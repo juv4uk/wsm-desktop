@@ -99,6 +99,10 @@ wsm/            Future project Guix channel modules
 
 Directories will gain implementation as the relevant design decisions and tests are completed.
 
+## Upstream documentation
+
+See [docs/UPSTREAMS.md](docs/UPSTREAMS.md) for the official Guix, Calamares, and Nonguix references used by this project.
+
 ## Development
 
 Start with [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). The initial workflow is to inspect and validate the Guix configuration in a virtual machine. Do not test an unfinished installer against a disk containing data you need.
