@@ -6,7 +6,7 @@
 двома файлами:
 
 ```
-profiles/hardware/asus/h170-pro/
+profiles/hardware/gigabyte/ga-h170-gaming3/
   profile.scm      конфігурація для цієї машини
   evidence.json    докази, що вона справді працює
   artifacts/       файли, що перевіряються за SHA-256
@@ -17,7 +17,7 @@ profiles/hardware/asus/h170-pro/
 ## Чому так
 
 Спокуса написати «має працювати» велика, і саме на ній спіткнувся не один
-дистрибутив. Різниця між «ми думаємо, що H170 заведеться» і «ми перевірили H170
+дистрибутив. Різниця між «ми думаємо, що GA-H170-Gaming 3 заведеться» і «ми перевірили H170
 26 листопада, ось звіт, ось що не працює» — це різниця між обіцянкою і фактом.
 
 `evidence.json` використовує контракт `wsm-profile-evidence/2` і зобов'язаний містити:
@@ -39,9 +39,9 @@ profiles/hardware/asus/h170-pro/
 ```sh
 python3 scripts/draft_profile_evidence.py \
   --report hwcheck-report.json \
-  --vendor GIGABYTE --model "H170 Gaming 3" \
-  --slug gigabyte/h170-gaming-3 \
-  --out profiles/hardware/gigabyte/h170-gaming-3/evidence.json
+  --vendor GIGABYTE --model "GA-H170-Gaming 3" \
+  --slug gigabyte/ga-h170-gaming3 \
+  --out profiles/hardware/gigabyte/ga-h170-gaming3/evidence.json
 ```
 
 Перед запуском у теці вже має бути `profile.scm`. Генератор копіює точні байти звіту в `artifacts/wsm-hwcheck-report.json`, записує його SHA-256 і обчислює `profile_source.sha256` з байтів `profile.scm`. Це provenance, а не функціональний тест. Кожний `pass`/ `fail` у `verified_functions` повинен окремо посилатися через `evidence` на тестовий артефакт; звіт інвентаризації не може бути єдиним доказом роботи функції.
