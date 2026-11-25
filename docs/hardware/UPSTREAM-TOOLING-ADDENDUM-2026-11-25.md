@@ -4,9 +4,6 @@
 
 - Статус: **дослідницьке доповнення; не є затвердженим маніфестом**
 - Критичний шлях: **ні** — дослідження не блокує перший preview-образ
-
-- Статус: дослідницьке доповнення; не є затвердженим маніфестом
-- Критичний шлях: **ні** — дослідження не блокує перший preview-образ
 - Батьківська задача: [#4 — аудит апаратних інструментів і джерел](https://github.com/juv4uk/wsm-desktop/issues/4)
 - Пов'язані контракти: [#16 — driver/runtime firmware evidence](https://github.com/juv4uk/wsm-desktop/issues/16), [#18 — device topology](https://github.com/juv4uk/wsm-desktop/pull/42), [#20 — display compatibility](https://github.com/juv4uk/wsm-desktop/pull/20), [#25 — network readiness](https://github.com/juv4uk/wsm-desktop/pull/25)
 - Це дослідження upstream-можливостей, а не затверджений пакетний маніфест WSM.

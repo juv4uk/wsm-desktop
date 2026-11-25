@@ -33,8 +33,14 @@ class OptionalHardwareProviderTests(unittest.TestCase):
     def test_displayid_parser_candidate_is_security_gated(self) -> None:
         self.assertIn("CVE-2026-112271", self.audit)
         self.assertIn("CVE-2026-112272", self.audit)
-        self.assertIn("не додавати libdisplay-info 0.4.0 до стандартного live image", self.lower)
-        self.assertIn("до підтвердженого upstream-виправлення", self.lower)
+        self.assertIn(
+            "не додавати `libdisplay-info 0.4.0` як обов'язковий parser до privileged/live preflight",
+            self.lower,
+        )
+        self.assertIn(
+            "перевіряти точну upstream/downstream revision на наявність відповідних виправлень",
+            self.lower,
+        )
 
     def test_intel_xpu_smi_is_limited_to_documented_device_families(self) -> None:
         self.assertIn("Arc Pro Series", self.audit)
