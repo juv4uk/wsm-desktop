@@ -191,23 +191,34 @@ def main(argv: list[str] | None = None) -> int:
         print("wsm-install: no plan emitted because required critical evidence is unresolved", file=sys.stderr)
         return 3
 
-    rendered = canonical_json(plan) + "\n"
+    rendered = canonical_json(plan) + "\\n"
     if args.plan_output:
+        protected_profile_inputs: tuple[Path, ...] = ()
+        if (
+            args.profile_evidence is not None
+            and profile_evidence is not None
+            and profile_evidence_root is not None
+        ):
+            raw_artifacts = profile_evidence.get("artifacts")
+            artifact_paths = (
+                tuple(
+                    profile_evidence_root / item["path"]
+                    for item in raw_artifacts
+                    if isinstance(item, dict) and isinstance(item.get("path"), str)
+                )
+                if isinstance(raw_artifacts, list) else ()
+            )
+            protected_profile_inputs = (
+                args.profile_evidence,
+                profile_evidence_root / "profile.scm",
+                *artifact_paths,
+            )
+
         destination, path_error = _safe_plan_output_path(
             args.plan_output,
             Path(args.report),
             args.schema,
-            (
-                (
-                    args.profile_evidence,
-                    profile_evidence_root / "profile.scm",
-                    *(profile_evidence_root / item["path"] for item in profile_evidence["artifacts"]),
-                )
-                if args.profile_evidence is not None
-                and profile_evidence is not None
-                and profile_evidence_root is not None
-                else ()
-            ),
+            protected_profile_inputs,
         )
         if path_error:
             print(f"wsm-install: unsafe plan output: {path_error}", file=sys.stderr)
