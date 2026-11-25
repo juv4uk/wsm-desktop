@@ -23,6 +23,19 @@ WSM варто будувати не навколо одного «детект�
 | [VKMS](https://docs.kernel.org/gpu/vkms.html) + [IGT GPU Tools](https://gitlab.freedesktop.org/drm/igt-gpu-tools) | Віртуальний DRM/KMS display для headless CI/VM перевірок | Для VKMS потрібно завантажити модуль/налаштувати configfs; IGT може вимагати окремої сесії без compositor-а. Це змінює стан тестового kernel і не є live preflight | Ізольована CI/VM lane, не probe на фізичному ПК |
 | [fwupd HSI](https://fwupd.github.io/hsi.html) | Окремі показники firmware/platform security posture | Security posture не доводить наявність runtime firmware blob, успішне виконання `request_firmware()` чи ініціалізацію пристрою | Окремий security report; не змішувати з #16 compatibility evidence |
 
+## Безпековий gate для libdisplay-info 0.4.0
+
+Нові можливості DisplayID у 0.4.0 не означають, що цю версію можна безпечно запускати на довільних EDID. Публічні advisory підтверджують дві окремі помилки читання за межами heap buffer у parser-ах DisplayID:
+
+- **CVE-2026-112271** — DisplayID v1: довжина data block може виходити за межі секції; уразливі версії вказані як libdisplay-info до 0.4.0 включно.
+- **CVE-2026-112272** — DisplayID v2: надмірна довжина data block може просунути parser за межі EDID buffer; advisory прямо описує 0.4.0.
+
+Обидва випадки можуть завершитися аварією процесу під час обробки спеціально сформованого EDID. Джерелом недовірених даних може бути монітор, KVM, capture-пристрій або локальний EDID-файл. Downstream-статус «не уражено» в окремих дистрибутивах не доводить, що upstream 0.4.0 виправлено: для деяких пакетів причина — відсутність відповідного parser-коду в їхній збірці.
+
+**Рішення WSM:** не додавати libdisplay-info 0.4.0 до стандартного live image і не запускати його автоматично в installer preflight до підтвердженого upstream-виправлення та regression-тестів на завеликі довжини блоків у DisplayID v1/v2. До того часу це лише дослідницький optional candidate; обробка недовіреного EDID не повинна відбуватися всередині основного процесу інсталятора. Після визначення fixed commit/release потрібно повторно перевірити downstream package revision, а не покладатися лише на номер версії.
+
+Джерела безпекової перевірки: [CVE-2026-112271 — Red Hat](https://access.redhat.com/security/cve/cve-2026-112271), [CVE-2026-112272 — Red Hat](https://access.redhat.com/security/cve/cve-2026-112272), [CVE-2026-112271 — Amazon Linux advisory](https://explore.alas.aws.amazon.com/CVE-2026-112271.html), [CVE-2026-112272 — Amazon Linux advisory](https://explore.alas.aws.amazon.com/CVE-2026-112272.html).
+
 ## Додаткові hardware providers: AMD SMI та CXL sysfs
 
 ### AMD SMI — окремий accelerator provider
