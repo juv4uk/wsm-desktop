@@ -30,7 +30,7 @@ ADAPTER_VERSION = "0.1.0"
 
 # Allow-lists. Anything that does not match is refused, not escaped and hoped
 # for: a wrong hostname is a cheap failure, an injected form is not.
-DEVICE_PATTERN = re.compile(r"^/dev/[a-zA-Z0-9._-]+$")
+DEVICE_PATTERN = re.compile(r"^/dev/[a-zA-Z0-9][a-zA-Z0-9._-]*$")
 HOSTNAME_PATTERN = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")
 ACCOUNT_PATTERN = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
 LABEL_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,16}$")
