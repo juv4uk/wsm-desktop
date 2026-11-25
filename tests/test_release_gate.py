@@ -14,7 +14,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from release_gate import check_channels, check_image, criterion, from_exit, verdict  # noqa: E402
+from release_gate import check_channels, check_image, check_tests, criterion, from_exit, verdict  # noqa: E402
 
 
 class VerdictTests(unittest.TestCase):
@@ -48,6 +48,24 @@ class ExitMappingTests(unittest.TestCase):
         self.assertEqual(from_exit("x", 1, "")["status"], "fail")
 
 
+class TestRunnerTests(unittest.TestCase):
+    def test_test_suite_uses_one_bounded_unittest_discovery_process(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "tests").mkdir()
+            (root / "tests" / "test_sample.py").write_text("pass\n", encoding="utf-8")
+            with patch("release_gate.ROOT", root), patch(
+                "release_gate.run", return_value=(0, "OK")
+            ) as run_mock:
+                result = check_tests()
+        self.assertEqual(result["status"], "pass")
+        self.assertEqual(run_mock.call_count, 1)
+        command = run_mock.call_args.args[0]
+        self.assertEqual(command[1:6], ["-m", "unittest", "discover", "-s", "tests"])
+        self.assertIn("-v", command)
+        self.assertEqual(run_mock.call_args.kwargs["timeout"], 900)
+
+
 class ChannelGateTests(unittest.TestCase):
     def test_missing_compatibility_lock_is_not_configured_not_a_failure(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -56,7 +74,7 @@ class ChannelGateTests(unittest.TestCase):
                 "release_gate.run", return_value=(0, "Free structural policy passed")
             ) as run_check:
                 result = check_channels()
-        self.assertEqual(result["status"], "pass")
+        self.assertEqual(result["status"], "not-run")
         self.assertIn("Compatibility: NOT_CONFIGURED", result["detail"])
         self.assertIn("no Compatibility product claim", result["detail"])
         run_check.assert_called_once()
