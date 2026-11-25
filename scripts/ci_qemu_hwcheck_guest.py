@@ -268,7 +268,8 @@ def _build_initramfs(work: Path) -> tuple[Path, int]:
     if not busybox:
         raise RuntimeError("busybox-static is required on the CI host")
     shutil.copy2(busybox, rootfs / "bin" / "busybox")
-    (rootfs / "bin" / "sh").symlink_to("busybox")
+    for applet in ("sh", "mount", "poweroff", "sleep", "sync"):
+        (rootfs / "bin" / applet).symlink_to("busybox")
 
     device_nodes = (
         ("console", 5, 1, 0o600),
