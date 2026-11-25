@@ -105,7 +105,7 @@
 
 | Тип | Напрямок | Достатня підстава | Обмеження |
 | --- | --- | --- | --- |
-| `interface-of` | USB interface → USB device | Канонічний sysfs path та підтверджений безпосередній parent | Device-level class/driver не описує кожен інтерфейс |
+| `interface-of` | USB interface → USB device | Канонічний sysfs path та підтверджений безпосередній parent; read-only `bInterfaceNumber`, `bInterfaceClass`, `bInterfaceSubClass`, `bInterfaceProtocol`, `modalias` | Device-level class/driver не описує кожен інтерфейс; binding одного interface не поширюється на sibling interfaces |
 | `bound-to` | PCI function або USB interface → driver | Власний resolved `driver` symlink функції | Відсутність symlink не доводить несумісність |
 | `function-of` | PCI function → `pci-slot-group` | Однакові domain:bus:device компоненти адреси | Тільки derived logical grouping, не фізичний слот/чип |
 | `virtual-function-of` | PCI VF → PF | Явні `physfn` / `virtfnN` symlink | Лише SR-IOV |
