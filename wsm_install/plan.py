@@ -104,10 +104,14 @@ def build_plan(
                     )
                 )
 
-        source_reports = [
-            item for item in profile_evidence.get("artifacts", [])
-            if item.get("kind") == "wsm-hwcheck-report"
-        ]
+        raw_artifacts = profile_evidence.get("artifacts")
+        source_reports = (
+            [
+                item for item in raw_artifacts
+                if isinstance(item, dict) and item.get("kind") == "wsm-hwcheck-report"
+            ]
+            if isinstance(raw_artifacts, list) else []
+        )
         if len(source_reports) != 1:
             blockers.append(
                 "hardware profile evidence must contain exactly one wsm-hwcheck-report artifact"
