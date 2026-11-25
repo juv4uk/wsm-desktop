@@ -11,8 +11,8 @@
 
 Є два способи сказати «ця машина підтримується»:
 
-1. «Ми написали конфігурацію для H170, має працювати.»
-2. «Ми перевірили H170 26 листопада, ось звіт `wsm-hwcheck`, ось що працює, ось що ні, ось що ми не перевіряли.»
+1. «Ми написали конфігурацію для Gigabyte GA-H170-Gaming 3, має працювати.»
+2. «Ми повторно ідентифікували Gigabyte GA-H170-Gaming 3 26 листопада, ось звіт `wsm-hwcheck`, ось що працює, ось що ні, ось що ми не перевіряли.»
 
 Перше — гіпотеза. Друге — доказ. Формат нижче існує, щоб друге було дешевшим за перше.
 
@@ -57,9 +57,9 @@ JSON Schema перевіряє форму. Скрипт перевіряє те,
 python3 scripts/draft_profile_evidence.py \
   --report hwcheck-report.json \
   --vendor GIGABYTE \
-  --model "H170 Gaming 3" \
-  --slug gigabyte/h170-gaming-3 \
-  --out profiles/hardware/gigabyte/h170-gaming-3/evidence.json
+  --model "GA-H170-Gaming 3" \
+  --slug gigabyte/ga-h170-gaming3 \
+  --out profiles/hardware/gigabyte/ga-h170-gaming3/evidence.json
 ```
 
 Перед запуском у цільовій теці вже має існувати `profile.scm`. Генератор хешує його точні байти в `profile_source.sha256`, копіює **точні байти** source report у `artifacts/wsm-hwcheck-report.json` і додає його SHA-256. Він не створює `profile.scm`, не робить функціональних тестів і залишає всі функції `not-assessed`. Зміна `profile.scm` або source report після збору доказів анулює bundle. Перед повторним запуском не перезаписує наявні файли: обери нову теку або свідомо прибери попередню чернетку після перевірки.
