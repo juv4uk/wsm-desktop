@@ -42,7 +42,7 @@ Both `--preflight` and `--dry-run` are mandatory. There is no apply command in t
 
 The summary repeats only report facts. It does not infer a working driver from a candidate module, infer runtime firmware success from a package candidate, or infer display functionality from advertised modes.
 
-The v1 prototype treats unknown discovery for a device marked `boot-path`, `storage-install-target`, `primary-display`, or `input` as unresolved critical evidence and refuses to emit a plan. Required runtime firmware reported as `missing` or `load-error` blocks only when attached to one of those critical roles. Network-installation uncertainty is a warning because an offline path may be available. These rules are conservative and should be reviewed against real live-image workflows before deployment integration.
+The v1 prototype treats unknown or not-detected discovery for a device marked `boot-path`, `storage-install-target`, `primary-display`, or `input` as unresolved critical evidence and refuses to emit a plan. Required runtime firmware reported as `missing` or `load-error` blocks only when attached to one of those critical roles. Network-installation uncertainty is a warning because an offline path may be available. These rules are conservative and should be reviewed against real live-image workflows before deployment integration.
 
 ## Plan determinism and trust
 
