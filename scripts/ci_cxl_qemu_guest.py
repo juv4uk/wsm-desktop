@@ -83,7 +83,7 @@ def parse_insmod_plan(text: str, module_root: Path) -> list[Path]:
         source = Path(fields[1]).resolve(strict=True)
         if root not in source.parents:
             raise CxlGuestError("module dependency escaped the selected kernel tree")
-        if not source.name.endswith((".ko", ".ko.zst", ".ko.xz")):
+        if not source.name.endswith((".ko", ".ko.zst", ".ko.xz", ".ko.gz")):
             continue
         if source not in seen:
             ordered.append(source)
@@ -98,20 +98,22 @@ def resolve_module_order(kernel_release: str, modprobe: str = "modprobe") -> lis
     ordered: list[Path] = []
     seen: set[Path] = set()
     for module in MODULE_REQUESTS:
-        result = subprocess.run(
-            [modprobe, "--show-depends", module],
-            capture_output=True,
-            text=True,
-            errors="replace",
-            timeout=10,
-            check=False,
+        result = run_bounded_process(
+            [modprobe, "--show-depends", "--set-version", kernel_release, module],
+            timeout_seconds=10,
+            marker=None,
+            max_stdout_bytes=64 * 1024,
+            max_stderr_bytes=8 * 1024,
         )
+        if result.timed_out or result.stdout_truncated or result.stderr_truncated:
+            raise CxlGuestError(f"modprobe dependency output exceeded limits for {module}")
         if result.returncode != 0:
+            detail = result.stderr_tail.decode("utf-8", errors="replace")[-1200:]
             raise CxlGuestError(
-                f"modprobe --show-depends {module} failed ({result.returncode}): "
-                f"{result.stderr[-1200:]}"
+                f"modprobe --show-depends {module} failed ({result.returncode}): {detail}"
             )
-        for source in parse_insmod_plan(result.stdout, root):
+        output = result.stdout_tail.decode("utf-8", errors="replace")
+        for source in parse_insmod_plan(output, root):
             if source not in seen:
                 ordered.append(source)
                 seen.add(source)
@@ -295,7 +297,7 @@ def install_guest_modules(guest_root: Path, kernel_release: str) -> list[str]:
         payload = decompress_module(source, MAX_MODULE_TOTAL_BYTES - total)
         total += len(payload)
         filename = source.name
-        for suffix in (".ko.zst", ".ko.xz"):
+        for suffix in (".ko.zst", ".ko.xz", ".ko.gz"):
             if filename.endswith(suffix):
                 filename = filename[:-len(suffix)] + ".ko"
                 break
