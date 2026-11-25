@@ -323,7 +323,7 @@ class GuixDeployCliTests(unittest.TestCase):
                 _ensure_output_not_on_target_filesystem(self.root / "review.scm")
 
     def test_review_output_fails_closed_on_malformed_mountinfo_after_target_entry(self) -> None:
-        malformed = "36 25 8:1 / /mnt rw,relatime - ext4 /dev/vda1 rw\\nmalformed\\n"
+        malformed = "36 25 8:1 / /mnt rw,relatime - ext4 /dev/vda1 rw\nmalformed\n"
         with patch.object(Path, "read_text", return_value=malformed):
             with self.assertRaisesRegex(DeployCliError, "mountinfo line 2 is malformed"):
                 _ensure_output_not_on_target_filesystem(self.root / "review.scm")
