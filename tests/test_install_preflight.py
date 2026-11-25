@@ -28,6 +28,31 @@ def load_fixture(name: str) -> tuple[dict, bytes]:
     return json.loads(raw), raw
 
 
+def make_profile_evidence(report: dict, root: Path) -> dict:
+    """Create a synthetic bundle for CLI integration tests; never real hardware evidence."""
+    payload = b"synthetic installer test evidence\n"
+    artifact = root / "artifacts" / "dmesg.txt"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_bytes(payload)
+    return {
+        "schema": "wsm-profile-evidence/2",
+        "profile": {"vendor": "TEST", "model": "FIXTURE", "slug": "test/fixture"},
+        "report_id": report["report_id"],
+        "report_schema_version": report["schema_version"],
+        "isa_level": "x86-64-v2",
+        "verified_on": "2026-11-26",
+        "verified_by": "local agent",
+        "verified_functions": [{"name": "synthetic-fixture", "status": "pass"}],
+        "known_limitations": [],
+        "not_assessed": ["physical-device-functionality"],
+        "artifacts": [{
+            "kind": "test-log",
+            "path": "artifacts/dmesg.txt",
+            "sha256": hashlib.sha256(payload).hexdigest(),
+        }],
+    }
+
+
 class InstallerPlanTests(unittest.TestCase):
     def test_observed_report_emits_deterministic_guix_plan(self) -> None:
         report, raw = load_fixture("desktop-observed.json")
@@ -179,6 +204,52 @@ class InstallerPlanTests(unittest.TestCase):
         report["devices"][0]["discovery_status"] = "not-detected"
         _, blockers, _ = build_plan(report, raw, "nix")
         self.assertTrue(any("not-detected" in item for item in blockers))
+
+    def test_cli_accepts_profile_evidence_and_records_provenance(self) -> None:
+        report, _ = load_fixture("desktop-observed.json")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report_path = root / "report.json"
+            report_path.write_bytes((FIXTURES / "desktop-observed.json").read_bytes())
+            profile_dir = root / "test" / "fixture"
+            profile_dir.mkdir(parents=True)
+            (profile_dir / "profile.scm").write_text(";; synthetic test fixture\n", encoding="utf-8")
+            evidence = make_profile_evidence(report, profile_dir)
+            evidence_path = profile_dir / "evidence.json"
+            evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+            plan_path = root / "plan.json"
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                result = main([
+                    "--preflight", "--report", str(report_path), "--backend", "guix",
+                    "--dry-run", "--profile-evidence", str(evidence_path),
+                    "--plan-output", str(plan_path),
+                ])
+            self.assertEqual(result, 0, stderr.getvalue())
+            plan = json.loads(plan_path.read_text(encoding="utf-8"))
+            self.assertEqual(plan["profile_evidence"]["slug"], "test/fixture")
+            self.assertEqual(plan["profile_evidence"]["report_id"], report["report_id"])
+
+    def test_cli_refuses_profile_evidence_for_a_different_report(self) -> None:
+        report, _ = load_fixture("desktop-observed.json")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report_path = root / "report.json"
+            report_path.write_bytes((FIXTURES / "desktop-observed.json").read_bytes())
+            profile_dir = root / "test" / "fixture"
+            profile_dir.mkdir(parents=True)
+            evidence = make_profile_evidence(report, profile_dir)
+            evidence["report_id"] = "different-report"
+            evidence_path = profile_dir / "evidence.json"
+            evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                result = main([
+                    "--preflight", "--report", str(report_path), "--backend", "guix",
+                    "--dry-run", "--profile-evidence", str(evidence_path),
+                ])
+        self.assertEqual(result, 3)
+        self.assertIn("report_id does not match", stderr.getvalue())
 
 if __name__ == "__main__":
     unittest.main()
