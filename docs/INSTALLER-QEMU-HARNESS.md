@@ -10,7 +10,11 @@
 
 ## What is implemented
 
-The project harness accepts a user-supplied regular ISO, validates bounded disk/RAM/CPU/time parameters, creates a new qcow2 in a temporary directory, runs QEMU with TCG and no network, captures serial output, and optionally requires an exact caller-supplied boot marker. QEMU block-device arguments use structured JSON nodes; the harness does not attach host block devices or pass through USB/GPU devices or EFI variables.
+The project harness accepts a user-supplied regular ISO, validates bounded disk/RAM/CPU/time parameters, creates a new qcow2 in a temporary directory, runs QEMU with TCG and no network, and optionally requires an exact caller-supplied boot marker. Serial stdout and QEMU stderr are streamed concurrently into fixed-size tail buffers rather than being accumulated in an unbounded temporary log or subprocess pipe. The default caps are 1 MiB for serial and 256 KiB for stderr; the JSON result reports bytes observed and whether either stream was truncated. Marker detection scans the full serial stream (including markers before the retained tail) and handles markers split across read chunks. A wall-clock timeout kills QEMU and the harness drains/closes its pipes before returning. QEMU block-device arguments use the documented `-blockdev` key/value syntax, with commas doubled inside filename values; serial uses `-serial stdio` and the host drains that pipe. The harness does not attach host block devices or pass through USB/GPU devices or EFI variables.
+
+### Bounded output capture
+
+The result fields `serial_output_tail` and `qemu_error` are bounded diagnostic tails, not complete logs. Their corresponding byte counters are `serial_bytes_seen` and `stderr_bytes_seen`; `serial_truncated` and `stderr_truncated` indicate that output exceeded the retained caps. The boot marker is evaluated while streaming and is independent of whether its bytes remain in the returned tail.
 
 The dedicated synthetic-ISO CI workflow builds a tiny disposable GRUB/BusyBox guest, passes it through the actual project harness, and requires the guest-only marker `WSM_QEMU_HARNESS_ISO_BOOT_OK`. A separate `qemu-guest-smoke` job in `.github/workflows/checks.yml` directly boots the GitHub runner kernel with a minimal BusyBox initramfs and checks `WSM_QEMU_GUEST_INIT_OK`. These tests cover different layers: direct guest-kernel execution and the project's ISO/QEMU harness.
 

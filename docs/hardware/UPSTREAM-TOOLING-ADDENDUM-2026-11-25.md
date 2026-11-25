@@ -49,6 +49,17 @@ WSM варто будувати не навколо одного «детект�
 - Не з'єднувати GPU і connector за іменем/порядком. Потрібен явний report-local relationship з provenance від #18.
 - Не вважати EDID/DisplayID advertised timings функціонально перевіреними режимами.
 
+## QEMU як окремий інструмент CI/VM-перевірок
+
+QEMU не є hardware-discovery provider і не має бути обов'язковою залежністю live preflight. Це контрольоване середовище для integration tests:
+
+- Офіційна сторінка QEMU на 25.11.2026 показує **11.1.3** (28.10.2026) як останній stable release та **11.2.0-rc1** (18.11.2026) як новіший release candidate. Для основної CI-матриці залишати stable-версію, яку надає runner/package source; RC перевіряти лише в окремому compatibility job після закріплення checksum/version.
+- Наш synthetic ISO test перевіряє саме harness, serial marker і відсутність host passthrough. Він не замінює Guix System build/boot або виконання `wsm-install` усередині Guix guest.
+- Перед порівнянням результатів потрібно фіксувати точну версію QEMU, machine type, firmware/BIOS, kernel/initramfs, CPU model та acceleration mode (TCG/KVM). Не змішувати TCG з KVM результати як однакову платформу.
+- Для disposable install tests використовувати тільки тимчасовий qcow2, no-network за замовчуванням, без host block-device/USB/GPU passthrough і без EFI variable store.
+
+Upstream: [QEMU downloads and releases](https://www.qemu.org/download/), [QEMU 11.0 release notes](https://www.qemu.org/2026/04/22/qemu-11-0-0/). Статус 11.2.0-rc1 не означає, що його вже слід ставити у звичайний CI runner.
+
 ## Packaging та відтворюваність
 
 Цей список не підтверджує, що будь-який пакунок уже присутній у WSM live image або у Guix/Nix closure.
@@ -87,6 +98,6 @@ WSM варто будувати не навколо одного «детект�
 
 ## Висновок
 
-Першими для реального WSM експерименту варто оцінити `libdisplay-info 0.4.0`, `drm_info 2.10.0`, `hwloc 2.16.0` (тільки в ізольованому експерименті до фінального релізу) та read-only PCIe AER counters. `devlink health show` — optional support for selected NIC/accelerator drivers. VKMS/IGT — тільки CI/VM. fwupd HSI — окремий security pane.
+Першими для реального WSM експерименту варто оцінити `libdisplay-info 0.4.0`, `drm_info 2.10.0`, `hwloc 2.16.0` (стабільний upstream-реліз від 2026-11-19; доцільно почати з ізольованого provider-прототипу) та read-only PCIe AER counters. Наявність hwloc 2.16.0 у точному Guix/Nix closure WSM ще не доведена; її треба перевірити після автентифікованого `channels.lock.scm` у #39. `devlink health show` — optional support for selected NIC/accelerator drivers. VKMS/IGT — тільки CI/VM. fwupd HSI — окремий security pane.
 
 Ні один із цих інструментів не повинен самостійно виставляти загальний verdict сумісності. WSM має зберігати первинний факт, джерело, час, обмеження та невідомі стани окремо від policy decision.
