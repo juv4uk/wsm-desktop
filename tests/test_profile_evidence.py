@@ -19,6 +19,7 @@ from check_profile_evidence import (  # noqa: E402
     main,
     validate,
     validate_directory,
+    read_document,
 )
 
 BASE = {
@@ -81,6 +82,10 @@ class ShapeTests(unittest.TestCase):
         del document["artifacts"]
         self.assertTrue(validate(document))
 
+    def test_invalid_calendar_date_is_refused(self) -> None:
+        problems = validate(bundle(verified_on="2026-99-99"))
+        self.assertTrue(any("date" in problem.lower() for problem in problems))
+
     def test_empty_artifacts_is_refused(self) -> None:
         self.assertTrue(validate(bundle(artifacts=[])))
 
@@ -129,6 +134,15 @@ class ArtifactTests(unittest.TestCase):
             evidence = write_profile(root)
             document = json.loads(evidence.read_text(encoding="utf-8"))
             document["artifacts"][0]["path"] = "../outside.txt"
+            problems = validate(document, artifact_root=evidence.parent)
+            self.assertTrue(any("safe relative path" in problem for problem in problems))
+
+    def test_windows_drive_path_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            evidence = write_profile(root)
+            document = json.loads(evidence.read_text(encoding="utf-8"))
+            document["artifacts"][0]["path"] = "C:/outside.txt"
             problems = validate(document, artifact_root=evidence.parent)
             self.assertTrue(any("safe relative path" in problem for problem in problems))
 
@@ -212,6 +226,14 @@ class DirectoryTests(unittest.TestCase):
             root = Path(directory) / "nonstandard-root"
             evidence = write_profile(root)
             self.assertEqual(validate_directory(evidence, root), [])
+
+    def test_invalid_utf8_evidence_is_a_controlled_error(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = Path(directory) / "evidence.json"
+            evidence.write_bytes(b"\\xff\\xfe")
+            document, problems = read_document(evidence)
+        self.assertIsNone(document)
+        self.assertTrue(any("cannot read evidence JSON" in problem for problem in problems))
 
     def test_main_accepts_a_valid_custom_directory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
