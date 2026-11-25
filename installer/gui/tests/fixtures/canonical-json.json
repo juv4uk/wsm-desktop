@@ -1,0 +1,18 @@
+{
+  "zeta": [
+    true,
+    {
+      "ukrainian": "Україна — ВОЛЬНІСТЬ",
+      "count": 17,
+      "nested": {
+        "enabled": false,
+        "items": [1, 2, 3]
+      }
+    }
+  ],
+  "alpha": {
+    "label": "WSM",
+    "values": [false, 5, "тест"]
+  },
+  "integer": 42
+}
