@@ -60,6 +60,9 @@ jobs:
       - name: Compile C++ and QML resources
         run: cmake --build build/wsm-installer --parallel 2
 
+      - name: Lint QML with generated CMake target
+        run: cmake --build build/wsm-installer --target all_qmllint --parallel 2
+
       - name: Verify QML application loads offscreen
         shell: bash
         run: |
