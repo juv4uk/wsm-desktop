@@ -55,13 +55,20 @@ Frontend показує звіт `wsm-hwcheck` (#5/#6) і похідні ріш�
 
 Обмеження свіжості сесії обробляються за #23: якщо схема звіту не доводить ту саму boot-сесію, стан є `unverifiable`, а не прихованою перевіркою.
 
+
+### Додатковий reference: NixOS hardware config у stdout
+
+Офіційна NixOS Wiki документує `nixos-generate-config --show-hardware-config`: команда друкує виявлену hardware configuration у stdout без запису конфігураційних файлів. Це корисний UX-патерн для read-only preview і порівняння з WSM report, але не замінює `wsm-hwcheck`, не є джерелом canonical schema та не додається як залежність Guix-first live image.
+
+Джерело: [NixOS Wiki — nixos-generate-config](https://wiki.nixos.org/wiki/Nixos-generate-config).
+
 ### 3. Один план — один backend — один власник системи
 
 Після preflight frontend формує draft plan і показує його користувачеві. Подальша передача відбувається виключно за канонічним контрактом [#12](../INSTALLER-HANDOFF.md):
 
 - frontend не виконує partition, format, mount для запису, зміни EFI-змінних, встановлення bootloader-а чи `guix system init` / `nixos-install`;
 - backend виконує фази `validate → realize/build → prepare → revalidate → apply → verify`;
-- для однієї інсталяції обирається рівно один backend: `guix-system` або `nixos`;
+- для першої підтримуваної інсталяції використовується лише `guix-system`; NixOS залишається відкладеним дослідницьким напрямом за ADR 0004;
 - прототип #13 залишається read-only і видає лише `diagnostic-only` план;
 - #14 доводить порядок фаз у disposable QEMU.
 
@@ -70,7 +77,7 @@ Frontend показує звіт `wsm-hwcheck` (#5/#6) і похідні ріш�
 | Кандидат | Класифікація для WSM | Пояснення |
 | --- | --- | --- |
 | **archinstall** | `adapt-pattern` | Найкраща модель гідованого TUI, JSON-плану, профілів і QEMU-циклу. Не форкати: payload і bootloader ownership несумісні з WSM. |
-| **NixOS installer tooling** | `reference / backend-native` | `nixos-generate-config` — еталон hardware-derived конфігурації; `nixos-install --no-bootloader` — орієнтир для Nix-шляху. Це backend tooling, не GUI frontend. |
+| **NixOS installer tooling** | `reference-only` для відкладеного Nix-треку | `nixos-generate-config --show-hardware-config` друкує hardware-derived конфігурацію в stdout без запису на диск — корисний read-only UX-приклад; `nixos-install --no-bootloader` лишається довідковим, але не входить у Guix-first deployment. Це не залежність і не активний backend першого релізу. |
 | **`guix-install`** | `adapt-pattern` + `reference-only` | Корисні патерни: один install-core для CLI/GUI, `--dry-run` що генерує `system.scm`/`channels.scm`, відновлення після помилки зі звільненням диска. Не брати як production dependency: pre-1.0, режим Panther/Nonguix не відповідає Free-by-default, інтеграція GUI в ISO незавершена. |
 | **Debian-installer `hw-detect` / `hwinfo`** | `reference-only` | Еталон firmware/modalias detection і невеликої udeb-сторінки; не є WSM frontend-ом. |
 | **Anaconda, YaST** | `reject as frontend for now` | Високий ризик конфлікту за disks/bootloader, distribution-coupled payload і невизначений сучасний addon/handoff шлях. Їхні методи виявлення залишаються джерелом для #4. |
@@ -88,7 +95,7 @@ Frontend показує звіт `wsm-hwcheck` (#5/#6) і похідні ріш�
 
 Матриця #11 показала, що найсильніше виявлення обладнання має YaST/libhd, а найкраща автоматична генерація апаратного конфігу — NixOS. Проте обидва інструменти тісно пов'язані зі своїм payload і bootloader-ом. Натомість archinstall дає найпридатнішу *форму взаємодії* з користувачем, яку можна адаптувати без успадкування його payload-у. `guix-install` додає корисні Guix-специфічні патерни lifecycle, але його поточні defaults і статус роблять його непридатним як залежність.
 
-Отже WSM інвестує у власний тонкий шар і два нативні backend-а, дотримуючись межі ADR 0004: спільний product/evidence/plan level, але жодного спільного runtime чи спільного власника bootloader.
+Отже WSM інвестує у власний тонкий frontend і один нативний Guix deployment path для першого релізу. Спільними лишаються product/evidence/plan level; NixOS не включається до першого installer runtime, доки ADR 0004 не буде окремо переглянуто.
 
 ## Що може змінити це рішення
 
@@ -99,7 +106,7 @@ Frontend показує звіт `wsm-hwcheck` (#5/#6) і похідні ріш�
 - стане відомо, чи Leap 16 використовує класичний YaST або Agama у поточному workflow;
 - з'являться реальні тести подвійного встановлення bootloader або докази, що hardware preflight блокує валідний сценарій;
 - #23/#18/#42 змінять модель свіжості або топології пристроїв;
-- #2 обере primary backend і тим самим звузить вимоги до frontend-а.
+- ADR 0004 буде окремо переглянуто з новими доказами, якщо NixOS планують повернути до першого підтримуваного installer path.
 
 ## Перевірка рішення
 
