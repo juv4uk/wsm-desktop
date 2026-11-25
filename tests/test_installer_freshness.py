@@ -59,6 +59,7 @@ class InstallerFreshnessTests(unittest.TestCase):
             report_value or report(),
             live_value or live(),
             expected_report_sha256=REPORT_SHA,
+            expected_boot_session_sha256=BOOT_A,
             **kwargs,
         )
 
@@ -108,6 +109,17 @@ class InstallerFreshnessTests(unittest.TestCase):
             expected_report_sha256="c" * 64,
         )
         self.assertEqual(decision.status, FreshnessStatus.REPORT_DIGEST_MISMATCH)
+        self.assertFalse(decision.confirmable)
+
+
+    def test_plan_session_digest_mismatch_is_rejected(self):
+        decision = evaluate_freshness(
+            report(),
+            live(),
+            expected_report_sha256=REPORT_SHA,
+            expected_boot_session_sha256=derive_boot_session_digest("different-plan-boot"),
+        )
+        self.assertEqual(decision.status, FreshnessStatus.SESSION_MISMATCH)
         self.assertFalse(decision.confirmable)
 
     def test_architecture_kernel_or_boot_mode_change_is_rejected(self):
