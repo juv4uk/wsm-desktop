@@ -92,11 +92,11 @@ class QemuHwcheckGuestSafetyTests(unittest.TestCase):
     def test_guest_distribution_copy_rejects_path_escape(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            source = root / "site-packages"
-            destination = root / "guest-site-packages"
+            source = root / "source" / "site-packages"
+            destination = root / "guest-root" / "site-packages"
             (source / "jsonschema").mkdir(parents=True)
             (source / "jsonschema" / "__init__.py").write_text("SAFE = True", encoding="utf-8")
-            (root / "outside.py").write_text("UNSAFE = True", encoding="utf-8")
+            (source.parent / "outside.py").write_text("UNSAFE = True", encoding="utf-8")
             distribution = SimpleNamespace(
                 files=(Path("jsonschema/__init__.py"), Path("../outside.py")),
                 locate_file=lambda entry: source / Path(str(entry)),
@@ -108,6 +108,7 @@ class QemuHwcheckGuestSafetyTests(unittest.TestCase):
                 "SAFE = True",
             )
             self.assertFalse((destination.parent / "outside.py").exists())
+            self.assertEqual((source.parent / "outside.py").read_text(encoding="utf-8"), "UNSAFE = True")
 
     def test_guest_installer_plan_marker_accepts_only_non_confirmable_dry_run(self) -> None:
         marker = (
