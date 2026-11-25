@@ -209,6 +209,25 @@ class PerformanceServicesTests(unittest.TestCase):
                 self.assertNotIn("mitigations=off", profile(name))
 
 
+class HomeEnvironmentTests(unittest.TestCase):
+    """Sound is a per-user service in Guix; a system-wide attempt gives two stacks."""
+
+    def test_home_profile_uses_pipewire(self) -> None:
+        text = (ROOT / "systems" / "home.scm").read_text(encoding="utf-8")
+        self.assertIn("(gnu home services sound)", text)
+        self.assertIn("home-pipewire-service-type", text)
+
+    def test_pulseaudio_emulation_stays_enabled(self) -> None:
+        """Without it, Plasma's volume applet and most apps see no server."""
+        text = (ROOT / "systems" / "home.scm").read_text(encoding="utf-8")
+        self.assertNotIn("(enable-pulseaudio? #f)", text)
+
+    def test_home_profile_does_not_start_a_second_audio_daemon(self) -> None:
+        text = (ROOT / "systems" / "home.scm").read_text(encoding="utf-8")
+        self.assertNotIn("home-pulseaudio-rtp", text)
+        self.assertNotIn("pulseaudio-service-type", text)
+
+
 class CompatibilityProfileTests(unittest.TestCase):
     def test_compatibility_profile_uses_the_nonguix_transformation(self) -> None:
         text = profile("compatibility.scm")
