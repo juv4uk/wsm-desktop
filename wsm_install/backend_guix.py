@@ -237,7 +237,7 @@ def validate_selection(selection: TargetSelection) -> None:
         isinstance(selection.full_name, str)
         and len(selection.full_name) <= 80
         and not any(
-            unicodedata.category(character) in {"Cc", "Cf", "Zl", "Zp"}
+            (unicodedata.category(character).startswith("C") or unicodedata.category(character) in {"Zl", "Zp"})
             for character in selection.full_name
         ),
         "selection.full_name",
