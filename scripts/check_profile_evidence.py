@@ -103,7 +103,7 @@ def validate(
     """Return problems; an empty list means schema and artifact checks passed."""
     schema = schema or load_schema()
     try:
-        jsonschema.validate(document, schema)
+        jsonschema.validate(document, schema, format_checker=jsonschema.FormatChecker())
     except jsonschema.ValidationError as exc:
         location = "/".join(str(part) for part in exc.absolute_path) or "<root>"
         return [f"schema: {location}: {exc.message}"]
