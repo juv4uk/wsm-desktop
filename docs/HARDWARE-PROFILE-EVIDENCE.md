@@ -4,7 +4,7 @@
 
 - Статус: **контракт v2 реалізовано**, реальних hardware-профілів ще немає
 - Канонічна задача: [#171](https://github.com/juv4uk/wsm-desktop/issues/171)
-- Схема: [`schemas/profile-evidence.schema.json`](../schemas/profile-evidence.schema.json)
+- Схема: [`schemas/profile-evidence.schema.json`](../schemas/profile-evidence.schema.json), контракт `wsm-profile-evidence/2`
 - Перевірка: `make check-profile-evidence`
 
 ## Контракт
