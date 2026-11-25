@@ -12,6 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(ROOT))
 
 from check_profile_evidence import validate  # noqa: E402
 
@@ -101,6 +102,50 @@ class RuleTests(unittest.TestCase):
     def test_personal_name_is_allowed_but_discouraged(self) -> None:
         """The rule bans e-mail, not names; docs tell contributors what to use."""
         self.assertEqual(validate(bundle(verified_by="local agent")), [])
+
+
+class InstallerGateTests(unittest.TestCase):
+    """The documented rule must hold in code, not only in prose."""
+
+    def plan(self, evidence=None):
+        sys.path.insert(0, str(ROOT))
+        from wsm_install.plan import build_plan
+
+        report = {
+            "schema_version": "1.0.0",
+            "report_id": "0f3c9a1e-2b44-4c8d-9f10-77a1b2c3d4e5",
+            "collected_at": "2026-11-26T00:00:00Z",
+            "collectors": [],
+            "environment": {
+                "architecture": "x86_64",
+                "kernel_release": "6.17.0",
+                "boot_mode": "uefi",
+                "virtualization": "none",
+            },
+            "limitations": [],
+            "privacy": {"personal_data_collected": False},
+            "devices": [],
+            "warnings": [],
+        }
+        import json as _json
+        payload = _json.dumps(report).encode("utf-8")
+        return build_plan(report, payload, "guix", profile_evidence=evidence)
+
+    def test_absent_evidence_is_a_warning_not_a_blocker(self) -> None:
+        """Most machines are untested; that must not look like a broken profile."""
+        _, blockers, warnings = self.plan(None)
+        self.assertEqual(blockers, [])
+        self.assertTrue(any("no verified hardware profile" in w for w in warnings))
+
+    def test_broken_evidence_blocks_the_plan(self) -> None:
+        broken = bundle(verified_functions=[{"name": "graphics", "status": "not-assessed"}])
+        _, blockers, _ = self.plan(broken)
+        self.assertTrue(any("hardware profile evidence is not valid" in b for b in blockers))
+
+    def test_valid_evidence_produces_no_evidence_blocker(self) -> None:
+        _, blockers, warnings = self.plan(bundle())
+        self.assertFalse(any("hardware profile evidence" in b for b in blockers))
+        self.assertFalse(any("no verified hardware profile" in w for w in warnings))
 
 
 class RepositoryTests(unittest.TestCase):

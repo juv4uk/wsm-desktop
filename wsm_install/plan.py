@@ -55,10 +55,29 @@ def build_plan(
     report: dict[str, Any],
     report_bytes: bytes,
     backend: str,
+    profile_evidence: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], list[str], list[str]]:
-    """Build a backend-specific plan without probing or invoking a backend."""
+    """Build a backend-specific plan without probing or invoking a backend.
+
+    ``profile_evidence`` is the bundle from profiles/hardware/<vendor>/<model>/.
+    When it is supplied but broken, that is a blocker: the machine claims to be
+    verified and the claim does not hold. When it is absent, the plan stays
+    diagnostic-only - absence is not a failure, it is the normal state until
+    someone actually tests the hardware.
+    """
     blockers: list[str] = []
     warnings: list[str] = []
+
+    if profile_evidence is not None:
+        from wsm_install.profile import problems
+
+        for problem in problems(profile_evidence):
+            blockers.append(f"hardware profile evidence is not valid: {problem}")
+    else:
+        warnings.append(
+            "no verified hardware profile evidence for this machine; "
+            "the plan remains diagnostic-only"
+        )
 
     for device in report["devices"]:
         criticality = set(device.get("criticality", []))
