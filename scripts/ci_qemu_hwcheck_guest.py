@@ -572,10 +572,16 @@ def _validate_installer_plan_result(serial: str) -> dict[str, str]:
         "backend_invoked": "false",
         "disk_access_performed": "false",
     }
+    required_fields = set(expected) | {"plan_sha256"}
+    if set(fields) != required_fields:
+        raise RuntimeError(
+            "guest installer plan result has missing or unexpected fields: "
+            f"expected={sorted(required_fields)}, actual={sorted(fields)}"
+        )
     for key, value in expected.items():
-        if fields.get(key) != value:
+        if fields[key] != value:
             raise RuntimeError(f"guest installer plan result violated {key}={value}: {fields}")
-    if not re.fullmatch(r"[0-9a-f]{64}", fields.get("plan_sha256", "")):
+    if not re.fullmatch(r"[0-9a-f]{64}", fields["plan_sha256"]):
         raise RuntimeError("guest installer plan result lacks a valid canonical plan digest")
     return fields
 
