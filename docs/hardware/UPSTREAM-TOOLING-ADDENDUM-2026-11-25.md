@@ -2,6 +2,9 @@
 
 <!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 
+- Статус: **дослідницьке доповнення; не є затвердженим маніфестом**
+- Критичний шлях: **ні** — дослідження не блокує перший preview-образ
+
 - Статус: дослідницьке доповнення; не є затвердженим маніфестом
 - Критичний шлях: **ні** — дослідження не блокує перший preview-образ
 - Батьківська задача: [#4 — аудит апаратних інструментів і джерел](https://github.com/juv4uk/wsm-desktop/issues/4)
@@ -211,6 +214,75 @@ EDID/DisplayID надходить від зовнішнього пристрою
 - `drm_info -j` та libdisplay-info — додаткові provider-и, output яких треба прив'язувати до exact tool version.
 - Не з'єднувати GPU і connector за іменем/порядком. Потрібен явний report-local relationship з provenance від #18.
 - Не вважати EDID/DisplayID advertised timings функціонально перевіреними режимами.
+
+## Optional GPU telemetry providers та стандартні сенсорні дані
+
+Ці provider-и розширюють локальну діагностику, але не замінюють базовий kernel/sysfs inventory. Їхня відсутність, помилка ініціалізації або обмежений доступ означають `not-collected/unknown`, а не відсутність чи несумісність GPU. Жоден telemetry provider не може самостійно видати compatibility verdict.
+
+### NVIDIA NVML
+
+[NVML](https://docs.nvidia.com/deploy/nvml-api/latest/index.html) — C API, на якому побудований `nvidia-smi`. Він має запити про стан GPU (ідентифікація, пам'ять, utilization, температура, clocks, PCI information та topology), але в тому самому API присутні device-control commands.
+
+Ключові обмеження для WSM:
+
+- NVIDIA вказує на обмежену підтримку деяких non-data-center продуктів, зокрема GeForce/RTX. Успішний PCI/sysfs discovery залишається основним фактом, а відсутність NVML, його бібліотеки чи підтримки конкретної GeForce не повинна бути негативним verdict.
+- Порядок NVML device enumeration/index не гарантується між перезавантаженнями. Для зв'язку з report-local device використовувати PCI BDF, звірений з kernel/sysfs; ніколи не використовувати NVML index як стійкий ID.
+- Офіційний API reference зазначає, що `nvmlDeviceGetHandleByIndex_v2` і `nvmlDeviceGetHandleByPciBusId_v2` можуть ініціалізувати цільовий GPU. Тому NVML не є буквально пасивним filesystem reader. До першої інтеграції потрібно перевірити, чи допустима така ініціалізація у live preflight; без такого погодження provider лишається в окремому opt-in diagnostics/support mode.
+- `NVML_ERROR_NO_PERMISSION`, `NOT_SUPPORTED`, `GPU_IS_LOST`, `NOT_FOUND`, missing library та driver/API version mismatch потрібно зберігати як різні результати provider-а, а не зводити до «пристрою немає».
+- Не викликати API із груп control/configuration: set power limit, clock offsets, reset, persistence, firmware/host operations чи інші mutating operations. Allowlist query methods має бути явним та version-pinned.
+- Не експортувати NVML UUID, board serial, GPU hostname чи process identity. Кореляція виконується локально за BDF; у зовнішній sanitized report записується лише allowlisted capability/telemetry fact з timestamp, tool/driver version і provenance.
+
+Рекомендована роль: **optional NVIDIA diagnostics provider після перевірки side-effect boundary**. Не вимагати proprietary driver/NVML у free baseline; не підміняти ним PCI ID, driver-binding або DRM/KMS evidence.
+
+Джерела:
+- [NVML API Reference Guide](https://docs.nvidia.com/deploy/nvml-api/latest/index.html) — призначення API та поділ query/control methods.
+- [NVML Device Queries](https://docs.nvidia.com/deploy/nvml-api/latest/api/group__nvmlDeviceQueries.html) — нестабільність enumeration order, PCI BDF lookup, ініціалізація GPU та помилки доступу.
+- [NVIDIA NVML overview](https://developer.nvidia.com/management-library-nvml) — NVML як бібліотечний інтерфейс під `nvidia-smi`.
+
+### Intel XPU-SMI / XPU Manager 2.0
+
+Версійна [документація Intel XPU Manager 2.0](https://intel.github.io/xpumanager/2.0/) описує daemon-less CLI `xpu-smi`, побудований на Level Zero. Вона документує discovery, per-field `--query-gpu`, PCI BDF selection та GPU↔CPU/GPU topology output.
+
+- У overview саме версії 2.0 Intel визначає `xpu-smi` як локальний management CLI для **Intel Arc Pro Series GPUs**. Окремі release/package pages згадують Data Center GPU та конкретні Ubuntu releases. Це не дає підстав автоматично заявляти підтримку всіх Intel iGPU/consumer Arc; перевіряти точний GPU, kernel driver, Level Zero runtime та package release.
+- `xpu-smi discovery --device <BDF> -j` і topology queries можуть давати structured output. Discovery properties включають SOC UUID, serial number, firmware names/versions, PCI BDF та інші поля. Сирий JSON не можна вважати privacy-safe; потрібен allowlist export, що відсікає serial/UUID/part number та інші ідентифікатори.
+- `--query-gpu` є single-shot або looping telemetry query; для preflight не використовувати безмежний `--loop`. Якщо його буде прийнято, задавати короткий timeout і обмежену кількість полів/ітерацій.
+- `xpu-smi` також має mutating commands: configuration/reset і firmware update. Документація окремо зазначає, що timeout suspends під час firmware write та reset. Ці команди, як і `dump` із широким collection, заборонені в automatic preflight.
+- Topology matrix позначає PCIe/NUMA locality (PIX/PXB/PHB/NODE/SYS), але ці vendor-level labels не повинні замінювати typed report-local edges із #18 чи подаватися як фізичний маршрут без provenance.
+- Спочатку оцінити тільки daemon-less CLI/API і його Level Zero/driver dependencies. XPUM daemon, REST API, Prometheus exporter чи Docker stack не потрібні у live installer.
+
+Рекомендована роль: **optional provider для підтверджених Arc Pro/Data Center configurations**. Не вмикати для всіх Intel GPU, не встановлювати мережево під час preflight і не додавати до free baseline, доки package closure, license та runtime footprint не перевірено за #39.
+
+Джерела:
+- [XPU-SMI 2.0 overview](https://intel.github.io/xpumanager/2.0/xpu-smi/overview.html) — заявлений GPU scope, query options, timeout та mutating reset/firmware operations.
+- [XPU-SMI 2.0 discovery](https://intel.github.io/xpumanager/2.0/xpu-smi/discovery.html) — JSON discovery fields, PCI BDF і sensitive properties.
+- [XPU-SMI 2.0 topology](https://intel.github.io/xpumanager/2.0/xpu-smi/topology.html) — GPU/CPU interconnect matrix і P2P capability statuses.
+- [Intel XPU Manager upstream](https://github.com/intel/xpumanager) — releases, supported OS/device matrix та runtime dependencies.
+
+### Linux hwmon sysfs та libsensors
+
+Linux [hwmon sysfs ABI](https://docs.kernel.org/hwmon/sysfs-interface.html) дає стандартизовані sensor attributes у `/sys/class/hwmon/hwmon*`, часто з посиланням на фізичний device у sysfs. Це найкращий початковий шлях для локального читання temperature/fan/voltage/power readings, якщо відповідний kernel driver їх експонує.
+
+- Стандарт чітко відрізняє RO, WO і RW; атрибути, окрім `name`, optional. Preflight читає тільки явно allowlisted RO fields (наприклад `temp*_input`, `fan*_input`, `in*_input`, `power*_input` та відповідні RO labels/alarms там, де наявні).
+- Не писати `*_enable`, `*_reset_history`, `*_samples`, `update_interval`, thresholds, limits або інші RW/WO attributes. Навіть якщо доступні поля в конкретному драйвері фактично read-only, загальний collector не повинен пробувати write як метод discovery.
+- Номер каналу сам по собі не означає CPU temperature, GPU temperature, VRM або fan конкретного пристрою. Записувати raw channel name, label (якщо наданий), driver/parent provenance і units; без label залишати фізичне значення сенсора невизначеним.
+- Kernel documentation застерігає, що motherboard wiring різниться і raw userspace parser має сам виконувати labeling/conversion. Оцінити libsensors для стандартних conversions/configuration; якщо config не дає надійного mapping, краще показати `temp2_input` як невідомий канал, ніж підписувати його «CPU».
+- Sensor readings є моментальними observations із timestamp, а не стабільною hardware identity, функціональним тестом чи повною оцінкою теплового запасу. Не запускати stress/thermal workload, не змінювати fan curve і не будувати compatibility verdict на одному reading.
+
+Рекомендована роль: **optional read-only sensor observation provider** з низьким пріоритетом; корисний для support/thermal diagnostics, але не для первинного bootability gate.
+
+Джерела:
+- [Linux hwmon sysfs interface](https://docs.kernel.org/hwmon/sysfs-interface.html) — device links, labels, units, RO/WO/RW permissions та optional attributes.
+- [Linux hwmon kernel API](https://docs.kernel.org/hwmon/hwmon-kernel-api.html) — спосіб, у який kernel drivers експонують стандартні та driver-specific attributes.
+
+### Підсумок прийняття
+
+| Provider | Початкове рішення | Що може довести | Чого не доводить |
+| --- | --- | --- | --- |
+| NVIDIA NVML | Optional; consent-/policy-gated після перевірки GPU initialization side effect | Vendor GPU queries, telemetry та деякі topology facts | Загальну підтримку GeForce, Linux driver binding без окремого доказу, DRM/display functionality або безпечність усіх NVML methods |
+| Intel XPU-SMI | Optional тільки для документованого device/runtime matrix | Intel GPU discovery, driver/firmware metadata та vendor topology facts | Підтримку всіх Intel graphics devices, відсутність device side effects або загальну функціональність |
+| hwmon/libsensors | Optional read-only sensor lane | Наявні sensor readings, labels, alarms і driver provenance | Універсальну назву каналу, довгострокову thermal health чи installation compatibility |
+
+Жоден із provider-ів не повинен бути необхідним для успішного inventory. Відсутність provider-а, не підтримуваний GPU family, denied access, missing runtime чи unsupported field відображаються як `not-collected/unknown` із причиною; вони не знижують compatibility verdict автоматично й не блокують installer.
 
 ## Guix System VM: актуальні upstream зміни
 
