@@ -187,12 +187,13 @@ Raw serial, WWN, UUID та інші чутливі ідентифікатори 
 
 Backend є єдиним компонентом, який знає, як конкретна система будується, активується та встановлюється. Frontend не генерує shell-команди з довільного тексту користувача.
 
-Підтримувані значення в цьому контракті:
+Підтримуване значення в контракті v0.1 для першого preview:
 
-- `guix-system` — Guix-native declaration і Guix deployment path;
-- `nixos` — NixOS-native configuration і NixOS deployment path.
+- `guix-system` — єдиний backend першого preview: Guix-native declaration і Guix deployment path.
 
-Для однієї інсталяції дозволено вибрати **лише один** backend. Не можна об'єднувати `/gnu/store` і `/nix/store`, передавати один і той самий root filesystem двом системним менеджерам, запускати обидва механізми активації або дозволяти обом встановлювати bootloader.
+`nixos` не є допустимим значенням plan v0.1 і не підтримується поточним installer runtime. Можливий майбутній Nix/NixOS backend потребуватиме окремого рішення за ADR 0004, власного deployment implementation і сумісного оновлення версії handoff contract.
+
+Для однієї інсталяції дозволено вибрати **лише один** backend. Перший preview приймає тільки `guix-system`. Не можна об'єднувати `/gnu/store` і `/nix/store`, передавати один і той самий root filesystem двом системним менеджерам, запускати обидва механізми активації або дозволяти обом встановлювати bootloader.
 
 Backend contract має реалізувати окремі кроки:
 
