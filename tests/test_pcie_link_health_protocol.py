@@ -74,7 +74,7 @@ class PcieLinkHealthProtocolTests(unittest.TestCase):
         ):
             with self.subTest(operation=forbidden):
                 self.assertIn(forbidden, self.lower)
-        self.assertIn("не змінює pcie, driver, device", self.lower)
+        self.assertIn("змінювати pcie, driver, device, devlink", self.lower)
 
     def test_zero_and_nonzero_counts_are_not_global_health_verdicts(self) -> None:
         self.assertIn("не healthy", self.lower)
