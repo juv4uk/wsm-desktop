@@ -116,6 +116,10 @@ class InstallerGuiContractTests(unittest.TestCase):
         self.assertIn("QCryptographicHash::hash(m_reportBytes", source)
         self.assertIn("unhashedPlan.remove", source)
         self.assertIn("QJsonDocument::Compact", source)
+        self.assertIn('sourceReport.value(QStringLiteral("report_id"))', source)
+        self.assertIn('sourceReport.value(QStringLiteral("schema_version"))', source)
+        self.assertIn("source_report.report_id", source)
+        self.assertIn("source_report.schema_version", source)
 
     def test_qml_smoke_mode_does_not_probe_hardware(self) -> None:
         main = (GUI / "src" / "main.cpp").read_text(encoding="utf-8")
@@ -149,12 +153,17 @@ class InstallerGuiContractTests(unittest.TestCase):
         self.assertIn('m_diskInventoryState = QStringLiteral("unavailable")', source)
         self.assertIn("JSON без масиву blockdevices", source)
 
-    def test_qml_navigation_requires_a_validated_preflight(self) -> None:
+    def test_qml_navigation_uses_the_tested_flow_helper(self) -> None:
         qml = (GUI / "qml" / "Main.qml").read_text(encoding="utf-8")
-        self.assertIn("function canOpenStep(step)", qml)
-        self.assertIn('wsmController.planStatus === "blocked"', qml)
-        self.assertIn('wsmController.diskInventoryState === "loaded"', qml)
-        self.assertIn('wsmController.diskInventoryState === "unavailable"', qml)
+        flow = (GUI / "qml" / "InstallerFlow.js").read_text(encoding="utf-8")
+        self.assertIn("InstallerFlow.canOpenStep(", qml)
+        self.assertIn("InstallerFlow.canFinishReview(", qml)
+        wrapper = qml.split("function canOpenStep(step)", 1)[1].split("function enterStep", 1)[0]
+        self.assertIn("InstallerFlow.canOpenStep(", wrapper)
+        self.assertNotIn("wsmController.diskInventoryState", wrapper)
+        self.assertIn("function canOpenStep(step, reportReady, diskInventoryState, planAvailable, planStatus)", flow)
+        self.assertIn("function canFinishReview(reviewAcknowledged)", flow)
+        self.assertIn("InstallerFlow.canFinishReview(root.reviewAcknowledged)", qml)
         self.assertIn("enabled: root.canOpenStep(index)", qml)
         self.assertIn("root.canOpenStep(root.currentStep + 1)", qml)
         self.assertIn("Qt.quit()", qml)
