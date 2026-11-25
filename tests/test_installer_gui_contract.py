@@ -142,6 +142,13 @@ class InstallerGuiContractTests(unittest.TestCase):
         self.assertTrue(tests.is_file())
         self.assertTrue((GUI / "qml" / "InstallerFlow.js").is_file())
 
+    def test_disk_inventory_rejects_missing_or_non_array_blockdevices(self) -> None:
+        source = (GUI / "src" / "PreflightController.cpp").read_text(encoding="utf-8")
+        self.assertIn('document.object().value(QStringLiteral("blockdevices"))', source)
+        self.assertIn("!blockDevicesValue.isArray()", source)
+        self.assertIn('m_diskInventoryState = QStringLiteral("unavailable")', source)
+        self.assertIn("JSON без масиву blockdevices", source)
+
     def test_qml_navigation_requires_a_validated_preflight(self) -> None:
         qml = (GUI / "qml" / "Main.qml").read_text(encoding="utf-8")
         self.assertIn("function canOpenStep(step)", qml)

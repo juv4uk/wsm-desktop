@@ -807,9 +807,19 @@ void PreflightController::parseDiskInventory(const QByteArray &bytes)
         return;
     }
 
+    const QJsonValue blockDevicesValue =
+        document.object().value(QStringLiteral("blockdevices"));
+    if (!blockDevicesValue.isArray()) {
+        m_disks.clear();
+        m_diskInventoryState = QStringLiteral("unavailable");
+        emit disksChanged();
+        setError(QStringLiteral("lsblk повернув JSON без масиву blockdevices."));
+        setStatus(QStringLiteral("Не вдалося підтвердити структуру інвентаризації накопичувачів."));
+        return;
+    }
+
     m_disks.clear();
-    const QJsonArray blockDevices = document.object()
-        .value(QStringLiteral("blockdevices")).toArray();
+    const QJsonArray blockDevices = blockDevicesValue.toArray();
     for (const QJsonValue &value : blockDevices) {
         const QJsonObject disk = value.toObject();
         if (jsonString(disk, QStringLiteral("type"), {}) != QStringLiteral("disk"))
