@@ -41,8 +41,8 @@ SAFE_GUEST_STAGES = {
     "WSM_CXL_STAGE_MODULE_LOAD",
 }
 GUEST_COUNTS_PATTERN = re.compile(
-    r"^WSM_CXL_COUNTS devices=(\\d{1,5}) ports=(\\d{1,5}) "
-    r"memdevs=(\\d{1,5}) edges=(\\d{1,5})$"
+    r"^WSM_CXL_COUNTS devices=([0-9]{1,5}) ports=([0-9]{1,5}) "
+    r"memdevs=([0-9]{1,5}) edges=([0-9]{1,5})$"
 )
 
 
