@@ -85,6 +85,25 @@ def build_plan(
             )
         except EvidenceUnavailable as exc:
             evidence_problems = [str(exc)]
+
+        if profile_evidence_root is not None:
+            profile_root = Path(profile_evidence_root)
+            profile_file = profile_root / "profile.scm"
+            if profile_root.is_symlink() or not profile_root.is_dir():
+                evidence_problems.append("profile directory is missing or is a symbolic link")
+            elif profile_file.is_symlink() or not profile_file.is_file():
+                evidence_problems.append("profile directory has no regular profile.scm")
+            elif not evidence_problems:
+                from wsm_install.profile import slug_matches_directory
+
+                evidence_problems.extend(
+                    slug_matches_directory(
+                        profile_evidence,
+                        profile_root,
+                        profile_root.parent.parent,
+                    )
+                )
+
         for problem in evidence_problems:
             blockers.append(f"hardware profile evidence is not valid: {problem}")
         if not blockers:
