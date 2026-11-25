@@ -59,6 +59,14 @@ CMake 3.4.2 має параметри:
 
 Для WSM deployment adapter потрібні і `Python Development`, і активний Python modules API. Успішна збірка без цих компонентів не відповідає вимогам проєкту.
 
+### Типи модулів і межа виконання
+
+Upstream Calamares розрізняє три interfaces: `qtplugin` для C++/Qt view- і job-модулів, `python` для job-модулів та `process` для зовнішніх команд. Документація Calamares прямо не рекомендує process-модулі як звичайний шлях інтеграції: їхні команди виконуються через shell, а автор модуля сам відповідає за quoting, host/target chroot semantics і привілеї. Для Python job-модулів upstream надає окремі `host_env_process_output` та `target_env_process_output` із timeout; прямі `os.system()` і довільний `subprocess` не є рекомендованим шляхом усередині такого модуля.
+
+Тому, **якщо Calamares буде повторно розглянуто**, WSM preflight має залишатися окремою read-only фазою, а Guix handoff — типізованим Python job або нативним модулем. Не передавати користувацькі значення в shell command string і не дозволяти Calamares generic bootloader/user jobs дублювати власність Guix. Це обмеження умовної інтеграції, а не повернення Calamares до статусу основного frontend-а.
+
+Джерело: [Calamares module interfaces and job-module guidance](https://github.com/calamares/calamares/blob/calamares/src/modules/README.md).
+
 ### Partition support — обов'язкова функція WSM
 
 У релізному `KPMcoreHelper.cmake` для Qt 6 Calamares шукає KPMcore мінімум **24.01.75**. Додатково потрібні:
