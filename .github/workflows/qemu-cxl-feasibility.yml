@@ -3,7 +3,7 @@ name: QEMU CXL feasibility probe
 on:
   push:
     branches:
-      - research/qemu-cxl-feasibility
+      - research/cxl-qemu-guest-clean-20261125
     paths:
       - "scripts/ci_probe_qemu_cxl.py"
       - "scripts/ci_qemu_cxl_guest.py"
