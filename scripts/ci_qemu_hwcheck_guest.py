@@ -41,6 +41,9 @@ MAX_TAR_MEMBERS = 50_000
 MAX_TAR_EXPANDED_BYTES = 256 * 1024 * 1024
 MAX_INITRAMFS_BYTES = 256 * 1024 * 1024
 MAX_REPORT_BYTES = 512 * 1024
+MAX_PLAN_BYTES = 256 * 1024
+MAX_BUNDLE_BYTES = 1024 * 1024
+MAX_GUEST_SITE_BYTES = 64 * 1024 * 1024
 BUSYBOX_APPLETS = ("sh", "mount", "mkdir", "poweroff", "sleep", "sync")
 QEMU_TIMEOUT_SECONDS = 90
 GUEST_MEMORY_MIB = 2048
@@ -61,7 +64,7 @@ mkdir -p /tmp
 
 export PATH=/opt/python/bin:/bin
 export PYTHONHOME=/opt/python
-export PYTHONPATH=/opt/wsm
+export PYTHONPATH=/opt/wsm:/opt/guest-site
 export LD_LIBRARY_PATH={ld_library_path}
 
 PYTHON=/opt/python/bin/python3.11
@@ -78,21 +81,49 @@ if [ ! -s /tmp/hardware-report.json ]; then
 fi
 echo WSM_HWCHECK_STAGE_COLLECTOR_DONE > /dev/console
 
+echo WSM_INSTALL_STAGE_PREFLIGHT_START > /dev/console
+if ! "$PYTHON" -S -m wsm_install --preflight --dry-run --quiet --report /tmp/hardware-report.json --backend guix --plan-output /tmp/wsm-install-plan.json > /dev/console 2>&1; then
+    guest_fail "wsm-install-preflight"
+fi
+if [ ! -s /tmp/wsm-install-plan.json ]; then
+    guest_fail "installer-plan-file-empty"
+fi
+echo WSM_INSTALL_STAGE_PREFLIGHT_DONE > /dev/console
+
 echo {report_begin} > /dev/console
 if ! "$PYTHON" -S - <<'PYREPORT' > /dev/console 2>&1
 import base64
 import gzip
+import hashlib
+import json
 from pathlib import Path
 
 report_path = Path("/tmp/hardware-report.json")
+plan_path = Path("/tmp/wsm-install-plan.json")
 if report_path.stat().st_size > {max_report_bytes}:
     raise SystemExit("guest report exceeds the 512 KiB report ceiling")
-raw = report_path.read_bytes()
-encoded = base64.b64encode(gzip.compress(raw, mtime=0)).decode("ascii")
+if plan_path.stat().st_size > {max_plan_bytes}:
+    raise SystemExit("guest installer plan exceeds the 256 KiB plan ceiling")
+report_raw = report_path.read_bytes()
+plan_raw = plan_path.read_bytes()
+bundle_raw = json.dumps(
+    {{
+        "hardware_report": json.loads(report_raw.decode("utf-8")),
+        "installer_plan": json.loads(plan_raw.decode("utf-8")),
+        "report_sha256": hashlib.sha256(report_raw).hexdigest(),
+        "plan_sha256": hashlib.sha256(plan_raw).hexdigest(),
+    }},
+    ensure_ascii=False,
+    separators=(",", ":"),
+    sort_keys=True,
+).encode("utf-8")
+if len(bundle_raw) > {max_bundle_bytes}:
+    raise SystemExit("combined report/plan bundle exceeds the 1 MiB ceiling")
+encoded = base64.b64encode(gzip.compress(bundle_raw, mtime=0)).decode("ascii")
 print("{report_prefix}" + encoded)
 PYREPORT
 then
-    guest_fail "report-encoding"
+    guest_fail "report-plan-bundle-encoding"
 fi
 echo {report_end} > /dev/console
 
@@ -210,6 +241,8 @@ def render_guest_init(library_path: str) -> str:
         report_prefix=REPORT_PREFIX,
         report_end=REPORT_END,
         max_report_bytes=MAX_REPORT_BYTES,
+        max_plan_bytes=MAX_PLAN_BYTES,
+        max_bundle_bytes=MAX_BUNDLE_BYTES,
     )
 
 
