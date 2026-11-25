@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import re
@@ -426,7 +427,13 @@ def build_qemu_command(qemu: str, kernel: Path, initramfs: Path) -> list[str]:
     ]
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--timeout", type=int, default=KERNEL_TIMEOUT_SECONDS)
+    args = parser.parse_args(argv)
+    if not 1 <= args.timeout <= 180:
+        raise CxlGuestError("QEMU guest timeout must be between 1 and 180 seconds")
+
     kernel_release = os.uname().release
     kernel = Path("/boot") / f"vmlinuz-{kernel_release}"
     qemu = shutil.which("qemu-system-x86_64")
@@ -434,8 +441,8 @@ def main() -> int:
         raise CxlGuestError(f"runner kernel image is unavailable: {kernel}")
     if not qemu:
         raise CxlGuestError("qemu-system-x86_64 is unavailable")
-    if not all(shutil.which(name) for name in ("modprobe", "zstd", "cpio", "gzip")):
-        raise CxlGuestError("modprobe, zstd, cpio, and gzip are required")
+    if not all(shutil.which(name) for name in ("modprobe", "zstd", "xz", "cpio", "gzip")):
+        raise CxlGuestError("modprobe, zstd, xz, cpio, and gzip are required")
 
     with tempfile.TemporaryDirectory(prefix="wsm-cxl-guest-") as directory:
         work = Path(directory)
@@ -461,7 +468,7 @@ def main() -> int:
         command = build_qemu_command(qemu, kernel_copy, initramfs)
         result = run_bounded_process(
             command,
-            timeout_seconds=KERNEL_TIMEOUT_SECONDS,
+            timeout_seconds=args.timeout,
             marker=GUEST_DONE_MARKER,
             max_stdout_bytes=MAX_SERIAL_BYTES,
             max_stderr_bytes=MAX_STDERR_BYTES,
