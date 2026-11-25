@@ -194,8 +194,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--manifest", type=Path, help="default: release-manifest.json next to the ISO")
     parser.add_argument("--boot", action="store_true", help="also boot the ISO in QEMU (slow)")
     parser.add_argument("--timeout-seconds", type=int, default=300)
-    parser.add_argument("--ovmf-code", type=Path)
-    parser.add_argument("--ovmf-vars", type=Path)
+    parser.add_argument("--ovmf-code", type=Path, help="read-only OVMF CODE image")
+    parser.add_argument(
+        "--ovmf-vars",
+        type=Path,
+        help="OVMF VARS template from the same package/build as --ovmf-code",
+    )
     parser.add_argument("--output", type=Path)
     parser.add_argument("--compact", action="store_true")
     return parser
