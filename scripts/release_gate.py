@@ -28,6 +28,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+ROOT = Path(__file__).resolve().parents[1]
 CHANNEL_LOCKS = {
     "free": ROOT / "channels.lock.scm",
     "compatibility": ROOT / "channels.compatibility.lock.scm",
@@ -35,7 +36,6 @@ CHANNEL_LOCKS = {
 
 SCHEMA = "wsm-release-gate/1"
 VERSION = "0.1.0"
-ROOT = Path(__file__).resolve().parents[1]
 
 
 def run(command: list[str], timeout: int = 900) -> tuple[int, str]:
