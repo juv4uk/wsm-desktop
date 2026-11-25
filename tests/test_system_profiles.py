@@ -1,16 +1,18 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
 """Structural checks for the Guix system profiles.
 
-These tests do not build anything. Without Guix they cannot: the profiles are
-declarative Scheme that only Guix can evaluate. What they do check is that each
-file is a sequence of complete s-expressions (so it cannot be half-written or
-truncated), and that the properties the profiles claim to have are actually
-written in them.
+These tests do not build a Guix image. They verify source structure and the
+shell contract of the image builder using a fake Guix executable.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
+import os
 import re
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -24,13 +26,7 @@ BLOCK_COMMENT_END = "|#"
 
 
 def read_forms(text: str) -> list[str]:
-    """Split Scheme source into top-level forms.
-
-    Raises ValueError on an unbalanced file, which is what a truncated write
-    looks like. Handles line comments, nested block comments, strings with
-    escapes and character literals such as #\\( -- all of which contain
-    characters that would otherwise be mistaken for structure.
-    """
+    """Split Scheme source into top-level forms."""
     forms: list[str] = []
     depth = 0
     start: int | None = None
@@ -52,17 +48,14 @@ def read_forms(text: str) -> list[str]:
             continue
 
         character = text[index]
-
         if text.startswith(BLOCK_COMMENT_START, index):
             block_depth = 1
             index += 2
             continue
-
         if character == ";":
             newline = text.find("\n", index)
             index = length if newline == -1 else newline + 1
             continue
-
         if character == '"':
             index += 1
             while index < length:
@@ -76,13 +69,11 @@ def read_forms(text: str) -> list[str]:
             else:
                 raise ValueError("unterminated string literal")
             continue
-
         if text.startswith("#\\", index):
             match = CHAR_LITERAL.match(text, index)
             if match:
                 index = match.end()
                 continue
-
         if character in DELIMITERS:
             if character in "([":
                 if depth == 0:
@@ -132,7 +123,6 @@ class DesktopProfileTests(unittest.TestCase):
 
     def test_has_exactly_one_display_manager(self) -> None:
         self.assertIn("sddm-service-type", self.text)
-        # GDM comes in through %desktop-services; two managers fight over one seat.
         self.assertIn("(delete gdm-service-type)", self.text)
 
     def test_has_a_desktop_environment(self) -> None:
@@ -147,7 +137,6 @@ class DesktopProfileTests(unittest.TestCase):
         self.assertIn("uk_UA.utf8", self.text)
 
     def test_free_profile_does_not_reference_nonguix(self) -> None:
-        """Comments may mention Nonguix; the code must not depend on it."""
         for name in ("desktop.scm", "live.scm"):
             with self.subTest(profile=name):
                 code = re.sub(r"(?m);.*$", "", profile(name)).lower()
@@ -167,10 +156,166 @@ class LiveProfileTests(unittest.TestCase):
 
 
 class IsoScriptTests(unittest.TestCase):
+    def _fake_guix(self, bin_dir: Path) -> None:
+        fake_guix = bin_dir / "guix"
+        fake_guix.write_text(
+            """#!/bin/sh
+printf 'CALL' >> "$WSM_TEST_GUIX_ARGS"
+for argument in "$@"; do printf '|%s' "$argument" >> "$WSM_TEST_GUIX_ARGS"; done
+printf '\\nPWD=%s\\n' "$PWD" >> "$WSM_TEST_GUIX_ARGS"
+root=
+case " $* " in
+    *" -- --version "*) echo 'guix (GNU Guix) 1.5.0-pinned'; exit 0 ;;
+    *" describe -f channels "*)
+        if [ "$WSM_TEST_AUTH_DISABLED" = '1' ]; then
+            echo 'channel authentication disabled' >&2
+        fi
+        printf '%s\\n' '(list (channel (name guix) (commit test)))'
+        exit 0 ;;
+    *" system image "*)
+        for argument in "$@"; do
+            case "$argument" in --root=*) root=${argument#--root=} ;; esac
+        done
+        [ -n "$root" ] || exit 9
+        ln -s "$WSM_TEST_IMAGE" "$root"
+        exit 0 ;;
+esac
+exit 8
+""",
+            encoding="utf-8",
+        )
+        fake_guix.chmod(0o755)
+
+    def test_builder_uses_locked_channels_and_writes_manifest(self) -> None:
+        script = ROOT / "scripts" / "build_iso.sh"
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_root = Path(temporary)
+            bin_dir = temporary_root / "bin"
+            output_dir = temporary_root / "out"
+            bin_dir.mkdir()
+            output_dir.mkdir()
+            fake_image = temporary_root / "guix-store-image.iso"
+            fake_image.write_bytes(b"synthetic test image bytes")
+            args_log = temporary_root / "guix-args.txt"
+            self._fake_guix(bin_dir)
+
+            environment = os.environ.copy()
+            environment["PATH"] = str(bin_dir) + os.pathsep + os.defpath
+            environment["WSM_ISO_DIR"] = str(output_dir)
+            environment["WSM_TEST_GUIX_ARGS"] = str(args_log)
+            environment["WSM_TEST_IMAGE"] = str(fake_image)
+            environment.pop("GUIX_PACKAGE_PATH", None)
+
+            result = subprocess.run(
+                ["/bin/sh", str(script)],
+                cwd=temporary_root,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            expected = output_dir / "wsm-desktop-live.iso"
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(expected.is_symlink())
+            self.assertEqual(expected.resolve(), fake_image)
+
+            calls = args_log.read_text(encoding="utf-8")
+            lock = ROOT / "channels.lock.scm"
+            self.assertIn(f"CALL|time-machine|-C|{lock}|-L|{ROOT}|--|describe|-f|channels", calls)
+            self.assertIn(f"CALL|time-machine|-C|{lock}|-L|{ROOT}|--|system|image", calls)
+            self.assertIn(f"--root={expected}", calls)
+            self.assertIn("--no-grafts", calls)
+            self.assertIn("--image-type=iso9660", calls)
+            self.assertIn(f"PWD={ROOT}", calls)
+            self.assertNotIn("--disable-authentication", calls)
+
+            manifest_path = output_dir / "manifest.json"
+            checksums_path = output_dir / "SHA256SUMS"
+            self.assertTrue(manifest_path.is_file())
+            self.assertTrue(checksums_path.is_file())
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(manifest["source"]["commit"], subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
+            ).strip())
+            self.assertEqual(manifest["source"]["locked_guix_channel_commit"], re.search(
+                r'\(commit\s+"([0-9a-f]{40})"\)',
+                (ROOT / "channels.lock.scm").read_text(encoding="utf-8"),
+            ).group(1))
+            self.assertEqual(manifest["artifact"]["size_bytes"], fake_image.stat().st_size)
+            self.assertEqual(
+                manifest["artifact"]["sha256"],
+                hashlib.sha256(fake_image.read_bytes()).hexdigest(),
+            )
+            self.assertIn("default", manifest["guix"]["authentication_policy"])
+            self.assertEqual(manifest["guix"]["locked_version"], "guix (GNU Guix) 1.5.0-pinned")
+
+            checksum_entries = {}
+            for line in checksums_path.read_text(encoding="utf-8").splitlines():
+                digest, filename = line.split("  ", 1)
+                checksum_entries[filename] = digest
+            for filename, digest in checksum_entries.items():
+                target = output_dir / filename
+                if filename == expected.name:
+                    target = expected
+                self.assertEqual(hashlib.sha256(target.read_bytes()).hexdigest(), digest)
+
+            # A repeat must fail before calling Guix or replacing the previous link.
+            previous_log = args_log.read_text(encoding="utf-8")
+            again = subprocess.run(
+                ["/bin/sh", str(script)],
+                cwd=temporary_root,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(again.returncode, 3)
+            self.assertEqual(args_log.read_text(encoding="utf-8"), previous_log)
+            self.assertEqual(expected.resolve(), fake_image)
+
+    def test_builder_fails_closed_when_channel_authentication_is_disabled(self) -> None:
+        script = ROOT / "scripts" / "build_iso.sh"
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_root = Path(temporary)
+            bin_dir = temporary_root / "bin"
+            output_dir = temporary_root / "out"
+            bin_dir.mkdir()
+            output_dir.mkdir()
+            fake_image = temporary_root / "guix-store-image.iso"
+            fake_image.write_bytes(b"image must not be published")
+            args_log = temporary_root / "guix-args.txt"
+            self._fake_guix(bin_dir)
+
+            environment = os.environ.copy()
+            environment["PATH"] = str(bin_dir) + os.pathsep + os.defpath
+            environment["WSM_ISO_DIR"] = str(output_dir)
+            environment["WSM_TEST_GUIX_ARGS"] = str(args_log)
+            environment["WSM_TEST_IMAGE"] = str(fake_image)
+            environment["WSM_TEST_AUTH_DISABLED"] = "1"
+            environment.pop("GUIX_PACKAGE_PATH", None)
+
+            result = subprocess.run(
+                ["/bin/sh", str(script)],
+                cwd=temporary_root,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 7, result.stderr)
+            self.assertIn("channel authentication is disabled", result.stderr)
+            calls = args_log.read_text(encoding="utf-8")
+            self.assertIn("CALL|time-machine|-C|", calls)
+            self.assertNotIn("|--|system|image", calls)
+            self.assertFalse((output_dir / "wsm-desktop-live.iso").exists())
+            self.assertFalse((output_dir / "manifest.json").exists())
+
     def test_script_refuses_to_run_without_guix(self) -> None:
         text = (ROOT / "scripts" / "build_iso.sh").read_text(encoding="utf-8")
         self.assertIn("command -v guix", text)
         self.assertIn("exit 127", text)
+        self.assertIn("time-machine -C", text)
         self.assertIn("--image-type=iso9660", text)
 
 
