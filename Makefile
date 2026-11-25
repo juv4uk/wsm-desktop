@@ -3,9 +3,9 @@
 PYTHON ?= python3
 GUIX ?= guix
 
-.PHONY: check check-channels check-docs check-evidence-drafter check-executor check-hardware-providers check-hardware-schema check-hwcheck check-hygiene check-install-steps check-installer check-isa check-live-acceptance check-locked-system check-makefile check-minimal-system check-partition check-perf-baseline check-profile-evidence check-profile-match check-profiles check-profiles-matrix check-qemu-harness check-release check-release-verdict check-state check-syntax check-system check-uefi-preboot-policy check-validation-protocols describe-lock release-bundle release-gate vm-system vm-system-serial
+.PHONY: check check-release-gate check-channels check-docs check-evidence-drafter check-executor check-hardware-providers check-hardware-schema check-hwcheck check-hygiene check-install-steps check-installer check-isa check-live-acceptance check-locked-system check-makefile check-minimal-system check-partition check-perf-baseline check-profile-evidence check-profile-match check-profiles check-profiles-matrix check-qemu-harness check-release check-release-verdict check-state check-syntax check-system check-uefi-preboot-policy check-validation-protocols describe-lock release-bundle release-gate vm-system vm-system-serial
 
-check: check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa check-live-acceptance check-profiles-matrix check-perf-baseline check-profile-evidence check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-hygiene check-channels check-executor
+check: check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa check-live-acceptance check-profiles-matrix check-perf-baseline check-profile-evidence check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-hygiene check-channels check-executor check-release-gate
 
 check-profiles:
 	$(PYTHON) tests/test_system_profiles.py
@@ -34,6 +34,9 @@ check-profile-match:
 
 check-release-verdict:
 	$(PYTHON) tests/test_verify_live_release.py
+
+check-release-gate:
+	$(PYTHON) tests/test_release_gate.py
 
 check-makefile:
 	$(PYTHON) tests/test_makefile_coverage.py
