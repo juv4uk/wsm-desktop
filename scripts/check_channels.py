@@ -33,6 +33,18 @@ class ParseError(Exception):
     pass
 
 
+class SchemeSymbol(str):
+    """An unquoted Scheme symbol; distinct from a string literal."""
+
+
+class SchemeQuotedSymbol(str):
+    """A quoted Scheme symbol such as 'guix."""
+
+
+class SchemeString(str):
+    """A Scheme string literal; distinct from an unquoted symbol."""
+
+
 def tokenize(text: str) -> list[str]:
     """Tokenize the deliberately small Scheme subset used by channel locks."""
     tokens: list[str] = []
@@ -98,8 +110,14 @@ def parse(tokens: list[str]) -> Any:
         if token.startswith('"'):
             if len(token) < 2 or not token.endswith('"'):
                 raise ParseError("malformed string token")
-            return token[1:-1], position + 1
-        return token, position + 1
+            return SchemeString(token[1:-1]), position + 1
+        if token == "#f":
+            return False, position + 1
+        if token.startswith("'"):
+            if len(token) == 1:
+                raise ParseError("empty quoted symbol")
+            return SchemeQuotedSymbol(token[1:]), position + 1
+        return SchemeSymbol(token), position + 1
 
     value, position = read(0)
     if position != len(tokens):
@@ -109,19 +127,19 @@ def parse(tokens: list[str]) -> Any:
 
 def channels_of(form: Any) -> list[dict[str, Any]]:
     """Read channel records, rejecting duplicate and unknown fields."""
-    if not isinstance(form, list) or not form or form[0] != "list":
+    if not isinstance(form, list) or not form or not isinstance(form[0], SchemeSymbol) or form[0] != "list":
         raise ParseError("expected (list (channel ...) ...)")
 
     found: list[dict[str, Any]] = []
     for entry in form[1:]:
-        if not isinstance(entry, list) or not entry or entry[0] != "channel":
+        if not isinstance(entry, list) or not entry or not isinstance(entry[0], SchemeSymbol) or entry[0] != "channel":
             raise ParseError(f"unexpected entry: {entry!r}")
         channel: dict[str, Any] = {}
         for field in entry[1:]:
             if not isinstance(field, list) or not field:
                 raise ParseError(f"malformed channel field: {field!r}")
             key = field[0]
-            if not isinstance(key, str) or key not in REQUIRED_FIELDS:
+            if not isinstance(key, SchemeSymbol) or key not in REQUIRED_FIELDS:
                 raise ParseError(f"unexpected channel field: {key!r}")
             if key in channel:
                 raise ParseError(f"duplicate channel field: {key!r}")
@@ -129,9 +147,16 @@ def channels_of(form: Any) -> list[dict[str, Any]]:
                 raise ParseError(f"channel field {key!r} must have exactly one value")
             value = field[1]
             if key == "name":
-                if not isinstance(value, str) or not value.startswith("'"):
+                if not isinstance(value, SchemeQuotedSymbol):
                     raise ParseError("channel name must be a quoted symbol")
-                value = value[1:]
+                value = str(value)
+            elif key in {"url", "commit"}:
+                if not isinstance(value, SchemeString):
+                    raise ParseError(f"channel field {key!r} must be a Scheme string")
+                value = str(value)
+            elif key == "branch":
+                if value is not False:
+                    raise ParseError("channel branch must be the Scheme boolean #f")
             channel[key] = value
         missing = REQUIRED_FIELDS - channel.keys()
         if missing:
@@ -145,19 +170,21 @@ def _introduction_is_canonical(value: Any) -> bool:
     if (
         not isinstance(value, list)
         or len(value) != 3
+        or not isinstance(value[0], SchemeSymbol)
         or value[0] != "make-channel-introduction"
     ):
         return False
     commit, fingerprint_form = value[1], value[2]
-    if not isinstance(commit, str) or not COMMIT.fullmatch(commit):
+    if not isinstance(commit, SchemeString) or not COMMIT.fullmatch(commit):
         return False
     if commit != INTRODUCTION_COMMIT:
         return False
     if (
         not isinstance(fingerprint_form, list)
         or len(fingerprint_form) != 2
+        or not isinstance(fingerprint_form[0], SchemeSymbol)
         or fingerprint_form[0] != "openpgp-fingerprint"
-        or not isinstance(fingerprint_form[1], str)
+        or not isinstance(fingerprint_form[1], SchemeString)
     ):
         return False
     fingerprint = re.sub(r"\s+", "", fingerprint_form[1]).upper()
@@ -202,7 +229,7 @@ def check(text: str) -> list[str]:
             ):
                 problems.append(f"channel {name!r} URL contains unsupported components")
 
-        if channel["branch"] != "#f":
+        if channel["branch"] is not False:
             problems.append(
                 f"channel {name!r} must use branch #f and a fixed commit, not a moving branch"
             )
