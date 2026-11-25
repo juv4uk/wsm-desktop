@@ -112,6 +112,22 @@ class RuleTests(unittest.TestCase):
                 )
                 self.assertTrue(check(text))
 
+    def test_branch_string_false_is_not_boolean_false(self) -> None:
+        text = GOOD.replace("(branch #f)", '(branch "#f")')
+        self.assertTrue(any("Scheme boolean #f" in item for item in check(text)))
+
+    def test_url_must_be_a_scheme_string_literal(self) -> None:
+        text = GOOD.replace('(url "https://git.guix.gnu.org/guix.git")', '(url https://git.guix.gnu.org/guix.git)')
+        self.assertTrue(any("must be a Scheme string" in item for item in check(text)))
+
+    def test_commit_must_be_a_scheme_string_literal(self) -> None:
+        text = GOOD.replace('(commit "4e5195be20d9b124df8a8bb69213412236e4668e")', '(commit 4e5195be20d9b124df8a8bb69213412236e4668e)')
+        self.assertTrue(any("must be a Scheme string" in item for item in check(text)))
+
+    def test_introduction_values_must_be_scheme_string_literals(self) -> None:
+        text = GOOD.replace('"9edb3f66fd807b096b48283debdcddccfea34bad"', '9edb3f66fd807b096b48283debdcddccfea34bad')
+        self.assertTrue(check(text))
+
     def test_branch_instead_of_false_is_refused(self) -> None:
         text = GOOD.replace("(branch #f)", '(branch "master")')
         self.assertTrue(any("branch #f" in item for item in check(text)))
