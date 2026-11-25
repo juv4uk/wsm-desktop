@@ -27,10 +27,6 @@ on:
       - ".github/workflows/installer-gui.yml"
   workflow_dispatch:
 
-concurrency:
-  group: installer-gui-${{ github.ref }}
-  cancel-in-progress: true
-
 permissions:
   contents: read
 
