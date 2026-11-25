@@ -38,7 +38,7 @@ class OptionalHardwareProviderTests(unittest.TestCase):
             self.lower,
         )
         self.assertIn(
-            "перевіряти точну upstream/downstream revision на наявність відповідних виправлень",
+            "перевірити точний source/package revision і фактичний parser code",
             self.lower,
         )
         self.assertIn("не включати до стандартного live image", self.lower)
