@@ -11,6 +11,8 @@ on:
       - "schemas/hardware-report.schema.json"
       - ".github/workflows/installer-gui.yml"
   push:
+    branches:
+      - main
     paths:
       - "installer/gui/**"
       - "wsm/packages/installer.scm"
@@ -20,6 +22,10 @@ on:
       - "schemas/hardware-report.schema.json"
       - ".github/workflows/installer-gui.yml"
   workflow_dispatch:
+
+concurrency:
+  group: installer-gui-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
