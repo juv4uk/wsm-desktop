@@ -15,6 +15,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import jsonschema
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -192,6 +194,30 @@ def write_bundle(
     return artifact_path
 
 
+def validate_hardware_report(report: Any) -> list[str]:
+    """Validate source report schema and privacy assertions before copying raw bytes."""
+    try:
+        schema = json.loads(
+            (ROOT / "schemas" / "hardware-report.schema.json").read_text(encoding="utf-8")
+        )
+        jsonschema.Draft202012Validator.check_schema(schema)
+    except (OSError, UnicodeError, json.JSONDecodeError, jsonschema.SchemaError) as exc:
+        return [f"cannot load hardware report schema: {exc}"]
+
+    validator = jsonschema.Draft202012Validator(
+        schema,
+        format_checker=jsonschema.FormatChecker(),
+    )
+    errors = sorted(
+        validator.iter_errors(report),
+        key=lambda item: list(item.absolute_path),
+    )
+    return [
+        f"{'/'.join(str(part) for part in error.absolute_path) or '<root>'}: {error.message}"
+        for error in errors
+    ]
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="draft-profile-evidence",
@@ -233,6 +259,17 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if not isinstance(report, dict):
         print("draft-profile-evidence: report root must be a JSON object", file=sys.stderr)
+        return 2
+
+    report_problems = validate_hardware_report(report)
+    if report_problems:
+        for problem in report_problems[:20]:
+            print(f"draft-profile-evidence: source report violates privacy/schema contract: {problem}", file=sys.stderr)
+        if len(report_problems) > 20:
+            print(
+                f"draft-profile-evidence: {len(report_problems) - 20} additional schema errors omitted",
+                file=sys.stderr,
+            )
         return 2
 
     try:
