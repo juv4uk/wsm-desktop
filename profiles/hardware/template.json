@@ -38,19 +38,12 @@
   ],
   "artifacts": [
     {
-      "kind": "dmesg",
-      "path": "artifacts/dmesg.txt",
+      "kind": "wsm-hwcheck-report",
+      "path": "artifacts/wsm-hwcheck-report.json",
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-      "note": "замінити на справжній файл і SHA-256"
+      "note": "замінити на точні байти реального wsm-hwcheck report"
     }
   ],
-  "hardware_signature": {
-    "pci_ids": [
-      "0000:0000"
-    ],
-    "match": "all",
-    "notes": "vendor:device у нижньому регістрі, як у lspci -nn; замінити на справжні"
-  },
   "profile_source": {
     "path": "profile.scm",
     "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
