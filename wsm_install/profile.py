@@ -38,13 +38,13 @@ def load(path: Path) -> dict[str, Any]:
     return value
 
 
-def _artifact_problems(
-    artifact: dict[str, Any],
+def _file_sha256_problem(
+    raw_path: str,
+    expected_sha256: str,
     artifact_root: Path | None,
-    index: int,
+    label: str,
 ) -> list[str]:
-    """Verify one artifact's portable path, containment, file type and SHA-256."""
-    raw_path = artifact["path"]
+    """Verify one safe relative file path and its exact SHA-256."""
     parts = raw_path.split("/")
     relative = PurePosixPath(raw_path)
     if (
@@ -55,47 +55,62 @@ def _artifact_problems(
         or any(part in ("", ".", "..") for part in parts)
         or relative.as_posix() != raw_path
     ):
-        return [f"artifacts/{index}/path is not a safe relative path: {raw_path!r}"]
+        return [f"{label}/path is not a safe relative path: {raw_path!r}"]
 
     if artifact_root is None:
-        return [f"artifacts/{index} cannot be verified without an evidence directory"]
+        return [f"{label} cannot be verified without an evidence directory"]
     if artifact_root.is_symlink():
-        return [f"artifacts/{index} evidence directory must not be a symbolic link"]
+        return [f"{label} evidence directory must not be a symbolic link"]
 
     try:
         root = artifact_root.resolve(strict=True)
-    except OSError as exc:
-        return [f"artifacts/{index} evidence directory is unavailable: {exc}"]
+    except (OSError, ValueError) as exc:
+        return [f"{label} evidence directory is unavailable: {exc}"]
     if not root.is_dir():
-        return [f"artifacts/{index} evidence root is not a directory"]
+        return [f"{label} evidence root is not a directory"]
 
     candidate = root
     for part in relative.parts:
         candidate = candidate / part
-        if candidate.is_symlink():
-            return [f"artifacts/{index}/path must not traverse a symbolic link"]
+        try:
+            if candidate.is_symlink():
+                return [f"{label}/path must not traverse a symbolic link"]
+        except (OSError, ValueError):
+            return [f"{label}/path contains an invalid filesystem component"]
 
     try:
         resolved = candidate.resolve(strict=True)
         resolved.relative_to(root)
     except (OSError, ValueError):
-        return [f"artifacts/{index}/path is missing or escapes the evidence directory"]
+        return [f"{label}/path is missing or escapes the evidence directory"]
 
-    if not resolved.is_file():
-        return [f"artifacts/{index}/path is not a regular file"]
-
-    digest = hashlib.sha256()
     try:
+        if not resolved.is_file():
+            return [f"{label}/path is not a regular file"]
+        digest = hashlib.sha256()
         with resolved.open("rb") as stream:
             for chunk in iter(lambda: stream.read(1024 * 1024), b""):
                 digest.update(chunk)
-    except OSError as exc:
-        return [f"artifacts/{index}/path cannot be read: {exc}"]
+    except (OSError, ValueError):
+        return [f"{label}/path cannot be read"]
 
-    if digest.hexdigest() != artifact["sha256"]:
-        return [f"artifacts/{index}/sha256 does not match the bytes at {raw_path!r}"]
+    if digest.hexdigest() != expected_sha256:
+        return [f"{label}/sha256 does not match the bytes at {raw_path!r}"]
     return []
 
+
+def _artifact_problems(
+    artifact: dict[str, Any],
+    artifact_root: Path | None,
+    index: int,
+) -> list[str]:
+    """Verify one manifest artifact against its actual file bytes."""
+    return _file_sha256_problem(
+        artifact["path"],
+        artifact["sha256"],
+        artifact_root,
+        f"artifacts/{index}",
+    )
 
 def problems(
     document: dict[str, Any],
@@ -159,6 +174,15 @@ def problems(
                 f"function {item['name']!r} failed but is not listed in known_limitations"
             )
 
+    profile_source = document["profile_source"]
+    found.extend(
+        _file_sha256_problem(
+            profile_source["path"],
+            profile_source["sha256"],
+            artifact_root,
+            "profile_source",
+        )
+    )
     for index, artifact in enumerate(document["artifacts"]):
         found.extend(_artifact_problems(artifact, artifact_root, index))
 
