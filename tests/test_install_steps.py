@@ -155,7 +155,7 @@ class FilesystemChoiceTests(unittest.TestCase):
 
 class BackendCommandTests(unittest.TestCase):
     def test_command_shape(self) -> None:
-        command = backend_command(layout(), "systems/desktop.scm")
+        command = backend_command(layout())
         self.assertEqual(
             command,
             [
@@ -164,14 +164,33 @@ class BackendCommandTests(unittest.TestCase):
             ],
         )
 
-    def test_non_scheme_file_is_refused(self) -> None:
-        with self.assertRaises(Refused):
-            backend_command(layout(), "systems/desktop.json")
+    def test_arbitrary_system_file_is_refused(self) -> None:
+        for path in ("systems/desktop.scm", "../../other.scm", "/tmp/other.scm", "/run/wsm/other.scm"):
+            with self.subTest(path=path), self.assertRaises(Refused):
+                backend_command(layout(), system_file=path)
+
+    def test_arbitrary_backend_target_is_refused(self) -> None:
+        for target in ("/", "/tmp", "/mnt2", "/mnt/../root", "//mnt"):
+            with self.subTest(target=target), self.assertRaises(Refused):
+                backend_command(layout(), target=target)
+
+    def test_backend_handoff_requires_disk_acknowledgement_and_size(self) -> None:
+        proposed = layout()
+        proposed.acknowledgement = None
+        with self.assertRaises(Refused) as caught:
+            backend_command(proposed)
+        self.assertEqual(caught.exception.code, "disk.acknowledgement")
+
+        proposed = layout()
+        proposed.disk_size_bytes = None
+        with self.assertRaises(Refused) as caught:
+            backend_command(proposed)
+        self.assertEqual(caught.exception.code, "disk.size-unrecorded")
 
 
 class RenderTests(unittest.TestCase):
     def test_render_warns_and_marks_destructive_steps(self) -> None:
-        text = render(plan_steps(layout()), backend_command(layout(), "systems/desktop.scm"))
+        text = render(plan_steps(layout()), backend_command(layout()))
         self.assertIn("NOT EXECUTED", text)
         self.assertIn("DESTRUCTIVE", text)
         self.assertIn("guix time-machine", text)
