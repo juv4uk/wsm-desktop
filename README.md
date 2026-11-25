@@ -58,13 +58,11 @@ Calamares user interface
     +--> WSM-specific configuration and preflight
               |
               v
-       WSM Guix deployment adapter
+       WSM backend adapter
               |
-              v
-       generated Guix System configuration
+              +--> Nix/NixOS deployment path
               |
-              v
-       guix system init
+              +--> GNU Guix deployment path
               |
               v
        installed WSM Desktop system
@@ -72,20 +70,22 @@ Calamares user interface
 
 This is a design target, not a working installer yet. Nix and Guix deployment must remain separate backend implementations until comparative tests justify a supported release model.
 
-### Important integration boundary
+### Backend ownership
 
-Guix System owns the declarative target configuration and system deployment. In particular, the generated Guix configuration must describe the bootloader and target file systems. We must not let a stock Calamares bootloader job and `guix system init` both attempt to install or configure the bootloader.
+Each installed WSM system must have exactly one backend responsible for system configuration and activation. The Nix/NixOS and Guix deployment paths are separate and must not both attempt to manage the same root filesystem, bootloader, or service manager.
 
-Likewise, Calamares' generic user-creation step must not be assumed to create a correct declarative Guix `user-account`. User creation, password handling, file-system mapping, and bootloader setup need an explicit WSM integration design.
+For the **Guix backend**, the generated Guix configuration owns the target file systems, user accounts, services, and bootloader. We must not let a stock Calamares bootloader job and `guix system init` both attempt to install or configure the bootloader. Calamares' generic user-creation step must not be assumed to create a correct declarative Guix `user-account`.
+
+The Nix/NixOS backend needs its own deployment design; it is not implemented by reusing Guix commands.
 
 ## Profiles
 
-The project intends to provide two clearly separated installation choices:
+The project intends to provide two clearly separated software-policy choices:
 
-- **WSM Free** — uses the official Guix channel and free-software components only.
-- **WSM Compatibility** — may add explicitly selected Nonguix components when needed for hardware support.
+- **WSM Free** — only components that meet the project's free-software policy.
+- **WSM Compatibility** — explicitly selected components outside that policy, with their licenses and redistribution terms disclosed.
 
-The compatibility profile is optional. Nonguix is an independent community channel and is not endorsed by the GNU Guix project. Review its own warnings and package licenses before enabling or redistributing its contents.
+These are WSM policy labels, not a claim that both backends already implement the profiles. Their package sources and exact behavior must be defined separately for each backend. On the Guix path, Nonguix may be considered as an optional independent channel; it is not endorsed by the GNU Guix project.
 
 ## Repository map
 
