@@ -36,6 +36,14 @@ CXL_MODULES = (
     "cxl_pmem",
     "cxl_test",
 )
+CONFIG_MODULES = {
+    "CONFIG_CXL_BUS": "cxl_core",
+    "CONFIG_CXL_PCI": "cxl_pci",
+    "CONFIG_CXL_ACPI": "cxl_acpi",
+    "CONFIG_CXL_MEM": "cxl_mem",
+    "CONFIG_CXL_PORT": "cxl_port",
+    "CONFIG_CXL_REGION": "cxl_region",
+}
 QEMU_TIMEOUT_SECONDS = 20
 MAX_CAPTURE_BYTES = 64 * 1024
 
@@ -94,6 +102,7 @@ def build_qemu_command(qemu: str) -> list[str]:
         "-nodefaults",
         "-display", "none",
         "-machine", "q35,cxl=on",
+        "-accel", "tcg",
         "-m", "1G,maxmem=2G,slots=8",
         "-smp", "1",
         "-object", "memory-backend-ram,id=vmem0,size=256M,share=on",
@@ -175,7 +184,10 @@ def probe(qemu_override: str | None = None) -> dict[str, object]:
     }
     driver_ready = all(
         config.get(name) == "y"
-        or (config.get(name) == "m" and bool(modules))
+        or (
+            config.get(name) == "m"
+            and CONFIG_MODULES.get(name) in modules
+        )
         for name in REQUIRED_CONFIG
     )
     qemu_version = None
@@ -186,15 +198,25 @@ def probe(qemu_override: str | None = None) -> dict[str, object]:
         "diagnostic": "qemu-system-x86_64 was not found.",
     }
     if qemu:
-        version = subprocess.run(
-            [qemu, "--version"],
-            capture_output=True,
-            text=True,
-            errors="replace",
-            timeout=5,
-            check=False,
-        )
-        qemu_version = (version.stdout or version.stderr).splitlines()[0:1]
+            try:
+            version = subprocess.run(
+                [qemu, "--version"],
+                capture_output=True,
+                text=True,
+                errors="replace",
+                timeout=5,
+                check=False,
+            )
+            qemu_version = (version.stdout or version.stderr).splitlines()[0:1]
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            qemu_version = None
+            qemu_result = {
+                "status": "version-probe-failed",
+                "exit_code": None,
+                "devices_seen": [],
+                "diagnostic": f"{type(exc).__name__}: {exc}",
+            }
+            qemu = None
         qemu_result = run_qemu_topology_probe(qemu)
 
     return {
