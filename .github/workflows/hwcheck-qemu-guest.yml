@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - work/hwcheck-qemu-guest
+      - fix/hwcheck-qemu-report-chunked-v3
   pull_request:
     paths:
       - ".github/workflows/hwcheck-qemu-guest.yml"
@@ -12,7 +13,6 @@ on:
       - "wsm_hwcheck/**"
       - "schemas/hardware-report.schema.json"
       - "docs/testing/HWCHECK-QEMU-GUEST.md"
-      - "tests/test_qemu_hwcheck_guest.py"
       - "tests/test_qemu_hwcheck_guest.py"
   workflow_dispatch:
 
@@ -42,10 +42,7 @@ jobs:
       - name: Install schema validator on the host only
         run: python -m pip install -r requirements-dev.txt
 
-      - name: Run host-side guest assembly and report transport tests
-        run: python -m unittest discover -s tests -p "test_qemu_hwcheck_guest.py" -v
-
-      - name: Run host-side initramfs and report transport tests
+      - name: Run host-side guest assembly, archive, and report transport tests
         run: python -m unittest discover -s tests -p "test_qemu_hwcheck_guest.py" -v
 
       - name: Boot guest and validate its actual WSM hardware report
