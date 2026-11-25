@@ -115,7 +115,7 @@ class GuixDeployCliTests(unittest.TestCase):
         self.assertEqual(payload["status"], "prepared-not-executed")
         self.assertEqual(
             payload["argv"],
-            ["guix", "system", "init", "/run/wsm/system.scm", "/mnt"],
+            ["/run/current-system/profile/bin/guix", "time-machine", "-C", "/run/wsm/channels.lock.scm", "--", "system", "init", "/run/wsm/system.scm", "/mnt"],
         )
         self.assertEqual(payload["configuration_path"], str(self.output_path))
         self.assertFalse(payload["deployment_executed"])
