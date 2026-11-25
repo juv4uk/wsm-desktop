@@ -88,7 +88,7 @@ class InputValidationTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, "execute.step-type")
 
     def test_invalid_argv_is_refused(self) -> None:
-        invalid = Step(["/bin/echo", "bad\\nargument"], "display")
+        invalid = Step(["/bin/echo", "bad" + chr(10) + "argument"], "display")
         with self.assertRaises(ExecutorError) as caught:
             execute([invalid], DISK, out=lambda _: None)
         self.assertEqual(caught.exception.code, "execute.command")
