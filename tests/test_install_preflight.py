@@ -49,7 +49,7 @@ class InstallerPlanTests(unittest.TestCase):
         self.assertEqual(plan["backend"]["id"], "nixos")
         self.assertFalse(plan["execution"]["mutations_authorized"])
 
-    def test_required_firmware_error_on_critical_device_is_blocking(self) -> None:
+    def test_required_network_firmware_error_is_warning_with_offline_fallback(self) -> None:
         report, raw = load_fixture("missing-firmware.json")
         _, blockers, warnings = build_plan(report, raw, "guix")
         self.assertFalse(blockers)
@@ -117,6 +117,11 @@ class InstallerPlanTests(unittest.TestCase):
                 ])
             self.assertEqual(result, 2)
 
+    def test_not_detected_critical_device_refuses_to_emit_plan(self) -> None:
+        report, raw = load_fixture("unknown-incomplete.json")
+        report["devices"][0]["discovery_status"] = "not-detected"
+        _, blockers, _ = build_plan(report, raw, "nix")
+        self.assertTrue(any("not-detected" in item for item in blockers))
 
 if __name__ == "__main__":
     unittest.main()
