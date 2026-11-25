@@ -68,6 +68,8 @@ def median_and_spread(samples: list[float]) -> dict[str, float]:
     return {
         "median": median,
         "p90": p90,
+        "p90_method": "nearest-rank",
+        "p90_rank": index + 1,
         "mad": mad,
         "mad_relative": mad_relative,
         "p90_relative": p90_relative,
