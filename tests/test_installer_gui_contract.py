@@ -121,6 +121,18 @@ class InstallerGuiContractTests(unittest.TestCase):
         self.assertIn("source_report.report_id", source)
         self.assertIn("source_report.schema_version", source)
 
+    def test_plan_json_has_shared_cpp_python_golden_contract(self) -> None:
+        self.assertTrue((GUI / "src" / "PlanJson.h").is_file())
+        self.assertTrue((GUI / "src" / "PlanJson.cpp").is_file())
+        self.assertTrue((GUI / "tests" / "fixtures" / "canonical-json.json").is_file())
+        self.assertTrue((ROOT / "scripts" / "test_installer_gui_plan_json.py").is_file())
+        main = (GUI / "src" / "main.cpp").read_text(encoding="utf-8")
+        workflow = (ROOT / ".github" / "workflows" / "installer-gui.yml").read_text(encoding="utf-8")
+        self.assertIn("--canonical-json", main)
+        self.assertIn("--validate-plan", main)
+        self.assertIn("WsmPlanJson::canonicalJson", main)
+        self.assertIn("test_installer_gui_plan_json.py", workflow)
+
     def test_qml_smoke_mode_does_not_probe_hardware(self) -> None:
         main = (GUI / "src" / "main.cpp").read_text(encoding="utf-8")
         qml = (GUI / "qml" / "Main.qml").read_text(encoding="utf-8")
