@@ -145,4 +145,4 @@
       (login-service-type config =>
         (login-configuration
          (inherit config)
-         (allow-empty-passwords? #f))))))
+         (allow-empty-passwords? #f)))))))
