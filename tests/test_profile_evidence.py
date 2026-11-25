@@ -424,6 +424,8 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(schema["properties"]["schema"]["const"], "wsm-profile-evidence/2")
         self.assertIn("isa_level", schema["required"])
         self.assertIn("artifacts", schema["required"])
+        self.assertIn("profile_source", schema["required"])
+        self.assertEqual(schema["properties"]["profile_source"]["properties"]["path"]["const"], "profile.scm")
 
     def test_no_bundle_lives_outside_the_profiles_tree(self) -> None:
         strays = [
