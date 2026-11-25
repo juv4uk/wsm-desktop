@@ -57,6 +57,7 @@ class QemuHwcheckGuestSafetyTests(unittest.TestCase):
             "WSM_HWCHECK_STAGE_COLLECTOR_START",
             "WSM_HWCHECK_STAGE_COLLECTOR_DONE",
             "WSM_HWCHECK_REPORT_BEGIN",
+            "WSM_HWCHECK_REPORT_CHUNK:",
             "WSM_HWCHECK_REPORT_END",
             "WSM_HWCHECK_GUEST_FAILURE:",
         ):
@@ -172,14 +173,59 @@ class QemuHwcheckGuestSafetyTests(unittest.TestCase):
         encoded = base64.b64encode(
             gzip.compress(json.dumps(expected).encode("utf-8"), mtime=0)
         ).decode("ascii")
-        serial = (chr(13) + chr(10)).join(
-            (
-                guest.REPORT_BEGIN,
-                guest.REPORT_PREFIX + encoded,
-                guest.REPORT_END,
+        chunk_lines = [
+            guest.REPORT_CHUNK_PREFIX + f"{index:06d}:" + encoded[offset:offset + guest.REPORT_CHUNK_CHARS]
+            for index, offset in enumerate(range(0, len(encoded), guest.REPORT_CHUNK_CHARS))
+        ]
+        self.assertTrue(chunk_lines)
+        self.assertTrue(
+            all(
+                len(line) <= len(guest.REPORT_CHUNK_PREFIX) + 7 + guest.REPORT_CHUNK_CHARS
+                for line in chunk_lines
             )
         )
+        serial = (chr(13) + chr(10)).join(
+            [guest.REPORT_BEGIN, *chunk_lines, guest.REPORT_END]
+        )
         self.assertEqual(guest._decode_guest_report(serial), expected)
+
+    def test_report_decoder_rejects_missing_chunk_sequence(self) -> None:
+        import base64
+        import gzip
+        import json
+
+        encoded = base64.b64encode(
+            gzip.compress(json.dumps({"payload": "x" * 200}).encode(), mtime=0)
+        ).decode("ascii")
+        self.assertGreater(len(encoded), guest.REPORT_CHUNK_CHARS)
+        first = encoded[:guest.REPORT_CHUNK_CHARS]
+        last = encoded[guest.REPORT_CHUNK_CHARS:]
+        serial = chr(10).join((
+            guest.REPORT_BEGIN,
+            guest.REPORT_CHUNK_PREFIX + "000000:" + first,
+            guest.REPORT_CHUNK_PREFIX + "000002:" + last,
+            guest.REPORT_END,
+        ))
+        with self.assertRaisesRegex(RuntimeError, "missing or out of sequence"):
+            guest._decode_guest_report(serial)
+
+    def test_report_decoder_rejects_duplicate_chunk_sequence(self) -> None:
+        import base64
+        import gzip
+        import json
+
+        encoded = base64.b64encode(
+            gzip.compress(json.dumps({"payload": "x" * 200}).encode(), mtime=0)
+        ).decode("ascii")
+        chunk = encoded[:guest.REPORT_CHUNK_CHARS]
+        serial = chr(10).join((
+            guest.REPORT_BEGIN,
+            guest.REPORT_CHUNK_PREFIX + "000000:" + chunk,
+            guest.REPORT_CHUNK_PREFIX + "000000:" + chunk,
+            guest.REPORT_END,
+        ))
+        with self.assertRaisesRegex(RuntimeError, "duplicate"):
+            guest._decode_guest_report(serial)
 
     def test_report_decoder_rejects_gzip_expansion_over_the_limit(self) -> None:
         import base64
@@ -187,13 +233,11 @@ class QemuHwcheckGuestSafetyTests(unittest.TestCase):
 
         oversized = b"x" * (guest.MAX_REPORT_BYTES + 1)
         encoded = base64.b64encode(gzip.compress(oversized, mtime=0)).decode("ascii")
-        serial = chr(10).join(
-            (
-                guest.REPORT_BEGIN,
-                guest.REPORT_PREFIX + encoded,
-                guest.REPORT_END,
-            )
-        )
+        chunks = [
+            guest.REPORT_CHUNK_PREFIX + f"{index:06d}:" + encoded[offset:offset + guest.REPORT_CHUNK_CHARS]
+            for index, offset in enumerate(range(0, len(encoded), guest.REPORT_CHUNK_CHARS))
+        ]
+        serial = chr(10).join([guest.REPORT_BEGIN, *chunks, guest.REPORT_END])
         with self.assertRaisesRegex(RuntimeError, "512 KiB"):
             guest._decode_guest_report(serial)
 
