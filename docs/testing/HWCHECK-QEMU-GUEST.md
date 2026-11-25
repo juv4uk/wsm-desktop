@@ -31,7 +31,8 @@ GNU/Linux build не називається static. Runner перевіряє EL
 - -nic none; немає host block device, USB/GPU passthrough, shared folders або EFI variable store.
 - Python archive завантажується host runner до створення guest; гість не має мережевого інтерфейсу.
 - Завантаження CPython обмежено 40 MiB; tar — 50 000 записів і 256 MiB розпакованих файлів; initramfs — 256 MiB; звіт — 512 KiB до gzip/base64.
-- Serial і stderr читаються через злитий bounded QEMU reader; зберігаються обмежені хвости, а не необмежені логи. Переповнення serial capture — hard failure, частковий звіт не приймається.
+- Завантаження CPython обмежено 40 MiB; tar — 50 000 записів і 256 MiB розпакованих файлів; initramfs — 256 MiB; JSON-звіт — 512 KiB до gzip/base64.
+- Serial і stderr читаються через bounded QEMU reader (2 MiB serial, 256 KiB stderr); зберігаються обмежені хвости, а не необмежені логи. Переповнення serial capture — hard failure, частковий звіт не приймається. Переповнення serial capture — hard failure, частковий звіт не приймається.
 - JSON Schema перевіряється на host. У гості немає jsonschema, pip чи package manager.
 
 ## Acceptance та інтерпретація
