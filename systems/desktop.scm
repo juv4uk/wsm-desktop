@@ -21,6 +21,7 @@
 ;;   - автоматичного встановлення: цей файл описує систему, а не інсталятор.
 
 (use-modules (gnu)
+             (wsm systems performance)
              (gnu services desktop)
              (gnu services networking)
              (gnu services sddm)
@@ -77,6 +78,10 @@
 
   (services
    (append
+    ;; Служби, що впливають на затримку: zram, earlyoom, fstrim.
+    ;; Кожна пояснена в systems/performance.scm, межі — в docs/PERFORMANCE.md.
+    %wsm-performance-services
+
     (list
      ;; Робоче середовище.
      (service plasma-desktop-service-type)
