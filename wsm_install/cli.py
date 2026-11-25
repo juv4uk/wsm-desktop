@@ -165,6 +165,7 @@ def main(argv: list[str] | None = None) -> int:
     assert raw is not None
     profile_evidence = None
     profile_evidence_root = None
+    profile_evidence_protected_paths: tuple[Path, ...] = ()
     if args.profile_evidence is not None:
         try:
             profile_evidence = load_profile_evidence(args.profile_evidence)
@@ -172,6 +173,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"wsm-install: invalid profile evidence: {exc}", file=sys.stderr)
             return 2
         profile_evidence_root = args.profile_evidence.parent
+        protected = [args.profile_evidence]
+        for artifact in profile_evidence.get("artifacts", []):
+            if isinstance(artifact, dict) and isinstance(artifact.get("path"), str):
+                protected.append(profile_evidence_root / artifact["path"])
+        profile_evidence_protected_paths = tuple(protected)
 
     plan, blockers, warnings = build_plan(
         report,
@@ -197,7 +203,7 @@ def main(argv: list[str] | None = None) -> int:
             args.plan_output,
             Path(args.report),
             args.schema,
-            (args.profile_evidence,) if args.profile_evidence is not None else (),
+            profile_evidence_protected_paths,
         )
         if path_error:
             print(f"wsm-install: unsafe plan output: {path_error}", file=sys.stderr)
