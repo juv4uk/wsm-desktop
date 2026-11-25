@@ -95,3 +95,4 @@ jobs:
           fi
 
           echo "Confirmed: guest kernel booted and executed /init under QEMU TCG."
+          echo "Scope: generic Linux guest smoke only; no WSM ISO boot or wsm-install execution."
