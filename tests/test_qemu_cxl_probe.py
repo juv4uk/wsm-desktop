@@ -12,8 +12,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.qemu_boot_smoke import BoundedProcessResult, MAX_PROCESS_INPUT_BYTES
+from scripts.qemu_boot_smoke import BoundedProcessResult
 from scripts.ci_probe_qemu_cxl import (
+    MAX_CAPTURE_BYTES,
     build_qemu_command,
     parse_kernel_config,
     run_qemu_topology_probe,
