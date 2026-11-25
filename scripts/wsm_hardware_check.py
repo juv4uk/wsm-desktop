@@ -152,8 +152,15 @@ def prepare_output(raw: str) -> Path:
 
     try:
         os.chmod(output, 0o700)
-    except OSError:
-        pass
+        actual_mode = stat.S_IMODE(output.stat().st_mode)
+    except OSError as exc:
+        raise SystemExit(
+            f"wsm-hardware-check: cannot enforce output directory mode 0700: {exc}"
+        ) from exc
+    if actual_mode != 0o700:
+        raise SystemExit(
+            f"wsm-hardware-check: output directory mode is {actual_mode:o}, expected 700"
+        )
     return output
 
 
@@ -398,52 +405,3 @@ def main(argv: list[str] | None = None) -> int:
         errors.extend(f"{backend}: {message}" for message in plan_errors)
 
     if any(item["status"] == "safely-blocked" for item in plans.values()) and not errors:
-        overall = "preflight-blocked"
-    elif errors:
-        overall = "failed"
-    else:
-        overall = "pass"
-
-    manifest = {
-        "schema": "wsm-hardware-check-manifest/1",
-        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "release": {
-            "id": release.get("release_id"),
-            "version": release.get("version"),
-            "source_commit": source_commit(),
-        },
-        "environment": {
-            "python": platform.python_version(),
-            "platform": platform.platform(),
-        },
-        "report": report_verification,
-        "plans": plans,
-        "commands": commands,
-        "safety": {
-            "policy_assertions": {
-                "network_used": False,
-                "root_required": False,
-                "block_device_access": False,
-                "bootloader_or_firmware_changes": False,
-                "backend_invoked": False,
-            },
-            "observed": {"run_as_root": os.geteuid() == 0},
-        },
-        "overall": overall,
-        "errors": errors,
-    }
-    (output / "manifest.json").write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    write_sums(output)
-
-    print(f"WSM {release.get('version')}: {overall}")
-    for backend in BACKENDS:
-        print(f"  {backend}: {plans[backend]['status']}")
-    print(f"  output: {output}")
-    return 0 if overall in {"pass", "preflight-blocked"} else 1
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
