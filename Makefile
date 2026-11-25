@@ -3,7 +3,7 @@
 PYTHON ?= python3
 GUIX ?= guix
 
-.PHONY: check release-gate check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle
+.PHONY: check check-channels check-docs check-evidence-drafter check-hardware-providers check-hardware-schema check-hwcheck check-hygiene check-install-steps check-installer check-isa check-live-acceptance check-locked-system check-makefile check-minimal-system check-partition check-perf-baseline check-profile-evidence check-profile-match check-profiles check-profiles-matrix check-qemu-harness check-release check-release-verdict check-state check-syntax check-system check-uefi-preboot-policy check-validation-protocols describe-lock release-bundle release-gate vm-system vm-system-serial
 
 check: check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa check-live-acceptance check-profiles-matrix check-perf-baseline check-profile-evidence check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-hygiene check-channels check-executor
 
@@ -58,8 +58,12 @@ release-gate:
 
 check-channels:
 	$(PYTHON) tests/test_check_channels.py
-	$(PYTHON) scripts/check_channels.py --policy free
-	$(PYTHON) scripts/check_channels.py --policy compatibility
+	$(PYTHON) scripts/check_channels.py --policy free --lock channels.lock.scm
+	@if test -f channels.compatibility.lock.scm; then \
+		$(PYTHON) scripts/check_channels.py --policy compatibility --lock channels.compatibility.lock.scm; \
+	else \
+		printf '%s\n' 'check-channels: Compatibility lock NOT_CONFIGURED; synthetic policy tests only (no lock PASS)'; \
+	fi
 
 check-profiles-matrix:
 	$(PYTHON) tests/test_profiles.py
