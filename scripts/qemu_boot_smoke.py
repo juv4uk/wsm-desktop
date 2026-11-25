@@ -266,8 +266,17 @@ def build_qemu_command(
     qcow2: Path,
     memory_mib: int,
     cpus: int,
+    firmware: str = "bios",
+    ovmf_code: Path | None = None,
+    ovmf_vars: Path | None = None,
 ) -> list[str]:
-    """Build isolated QEMU arguments using JSON blockdev nodes and stdio serial."""
+    """Build isolated QEMU arguments using JSON blockdev nodes and stdio serial.
+
+    ``firmware="uefi"`` adds a read-only OVMF code pflash plus a writable copy of
+    the variable store, so the guest can set its own boot entries without
+    touching the host's. The acceptance for the live image requires both modes:
+    a BIOS-only boot proves nothing about UEFI machines.
+    """
     file_node = json.dumps({
         "driver": "file",
         "filename": str(qcow2),
@@ -278,9 +287,19 @@ def build_qemu_command(
         "file": "wsm-disk-file",
         "node-name": "wsm-disk",
     }, separators=(",", ":"))
+    firmware_args: list[str] = []
+    if firmware == "uefi":
+        if ovmf_code is None or ovmf_vars is None:
+            raise ValueError("uefi boot needs both an OVMF code image and a variables file")
+        firmware_args = [
+            "-drive", f"if=pflash,format=raw,readonly=on,file={ovmf_code}",
+            "-drive", f"if=pflash,format=raw,file={ovmf_vars}",
+        ]
+
     return [
         qemu,
         "-machine", "q35,accel=tcg",
+        *firmware_args,
         "-m", str(memory_mib),
         "-smp", str(cpus),
         "-cdrom", str(iso),
@@ -310,6 +329,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--boot-marker",
         help="literal text that must appear on the serial console to confirm boot",
     )
+    parser.add_argument(
+        "--firmware",
+        choices=("bios", "uefi"),
+        default="bios",
+        help="boot firmware; uefi needs --ovmf-code (acceptance requires both modes)",
+    )
+    parser.add_argument(
+        "--ovmf-code",
+        type=Path,
+        help="OVMF code image (e.g. /usr/share/OVMF/OVMF_CODE.fd) for --firmware uefi",
+    )
     parser.add_argument("--dry-run", action="store_true", help="print the isolated QEMU command only")
     return parser
 
@@ -334,15 +364,42 @@ def main(argv: Sequence[str] | None = None) -> int:
     qemu = shutil.which("qemu-system-x86_64") or "qemu-system-x86_64"
     qemu_img = shutil.which("qemu-img") or "qemu-img"
 
+    ovmf_vars: Path | None = None
+    if args.firmware == "uefi":
+        if args.ovmf_code is None:
+            print(
+                "qemu-boot-smoke: --firmware uefi requires --ovmf-code; "
+                "a BIOS-only boot does not prove the UEFI path",
+                file=sys.stderr,
+            )
+            return 2
+        if not args.ovmf_code.is_file():
+            print(
+                f"qemu-boot-smoke: OVMF code image not found: {args.ovmf_code}",
+                file=sys.stderr,
+            )
+            return 2
+
     with tempfile.TemporaryDirectory(prefix="wsm-qemu-smoke-") as temporary:
         work = Path(temporary).resolve()
         qcow2 = work / "disposable.qcow2"
-        command = build_qemu_command(qemu, iso, qcow2, args.memory_mib, args.cpus)
+        if args.firmware == "uefi":
+            # A writable copy per run: the guest must never write to the host's
+            # variable store, and a fresh store keeps runs independent.
+            ovmf_vars = work / "OVMF_VARS.fd"
+            shutil.copyfile(args.ovmf_code, ovmf_vars)
+        command = build_qemu_command(
+            qemu, iso, qcow2, args.memory_mib, args.cpus,
+            firmware=args.firmware,
+            ovmf_code=args.ovmf_code,
+            ovmf_vars=ovmf_vars,
+        )
 
         if args.dry_run:
             print(json.dumps({
                 "mode": "dry-run",
                 "iso": str(iso),
+                "firmware": args.firmware,
                 "temporary_directory": str(work),
                 "qcow2_path": str(qcow2),
                 "qemu_command": command,
