@@ -49,9 +49,7 @@ def build_qemu_command(qemu: str, kernel: Path, initramfs: Path) -> list[str]:
 
 def extract_hardware_report(serial_output: bytes) -> bytes:
     """Extract exactly one guest report between explicit serial markers."""
-    begin_count = serial_output.count(REPORT_BEGIN)
-    end_count = serial_output.count(REPORT_END)
-    if begin_count != 1 or end_count != 1:
+    if serial_output.count(REPORT_BEGIN) != 1 or serial_output.count(REPORT_END) != 1:
         raise ValueError("guest serial stream must contain exactly one report boundary pair")
 
     begin_at = serial_output.find(REPORT_BEGIN)
@@ -61,7 +59,7 @@ def extract_hardware_report(serial_output: bytes) -> bytes:
 
     end_at = serial_output.find(REPORT_END, payload_start)
     if end_at < 0:
-        raise ValueError("guest report end marker precedes or is missing after report start")
+        raise ValueError("guest report end marker is missing or out of order")
 
     payload = serial_output[payload_start:end_at].strip(b"\r\n")
     if not payload:
@@ -70,7 +68,7 @@ def extract_hardware_report(serial_output: bytes) -> bytes:
 
 
 def validate_hardware_report(report: Any, schema: dict[str, Any]) -> int:
-    """Validate schema and the read-only / privacy / functional-test invariants."""
+    """Validate schema and the read-only, privacy, and inventory-only invariants."""
     Draft202012Validator.check_schema(schema)
     errors = sorted(
         Draft202012Validator(schema).iter_errors(report),
@@ -85,12 +83,13 @@ def validate_hardware_report(report: Any, schema: dict[str, Any]) -> int:
         raise ValueError("guest report did not use hardware report schema v1.0.0")
 
     privacy = report.get("privacy", {})
-    if privacy.get("network_requests_performed") is not False:
-        raise ValueError("guest report does not affirm network_requests_performed=false")
-    if privacy.get("network_upload_performed") is not False:
-        raise ValueError("guest report does not affirm network_upload_performed=false")
-    if privacy.get("sensitive_identifiers_included") is not False:
-        raise ValueError("guest report does not affirm sensitive_identifiers_included=false")
+    for field in (
+        "network_requests_performed",
+        "network_upload_performed",
+        "sensitive_identifiers_included",
+    ):
+        if privacy.get(field) is not False:
+            raise ValueError(f"guest report does not affirm {field}=false")
 
     devices = report.get("devices", [])
     functional_test_count = 0
@@ -103,7 +102,7 @@ def validate_hardware_report(report: Any, schema: dict[str, Any]) -> int:
             status = test.get("status")
             if status not in {"unknown", "not-tested"}:
                 raise ValueError(
-                    f"devices/{index}/functional_tests/{test_index} claims an unexecuted test status {status!r}"
+                    f"devices/{index}/functional_tests/{test_index} claims an unexecuted status {status!r}"
                 )
     if functional_test_count:
         raise ValueError("inventory-only guest unexpectedly emitted functional test records")
@@ -114,7 +113,6 @@ def validate_hardware_report(report: Any, schema: dict[str, Any]) -> int:
         for item in collectors
     ):
         raise ValueError("report does not contain the actual wsm-hwcheck sysfs collector")
-
     return len(devices)
 
 
@@ -122,11 +120,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--kernel", required=True, type=Path)
     parser.add_argument("--initramfs", required=True, type=Path)
-    parser.add_argument(
-        "--schema",
-        type=Path,
-        default=Path("schemas/hardware-report.schema.json"),
-    )
+    parser.add_argument("--schema", type=Path, default=Path("schemas/hardware-report.schema.json"))
     parser.add_argument("--timeout-seconds", type=int, default=120)
     args = parser.parse_args(argv)
 
@@ -163,16 +157,12 @@ def main(argv: list[str] | None = None) -> int:
     if result.stdout_truncated or result.stderr_truncated:
         raise RuntimeError("guest serial or QEMU stderr exceeded the bounded capture limit")
 
-    serial = result.stdout_tail
-    report_bytes = extract_hardware_report(serial)
+    report_bytes = extract_hardware_report(result.stdout_tail)
     report = json.loads(report_bytes)
     schema = json.loads(args.schema.read_text(encoding="utf-8"))
     device_count = validate_hardware_report(report, schema)
 
-    categories = Counter(
-        device.get("category", "unknown")
-        for device in report.get("devices", [])
-    )
+    categories = Counter(device.get("category", "unknown") for device in report.get("devices", []))
     report_sha256 = hashlib.sha256(report_bytes).hexdigest()
     print("PASS: actual wsm-hwcheck CLI executed inside an isolated QEMU TCG guest.")
     print(f"schema_version={report['schema_version']} devices={device_count} collectors={len(report['collectors'])}")
