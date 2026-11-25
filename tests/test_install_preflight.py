@@ -242,6 +242,7 @@ class InstallerPlanTests(unittest.TestCase):
             report_path.write_bytes((FIXTURES / "desktop-observed.json").read_bytes())
             profile_dir = root / "test" / "fixture"
             profile_dir.mkdir(parents=True)
+            (profile_dir / "profile.scm").write_text(";; synthetic test fixture\\n", encoding="utf-8")
             evidence = make_profile_evidence(report, profile_dir)
             evidence["report_id"] = "different-report"
             evidence_path = profile_dir / "evidence.json"
