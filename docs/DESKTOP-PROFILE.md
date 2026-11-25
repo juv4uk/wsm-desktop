@@ -83,19 +83,29 @@ channel resolution/build явно з'являється `channel authentication 
 
 ```sh
 # BIOS
-python3 scripts/qemu_boot_smoke.py --iso build/wsm-desktop.iso \
+python3 scripts/qemu_boot_smoke.py --iso build/wsm-desktop-live.iso \
     --boot-marker WSM_LIVE_READY --timeout-seconds 300
 
 # UEFI (потрібен OVMF)
-python3 scripts/qemu_boot_smoke.py --iso build/wsm-desktop.iso \
+python3 scripts/qemu_boot_smoke.py --iso build/wsm-desktop-live.iso \
     --firmware uefi --ovmf-code /usr/share/OVMF/OVMF_CODE.fd \
+    --ovmf-vars /usr/share/OVMF/OVMF_VARS.fd \
     --boot-marker WSM_LIVE_READY --timeout-seconds 300
 ```
 
-Для UEFI harness робить **копію** змінного сховища OVMF у тимчасовому каталозі:
-гість не повинен писати у змінні хост-машини, і кожен прогін має бути
-незалежним. Без `--ovmf-code` запуск відмовляє з кодом 2, а не тихо
-перемикається на BIOS.
+Для UEFI потрібна пара `OVMF_CODE.fd` і `OVMF_VARS.fd` **з одного пакета та
+однієї збірки OVMF**. CODE підключається як read-only pflash; harness копіює
+лише VARS template у приватний тимчасовий файл, який гість може змінювати.
+Вихідний VARS template та NVRAM хоста не змінюються. У dry-run це видно як
+`host_efi_variables_modified=false` і `guest_uefi_vars_writable=true`.
+Без будь-якого з `--ovmf-code` / `--ovmf-vars`, або якщо файли порожні,
+некоректні чи вказують на той самий файл, запуск відмовляє з кодом 2 — жодного
+неявного переходу на BIOS немає.
+
+Builder зберігає GC-root посилання окремо в
+`build/.wsm-desktop-live.iso-root`, а `build/wsm-desktop-live.iso` є
+звичайним файлом, який можна перевіряти й передавати QEMU без dereference
+посилання на `/gnu/store`. Manifest і SHA-256 рахуються від цього regular ISO.
 
 Критерій NO-GO: збірка успішна, але маркера немає в жодному або в одному з
 режимів.
