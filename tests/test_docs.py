@@ -27,12 +27,35 @@ class DocumentationTests(unittest.TestCase):
 
 class DocumentationLanguageTests(unittest.TestCase):
     def test_ukrainian_detection(self) -> None:
-        self.assertTrue(check_docs.is_ukrainian("Внесок у WSM Desktop"))
+        self.assertTrue(
+            check_docs.is_ukrainian(
+                "Внесок у WSM Desktop. Дякуємо за інтерес до проєкту; "
+                "найцінніший внесок зараз — перевірювані технічні дослідження."
+            )
+        )
         self.assertFalse(check_docs.is_ukrainian("Contributing to WSM Desktop"))
+
+    def test_ukrainian_detection_rejects_a_mixed_heading(self) -> None:
+        # A short heading dominated by a proper name is not a Ukrainian document.
+        # Pinning the boundary keeps a future relaxation visible as a decision.
+        self.assertFalse(check_docs.is_ukrainian("Внесок у WSM Desktop"))
 
     def test_ukrainian_detection_tolerates_technical_terms(self) -> None:
         body = "Документація ведеться українською; терміни Guix, Nix і Calamares не перекладаємо. " * 10
         self.assertTrue(check_docs.is_ukrainian(body))
+
+    def test_english_text_with_a_ukrainian_fragment_is_not_ukrainian(self) -> None:
+        english = (
+            "This is the English documentation for setup, contribution, and security. " * 4
+            + "Українська"
+        )
+        self.assertFalse(check_docs.is_ukrainian(english))
+
+    def test_canonical_entry_points_are_dominantly_ukrainian(self) -> None:
+        for relative in check_docs.ENTRY_POINT_DOCUMENTS:
+            with self.subTest(path=relative):
+                content = (ROOT / relative).read_text(encoding="utf-8")
+                self.assertTrue(check_docs.is_ukrainian(content))
 
     def test_translation_counterpart(self) -> None:
         self.assertEqual(
