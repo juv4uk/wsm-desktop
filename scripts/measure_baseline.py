@@ -56,8 +56,8 @@ def median_and_spread(samples: list[float]) -> dict[str, float]:
     """Median, p90 and MAD - the issue asks for spread, not a mean of one run."""
     ordered = sorted(samples)
     median = statistics.median(ordered)
-    # Nearest-rank percentile: rank=ceil(0.9*N), then convert to zero-based index.
-    # Do not use round(): Python's ties-to-even makes N=6 choose rank 5, not 6.
+    # Nearest-rank percentile: rank=ceil(0.9*N), converted to zero-based index.
+    # Avoid round(): ties-to-even makes N=6 select rank 5 rather than rank 6.
     index = max(0, min(len(ordered) - 1, math.ceil(0.9 * len(ordered)) - 1))
     p90 = ordered[index]
     mad = statistics.median([abs(value - median) for value in ordered])
