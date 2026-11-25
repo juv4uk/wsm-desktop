@@ -544,7 +544,7 @@ def _decode_guest_report(serial: str) -> dict:
 def _validate_installer_plan_result(serial: str) -> dict[str, str]:
     """Require exactly one guest-side non-confirmable wsm-install plan result."""
     prefix = "WSM_INSTALL_PLAN_RESULT:"
-    matches = re.findall(rf"{re.escape(prefix)}([^\\r\\n]+)", serial)
+    matches = re.findall(rf"{re.escape(prefix)}([^\r\n]+)", serial)
     if serial.count("WSM_INSTALL_STAGE_START") != 1 or serial.count("WSM_INSTALL_STAGE_DONE") != 1:
         raise RuntimeError("guest installer stage markers were missing or duplicated")
     if len(matches) != 1:
