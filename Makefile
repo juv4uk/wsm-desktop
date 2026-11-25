@@ -5,7 +5,10 @@ GUIX ?= guix
 
 .PHONY: check check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle
 
-check: check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy
+check: check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles
+
+check-profiles:
+	$(PYTHON) tests/test_system_profiles.py
 
 check-docs:
 	$(PYTHON) scripts/check_docs.py
