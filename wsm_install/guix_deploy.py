@@ -7,7 +7,7 @@ import argparse
 from dataclasses import fields
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import stat
 import sys
@@ -111,6 +111,41 @@ def _load_selection(value: dict[str, Any]) -> TargetSelection:
     selection = TargetSelection(**value)
     validate_selection(selection)
     return selection
+
+
+def _resolve_mountpoint(value: str) -> Path:
+    """Allow only a real, non-symlink path under /mnt for a future target."""
+    requested = PurePosixPath(value)
+    if not requested.is_absolute():
+        raise DeployCliError("target mountpoint must be absolute")
+    if ".." in requested.parts:
+        raise DeployCliError("target mountpoint must not contain '..' components")
+    if len(requested.parts) < 2 or requested.parts[1] != "mnt":
+        raise DeployCliError("target mountpoint must be /mnt or a path below /mnt")
+
+    current = Path("/")
+    for component in requested.parts[1:]:
+        current = current / component
+        try:
+            metadata = os.lstat(current)
+        except FileNotFoundError:
+            break
+        except OSError as exc:
+            raise DeployCliError(f"cannot inspect target mountpoint component: {exc}") from exc
+        if stat.S_ISLNK(metadata.st_mode):
+            raise DeployCliError("target mountpoint must not contain symlink components")
+        if not stat.S_ISDIR(metadata.st_mode):
+            raise DeployCliError("existing target mountpoint components must be directories")
+
+    return Path(requested.as_posix())
+
+
+def _ensure_output_outside_mountpoint(destination: Path, mountpoint: Path) -> None:
+    resolved_mountpoint = mountpoint.resolve(strict=False)
+    if destination == resolved_mountpoint or resolved_mountpoint in destination.parents:
+        raise DeployCliError(
+            "configuration output must be outside the target mountpoint to avoid writing to the target filesystem"
+        )
 
 
 def _resolve_output(
@@ -263,10 +298,12 @@ def main(argv: list[str] | None = None) -> int:
         if args.confirm_target_digest != target_digest:
             raise HandoffError("confirmation.target_digest", "the confirmed target digest does not match the input")
 
+        mountpoint = _resolve_mountpoint(args.mountpoint)
         destination = _resolve_output(
             args.output,
             (plan_path, selection_path),
         )
+        _ensure_output_outside_mountpoint(destination, mountpoint)
         handoff = prepare(
             plan,
             selection,
@@ -274,7 +311,7 @@ def main(argv: list[str] | None = None) -> int:
             confirmed_target_digest=args.confirm_target_digest,
             external_bootloader_job=False,
             configuration_path=str(destination),
-            target_mountpoint=args.mountpoint,
+            target_mountpoint=str(mountpoint),
         )
 
         _write_new_file(destination, handoff.configuration)
