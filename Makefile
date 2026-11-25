@@ -3,7 +3,7 @@
 PYTHON ?= python3
 GUIX ?= guix
 
-.PHONY: check check-docs check-hardware-schema check-hwcheck check-installer check-qemu-harness check-validation-protocols check-system vm-system
+.PHONY: check check-docs check-hardware-schema check-hwcheck check-installer check-qemu-harness check-qemu-hwcheck-guest check-validation-protocols check-system vm-system
 
 check: check-docs check-hardware-schema check-hwcheck check-installer check-qemu-harness check-validation-protocols
 
@@ -32,3 +32,6 @@ check-qemu-harness:
 
 check-validation-protocols:
 	$(PYTHON) tests/test_validation_protocol_privacy.py
+
+check-qemu-hwcheck-guest:
+	$(PYTHON) -m unittest discover -s tests -p 'test_qemu_hwcheck_guest.py' -v
