@@ -3,6 +3,7 @@
 <!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 
 - Статус: **proposed / review draft**
+- Критичний шлях: **ні** — контракт топології не входить у перший preview
 - Власник контракту звіту: [#5 — versioned hardware evidence report](https://github.com/juv4uk/wsm-desktop/issues/5)
 - Власник топології: [#18 — device and interface topology](https://github.com/juv4uk/wsm-desktop/issues/18)
 - Пов'язані роботи: [#6 — inventory collector](https://github.com/juv4uk/wsm-desktop/issues/6), [#12 — installer handoff](https://github.com/juv4uk/wsm-desktop/issues/12)

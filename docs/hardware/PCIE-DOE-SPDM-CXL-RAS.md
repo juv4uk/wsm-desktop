@@ -3,6 +3,7 @@
 <!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 
 - Статус: дослідницький addendum; не є реалізаційним контрактом
+- Критичний шлях: **ні** — дослідження не блокує перший preview-образ
 - Дата перевірки upstream ABI: 2026-11-25
 - Знімок Linux source: `torvalds/linux` commit `4dce97c6c265544342e716e62fd24bbb232590c5`
 - Пов'язана задача: [#81 — PCIe DOE/SPDM authentication та CXL RAS evidence](https://github.com/juv4uk/wsm-desktop/issues/81)

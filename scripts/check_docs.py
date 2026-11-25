@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Check local Markdown links without requiring third-party dependencies."""
+"""Check local Markdown links and research-document status headers."""
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 LINK_PATTERN = re.compile(r"(?<!!)\[[^\]]*\]\(([^)]+)\)")
+STATUS_PATTERN = re.compile(r"(?m)^-?\s*(?:Статус|Status):")
+STATUS_HEADER_LINES = 20
 
 
 def markdown_files() -> list[Path]:
@@ -59,12 +61,34 @@ def check_links() -> list[str]:
     return errors
 
 
+def check_research_status() -> list[str]:
+    """Every document under docs/hardware/ must state its status near the top.
+
+    The directory mixes implemented contracts with open research. Without a
+    status header a reader cannot tell which is which, and a research note is
+    easily mistaken for a commitment.
+    """
+    errors: list[str] = []
+    for source in sorted((ROOT / "docs" / "hardware").glob("*.md")):
+        head = "\n".join(source.read_text(encoding="utf-8").splitlines()[:STATUS_HEADER_LINES])
+        if not STATUS_PATTERN.search(head):
+            errors.append(
+                f"{source.relative_to(ROOT)}: missing a 'Статус:' or 'Status:' "
+                f"line in the first {STATUS_HEADER_LINES} lines"
+            )
+    return errors
+
+
 def main() -> int:
-    errors = check_links()
+    errors = check_links() + check_research_status()
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1
-    print(f"Markdown link check passed ({len(markdown_files())} files).")
+    print(
+        f"Documentation checks passed "
+        f"({len(markdown_files())} files, "
+        f"{len(list((ROOT / 'docs' / 'hardware').glob('*.md')))} hardware documents)."
+    )
     return 0
 
 
