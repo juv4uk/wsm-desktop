@@ -29,6 +29,7 @@ _GUEST_SPEC.loader.exec_module(_GUEST_MODULE)
 GuestRunError = _GUEST_MODULE.GuestRunError
 MAX_INITRAMFS_BYTES = _GUEST_MODULE.MAX_INITRAMFS_BYTES
 MAX_PYTHON_ARCHIVE_BYTES = _GUEST_MODULE.MAX_PYTHON_ARCHIVE_BYTES
+MAX_REPORT_BYTES = _GUEST_MODULE.MAX_REPORT_BYTES
 extract_python_archive = _GUEST_MODULE.extract_python_archive
 extract_report = _GUEST_MODULE.extract_report
 write_guest_init = _GUEST_MODULE.write_guest_init
@@ -55,6 +56,15 @@ class GuestReportExtractionTests(unittest.TestCase):
         )
         self.assertEqual(extract_report(serial), self.REPORT)
 
+    def test_extracts_bare_cr_serial_report(self) -> None:
+        payload = json.dumps(self.REPORT, separators=(",", ":")).encode("utf-8")
+        serial = (
+            b"kernel boot\rWSM_HWCHECK_REPORT_BEGIN\r"
+            + payload
+            + b"\rWSM_HWCHECK_REPORT_END\rreboot\r"
+        )
+        self.assertEqual(extract_report(serial), self.REPORT)
+
     def test_uses_last_complete_report_when_guest_prints_diagnostic_markers(self) -> None:
         payload = json.dumps(self.REPORT, separators=(",", ":")).encode("utf-8")
         serial = (
@@ -71,11 +81,34 @@ class GuestReportExtractionTests(unittest.TestCase):
         with self.assertRaisesRegex(GuestRunError, "end marker"):
             extract_report(b"WSM_HWCHECK_REPORT_BEGIN\n{}")
 
-    def test_rejects_non_json_report_payload(self) -> None:
-        with self.assertRaisesRegex(GuestRunError, "not valid UTF-8 JSON"):
-            extract_report(
-                b"WSM_HWCHECK_REPORT_BEGIN\nnot-json\nWSM_HWCHECK_REPORT_END\n"
-            )
+    def test_rejects_shell_trace_contamination_instead_of_stripping_it(self) -> None:
+        payload = json.dumps(self.REPORT, separators=(",", ":")).encode("utf-8")
+        serial = (
+            b"WSM_HWCHECK_REPORT_BEGIN\n"
+            b"+ cat /tmp/hardware-report.json\n"
+            + payload
+            + b"\nWSM_HWCHECK_REPORT_END\n"
+        )
+        with self.assertRaisesRegex(GuestRunError, "clean JSON"):
+            extract_report(serial)
+
+    def test_rejects_invalid_utf8_payload_with_bounded_diagnostics(self) -> None:
+        serial = (
+            b"WSM_HWCHECK_REPORT_BEGIN\n{\xff}\n"
+            b"WSM_HWCHECK_REPORT_END\n"
+        )
+        with self.assertRaisesRegex(GuestRunError, "not valid UTF-8"):
+            extract_report(serial)
+
+    def test_rejects_payload_larger_than_the_report_limit(self) -> None:
+        oversized = b" " * (MAX_REPORT_BYTES + 1)
+        serial = (
+            b"WSM_HWCHECK_REPORT_BEGIN\n"
+            + oversized
+            + b"\nWSM_HWCHECK_REPORT_END\n"
+        )
+        with self.assertRaisesRegex(GuestRunError, "payload ceiling"):
+            extract_report(serial)
 
 
 class GuestInitTemplateTests(unittest.TestCase):
@@ -97,6 +130,8 @@ class GuestInitTemplateTests(unittest.TestCase):
             self.assertIn("WSM_HWCHECK_GUEST_REPORT_READY", rendered)
             self.assertIn("WSM_HWCHECK_REPORT_BEGIN", rendered)
             self.assertIn("WSM_HWCHECK_REPORT_END", rendered)
+            self.assertIn("set -eu", rendered)
+            self.assertNotIn("set -x", rendered)
             self.assertNotIn("{{", rendered)
             self.assertNotIn("}}", rendered)
 
