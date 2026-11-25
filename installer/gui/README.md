@@ -7,7 +7,7 @@
 ## Що реалізовано
 
 - Власне WSM Qt 6 / QML вікно з українським майстром: вступ → апаратні докази → read-only перелік дисків → параметри → підсумковий перегляд.
-- Апаратний звіт береться через `python3 -m wsm_hwcheck`; той самий звіт передається у `python3 -m wsm_install --preflight --backend guix --dry-run --quiet`.
+- Апаратний звіт береться через `python3 -m wsm_hwcheck`; той самий звіт передається у `python3 -m wsm_install --preflight --backend guix --dry-run`.
 - Frontend показує фактичні поля report: виявлення, драйверне прив'язування, runtime firmware status, evidence та functional tests. Відсутні тести позначаються як такі, що не виконувалися.
 - Перелік цілих дисків отримується окремим read-only викликом `lsblk --json --bytes --tree`. Вибір диска існує лише в пам'яті UI і не стає install target.
 - Зв'язок із процесами зроблено через `QProcess::start(program, arguments)`: немає shell command string, eval або запуску довільного тексту з UI.
@@ -19,8 +19,9 @@
 Потрібні Qt 6 development packages для Core, Gui, QML, Quick і Quick Controls, CMake 3.21+ та C++17:
 
 ```sh
-cmake -S installer/gui -B build/wsm-installer -DCMAKE_BUILD_TYPE=Release
+cmake -S installer/gui -B build/wsm-installer -DCMAKE_BUILD_TYPE=Release -DWSM_BUILD_TESTS=ON
 cmake --build build/wsm-installer
+ctest --test-dir build/wsm-installer --output-on-failure
 cmake --install build/wsm-installer --prefix /usr/local
 ```
 
@@ -34,6 +35,8 @@ Guix package definition міститься окремо у `wsm/packages/install
 
 ## Відомі межі
 
+- Wizard navigation gates the parameter and review steps until the read-only disk inventory attempt has completed. An unavailable inventory is shown explicitly and permits only diagnostic review without a disk candidate.
+- C++ behavioral tests cover navigation gates and a Python/Qt canonical JSON + SHA-256 golden vector.
 - Поточний report schema v1 не доводить same-boot freshness. Frontend показує звіт як inventory snapshot, а не як підтвердження поточного boot session.
 - `lsblk` дає read-only block-device inventory; це не тест здоров'я диска та не дозвіл його використовувати.
 - Функціональні тести відображаються лише коли їх реально містить report. Collector не запускає тестування відео, мережі, звуку або сну.
