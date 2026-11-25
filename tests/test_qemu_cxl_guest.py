@@ -79,6 +79,15 @@ class QemuCxlGuestTests(unittest.TestCase):
         self.assertNotIn("EDID", summary)
         self.assertNotIn("PCI", summary)
 
+        untrusted = summarize_guest_serial(
+            "WSM_CXL_STATUS=0000:00:1f.0\n"
+            "WSM_CXL_COUNTS devices=8 ports=4 memdevs=1 edges=7 PCI=secret\n"
+        )
+        self.assertIn("status=unknown", untrusted)
+        self.assertIn("counts=not-reported", untrusted)
+        self.assertNotIn("0000:00:1f.0", untrusted)
+        self.assertNotIn("secret", untrusted)
+
     def test_sysfs_report_uses_synthetic_names_not_host_addresses(self) -> None:
         source = (ROOT / "scripts" / "ci_qemu_cxl_guest.py").read_text(encoding="utf-8")
         self.assertIn("device_pattern.fullmatch", source)
