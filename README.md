@@ -18,7 +18,7 @@ The project is in **pre-alpha**. There is no supported installation image yet. T
 - [ ] Hardware compatibility testing
 - [ ] First public preview image
 
-See [the roadmap](docs/ROADMAP.md) for milestones and acceptance criteria. The hardware-first/upstream-first direction is explored through [the hardware preflight](docs/hardware/HWCHECK.md) and the [upstream tooling assessment](docs/hardware/UPSTREAM-TOOLING.md). The proposed dual-backend direction is recorded in [ADR 0004](docs/decisions/0004-nix-guix-backend-strategy.md) and is not yet ratified. The current Calamares 3.4.2 assessment is in [docs/CALAMARES-FEASIBILITY.md](docs/CALAMARES-FEASIBILITY.md).
+See [the roadmap](docs/ROADMAP.md) for milestones and acceptance criteria. The installer frontend is being evaluated in [issue #10](https://github.com/juv4uk/wsm-desktop/issues/10); Calamares is not a locked dependency. The hardware-first/upstream-first direction is explored through [the hardware preflight](docs/hardware/HWCHECK.md) and the [upstream tooling assessment](docs/hardware/UPSTREAM-TOOLING.md). The proposed dual-backend direction is recorded in [ADR 0004](docs/decisions/0004-nix-guix-backend-strategy.md) and is not yet ratified. The current Calamares 3.4.2 assessment is in [docs/CALAMARES-FEASIBILITY.md](docs/CALAMARES-FEASIBILITY.md).
 
 ## Technology
 
@@ -26,7 +26,7 @@ See [the roadmap](docs/ROADMAP.md) for milestones and acceptance criteria. The h
 | --- | --- |
 | Nix / NixOS | Candidate native backend for declarative system configuration, package builds, and activation |
 | GNU Guix System | Candidate native backend for declarative operating-system configuration and package management |
-| Calamares | Intended graphical installation workflow and user-facing installer |
+| Installer frontend | Under evaluation; Calamares is one candidate, not a selected dependency |
 | WSM backend adapter | Project-owned integration between Calamares and one selected system backend |
 | Nonguix (optional) | Separately selected nonfree firmware, drivers, or other packages when required |
 | QEMU | Safe virtual-machine testing before physical hardware installation |
@@ -53,9 +53,9 @@ The intended installation flow is:
 Live environment
     |
     v
-Calamares user interface
+Selected WSM installer frontend (not selected yet)
     |
-    +--> existing Calamares pages for supported tasks
+    +--> frontend-native pages for supported tasks
     |
     +--> WSM-specific configuration and preflight
               |
@@ -76,7 +76,7 @@ This is a design target, not a working installer yet. Nix and Guix deployment mu
 
 Each installed WSM system must have exactly one backend responsible for system configuration and activation. The Nix/NixOS and Guix deployment paths are separate and must not both attempt to manage the same root filesystem, bootloader, or service manager.
 
-For the **Guix backend**, the generated Guix configuration owns the target file systems, user accounts, services, and bootloader. We must not let a stock Calamares bootloader job and `guix system init` both attempt to install or configure the bootloader. Calamares' generic user-creation step must not be assumed to create a correct declarative Guix `user-account`.
+For the **Guix backend**, the generated Guix configuration owns the target file systems, user accounts, services, and bootloader. We must not let a stock Calamares bootloader job and `guix system init` both attempt to install or configure the bootloader. If Calamares is selected, its generic user-creation step must not be assumed to create a correct declarative Guix `user-account`.
 
 The Nix/NixOS backend needs its own deployment design; it is not implemented by reusing Guix commands.
 
