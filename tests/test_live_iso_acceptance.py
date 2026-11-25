@@ -10,8 +10,11 @@ incomplete UEFI invocation instead of silently booting BIOS.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import io
 import json
+import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -234,6 +237,143 @@ class HarnessCliTests(unittest.TestCase):
         self.assertIn("image-live:", makefile)
         self.assertIn("./scripts/build_iso.sh", makefile)
         self.assertIn("make image-live", docs)
+
+
+
+class BuildIsoArtifactTests(unittest.TestCase):
+    def _fake_guix_environment(
+        self, root: Path, resolved_commit: str, image_kind: str
+    ) -> tuple[dict[str, str], Path]:
+        fake_bin = root / "bin"
+        output = root / "output"
+        fake_bin.mkdir()
+        output.mkdir()
+        fake_guix = fake_bin / "guix"
+        fake_guix.write_text(
+            """#!/bin/sh
+set -eu
+case "$*" in
+  *"-- --version"*)
+    printf '%s\n' 'GNU Guix 1.6.0'
+    exit 0
+    ;;
+  *"-- describe -f channels"*)
+    printf '(list (channel (name guix) (commit "%s")))\n' "$WSM_TEST_CHANNEL_COMMIT"
+    exit 0
+    ;;
+  *"-- system image"*)
+    root_path=""
+    for argument in "$@"; do
+      case "$argument" in
+        --root=*) root_path=$(printf '%s\n' "$argument" | sed 's/^--root=//') ;;
+      esac
+    done
+    test -n "$root_path"
+    store_path="\${root_path}.store-object"
+    python3 - "$store_path" "$WSM_TEST_ISO_KIND" <<'PY'
+import sys
+from pathlib import Path
+
+destination = Path(sys.argv[1])
+if sys.argv[2] == "valid":
+    image = bytearray(17 * 2048)
+    offset = 16 * 2048
+    image[offset:offset + 7] = bytes((1,)) + b"CD001" + bytes((1,))
+    destination.write_bytes(image)
+else:
+    destination.write_bytes(b"not an ISO9660 image")
+PY
+    ln -s "$store_path" "$root_path"
+    exit 0
+    ;;
+esac
+printf 'unexpected fake guix arguments: %s\n' "$*" >&2
+exit 97
+""",
+            encoding="utf-8",
+        )
+        fake_guix.chmod(0o755)
+        environment = dict(os.environ)
+        environment["PATH"] = str(fake_bin) + os.pathsep + environment.get("PATH", "")
+        environment["WSM_ISO_DIR"] = str(output)
+        environment["WSM_TEST_CHANNEL_COMMIT"] = resolved_commit
+        environment["WSM_TEST_ISO_KIND"] = image_kind
+        return environment, output
+
+    def _locked_channel_commit(self) -> str:
+        lock_text = (ROOT / "channels.lock.scm").read_text(encoding="utf-8")
+        matches = re.findall(r'\(commit\s+"([0-9a-f]{40})"\)', lock_text)
+        self.assertEqual(len(matches), 1)
+        return matches[0]
+
+    def _run_builder(self, environment: dict[str, str]) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["sh", str(ROOT / "scripts" / "build_iso.sh")],
+            cwd=ROOT,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def test_builder_materializes_regular_iso_and_manifest_hashes_final_file(self) -> None:
+        locked_commit = self._locked_channel_commit()
+        with tempfile.TemporaryDirectory() as temporary:
+            environment, output = self._fake_guix_environment(
+                Path(temporary), locked_commit, "valid"
+            )
+            result = self._run_builder(environment)
+            self.assertEqual(result.returncode, 0, result.stdout + "\n" + result.stderr)
+
+            iso = output / "wsm-desktop-live.iso"
+            gc_root = output / ".wsm-desktop-live.iso-root"
+            self.assertTrue(iso.is_file())
+            self.assertFalse(iso.is_symlink())
+            self.assertTrue(gc_root.is_symlink())
+
+            manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+            artifact = manifest["artifact"]
+            digest = hashlib.sha256(iso.read_bytes()).hexdigest()
+            self.assertTrue(artifact["regular_file"])
+            self.assertEqual(artifact["gc_root"], gc_root.name)
+            self.assertEqual(artifact["size_bytes"], iso.stat().st_size)
+            self.assertEqual(artifact["sha256"], digest)
+            self.assertEqual(artifact["store_object_sha256"], digest)
+            self.assertEqual(
+                manifest["guix"]["resolved_guix_channel_commit"], locked_commit
+            )
+
+            command = manifest["build"]["command"]
+            self.assertIn("-L", command)
+            self.assertIn(str(ROOT), command)
+            self.assertIn("--save-provenance", command)
+            self.assertIn(f"--root={gc_root}", command)
+            checksums = (output / "SHA256SUMS").read_text(encoding="utf-8")
+            self.assertIn(f"{digest}  {iso.name}", checksums)
+
+    def test_builder_rejects_non_iso_store_image_before_publish(self) -> None:
+        locked_commit = self._locked_channel_commit()
+        with tempfile.TemporaryDirectory() as temporary:
+            environment, output = self._fake_guix_environment(
+                Path(temporary), locked_commit, "invalid"
+            )
+            result = self._run_builder(environment)
+            self.assertEqual(result.returncode, 4, result.stdout + "\n" + result.stderr)
+            self.assertIn("ISO9660 Primary Volume Descriptor", result.stderr)
+            self.assertFalse((output / "wsm-desktop-live.iso").exists())
+            self.assertFalse((output / "wsm-desktop-live.iso").is_symlink())
+
+    def test_builder_rejects_channel_resolution_that_disagrees_with_lock(self) -> None:
+        locked_commit = self._locked_channel_commit()
+        wrong_commit = "0" * 40 if locked_commit != "0" * 40 else "1" * 40
+        with tempfile.TemporaryDirectory() as temporary:
+            environment, output = self._fake_guix_environment(
+                Path(temporary), wrong_commit, "valid"
+            )
+            result = self._run_builder(environment)
+            self.assertEqual(result.returncode, 8, result.stdout + "\n" + result.stderr)
+            self.assertIn("does not match channels.lock.scm", result.stderr)
+            self.assertFalse((output / "wsm-desktop-live.iso").exists())
 
 
 if __name__ == "__main__":
