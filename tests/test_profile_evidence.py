@@ -97,6 +97,45 @@ class ArtifactIdentityTests(unittest.TestCase):
             problems = validate(document, artifact_root=root)
         self.assertTrue(any("bytes identical to the source hardware report" in item for item in problems))
 
+    def test_shared_validator_requires_exactly_one_source_report_artifact(self) -> None:
+        document = bundle()
+        document["artifacts"] = [
+            item for item in document["artifacts"]
+            if item["kind"] != "wsm-hwcheck-report"
+        ]
+        problems = validate_fixture(document)
+        self.assertTrue(any("exactly one wsm-hwcheck-report" in item for item in problems))
+
+    def test_shared_validator_rejects_multiple_source_report_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            prepare_artifact_root(root)
+            duplicate_path = root / "artifacts" / "second-report.json"
+            duplicate_path.write_bytes(SOURCE_REPORT_BYTES)
+            document = bundle()
+            document["artifacts"].append({
+                "kind": "wsm-hwcheck-report",
+                "path": "artifacts/second-report.json",
+                "sha256": SOURCE_REPORT_SHA256,
+            })
+            problems = validate(document, artifact_root=root)
+        self.assertTrue(any("exactly one wsm-hwcheck-report" in item for item in problems))
+
+    def test_artifact_path_must_be_under_artifacts_directory(self) -> None:
+        document = bundle()
+        document["artifacts"][0]["path"] = "README.md"
+        problems = validate_fixture(document)
+        self.assertTrue(any("artifacts/" in item for item in problems))
+
+    def test_zero_byte_functional_log_is_rejected_even_with_matching_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            prepare_artifact_root(root)
+            (root / "artifacts" / "functional-test.log").write_bytes(b"")
+            document = bundle()
+            document["artifacts"][0]["sha256"] = hashlib.sha256(b"").hexdigest()
+            problems = validate(document, artifact_root=root)
+        self.assertTrue(any("empty file" in item for item in problems))
     def test_unknown_artifact_kind_is_rejected(self) -> None:
         document = bundle()
         document["artifacts"][0]["kind"] = "mystery-proof"
@@ -373,12 +412,26 @@ class DirectoryTests(unittest.TestCase):
     def test_model_directory_without_evidence_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            (root / "gigabyte" / "h170-gaming-3").mkdir(parents=True)
+            model = root / "gigabyte" / "h170-gaming-3"
+            model.mkdir(parents=True)
+            (model / "profile.scm").write_text(";; declared profile without evidence\\n", encoding="utf-8")
             stdout, stderr = io.StringIO(), io.StringIO()
             with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
                 result = main(["--dir", str(root)])
         self.assertEqual(result, 1)
         self.assertIn("missing mandatory evidence.json", stderr.getvalue())
+
+    def test_readme_only_research_directory_is_ignored(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            model = root / "gigabyte" / "ga-h170-gaming3"
+            model.mkdir(parents=True)
+            (model / "README.md").write_text("# Owner reference\\n", encoding="utf-8")
+            stdout, stderr = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                result = main(["--dir", str(root)])
+        self.assertEqual(result, 0, stderr.getvalue())
+        self.assertIn("no hardware profile directories yet", stdout.getvalue())
 
     def test_empty_profiles_root_is_not_a_fake_profile(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
