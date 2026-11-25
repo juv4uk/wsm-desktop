@@ -36,10 +36,31 @@ sha256sum "$(readlink result)"
   `root@wsm-kde ~#`.
 - `screendump` через QEMU monitor: 1280×800 графічний framebuffer із
   Breeze-подібним фоном, а не текстова консоль.
+- Після security-fix зібрано новий hardened ISO: SHA-256 `d1a000f8c465b496565b0f611ae6f65095086a8457c663f212ca5b17073fd7ef`; той самий QEMU-boot markers підтверджено, `Login incorrect` не з'являвся, графічний framebuffer 1280×800 збережено. Це ще не compatibility-збірка з NVIDIA.
 - Копія на Ventoy: `D:\wsm-desktop-kde-20261125.iso`, поруч із початковим
   `omarchy-4.5.0-x86.iso` (його не змінено). SHA-256 копії, порахований на
   Windows-боці: `C054C6F7AF5119F96739CDAB4FC540449FFB2136A10A92554AC01D887590CBB9`
   — збігається з вихідним ISO.
+
+## Compatibility-профіль для NVIDIA
+
+Вільний ISO вище містить лише відкритий `nouveau` (`nouveau.ko`, Mesa `nouveau_dri.so`, `libvulkan_nouveau.so`). У ньому **немає** `nvidia.ko`, `/lib/firmware/nvidia/...` або `linux-firmware`; ядро — `linux-libre 7.3.5`. Для вашої `NVIDIA GeForce GTX 1050 Ti` (Pascal `GP107`, `0x1c82`) цього недостатньо для пропрієтарного драйвера.
+
+Дані про залізо — з [`wsm-os/docs/OWNER-HARDWARE-PROFILE.md`](https://github.com/juv4uk/wsm-os/blob/main/docs/OWNER-HARDWARE-PROFILE.md): GTX 1050 Ti 4096 MiB, CUDA capability 6.1 (`sm_61`), PCI `01:00.0`, Windows/NVML драйвер `582.66`.
+
+Тому додано окремий [`systems/live-compat.scm`](../systems/live-compat.scm) із зафіксованими каналами [`channels/compatibility.lock.scm`](../channels/compatibility.lock.scm):
+
+- ядро `linux 7.3.5` (не libre);
+- `nvidia-service-type` із гілкою **580.xx** — останньою, яка підтримує Pascal (590+ не розпізнає GTX 10xx);
+- `nvidia-module-580`, `nvidia-firmware-580`, `nvidia-settings-580` і `linux-firmware`;
+- KDE Plasma, SDDM, NetworkManager/WPA, WSM preflight-інструменти — ті самі, що й у вільному профілі.
+
+Збірка (в ізольованому профілі, побудованому з lock-файлу):
+
+```sh
+guix time-machine -C channels/compatibility.lock.scm -- \
+  system image -t uncompressed-iso9660 systems/live-compat.scm
+```
 
 ## Чесні обмеження
 
