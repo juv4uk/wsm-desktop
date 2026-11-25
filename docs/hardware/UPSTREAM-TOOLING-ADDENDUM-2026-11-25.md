@@ -49,6 +49,16 @@ WSM варто будувати не навколо одного «детект�
 - Не з'єднувати GPU і connector за іменем/порядком. Потрібен явний report-local relationship з provenance від #18.
 - Не вважати EDID/DisplayID advertised timings функціонально перевіреними режимами.
 
+#### Безпека DisplayID parser-а
+
+Два опубліковані CVE описують out-of-bounds read у DisplayID parser-ах `libdisplay-info` під час обробки некоректних довжин data block у EDID:
+- [CVE-2026-112271](https://access.redhat.com/security/cve/cve-2026-112271) — parser DisplayID v1; crafted EDID може спричинити читання за межами buffer і crash/denial of service.
+- [CVE-2026-112272](https://access.redhat.com/security/cve/cve-2026-112272) — аналогічна помилка у parser DisplayID v2; Red Hat окремо зазначає, що його RHEL-релізи не уражені, оскільки shipped packages не містять уразливої parser logic.
+
+Публічні записи для upstream `libdisplay-info` вказують на вразливий код у версіях **through 0.4.0** ([CVE-2026-112271 affected-version record](https://explore.alas.aws.amazon.com/CVE-2026-112271.html), [CVE-2026-112272 record](https://explore.alas.aws.amazon.com/CVE-2026-112272.html)). Це не означає, що кожен downstream package з рядком версії `0.4.0` обов'язково уражений: дистрибутиви можуть вилучати parser code або backport-ити виправлення. Визначати affectedness треба за точним source/package revision та фактичним вмістом parser-а, а не лише за version string.
+
+**Правило для WSM:** не додавати `libdisplay-info 0.4.0` як обов'язковий parser до privileged/live preflight. EDID/DisplayID parsing лишається optional і не запускається з підвищеними привілеями; перед його використанням перевірити точну upstream/downstream revision на наявність відповідних виправлень. За відсутності такої перевірки використовувати read-only DRM/KMS properties, а parser-specific fields залишати `unknown/not-collected`. Crafted EDID слід вважати untrusted input.
+
 ## Guix System VM: актуальні upstream зміни
 
 У Guix upstream 2026-11-14 були злиті дві зміни, які слід врахувати під час bring-up WSM:
