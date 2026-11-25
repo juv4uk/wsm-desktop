@@ -41,8 +41,15 @@ GUEST_MEMORY_MIB = 512
 GUEST_INIT = """#!/bin/sh
 set -eu
 
-mount -t proc -o ro,nosuid,nodev,noexec proc /proc
-mount -t sysfs -o ro,nosuid,nodev,noexec sysfs /sys
+guest_fail() {
+    echo "WSM_HWCHECK_GUEST_FAILURE:$1" > /dev/console
+    sleep 2
+    poweroff -f
+}
+
+echo WSM_HWCHECK_STAGE_INIT > /dev/console
+mount -t proc -o ro,nosuid,nodev,noexec proc /proc || guest_fail "proc-mount"
+mount -t sysfs -o ro,nosuid,nodev,noexec sysfs /sys || guest_fail "sysfs-mount"
 mkdir -p /tmp
 
 export PATH=/opt/python/bin:/bin
@@ -51,12 +58,21 @@ export PYTHONPATH=/opt/wsm
 export LD_LIBRARY_PATH={ld_library_path}
 
 PYTHON=/opt/python/bin/python3.11
-"$PYTHON" -S -c 'import json, selectors, subprocess, pathlib, gzip, base64'
-"$PYTHON" -S -m wsm_hwcheck --compact --output /tmp/hardware-report.json
-test -s /tmp/hardware-report.json
+echo WSM_HWCHECK_STAGE_PYTHON_IMPORT > /dev/console
+if ! "$PYTHON" -S -c 'import json, selectors, subprocess, pathlib, gzip, base64' > /dev/console 2>&1; then
+    guest_fail "python-import-smoke"
+fi
+echo WSM_HWCHECK_STAGE_COLLECTOR_START > /dev/console
+if ! "$PYTHON" -S -m wsm_hwcheck --compact --output /tmp/hardware-report.json > /dev/console 2>&1; then
+    guest_fail "wsm-hwcheck-execution"
+fi
+if [ ! -s /tmp/hardware-report.json ]; then
+    guest_fail "report-file-empty"
+fi
+echo WSM_HWCHECK_STAGE_COLLECTOR_DONE > /dev/console
 
-echo {report_begin}
-"$PYTHON" -S - <<'PYREPORT'
+echo {report_begin} > /dev/console
+if ! "$PYTHON" -S - <<'PYREPORT' > /dev/console 2>&1
 import base64
 import gzip
 from pathlib import Path
@@ -65,10 +81,15 @@ raw = Path("/tmp/hardware-report.json").read_bytes()
 encoded = base64.b64encode(gzip.compress(raw, mtime=0)).decode("ascii")
 print("{report_prefix}" + encoded)
 PYREPORT
-echo {report_end}
+then
+    guest_fail "report-encoding"
+fi
+echo {report_end} > /dev/console
 
 sync
 poweroff -f
+sleep 2
+guest_fail "poweroff-returned"
 """
 
 
@@ -421,9 +442,12 @@ def main() -> int:
         if result.stdout_truncated or result.stderr_truncated:
             raise RuntimeError("QEMU output exceeded bounded capture; refusing an incomplete report")
         if not result.marker_seen:
+            serial_first = serial[:10000]
+            serial_last = serial[-6000:]
             raise RuntimeError(
-                f"guest did not emit {REPORT_END}; stderr: {stderr[-1200:]}; "
-                f"serial: {serial[-1800:]}"
+                f"guest did not emit {REPORT_END}; serial_bytes={result.stdout_bytes_seen}; "
+                f"stdout_truncated={result.stdout_truncated}; stderr: {stderr[-1200:]}\\n"
+                f"serial first bytes:\\n{serial_first}\\nserial tail:\\n{serial_last}"
             )
 
         report = _decode_guest_report(serial)
