@@ -69,19 +69,48 @@ class CpuinfoParsingTests(unittest.TestCase):
         handle.close()
         return Path(handle.name)
 
-    def test_reads_first_processor_block_only(self) -> None:
+    def test_intersects_flags_across_all_processor_blocks(self) -> None:
         path = self.write(
-            "processor\t: 0\n"
-            "vendor_id\t: GenuineIntel\n"
-            "model name\t: Test CPU\n"
-            "flags\t\t: " + " ".join(V3) + "\n"
-            "\n"
-            "processor\t: 1\n"
-            "flags\t\t: sse sse2\n"
+            "processor\\t: 0\\n"
+            "vendor_id\\t: GenuineIntel\\n"
+            "model name\\t: Test CPU\\n"
+            "flags\\t\\t: " + " ".join(V3) + "\\n"
+            "\\n"
+            "processor\\t: 1\\n"
+            "flags\\t\\t: " + " ".join(V2) + "\\n"
         )
         flags, fields = read_cpuinfo_flags(path)
-        self.assertIn("avx2", flags)
+        self.assertEqual(flags, sorted(V2))
         self.assertEqual(fields["vendor_id"], "GenuineIntel")
+        self.assertEqual(fields["_cpuinfo_processor_count"], "2")
+        self.assertEqual(fields["_cpuinfo_flags_heterogeneous"], "true")
+        path.unlink()
+
+    def test_single_processor_preserves_its_complete_feature_set(self) -> None:
+        path = self.write(
+            "processor\\t: 0\\n"
+            "vendor_id\\t: GenuineIntel\\n"
+            "flags\\t\\t: " + " ".join(V3) + "\\n"
+        )
+        flags, fields = read_cpuinfo_flags(path)
+        self.assertEqual(flags, sorted(V3))
+        self.assertEqual(fields["_cpuinfo_processor_count"], "1")
+        self.assertEqual(fields["_cpuinfo_flags_heterogeneous"], "false")
+        path.unlink()
+
+    def test_missing_flags_on_any_processor_prevents_partial_claim(self) -> None:
+        path = self.write(
+            "processor\\t: 0\\n"
+            "vendor_id\\t: GenuineIntel\\n"
+            "flags\\t\\t: " + " ".join(V3) + "\\n"
+            "\\n"
+            "processor\\t: 1\\n"
+            "vendor_id\\t: GenuineIntel\\n"
+        )
+        flags, fields = read_cpuinfo_flags(path)
+        self.assertEqual(flags, [])
+        self.assertEqual(fields["_cpuinfo_processor_count"], "2")
+        self.assertEqual(fields["_cpuinfo_flags_incomplete"], "true")
         path.unlink()
 
     def test_missing_cpuinfo_is_a_clean_refusal(self) -> None:
