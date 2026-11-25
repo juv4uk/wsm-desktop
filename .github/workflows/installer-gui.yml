@@ -1,0 +1,49 @@
+name: WSM Installer GUI
+
+on:
+  pull_request:
+    paths:
+      - "installer/gui/**"
+      - "wsm/packages/installer-gui.scm"
+      - "tests/test_installer_gui_contract.py"
+      - ".github/workflows/installer-gui.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "installer/gui/**"
+      - "wsm/packages/installer-gui.scm"
+      - "tests/test_installer_gui_contract.py"
+      - ".github/workflows/installer-gui.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  qt-qml-build:
+    name: Qt 6 build and QML load smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Qt 6 build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            cmake ninja-build qt6-base-dev qt6-declarative-dev \
+            qml6-module-qtquick qml6-module-qtquick-controls \
+            qml6-module-qtquick-layouts qml6-module-qtquick-window
+
+      - name: Configure
+        run: cmake -S installer/gui -B build/installer-gui -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build/installer-gui --parallel 2
+
+      - name: Load the QML interface without probing hardware
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QT_QUICK_CONTROLS_STYLE: Basic
+        run: build/installer-gui/wsm-installer --smoke-test
