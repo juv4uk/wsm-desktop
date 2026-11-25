@@ -130,7 +130,7 @@ def _read_first(path: str) -> str:
         return "unknown"
 
 
-def environment(mode: str) -> dict[str, Any]:
+def environment(mode: str, cpuinfo_path: Path = Path("/proc/cpuinfo")) -> dict[str, Any]:
     """Everything a reader needs to decide whether two numbers may be compared."""
     meminfo = {}
     try:
@@ -142,9 +142,11 @@ def environment(mode: str) -> dict[str, Any]:
         pass
 
     isa: dict[str, Any]
+    cpu_model = "unknown"
     try:
-        flags, fields = read_cpuinfo_flags(Path("/proc/cpuinfo"))
-        isa = build_evidence(flags, fields, platform.machine(), "procfs:/proc/cpuinfo")
+        flags, fields = read_cpuinfo_flags(cpuinfo_path)
+        cpu_model = fields.get("model name") or "unknown"
+        isa = build_evidence(flags, fields, platform.machine(), f"procfs:{cpuinfo_path}")
     except IsaError as exc:
         isa = {"schema": None, "unavailable": exc.code, "message": exc.message}
 
@@ -153,7 +155,7 @@ def environment(mode: str) -> dict[str, Any]:
         "kernel_release": platform.release(),
         "machine": platform.machine(),
         "python": platform.python_version(),
-        "cpu_model": _read_first("/proc/cpuinfo").split("model name")[0] or "unknown",
+        "cpu_model": cpu_model,
         "isa_level": (isa.get("levels", {}) or {}).get("highest_supported", "unknown"),
         "memory": meminfo,
         "governor": _read_first(

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -66,6 +67,28 @@ class MeasurementTests(unittest.TestCase):
         for name, result in artifact["workloads"].items():
             with self.subTest(workload=name):
                 self.assertGreater(result["median"], 0.0)
+
+    def test_cpu_model_comes_from_the_model_name_field(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            cpuinfo = Path(temporary) / "cpuinfo"
+            cpuinfo.write_text(
+                "processor : 0\\n"
+                "vendor_id : GenuineIntel\\n"
+                "model name : Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz\\n"
+                "flags : sse sse2\\n",
+                encoding="utf-8",
+            )
+            artifact = environment("physical", cpuinfo_path=cpuinfo)
+        self.assertEqual(
+            artifact["environment"]["cpu_model"],
+            "Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz",
+        )
+
+    def test_cpu_model_is_unknown_when_cpuinfo_is_unavailable(self) -> None:
+        artifact = environment(
+            "physical", cpuinfo_path=Path("/definitely/missing/wsm-cpuinfo")
+        )
+        self.assertEqual(artifact["environment"]["cpu_model"], "unknown")
 
     def test_environment_does_not_guess_the_storage_class(self) -> None:
         self.assertEqual(environment("physical")["storage_class"], "unknown")
