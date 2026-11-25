@@ -1,101 +1,29 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""Validate hardware profile evidence bundles and their referenced artifacts."""
+"""Repository scanner for hardware profile evidence.
+
+All semantic and artifact-byte checks are delegated to wsm_install.profile so
+the installer and this command cannot drift into different definitions of
+valid evidence.
+"""
 
 from __future__ import annotations
 
 import argparse
-import hashlib
-import json
 import sys
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Any
 
-
 ROOT = Path(__file__).resolve().parents[1]
-SCHEMA_PATH = ROOT / "schemas" / "profile-evidence.schema.json"
 PROFILES_DIR = ROOT / "profiles" / "hardware"
-
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from wsm_install.profile import problems as profile_problems  # noqa: E402
-
-
-def load_schema() -> dict[str, Any]:
-    return json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
-
-
-def _load_document(path: Path) -> tuple[dict[str, Any] | None, list[str]]:
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        return None, [f"cannot read JSON: {exc}"]
-    if not isinstance(value, dict):
-        return None, ["evidence document must be a JSON object"]
-    return value, []
-
-
-def _validate_artifact(
-    artifact: dict[str, Any],
-    artifact_root: Path | None,
-    index: int,
-) -> list[str]:
-    problems: list[str] = []
-    raw_path = artifact["path"]
-
-    # Use portable POSIX relative paths in the manifest; never accept a path
-    # that could escape the evidence directory or become absolute on Windows.
-    parts = raw_path.split("/")
-    relative = PurePosixPath(raw_path)
-    if (
-        not raw_path
-        or "\\" in raw_path
-        or ":" in raw_path
-        or relative.is_absolute()
-        or any(part in ("", ".", "..") for part in parts)
-        or relative.as_posix() != raw_path
-    ):
-        return [f"artifacts/{index}/path is not a safe relative path: {raw_path!r}"]
-
-    if artifact_root is None:
-        return [f"artifacts/{index} cannot be verified without an evidence directory"]
-
-    try:
-        root = artifact_root.resolve(strict=True)
-    except OSError as exc:
-        return [f"artifacts/{index} evidence directory is unavailable: {exc}"]
-    if not root.is_dir():
-        return [f"artifacts/{index} evidence root is not a directory"]
-
-    candidate = root
-    for part in relative.parts:
-        candidate = candidate / part
-        if candidate.is_symlink():
-            return [f"artifacts/{index}/path must not traverse a symbolic link"]
-
-    try:
-        resolved = candidate.resolve(strict=True)
-    except OSError as exc:
-        return [f"artifacts/{index}/path does not resolve to a file: {exc}"]
-
-    if not resolved.is_relative_to(root):
-        return [f"artifacts/{index}/path escapes the evidence directory"]
-    if not resolved.is_file():
-        return [f"artifacts/{index}/path is not a regular file"]
-
-    digest = hashlib.sha256()
-    try:
-        with resolved.open("rb") as stream:
-            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                digest.update(chunk)
-    except OSError as exc:
-        return [f"artifacts/{index}/path cannot be read: {exc}"]
-
-    if digest.hexdigest() != artifact["sha256"]:
-        problems.append(
-            f"artifacts/{index}/sha256 does not match the bytes at {raw_path!r}"
-        )
-    return problems
+from wsm_install.profile import (  # noqa: E402
+    EvidenceUnavailable,
+    load,
+    problems as profile_problems,
+    slug_matches_directory,
+)
 
 
 def validate(
@@ -104,47 +32,35 @@ def validate(
     *,
     artifact_root: Path | None = None,
 ) -> list[str]:
-    """Apply the installer's shared schema/semantic gate, then verify local artifact bytes."""
-    problems = profile_problems(document, schema)
-    for index, artifact in enumerate(document["artifacts"]):
-        problems.extend(_validate_artifact(artifact, artifact_root, index))
-    return problems
+    """Use the installer's shared validator, including actual artifact bytes."""
+    try:
+        return profile_problems(document, schema, artifact_root=artifact_root)
+    except EvidenceUnavailable as exc:
+        return [str(exc)]
 
 
 def validate_directory(path: Path, profiles_dir: Path = PROFILES_DIR) -> list[str]:
-    """Validate a model directory's evidence.json, slug and referenced files."""
+    """Validate evidence, artifacts and canonical vendor/model slug."""
     if path.is_symlink():
         return ["evidence.json must not be a symbolic link"]
-    document, read_problems = _load_document(path)
-    if read_problems or document is None:
-        return read_problems
+    if path.parent.is_symlink():
+        return ["profile directory must not be a symbolic link"]
+    if not (path.parent / "profile.scm").is_file():
+        return ["profile directory has no profile.scm"]
+
+    try:
+        document = load(path)
+    except EvidenceUnavailable as exc:
+        return [str(exc)]
 
     problems = validate(document, artifact_root=path.parent)
     if problems:
         return problems
-
-    try:
-        root = profiles_dir.resolve(strict=True)
-        model_dir = path.parent.resolve(strict=True)
-        relative = model_dir.relative_to(root)
-    except (OSError, ValueError) as exc:
-        return [f"evidence directory is outside the profiles root: {exc}"]
-
-    if len(relative.parts) != 2:
-        problems.append("profile directory must be exactly <vendor>/<model>")
-        return problems
-
-    expected_slug = relative.as_posix()
-    actual_slug = document["profile"]["slug"]
-    if actual_slug != expected_slug:
-        problems.append(
-            f"slug {actual_slug!r} does not match the directory {expected_slug!r}"
-        )
-    return problems
+    return slug_matches_directory(document, path.parent, profiles_dir)
 
 
 def discover_profile_directories(profiles_dir: Path) -> tuple[list[Path], list[str]]:
-    """Discover every tracked-depth vendor/model directory; reject symlink dirs."""
+    """Discover every vendor/model directory and reject symlink directories."""
     directories: list[Path] = []
     problems: list[str] = []
     try:
@@ -188,7 +104,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--dir",
         type=Path,
         default=PROFILES_DIR,
-        help="scan <vendor>/<model> directories for mandatory evidence.json",
+        help="scan <vendor>/<model> directories for profile.scm and evidence.json",
     )
     return parser
 
@@ -198,9 +114,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.file:
         target = args.file
-        document, problems = _load_document(target)
-        if document is not None:
-            problems = validate(document, artifact_root=target.parent)
+        problems = validate(load(target), artifact_root=target.parent) if target.is_file() else [
+            f"evidence file not found or not a regular file: {target}"
+        ]
         if problems:
             print(f"{target}:", file=sys.stderr)
             for problem in problems:
@@ -210,8 +126,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     profiles_dir = args.dir
-    if not profiles_dir.is_dir():
-        print(f"check-profile-evidence: no profiles directory at {profiles_dir}", file=sys.stderr)
+    if profiles_dir.is_symlink() or not profiles_dir.is_dir():
+        print(
+            f"check-profile-evidence: profiles directory not found or is a symbolic link: {profiles_dir}",
+            file=sys.stderr,
+        )
         return 2
 
     directories, discovery_problems = discover_profile_directories(profiles_dir)
@@ -225,22 +144,24 @@ def main(argv: list[str] | None = None) -> int:
 
     accepted = 0
     for model_dir in directories:
-        target = model_dir / "evidence.json"
-        if not target.is_file():
-            failures += 1
-            print(f"{model_dir}:", file=sys.stderr)
-            print("  - missing mandatory evidence.json; this directory is not an accepted profile", file=sys.stderr)
-            continue
+        profile_file = model_dir / "profile.scm"
+        evidence_file = model_dir / "evidence.json"
+        problems: list[str] = []
+        if profile_file.is_symlink() or not profile_file.is_file():
+            problems.append("missing mandatory profile.scm; this directory is not a complete profile")
+        if evidence_file.is_symlink() or not evidence_file.is_file():
+            problems.append("missing mandatory evidence.json; this directory is not a verified profile")
+        if not problems:
+            problems = validate_directory(evidence_file, profiles_dir)
 
-        problems = validate_directory(target, profiles_dir)
         if problems:
             failures += 1
-            print(f"{target}:", file=sys.stderr)
+            print(f"{model_dir}:", file=sys.stderr)
             for problem in problems:
                 print(f"  - {problem}", file=sys.stderr)
         else:
             accepted += 1
-            print(f"{target}: ok")
+            print(f"{evidence_file}: ok")
 
     if failures:
         print(
