@@ -3,7 +3,7 @@
 PYTHON ?= python3
 GUIX ?= guix
 
-.PHONY: check check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle
+.PHONY: check check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle image-live
 
 check: check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa check-live-acceptance check-profiles-matrix check-perf-baseline check-profile-evidence check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition
 
@@ -97,6 +97,14 @@ describe-lock:
 
 check-locked-system:
 	$(GUIX) time-machine -C channels.lock.scm -- system build systems/minimal.scm
+
+# Live ISO (issue #170).
+# Використовує автентифікований free channel lock.
+# Збірка довга і потребує багато місця; не входить у `make check`.
+# Результат: store path ISO. Далі треба скопіювати в build/ і перевірити
+# маркери WSM_LIVE_READY / WSM_PLASMA_SESSION_READY у QEMU.
+image-live:
+	$(GUIX) time-machine -C channels.lock.scm -- system image --image-type=iso9660 systems/live.scm
 
 release-bundle: check
 	$(PYTHON) scripts/build_release_bundle.py
