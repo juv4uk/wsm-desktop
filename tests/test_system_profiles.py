@@ -160,6 +160,22 @@ class KnownPitfallTests(unittest.TestCase):
         self.assertIn("(auto-enable? #f)", text)
 
 
+class SourceResolutionTests(unittest.TestCase):
+    def test_live_profile_does_not_use_a_relative_include(self) -> None:
+        """`include` with a relative path depends on the working directory."""
+        text = profile("live.scm")
+        self.assertNotIn('(include "desktop.scm")', text)
+        self.assertIn("current-filename", text)
+
+    def test_package_source_excludes_vcs_metadata(self) -> None:
+        """Without select? the store copy would embed .git and vary per clone."""
+        text = (ROOT / "wsm" / "packages" / "wsm.scm").read_text(encoding="utf-8")
+        self.assertIn("#:select?", text)
+        for skipped in ("/.git", "/__pycache__", "/build"):
+            with self.subTest(skip=skipped):
+                self.assertIn(skipped, text)
+
+
 class LiveProfileTests(unittest.TestCase):
     def test_live_profile_inherits_the_desktop_profile(self) -> None:
         text = profile("live.scm")

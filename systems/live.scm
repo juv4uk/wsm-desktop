@@ -30,7 +30,11 @@
              (gnu packages kde-plasma)
              (wsm packages wsm))
 
-(define base-os (include "desktop.scm"))
+;; Завантажуємо сусідній файл за абсолютним шляхом, а не через include з
+;; відносним: тоді результат не залежить від того, з якого каталогу запущено
+;; guix. current-filename дає шлях до цього файлу під час читання.
+(define base-os
+  (load (string-append (dirname (current-filename)) "/desktop.scm")))
 
 ;; Acceptance for the live image is a serial marker, not "it built". Without a
 ;; marker the only thing a boot smoke test can say is "QEMU exited".

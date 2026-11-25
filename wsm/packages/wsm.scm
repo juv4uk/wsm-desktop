@@ -25,7 +25,16 @@
   (package
     (name "wsm-tools")
     (version "0.1.0-rc1")
-    (source (local-file "../.." "wsm-desktop-source" #:recursive? #t))
+    ;; Relative paths in local-file are resolved against this file, so "../.."
+    ;; is the repository root. select? keeps .git and build output out of the
+    ;; store: without it the source would embed the whole git directory, which
+    ;; differs between clones and makes the build non-reproducible.
+    (source (local-file "../.." "wsm-desktop-source"
+                        #:recursive? #t
+                        #:select? (lambda (path _stat)
+                                    (not (any (lambda (skip)
+                                                (string-contains path skip))
+                                              '("/.git" "/__pycache__" "/build"))))))
     (build-system python-build-system)
     (arguments
      (list
