@@ -48,7 +48,7 @@ QEMU запускали з одним synthetic volatile Type 3 пристроє
 - \`cxl_memdev_count=1\`;
 - \`cxl_region_created=false\`.
 
-У \`/sys/bus/cxl/devices\` виявлено 12 імен вузлів:
+У \`/sys/bus/cxl/devices\` виявлено 11 імен вузлів:
 
 \`\`\`text
 decoder0.0
