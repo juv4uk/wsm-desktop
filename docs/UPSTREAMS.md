@@ -37,3 +37,20 @@ Nonguix є незалежним community channel. Його інструкції
 ## Правило доказовості
 
 Для кожної версії, пакета, драйвера або firmware у майбутньому hardware manifest потрібно зберігати джерело, точну ревізію, ліцензію та результат перевірки. Сам факт присутності компонента в upstream-репозиторії не підтверджує його сумісність з конкретною конфігурацією чи право включати його до WSM образу.
+
+
+## Calamares — актуальні джерела
+
+- [Офіційний сайт Calamares](https://calamares.codeberg.page/)
+- [Основний upstream repository](https://codeberg.org/Calamares/calamares)
+- [Релізний тег v3.4.2](https://codeberg.org/Calamares/calamares/src/tag/v3.4.2)
+- [v3.4.2 CMakeLists.txt](https://codeberg.org/Calamares/calamares/src/tag/v3.4.2/CMakeLists.txt)
+- [v3.4.2 CONTRIBUTING.md](https://codeberg.org/Calamares/calamares/src/tag/v3.4.2/CONTRIBUTING.md)
+- [v3.4.2 partition module](https://codeberg.org/Calamares/calamares/src/tag/v3.4.2/src/modules/partition/CMakeLists.txt)
+- [v3.4.2 KPMcore helper](https://codeberg.org/Calamares/calamares/src/tag/v3.4.2/CMakeModules/KPMcoreHelper.cmake)
+- [Developer guide](https://calamares.codeberg.page/docs/develop-code/)
+- [Deployment guide](https://calamares.codeberg.page/docs/deploy-configuration/)
+
+Для джерел та API Calamares використовувати основний Codeberg upstream і релізний тег, а не покладатися на старі GitHub посилання. Інформація про пакетні залежності, що не є частиною тегу, повинна бути окремо позначена як оцінка й перевірена на конкретній ревізії.
+
+Деталі сумісності Guix/Calamares зафіксовані у [CALAMARES-FEASIBILITY.md](CALAMARES-FEASIBILITY.md).
