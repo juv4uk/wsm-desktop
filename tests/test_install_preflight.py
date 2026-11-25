@@ -162,10 +162,15 @@ class InstallerPlanTests(unittest.TestCase):
             evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
             artifact_path = profile_dir / "artifacts" / "dmesg.txt"
             artifact_bytes = artifact_path.read_bytes()
+            source_report_path = profile_dir / "artifacts" / "wsm-hwcheck-report.json"
+            source_report_bytes = source_report_path.read_bytes()
+            evidence_bytes = evidence_path.read_bytes()
 
             for protected_path, expected_bytes in (
                 (profile_path, profile_bytes),
                 (artifact_path, artifact_bytes),
+                (source_report_path, source_report_bytes),
+                (evidence_path, evidence_bytes),
             ):
                 with self.subTest(protected_path=protected_path), contextlib.redirect_stderr(io.StringIO()):
                     result = main([
