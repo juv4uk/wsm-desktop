@@ -131,8 +131,8 @@ def evaluate_freshness(
     max_age_seconds: int = DEFAULT_MAX_AGE_SECONDS,
 ) -> FreshnessDecision:
     """Fail closed unless report bytes, boot session, age, environment and topology match."""
-    if max_age_seconds < 1:
-        raise ValueError("max_age_seconds must be at least 1")
+    if type(max_age_seconds) is not int or max_age_seconds < 1:
+        raise ValueError("max_age_seconds must be a positive integer")
 
     if not _is_digest(report.report_sha256) or not _is_digest(expected_report_sha256):
         return _decision(FreshnessStatus.UNVERIFIABLE, "report digest is missing or malformed")
@@ -158,8 +158,8 @@ def evaluate_freshness(
         )
 
     if (
-        not isinstance(report.collected_monotonic_ns, int)
-        or not isinstance(live.monotonic_now_ns, int)
+        type(report.collected_monotonic_ns) is not int
+        or type(live.monotonic_now_ns) is not int
         or report.collected_monotonic_ns < 0
         or live.monotonic_now_ns < 0
         or live.monotonic_now_ns < report.collected_monotonic_ns
