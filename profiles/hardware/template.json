@@ -7,18 +7,23 @@
   },
   "report_id": "замінити на report_id зі звіту wsm-hwcheck",
   "report_schema_version": "1.0.0",
-  "isa_level": "x86-64-v2",
+  "isa_level": "unknown",
   "verified_on": "2026-11-26",
   "verified_by": "автори проєкту",
   "verified_functions": [
-    {"name": "graphics", "status": "not-assessed", "note": "що саме перевіряли"},
+    {"name": "graphics", "status": "not-assessed", "note": "замінити після реального тесту"},
     {"name": "storage", "status": "not-assessed"},
     {"name": "network", "status": "not-assessed"},
     {"name": "audio", "status": "not-assessed"}
   ],
-  "known_limitations": ["кожне обмеження окремим рядком"],
-  "not_assessed": ["suspend/resume", "що ще не перевірено"],
+  "known_limitations": ["кожне відоме обмеження окремим рядком"],
+  "not_assessed": ["suspend/resume", "інші неперевірені функції"],
   "artifacts": [
-    {"kind": "dmesg", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "note": "замінити на справжній хеш"}
+    {
+      "kind": "dmesg",
+      "path": "artifacts/replace-me-dmesg.txt",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "note": "замінити path і SHA-256 реального файла"
+    }
   ]
 }
