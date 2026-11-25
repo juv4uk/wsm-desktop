@@ -153,28 +153,50 @@ def check_image(iso: Path | None, boot: bool) -> dict[str, str]:
         detail = (completed.stderr or completed.stdout).strip().splitlines()
         return criterion("image", "fail", (detail[-1] if detail else "verifier emitted invalid JSON")[:300])
 
-    overall = payload.get("overall") if isinstance(payload, dict) else None
-    if completed.returncode == 0 and overall == "pass":
-        return criterion("image", "pass", "checksum, manifest, ISO structure and requested boot checks passed")
-    if completed.returncode == 2 and overall == "incomplete":
+    if not isinstance(payload, dict) or payload.get("schema") != "wsm-release-verdict/1":
+        return criterion("image", "fail", "live image verifier returned an unknown or missing schema")
+
+    expected_ids = {"checksum", "manifest", "iso-structure", "boot-bios", "boot-uefi"}
+    criteria = payload.get("criteria")
+    if not isinstance(criteria, list) or not criteria:
+        return criterion("image", "fail", "live image verifier returned no criteria")
+    if any(
+        not isinstance(item, dict)
+        or not isinstance(item.get("id"), str)
+        or item.get("status") not in {"pass", "fail", "not-run"}
+        for item in criteria
+    ):
+        return criterion("image", "fail", "live image verifier returned malformed criteria")
+    identifiers = [item["id"] for item in criteria]
+    if len(identifiers) != len(set(identifiers)) or set(identifiers) != expected_ids:
+        return criterion("image", "fail", "live image verifier criteria do not match the required set")
+
+    statuses = {item["status"] for item in criteria}
+    expected_overall = "fail" if "fail" in statuses else "incomplete" if "not-run" in statuses else "pass"
+    overall = payload.get("overall")
+    expected_exit = {"pass": 0, "fail": 1, "incomplete": 2}[expected_overall]
+    if overall != expected_overall or completed.returncode != expected_exit:
+        return criterion(
+            "image",
+            "fail",
+            f"verifier result is inconsistent: exit={completed.returncode}, reported={overall!r}, expected={expected_overall!r}",
+        )
+
+    if overall == "pass":
+        return criterion("image", "pass", "checksum, manifest, ISO structure and both boot checks passed")
+    if overall == "incomplete":
         pending = [
-            f"{item.get('id')}: {item.get('detail')}"
-            for item in payload.get("criteria", [])
-            if isinstance(item, dict) and item.get("status") == "not-run"
+            f"{item['id']}: {item.get('detail', '')}"
+            for item in criteria
+            if item["status"] == "not-run"
         ]
         return criterion("image", "not-run", "; ".join(pending)[:300] or "live image verification is incomplete")
-    if completed.returncode == 1 and overall == "fail":
-        failed = [
-            f"{item.get('id')}: {item.get('detail')}"
-            for item in payload.get("criteria", [])
-            if isinstance(item, dict) and item.get("status") == "fail"
-        ]
-        return criterion("image", "fail", "; ".join(failed)[:300] or "live image verifier reported failure")
-    return criterion(
-        "image",
-        "fail",
-        f"verifier exit/status mismatch: exit={completed.returncode}, overall={overall!r}",
-    )
+    failed = [
+        f"{item['id']}: {item.get('detail', '')}"
+        for item in criteria
+        if item["status"] == "fail"
+    ]
+    return criterion("image", "fail", "; ".join(failed)[:300] or "live image verifier reported failure")
 
 
 def verdict(criteria: list[dict[str, str]]) -> dict[str, Any]:
