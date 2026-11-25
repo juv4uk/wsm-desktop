@@ -131,6 +131,36 @@ class InstallerPlanTests(unittest.TestCase):
             self.assertEqual(result, 2)
             self.assertEqual(report_path.read_bytes(), report_bytes)
 
+    def test_plan_output_cannot_overwrite_profile_configuration_or_artifacts(self) -> None:
+        report, _ = load_fixture("desktop-observed.json")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report_path = root / "report.json"
+            report_path.write_bytes((FIXTURES / "desktop-observed.json").read_bytes())
+            profile_dir = root / "test" / "fixture"
+            profile_dir.mkdir(parents=True)
+            profile_bytes = b";; synthetic test profile\\n"
+            profile_path = profile_dir / "profile.scm"
+            profile_path.write_bytes(profile_bytes)
+            evidence = make_profile_evidence(report, profile_dir)
+            evidence_path = profile_dir / "evidence.json"
+            evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+            artifact_path = profile_dir / "artifacts" / "dmesg.txt"
+            artifact_bytes = artifact_path.read_bytes()
+
+            for protected_path, expected_bytes in (
+                (profile_path, profile_bytes),
+                (artifact_path, artifact_bytes),
+            ):
+                with self.subTest(protected_path=protected_path), contextlib.redirect_stderr(io.StringIO()):
+                    result = main([
+                        "--preflight", "--report", str(report_path), "--backend", "guix",
+                        "--dry-run", "--profile-evidence", str(evidence_path),
+                        "--plan-output", str(protected_path),
+                    ])
+                self.assertEqual(result, 2)
+                self.assertEqual(protected_path.read_bytes(), expected_bytes)
+
     def test_plan_output_rejects_hardlink_and_symlink_aliases(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             report_path = Path(directory) / "report.json"

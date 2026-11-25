@@ -84,11 +84,11 @@ def _safe_plan_output_path(
         except OSError as exc:
             return None, f"cannot resolve protected input path {source}: {exc}"
         if destination == source_resolved:
-            return None, "plan output must not overwrite the report or schema input"
+            return None, f"plan output must not overwrite a protected input: {source}"
         if destination.exists():
             try:
                 if os.path.samefile(destination, source):
-                    return None, "plan output must not alias the report or schema input"
+                    return None, f"plan output must not alias a protected input: {source}"
             except OSError as exc:
                 return None, f"cannot verify plan output identity: {exc}"
 
@@ -197,7 +197,17 @@ def main(argv: list[str] | None = None) -> int:
             args.plan_output,
             Path(args.report),
             args.schema,
-            (args.profile_evidence,) if args.profile_evidence is not None else (),
+            (
+                (
+                    args.profile_evidence,
+                    profile_evidence_root / "profile.scm",
+                    *(profile_evidence_root / item["path"] for item in profile_evidence["artifacts"]),
+                )
+                if args.profile_evidence is not None
+                and profile_evidence is not None
+                and profile_evidence_root is not None
+                else ()
+            ),
         )
         if path_error:
             print(f"wsm-install: unsafe plan output: {path_error}", file=sys.stderr)
