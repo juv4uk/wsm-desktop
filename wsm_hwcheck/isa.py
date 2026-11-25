@@ -80,26 +80,63 @@ class IsaError(Exception):
 
 
 def read_cpuinfo_flags(path: Path) -> tuple[list[str], dict[str, str]]:
-    """Return the flag set of the first processor block plus a few raw fields."""
+    """Return the intersection of flags across every CPU block exposed by procfs.
+
+    Linux normally emits one processor block per online logical CPU.  A
+    feature present only on the first block is not a safe machine-wide
+    capability on heterogeneous systems, so optimized levels use the
+    intersection.  If any processor block lacks a flags line, the complete
+    set is treated as unavailable rather than inferred from a partial sample.
+    """
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
     except OSError as exc:
         raise IsaError("cpuinfo.unreadable", f"cannot read {path}: {exc}") from exc
 
-    flags: list[str] = []
     fields: dict[str, str] = {}
-    for block in text.split("\n\n"):
+    processor_flag_sets: list[set[str]] = []
+    processor_blocks = 0
+    missing_processor_flags = False
+
+    for block in text.split("\\n\\n"):
         if not block.strip():
             continue
+
+        values: dict[str, str] = {}
         for line in block.splitlines():
             if ":" not in line:
                 continue
             key, value = (part.strip() for part in line.split(":", 1))
-            if key == "flags":
-                flags = sorted(set(value.split()))
-            elif key in {"vendor_id", "model name", "cpu family"} and key not in fields:
-                fields[key] = value
-        break  # first processor block only: levels are uniform across sockets
+            values[key] = value
+
+        if "processor" in values:
+            processor_blocks += 1
+            if "flags" not in values:
+                missing_processor_flags = True
+
+        if "flags" in values:
+            processor_flag_sets.append(set(values["flags"].split()))
+
+        for key in ("vendor_id", "model name", "cpu family"):
+            if key in values and key not in fields:
+                fields[key] = values[key]
+
+    # Keep compatibility with small/nonstandard cpuinfo fixtures that expose
+    # flags but omit the processor label: each flags block is still a sample.
+    sample_count = processor_blocks or len(processor_flag_sets)
+    heterogeneous = len({frozenset(flags) for flags in processor_flag_sets}) > 1
+
+    if not processor_flag_sets or missing_processor_flags:
+        flags: list[str] = []
+    else:
+        common = set.intersection(*processor_flag_sets)
+        flags = sorted(common)
+
+    # These private parser facts are consumed only by build_evidence(); they
+    # are not copied into the public vendor/model fields.
+    fields["_cpuinfo_processor_count"] = str(sample_count)
+    fields["_cpuinfo_flags_heterogeneous"] = "true" if heterogeneous else "false"
+    fields["_cpuinfo_flags_incomplete"] = "true" if missing_processor_flags else "false"
     return flags, fields
 
 
@@ -141,10 +178,25 @@ def build_evidence(
 ) -> dict[str, Any]:
     levels = evaluate(flags, architecture)
     warnings: list[str] = []
+    processor_count = int(fields.get("_cpuinfo_processor_count", "1") or "1")
+    flags_heterogeneous = fields.get("_cpuinfo_flags_heterogeneous") == "true"
+    flags_incomplete = fields.get("_cpuinfo_flags_incomplete") == "true"
+
+    if flags_heterogeneous:
+        warnings.append(
+            f"CPU feature flags differ across {processor_count} processor blocks; "
+            "reported ISA levels use the intersection of the observed blocks"
+        )
+    if flags_incomplete:
+        warnings.append(
+            "at least one processor block has no flags field; the ISA feature "
+            "set is unavailable rather than inferred from a partial sample"
+        )
     if "osxsave" not in set(flags):
         warnings.append(
-            "osxsave is absent: AVX-family state is not managed by the OS, so "
-            "AVX levels are not usable even if the silicon has them"
+            "osxsave is absent from the common feature set: AVX-family state is "
+            "not managed by the OS on every observed processor, so AVX levels "
+            "are not usable machine-wide"
         )
     if fields.get("vendor_id") and "GenuineIntel" not in fields["vendor_id"] and "AuthenticAMD" not in fields["vendor_id"]:
         warnings.append(
@@ -164,7 +216,7 @@ def build_evidence(
         "evidence": {
             "source": source,
             "kind": "live-observation",
-            "confidence": "confirmed",
+            "confidence": "unknown" if flags_incomplete else "confirmed",
             "feature_count": len(flags),
         },
         "warnings": warnings,
@@ -172,6 +224,7 @@ def build_evidence(
             "a supported level is evidence about the running CPU and kernel, not a build decision",
             "no performance claim is made: v2-to-v3 gains are workload-dependent",
             "the kernel clears AVX-family flags when OS support is missing, so absence means 'not usable now'",
+            "the feature set is the intersection of processor blocks exposed by procfs; CPUs hidden from procfs are outside this observation",
         ],
     }
 
