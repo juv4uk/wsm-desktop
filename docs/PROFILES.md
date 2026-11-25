@@ -117,9 +117,17 @@ python3 scripts/check_channels.py --policy free
 python3 scripts/check_channels.py --policy compatibility
 ```
 
-Політика `free` дозволяє лише офіційний Guix. Політика `compatibility`
-дозволяє Nonguix — але **не** дозволяє безіменний канал, гілку замість коміта,
-`http://`, невідомий хост або канал без introduction.
+Політика `free` за замовчуванням читає лише `channels.lock.scm`. Політика
+`compatibility` за замовчуванням читає окремий
+`channels.compatibility.lock.scm`; вона вимагає і Guix, і точно названий
+Nonguix. Перевірка відхиляє не лише невідомий хост, а й інший репозиторій на
+дозволеному хості, неканонічний introduction, branch замість `#f`, неповні
+чи дубльовані Scheme fields і невідомі канали.
+
+Поки `channels.compatibility.lock.scm` не створено з реальним Nonguix commit
+та перевіреною автентифікацією, `check-channels` явно повідомляє, що
+Compatibility image не є збірним. Вільний lock **не** може пройти перевірку
+Compatibility лише тому, що він сам по собі коректний.
 
 Різниця принципова: продукт може містити пропрієтарний драйвер, але не може
 містити **невідомо що**. Драйвер названий, зафіксований і підписаний; випадковий
