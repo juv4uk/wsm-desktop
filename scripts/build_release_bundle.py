@@ -74,12 +74,14 @@ def _prepare_destinations(output: Path) -> tuple[Path, Path, Path]:
     for path in destinations:
         _reject_symlink_components(path)
         try:
-            path.lstat()
+            metadata = path.lstat()
         except FileNotFoundError:
             pass
         except OSError as exc:
             raise SystemExit(f"build-release-bundle: cannot inspect destination {path}: {exc}")
         else:
+            if stat.S_ISLNK(metadata.st_mode):
+                raise SystemExit(f"build-release-bundle: symlink destination is not allowed: {path}")
             raise SystemExit(f"build-release-bundle: destination already exists: {path}")
 
     try:
