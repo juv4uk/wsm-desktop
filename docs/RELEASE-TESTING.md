@@ -17,23 +17,21 @@
 ## 1. Вимоги
 
 - Linux (будь-який дистрибутив із `/sys` і `/proc`);
+
+У WSL2, контейнері або VM звіт описує лише пристрої, видимі всередині цього гостьового середовища, а не повну інвентаризацію фізичного хоста. Для hardware-evidence саме фізичного ПК запускайте RC1 у native Linux session або з Linux live USB на цільовій машині.
 - Python 3.10 або новіший;
 - `jsonschema[format]==4.26.0` — з `requirements-install.txt` або з системного пакета;
 - опційно `/lib/modules/<kernel>/` та `journalctl` або `dmesg` для багатшої діагностики.
 
-Підготовка залежності може потребувати мережі. Після встановлення сам RC1 працює offline. Встановлення залежності ізольовано в користувача (без sudo):
-
-```sh
-python3 -m pip install --user -r requirements-install.txt
-```
-
-Якщо ваш дистрибутив забороняє `pip install --user`, використайте віртуальне оточення:
+Підготовка залежності може потребувати мережі. Після встановлення сам RC1 працює offline. Основний спосіб — ізольоване віртуальне оточення (без зміни системного Python і без `sudo`):
 
 ```sh
 python3 -m venv ~/.venvs/wsm-preview
-~/.venvs/wsm-preview/bin/pip install -r requirements-install.txt
-~/.venvs/wsm-preview/bin/python scripts/wsm_hardware_check.py --out ...
+~/.venvs/wsm-preview/bin/python -m pip install -r requirements-install.txt
+~/.venvs/wsm-preview/bin/python scripts/wsm_hardware_check.py --out "$HOME/wsm-check-$(date -u +%Y%m%dT%H%M%SZ)"
 ```
+
+На дистрибутивах, де `python3-venv` не встановлений, спершу додайте відповідний системний пакет засобами самого дистрибутива. Не обходьте PEP 668 через зміну системного Python.
 
 ## 2. Перевірка цілісності та запуск
 
@@ -120,7 +118,7 @@ PY
 
 Надсилайте публічно лише:
 
-- версію з `manifest.json`; якщо `source_commit` має значення `null` (розпакування tarball всередині іншого git-репо), беріть commit із `release-manifest.json`;
+- версію з `manifest.json`; якщо `source_commit` має значення `null` (звичайне розпакування tarball поза Git work tree або всередині іншого репозиторію), беріть commit із `release-manifest.json`;
 - `overall` і статуси `guix`/`nix`;
 - стислий human-readable summary зі stderr;
 - модель/категорію пристрою й опис проблеми.
