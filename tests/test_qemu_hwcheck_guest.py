@@ -172,7 +172,7 @@ class QemuHwcheckGuestSafetyTests(unittest.TestCase):
         encoded = base64.b64encode(
             gzip.compress(json.dumps(expected).encode("utf-8"), mtime=0)
         ).decode("ascii")
-        serial = "\\r\\n".join(
+        serial = (chr(13) + chr(10)).join(
             (
                 guest.REPORT_BEGIN,
                 guest.REPORT_PREFIX + encoded,
@@ -187,7 +187,7 @@ class QemuHwcheckGuestSafetyTests(unittest.TestCase):
 
         oversized = b"x" * (guest.MAX_REPORT_BYTES + 1)
         encoded = base64.b64encode(gzip.compress(oversized, mtime=0)).decode("ascii")
-        serial = "\\n".join(
+        serial = chr(10).join(
             (
                 guest.REPORT_BEGIN,
                 guest.REPORT_PREFIX + encoded,
