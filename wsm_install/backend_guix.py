@@ -88,7 +88,11 @@ class TargetSelection:
             self.efi_label,
             self.boot_mode,
         ])
-        return hashlib.sha256(material.encode("utf-8")).hexdigest()
+        # The digest must be computable for any input: it is compared against
+        # the confirmation before validation rejects a bad value, so it cannot
+        # be the place that raises. Lone surrogates are not encodable, hence
+        # backslashreplace rather than a hard failure.
+        return hashlib.sha256(material.encode("utf-8", "backslashreplace")).hexdigest()
 
 
 @dataclass(frozen=True)
