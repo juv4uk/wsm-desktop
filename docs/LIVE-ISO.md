@@ -37,7 +37,9 @@ sha256sum "$(readlink result)"
 - `screendump` через QEMU monitor: 1280×800 графічний framebuffer із
   Breeze-подібним фоном, а не текстова консоль.
 - Копія на Ventoy: `D:\wsm-desktop-kde-20261125.iso`, поруч із початковим
-  `omarchy-4.5.0-x86.iso` (його не змінено).
+  `omarchy-4.5.0-x86.iso` (його не змінено). SHA-256 копії, порахований на
+  Windows-боці: `C054C6F7AF5119F96739CDAB4FC540449FFB2136A10A92554AC01D887590CBB9`
+  — збігається з вихідним ISO.
 
 ## Чесні обмеження
 
