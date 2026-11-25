@@ -107,6 +107,16 @@ class HarnessCliTests(unittest.TestCase):
             self.assertEqual(copied.read_bytes(), b"separate vars template bytes")
             self.assertEqual(template.read_bytes(), b"separate vars template bytes")
 
+    def test_empty_vars_template_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            template = root / "OVMF_VARS.fd"
+            destination = root / "private" / "OVMF_VARS.fd"
+            template.write_bytes(b"")
+            destination.parent.mkdir()
+            with self.assertRaises(ValueError):
+                copy_ovmf_vars_template(template, destination)
+
     def test_uefi_cli_uses_code_and_private_copy_of_distinct_vars_template(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -128,13 +138,30 @@ class HarnessCliTests(unittest.TestCase):
         drives = [command[index + 1] for index, value in enumerate(command[:-1]) if value == "-drive"]
         self.assertEqual(len(drives), 2)
         self.assertIn(f"file={code}", drives[0])
+        self.assertIn("unit=0", drives[0])
         self.assertIn("readonly=on", drives[0])
         self.assertIn("OVMF_VARS.fd", drives[1])
+        self.assertIn("unit=1", drives[1])
         self.assertNotIn(f"file={vars_template}", drives[1])
         self.assertNotIn("readonly=on", drives[1])
         self.assertFalse(payload["host_efi_variables_modified"])
         self.assertTrue(payload["guest_uefi_vars_writable"])
         self.assertEqual(payload["guest_uefi_vars_source"], "private-copy-of-vars-template")
+
+    def test_uefi_rejects_using_the_same_file_for_code_and_vars(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            iso = root / "live.iso"
+            code_and_vars = root / "OVMF.fd"
+            iso.write_bytes(b"not really an iso, but not empty")
+            code_and_vars.write_bytes(b"one file cannot be both firmware code and vars")
+            result = self.run_harness(
+                "--iso", str(iso), "--firmware", "uefi",
+                "--ovmf-code", str(code_and_vars), "--ovmf-vars", str(code_and_vars),
+                "--dry-run",
+            )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("must be separate files", result.stderr)
 
     def test_dry_run_reports_bios_without_guest_nvram(self) -> None:
         with tempfile.NamedTemporaryFile(suffix=".iso") as iso:
