@@ -7,6 +7,7 @@ import contextlib
 import hashlib
 import io
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -36,6 +37,12 @@ class InstallerPlanTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual(first["backend"]["id"], "guix-system")
         self.assertEqual(first["source_report"]["sha256"], hashlib.sha256(raw).hexdigest())
+        self.assertEqual(first["plan_status"], "diagnostic-only")
+        self.assertFalse(first["plan_readiness"]["confirmable"])
+        self.assertIn("storage-install-target", first["plan_readiness"]["required_user_actions"])
+        self.assertTrue(first["execution"]["dry_run"])
+        self.assertTrue(first["device_summary"][0]["evidence_refs"])
+        self.assertTrue(first["device_summary"][0]["evidence_refs"][0]["json_pointer"].endswith("/evidence/0"))
         digest = first.pop("plan_sha256")
         self.assertEqual(digest, hashlib.sha256(canonical_json(first).encode()).hexdigest())
         self.assertFalse(first["execution"]["mutations_authorized"])
@@ -77,6 +84,56 @@ class InstallerPlanTests(unittest.TestCase):
             self.assertEqual(plan["backend"]["id"], "nixos")
             self.assertFalse(plan["execution"]["backend_invoked"])
             self.assertFalse(plan["execution"]["disk_access_performed"])
+            self.assertFalse(plan["execution"]["plan_confirmable"])
+            self.assertTrue(plan["execution"]["dry_run"])
+
+
+    def test_plan_output_cannot_overwrite_report_or_schema(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report_path = Path(directory) / "report.json"
+            report_bytes = (FIXTURES / "desktop-observed.json").read_bytes()
+            report_path.write_bytes(report_bytes)
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                result = main([
+                    "--preflight", "--report", str(report_path), "--backend", "guix",
+                    "--dry-run", "--plan-output", str(report_path),
+                ])
+            self.assertEqual(result, 2)
+            self.assertEqual(report_path.read_bytes(), report_bytes)
+
+    def test_plan_output_rejects_hardlink_and_symlink_aliases(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report_path = Path(directory) / "report.json"
+            report_path.write_bytes((FIXTURES / "desktop-observed.json").read_bytes())
+            hardlink = Path(directory) / "report-hardlink.json"
+            symlink = Path(directory) / "report-symlink.json"
+            hardlink.hardlink_to(report_path)
+            symlink.symlink_to(report_path)
+            for alias in (hardlink, symlink):
+                with self.subTest(alias=alias.name), contextlib.redirect_stderr(io.StringIO()):
+                    result = main([
+                        "--preflight", "--report", str(report_path), "--backend", "guix",
+                        "--dry-run", "--plan-output", str(alias),
+                    ])
+                self.assertEqual(result, 2)
+
+    def test_plan_output_rejects_device_nodes(self) -> None:
+        with contextlib.redirect_stderr(io.StringIO()):
+            result = main([
+                "--preflight", "--report", str(FIXTURES / "desktop-observed.json"),
+                "--backend", "guix", "--dry-run", "--plan-output", os.devnull,
+            ])
+        self.assertEqual(result, 2)
+
+    def test_missing_required_roles_make_plan_diagnostic_only(self) -> None:
+        report, raw = load_fixture("desktop-observed.json")
+        plan, blockers, warnings = build_plan(report, raw, "guix")
+        self.assertEqual(blockers, [])
+        self.assertFalse(plan["plan_readiness"]["confirmable"])
+        self.assertEqual(plan["plan_readiness"]["role_coverage"]["input"], "not-collected")
+        self.assertEqual(plan["plan_readiness"]["role_coverage"]["boot-path"], "not-collected")
+        self.assertTrue(any("storage target is not selected" in item for item in warnings))
 
     def test_cli_rejects_malformed_json_without_plan(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
