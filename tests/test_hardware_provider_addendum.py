@@ -41,6 +41,12 @@ class OptionalHardwareProviderTests(unittest.TestCase):
             "перевіряти точну upstream/downstream revision на наявність відповідних виправлень",
             self.lower,
         )
+        self.assertIn("не включати до стандартного live image", self.lower)
+        self.assertIn("не запускати автоматично на отриманому edid/displayid", self.lower)
+        self.assertIn("ані без підвищених привілеїв", self.lower)
+        self.assertIn("provider позначається `not-used/not-collected`", self.lower)
+        self.assertIn("parser-specific fields — `unknown/not-collected`", self.lower)
+        self.assertIn("збираються незалежно від parser-а", self.lower)
 
     def test_intel_xpu_smi_is_limited_to_documented_device_families(self) -> None:
         self.assertIn("Arc Pro Series", self.audit)
