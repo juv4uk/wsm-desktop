@@ -88,6 +88,20 @@ def _require(condition: bool, code: str, message: str) -> None:
         raise Refused(code, message)
 
 
+def minimum_disk_size_bytes(firmware: str) -> int:
+    """Minimum geometry: 1 MiB alignment + firmware boot partition + 12 GiB root."""
+    if firmware == "uefi":
+        boot_partition_mib = ESP_MIB
+    elif firmware == "bios":
+        boot_partition_mib = BIOS_BOOT_MIB
+    else:
+        raise Refused(
+            "disk.firmware",
+            f"firmware must be 'uefi' or 'bios', got {firmware!r}",
+        )
+    return (1 + boot_partition_mib + MIN_ROOT_MIB) * 1024 * 1024
+
+
 def validate_target(disk: Disk, acknowledgement: str | None, firmware: str) -> None:
     """Every reason this disk must not be touched, in the order that matters most."""
     _require(
@@ -105,11 +119,13 @@ def validate_target(disk: Disk, acknowledgement: str | None, firmware: str) -> N
         "disk.running-system",
         f"{disk.path} holds the system we are running from",
     )
+    minimum_size = minimum_disk_size_bytes(firmware)
+    minimum_mib = minimum_size // (1024 * 1024)
     _require(
-        disk.size_bytes >= (MIN_ROOT_MIB + ESP_MIB) * 1024 * 1024,
+        disk.size_bytes >= minimum_size,
         "disk.too-small",
-        f"{disk.path} is {disk.size_bytes} bytes; the smallest supported layout needs "
-        f"{MIN_ROOT_MIB + ESP_MIB} MiB",
+        f"{disk.path} is {disk.size_bytes} bytes; the smallest {firmware} layout needs "
+        f"{minimum_mib} MiB",
     )
     # The install sequence always overwrites the partition table with
     # sgdisk --zap-all. Even an inventory-empty disk needs explicit consent.
