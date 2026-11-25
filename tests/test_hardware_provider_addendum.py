@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Guardrails for optional GPU telemetry and hwmon provider semantics."""
 
 from pathlib import Path

@@ -1,6 +1,6 @@
 # Контракт передавання: апаратний preflight → план → системний backend
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 - Статус: **proposed / design-only** — backend-адаптер Guix v0.1 реалізовано read-only
 - Дата: 2026-11-25

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Регресійні перевірки мінімального Guix System VM-профілю."""
 
 import unittest

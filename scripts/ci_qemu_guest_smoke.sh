@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 # Real guest-kernel smoke test for GitHub Actions. This is not a WSM image test.
 set -Eeuo pipefail
 

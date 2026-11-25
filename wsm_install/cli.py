@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Read-only report validation, summary, and deterministic draft-plan output."""
 
 from __future__ import annotations

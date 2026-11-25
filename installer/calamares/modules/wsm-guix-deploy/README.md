@@ -1,6 +1,6 @@
 # Модуль wsm-guix-deploy
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 Це місце для майбутнього Python job module Calamares. Файлу \`module.desc\` та Calamares entry point тут навмисно немає, тому frontend не може випадково завантажити незавершений installer backend.
 

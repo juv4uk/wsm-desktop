@@ -1,6 +1,6 @@
 # ADR 0004: Nix і GNU Guix як окремі кандидати на системну основу WSM
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 - Статус: **прийнято — перший backend GNU Guix, Nix відкладено**
 - Дата: 2026-11-25 (запропоновано й прийнято)

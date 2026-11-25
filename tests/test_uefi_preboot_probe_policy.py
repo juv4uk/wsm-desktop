@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Policy guardrails for a future sanitized UEFI pre-boot provider."""
 
 from pathlib import Path

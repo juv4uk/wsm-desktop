@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Command-line entry point for python -m wsm_hwcheck."""
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
 # Архітектура WSM Desktop
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 ## Мета
 

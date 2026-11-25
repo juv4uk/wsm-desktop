@@ -1,6 +1,6 @@
 # Канали WSM
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 ## Вільний релізний lock
 

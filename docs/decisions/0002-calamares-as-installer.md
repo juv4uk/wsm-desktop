@@ -1,6 +1,6 @@
 # ADR 0002: Calamares як графічний інсталятор
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 - Статус: прийнято як архітектурний напрямок
 - Дата: 2026-11-25

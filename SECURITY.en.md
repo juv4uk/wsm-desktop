@@ -3,7 +3,7 @@
 > English translation. The canonical document is
 > [SECURITY.md](SECURITY.md); in any disagreement the Ukrainian text wins.
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 WSM Desktop is pre-alpha. The installer is not yet intended for use on real systems.
 

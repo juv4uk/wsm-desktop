@@ -1,6 +1,6 @@
 # Внесок у WSM Desktop
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 Дякуємо за інтерес до WSM Desktop. Проєкт перебуває на ранній стадії; найцінніший внесок зараз — перевірювані технічні дослідження, невеликі зміни та точна документація.
 

@@ -1,6 +1,6 @@
 # Контракт топології обладнання WSM
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 - Статус: **proposed / review draft**
 - Критичний шлях: **ні** — контракт топології не входить у перший preview

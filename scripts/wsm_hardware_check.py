@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """One-command, read-only hardware preview check for a WSM release tree.
 
 The script collects a local hardware report and asks the diagnostic-only

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Safety and command-construction tests for the disposable QEMU harness."""
 
 from __future__ import annotations

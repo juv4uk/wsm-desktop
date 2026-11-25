@@ -1,6 +1,6 @@
 # ADR 0003: Free-профіль за замовчуванням
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 - Статус: прийнято
 - Дата: 2026-11-25

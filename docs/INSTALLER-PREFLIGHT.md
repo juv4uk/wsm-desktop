@@ -1,6 +1,6 @@
 # WSM read-only installer preflight prototype
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 - Status: **prototype / dry-run only**
 - Related: [#12 — handoff contract](https://github.com/juv4uk/wsm-desktop/issues/12), [#13 — preflight prototype](https://github.com/juv4uk/wsm-desktop/issues/13)

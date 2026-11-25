@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Acceptance tests for the Guix deployment adapter.
 
 These follow the assertions in docs/INSTALLER-HANDOFF.md section 8: a plan that

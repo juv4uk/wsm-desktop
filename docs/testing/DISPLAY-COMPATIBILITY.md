@@ -1,6 +1,6 @@
 # Протокол перевірки сумісності дисплеїв і моніторів WSM
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 - Статус: **proposed / validation protocol**
 - Пов'язана задача: [#20](https://github.com/juv4uk/wsm-desktop/issues/20)

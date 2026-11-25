@@ -1,6 +1,6 @@
 # Ethical principles and third-party components
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 > English translation. The canonical document is [ETHICS.md](ETHICS.md); in any
 > disagreement the Ukrainian text wins.

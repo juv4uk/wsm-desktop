@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Structural checks for the Guix system profiles.
 
 These tests do not build anything. Without Guix they cannot: the profiles are

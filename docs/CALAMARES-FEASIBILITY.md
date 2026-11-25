@@ -1,6 +1,6 @@
 # Оцінка можливості інтеграції Calamares у GNU Guix
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 - Дата перевірки: 2026-11-25
 - Розглянута версія: Calamares 3.4.2

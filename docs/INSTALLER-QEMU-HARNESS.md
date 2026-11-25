@@ -1,6 +1,6 @@
 # Disposable QEMU installer harness
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 - Status: **QEMU harness and synthetic-ISO CI integration available; Guix/WSM guest acceptance pending**
 - Related: #1 (Guix VM milestone), #13 (read-only CLI), #14 (QEMU integration), #23 (session freshness), #27 (harness)

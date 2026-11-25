@@ -1,6 +1,6 @@
 # Конфігурації Guix System
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 Файл \`minimal.scm\` — мінімальний приклад для перевірки синтаксису, побудови системи та запуску у відокремленій QEMU-віртуальній машині. Це не профіль випуску WSM Desktop, не live-образ і не виробничий інсталятор.
 

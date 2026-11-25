@@ -1,5 +1,5 @@
 #!/bin/sh
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 #
 # Збирає завантажувальний ISO WSM Desktop із systems/live.scm.
 #

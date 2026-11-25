@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Prepare a confirmed Guix handoff without executing deployment commands."""
 
 from __future__ import annotations

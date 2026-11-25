@@ -1,6 +1,6 @@
 # Етичні принципи та сторонні компоненти
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 ## Вільне програмне забезпечення — типовий шлях
 

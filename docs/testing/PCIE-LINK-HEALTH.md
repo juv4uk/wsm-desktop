@@ -1,6 +1,6 @@
 # Протокол read-only перевірки PCIe AER та devlink health
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 - Статус: **proposed / validation protocol**
 - Пов’язана задача: [#69](https://github.com/juv4uk/wsm-desktop/issues/69)
