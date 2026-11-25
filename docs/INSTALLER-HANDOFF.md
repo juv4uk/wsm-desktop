@@ -336,8 +336,8 @@ Frontend реалізація може змінюватися (Calamares, інш
 **Обмеження поточного adapter prototype:**
 
 - disk input наразі обмежено простим вузлом `/dev/<name>`; `/dev/.`, `/dev/..`, підрядки з newline та додаткові path segments відхиляються. Це синтаксична allowlist, а не доказ ідентичності block device.
-- configuration staging path фіксований: `/run/wsm/system.scm`; authenticated channel lock staging path фіксований: `/run/wsm/channels.lock.scm`; install target mount root фіксований: `/mnt`. Довільні абсолютні шляхи, `/`, `..` та вкладені target mountpoints не приймаються.
-- майбутній Guix deployment argv використовує `guix time-machine -C /run/wsm/channels.lock.scm -- system init /run/wsm/system.scm /mnt`. Обидва inputs мають бути staged та перевірені до запуску; sequence planner не виконує цю команду.
+- configuration staging path фіксований: `/run/wsm/system.scm`; authenticated channel lock staging path фіксований: `/run/wsm/channels.lock.scm`; Guix executable path фіксований: `/run/current-system/profile/bin/guix`; install target mount root фіксований: `/mnt`. Довільні абсолютні шляхи, `/`, `..` та вкладені target mountpoints не приймаються.
+- майбутній Guix deployment argv використовує `/run/current-system/profile/bin/guix time-machine -C /run/wsm/channels.lock.scm -- system init /run/wsm/system.scm /mnt`. Обидва inputs мають бути staged та перевірені до запуску; sequence planner не виконує цю команду.
 - перед першою операцією запису майбутній `APPLY` все одно мусить повторно розв'язати явно обраний `/dev/...` у поточну block-device identity й порівняти її з підтвердженим target; adapter поки не реалізує цю операцію.
 - поля тексту, що потрапляють у Scheme, відхиляють Unicode control/format/line-separator characters; regex-поля перевіряються повним збігом, не префіксом.
 
@@ -357,7 +357,7 @@ Frontend реалізація може змінюватися (Calamares, інш
 
 - `python3 -m wsm_install.guix_deploy --plan PLAN.json --selection TARGET.json --show-confirmation` перевіряє обидва входи й показує точні SHA-256 плану та вибору цілі; файл конфігурації не створюється;
 - другий виклик вимагає обидва digest-и через `--confirm-plan-sha256` і `--confirm-target-digest`, після чого створює новий абсолютний `.scm` файл з режимом `0600` як **оглядову копію**;
-- CLI друкує JSON із allow-listed `argv`, але ніколи не виконує його. `argv` використовує `guix time-machine -C /run/wsm/channels.lock.scm -- system init` і завжди містить фіксовані `/run/wsm/system.scm` та `/mnt`, навіть коли оглядова копія лежить в іншому абсолютному шляху: це відображення майбутньої команди інсталятора, а не дозвіл на довільні шляхи. Окремі `--mountpoint` немає;
+- CLI друкує JSON із allow-listed `argv`, але ніколи не виконує його. `argv` використовує `/run/current-system/profile/bin/guix time-machine -C /run/wsm/channels.lock.scm -- system init` і завжди містить фіксовані `/run/wsm/system.scm` та `/mnt`, навіть коли оглядова копія лежить в іншому абсолютному шляху: це відображення майбутньої команди інсталятора, а не дозвіл на довільні шляхи. Окремі `--mountpoint` немає;
 - CLI відхиляє symlink/не regular input, duplicate JSON keys, змінені чи diagnostic-only plans, неузгоджені підтвердження, перезапис наявного output і будь-яку оглядову копію всередині цільового `/mnt`;
 - `make check-installer` запускає окремі backend і CLI safety tests.
 
