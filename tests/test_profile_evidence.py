@@ -112,7 +112,7 @@ class ArtifactTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             problems = validate(bundle(), artifact_root=root)
-        self.assertTrue(any("does not resolve to a file" in item for item in problems))
+        self.assertTrue(any("is missing or escapes the evidence directory" in item for item in problems))
 
     def test_artifact_path_cannot_escape_bundle_directory(self) -> None:
         document = bundle(
