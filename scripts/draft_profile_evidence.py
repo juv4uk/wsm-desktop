@@ -229,7 +229,7 @@ def main(argv: list[str] | None = None) -> int:
             raise OSError("profile directory must contain a regular profile.scm before drafting")
         profile_bytes = profile_source.read_bytes()
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        print(f"draft-profile-evidence: cannot read report: {exc}", file=sys.stderr)
+        print(f"draft-profile-evidence: cannot read source inputs: {exc}", file=sys.stderr)
         return 2
     if not isinstance(report, dict):
         print("draft-profile-evidence: report root must be a JSON object", file=sys.stderr)
