@@ -31,6 +31,7 @@ from scripts.qemu_boot_smoke import (
     MAX_BOOT_MARKER_BYTES,
     MAX_SERIAL_CAPTURE_BYTES,
     MAX_STDERR_CAPTURE_BYTES,
+    MAX_PROCESS_INPUT_BYTES,
     build_qemu_command,
     main,
     parse_disk_size_mib,
@@ -213,6 +214,32 @@ class QemuBootSmokeTests(unittest.TestCase):
             self.assertEqual(calls[0][1:4], ["create", "-f", "qcow2"])
             runner.assert_called_once()
             self.assertEqual(runner.call_args.kwargs["marker"], "WSM-LIVE-READY")
+
+    def test_bounded_process_can_send_a_small_stdin_payload(self) -> None:
+        result = run_bounded_process(
+            [
+                sys.executable,
+                "-c",
+                "import sys; data = sys.stdin.read(); print(data, end='')",
+            ],
+            timeout_seconds=5,
+            marker=None,
+            stdin_bytes=b"info qtree\\nquit\\n",
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertFalse(result.timed_out)
+        self.assertEqual(result.stdout_tail, b"info qtree\\nquit\\n")
+
+    def test_bounded_process_rejects_oversized_stdin_before_spawn(self) -> None:
+        with patch("scripts.qemu_boot_smoke.subprocess.Popen") as popen:
+            with self.assertRaisesRegex(ValueError, "stdin payload"):
+                run_bounded_process(
+                    [sys.executable, "-c", "pass"],
+                    timeout_seconds=5,
+                    marker=None,
+                    stdin_bytes=b"x" * (MAX_PROCESS_INPUT_BYTES + 1),
+                )
+        popen.assert_not_called()
 
     def test_bounded_capture_detects_marker_before_retained_tail(self) -> None:
         marker = "WSM_MARKER_AT_STREAM_START"
