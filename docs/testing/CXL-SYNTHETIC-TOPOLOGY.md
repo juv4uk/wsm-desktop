@@ -189,7 +189,7 @@ done
 
 Окремий optional CI lane виконує дві різні перевірки:
 
-- `scripts/ci_probe_qemu_cxl.py` — read-only host capability snapshot і QEMU qdev probe. Він створює лише volatile Type 3 memory object, зупиняє guest CPUs та не завантажує host CXL modules.
+- `scripts/ci_probe_qemu_cxl.py` — read-only host capability snapshot і QEMU qdev probe. Він створює лише volatile Type 3 memory object, зупиняє guest CPUs та не завантажує host CXL modules; monitor stdin (до 1 KiB) і сумарний stdout/stderr (64 KiB: 56/8 KiB) обмежуються спільним `run_bounded_process` reader.
 - `scripts/ci_qemu_cxl_guest.py` — disposable Linux guest на exact runner kernel; використовує лише dependency closure від `modprobe --show-depends`, запускає CXL modules всередині guest і читає read-only sysfs. Немає диска, NIC, passthrough, host module loading, CXL region/namespace creation або decoder writes.
 - `tests/test_qemu_cxl_probe.py` і `tests/test_qemu_cxl_guest.py` перевіряють топологію, privacy, safety та streaming resource limits; `make check-cxl-guest` запускає обидва набори.
 - `.github/workflows/qemu-cxl-feasibility.yml` є окремою feasibility lane, а не hardware preflight gate.
