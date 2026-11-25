@@ -34,8 +34,9 @@ AMD SMI є наступником ROCm SMI та надає API для GPU/device
 - JSON output CLI може бути зручним для експериментів, але не є стабільним WSM report schema. Adapter має бути version-pinned і тримати окремо vendor-native observations та report-local device IDs.
 - AMD SMI — telemetry/topology evidence, не доказ сумісності для boot або display path. Відсутність AMD SMI/ROCm не означає несумісність AMD GPU; цей provider не повинен бути обов'язковим preflight dependency.
 - Не викликати mutating CLI commands на етапі inventory: документація CLI також містить `set` та `reset`. Використовувати тільки окремо reviewed read-only queries; telemetry values можуть змінюватися в часі й не є статичними hardware identity.
+- У ROCm 10.2.0 (2026-11-18) AMD SMI 27.2.0 додав єдиний `amdsmi_get_link_topology()` API для bare metal: link weight/status/type, hop count і framebuffer-sharing data; він має Python та Rust bindings. У тій самій версії опубліковано Python library `amdsmi` 27.2.0 на PyPI без вимоги встановлювати весь ROCm SDK, але залишаються вимоги Linux x86_64, glibc ≥ 2.27, драйвера `amdgpu` та `libdrm`. Це потенційний спосіб окремо пакувати optional provider, а не підстава для `pip install` або мережевого встановлення під час preflight.
 
-Джерела: [AMD SMI 27.2.0](https://rocmdocs.amd.com/projects/amdsmi/en/latest/), [AMD SMI CLI guidance](https://rocmdocs.amd.com/projects/amdsmi/en/develop/how-to/amdsmi-cli-tool.html), [AMD SMI topology output](https://rocmdocs.amd.com/projects/amdsmi/en/develop/how-to/amdsmi-cli-tool.html#amd-smi-topology).
+Джерела: [AMD SMI 27.2.0, документація ROCm 10.2.0](https://rocm.docs.amd.com/projects/amdsmi/en/docs-10.2.0/), [AMD SMI CLI guidance 27.2.0](https://rocm.docs.amd.com/projects/amdsmi/en/docs-10.2.0/how-to/amdsmi-cli-tool.html), [AMD SMI topology output 27.2.0](https://rocm.docs.amd.com/projects/amdsmi/en/docs-10.2.0/how-to/amdsmi-cli-tool.html#amd-smi-topology).
 
 ### CXL sysfs — типізована fabric topology та memory locality
 
