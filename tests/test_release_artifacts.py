@@ -223,11 +223,11 @@ class ReleaseBundleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / f"wsm-desktop-{release['version']}-source.tar.gz"
             sums = output.with_name("SHA256SUMS")
-            sums.write_text("preserve this file\\n", encoding="utf-8")
+            sums.write_text("preserve this file\n", encoding="utf-8")
             with self.assertRaisesRegex(SystemExit, "destination already exists"):
                 build(release["version"], output)
             self.assertFalse(output.exists())
-            self.assertEqual(sums.read_text(encoding="utf-8"), "preserve this file\\n")
+            self.assertEqual(sums.read_text(encoding="utf-8"), "preserve this file\n")
 
     def test_bundle_refuses_symlink_manifest_without_writing_tarball(self) -> None:
         from scripts.build_release_bundle import build, load_release
@@ -236,13 +236,13 @@ class ReleaseBundleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / f"wsm-desktop-{release['version']}-source.tar.gz"
             target = Path(directory) / "outside.txt"
-            target.write_text("do not overwrite\\n", encoding="utf-8")
+            target.write_text("do not overwrite\n", encoding="utf-8")
             manifest = output.with_name("release-manifest.json")
             manifest.symlink_to(target)
             with self.assertRaisesRegex(SystemExit, "symlink"):
                 build(release["version"], output)
             self.assertFalse(output.exists())
-            self.assertEqual(target.read_text(encoding="utf-8"), "do not overwrite\\n")
+            self.assertEqual(target.read_text(encoding="utf-8"), "do not overwrite\n")
             self.assertTrue(manifest.is_symlink())
 
     def test_bundle_refuses_output_inside_repository(self) -> None:
