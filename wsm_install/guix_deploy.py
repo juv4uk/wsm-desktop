@@ -85,6 +85,17 @@ def _read_json_object(path_value: str, label: str) -> tuple[dict[str, Any], Path
     return value, resolved
 
 
+def _validate_plan_shape(plan: dict[str, Any]) -> None:
+    """Reject malformed nested fields before the stricter adapter validator reads them."""
+    for key in ("backend", "plan_readiness", "execution", "source_report"):
+        if not isinstance(plan.get(key), dict):
+            raise DeployCliError(f"plan field {key!r} must be a JSON object")
+    if not isinstance(plan.get("blockers"), list):
+        raise DeployCliError("plan field 'blockers' must be a JSON array")
+    if not isinstance(plan.get("plan_sha256"), str):
+        raise DeployCliError("plan field 'plan_sha256' must be a string")
+
+
 def _load_selection(value: dict[str, Any]) -> TargetSelection:
     expected = {item.name for item in fields(TargetSelection)}
     actual = set(value)
@@ -206,6 +217,7 @@ def main(argv: list[str] | None = None) -> int:
         plan, plan_path = _read_json_object(args.plan, "plan")
         selection_data, selection_path = _read_json_object(args.selection, "selection")
         selection = _load_selection(selection_data)
+        _validate_plan_shape(plan)
         validate_plan(plan)
 
         target_digest = selection.digest()
@@ -290,7 +302,7 @@ def main(argv: list[str] | None = None) -> int:
     except HandoffError as exc:
         print(f"wsm-guix-deploy: refused [{exc.code}]: {exc.message}", file=sys.stderr)
         return 3
-    except (DeployCliError, OSError, TypeError, ValueError) as exc:
+    except (DeployCliError, OSError, TypeError, ValueError, AttributeError) as exc:
         print(f"wsm-guix-deploy: {exc}", file=sys.stderr)
         return 2
 
