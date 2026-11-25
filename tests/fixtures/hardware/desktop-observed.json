@@ -37,7 +37,7 @@
         "revision": "a1",
         "manufacturer": "NVIDIA",
         "model": "Example GPU",
-        "hardware_device_id": "0x1c82"
+        "device_id": "0x1c82"
       },
       "discovery_status": "discovered",
       "driver": {
