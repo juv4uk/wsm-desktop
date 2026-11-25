@@ -6,6 +6,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -186,6 +187,43 @@ class QemuBootSmokeTests(unittest.TestCase):
             self.assertEqual(calls[0][1:4], ["create", "-f", "qcow2"])
             self.assertIn("-nic", calls[1])
             self.assertIn("none", calls[1])
+
+    @unittest.skipUnless(
+        shutil.which("qemu-system-x86_64") and shutil.which("qemu-img"),
+        "real QEMU CLI smoke requires qemu-system-x86_64 and qemu-img",
+    )
+    def test_real_qemu_accepts_generated_command_with_comma_path(self) -> None:
+        """Start QEMU paused to validate real CLI parsing without booting a guest."""
+        with tempfile.TemporaryDirectory() as parent:
+            root = Path(parent) / "tmp,comma"
+            root.mkdir()
+            iso = root / "synthetic.iso"
+            qcow2 = root / "disposable.qcow2"
+            iso.write_bytes(b"\\0" * 2048)
+            subprocess.run(
+                ["qemu-img", "create", "-f", "qcow2", str(qcow2), "256M"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            command = build_qemu_command(
+                "qemu-system-x86_64", iso, qcow2, 256, 1
+            )
+            # Pause the guest CPU so this test validates device/option setup only.
+            command.insert(1, "-S")
+            try:
+                subprocess.run(
+                    command,
+                    check=False,
+                    timeout=3,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+            except subprocess.TimeoutExpired:
+                return
+            self.fail("QEMU exited before the bounded paused-VM smoke timeout")
 
 
 if __name__ == "__main__":
