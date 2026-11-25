@@ -73,6 +73,7 @@
       "mac-address",
       "uuid",
       "hostname"
-    ]
+    ],
+    "network_requests_performed": false
   }
 }
