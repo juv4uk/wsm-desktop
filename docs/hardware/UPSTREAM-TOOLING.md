@@ -88,7 +88,19 @@ The smallest baseline must still function without Internet access and without an
 
 ## Backend packaging status
 
-**Not yet verified.** Package presence, version, buildability and runtime operation in a pinned Nixpkgs revision and a pinned Guix channel are separate checks. Do not infer package availability from an upstream source repository or a package search result.
+### Nixpkgs — preliminary package-index evidence
+
+A third-party Nixpkgs package index snapshot generated on **2026-10-17** reports:
+
+- `hwinfo` 26.0, GPL-2.0-only, from `pkgs/by-name/hw/hwinfo/package.nix`.
+- `hw-probe` 1.6.6, license options LGPL-2.1 and BSD-4-Clause, from `pkgs/tools/system/hw-probe/default.nix`.
+- The indexed `hw-probe` derivation has a broad runtime/input set (39 dependencies in that snapshot), including `hwinfo` and a number of optional diagnostic utilities. This reinforces the need to test its live-image footprint and avoid invoking all checks automatically.
+
+These are package-index observations, not a build result. The index identifies a shortened nixpkgs revision (`e7fccb1ad3ed`); the exact derivation and substituter/build result must be checked against the Nixpkgs revision actually pinned by the local experiment. Sources: [hwinfo package index](https://mynixos.com/nixpkgs/package/hwinfo), [hw-probe package index](https://nixpkgs.fyi/package/hw-probe), [Nixpkgs search guidance](https://wiki.nixos.org/wiki/Searching_packages).
+
+### GNU Guix — unresolved
+
+No authoritative package presence/build result has been established in this research pass. Do not infer that a package is absent merely because an indexed web search did not return it. The local experiment should check the exact pinned Guix channel using its own package index and report package name/version/build status.
 
 Issue [#4](https://github.com/juv4uk/wsm-desktop/issues/4) tracks the exact per-backend package audit. The local Nix/Guix experiment should report its actual pinned revisions and package results there rather than changing the current environment.
 
