@@ -136,7 +136,7 @@ class PolicyTests(unittest.TestCase):
         self.assertTrue(check(text, "free"))
 
     def test_wrong_guix_introduction_is_refused(self) -> None:
-        text = GOOD_FREE.replace(GUIX_INTRODUCTION_COMMIT_PLACEHOLDER, "x") if False else replace_once(
+        text = replace_once(
             GOOD_FREE,
             "9edb3f66fd807b096b48283debdcddccfea34bad",
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
