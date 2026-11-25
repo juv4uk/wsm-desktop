@@ -158,10 +158,9 @@ def run_qemu_topology_probe(qemu: str) -> dict[str, object]:
 
     output = (
         completed.stdout_tail.decode("utf-8", errors="replace")
-        + "\\n"
+        + "\n"
         + completed.stderr_tail.decode("utf-8", errors="replace")
     )
-
     expected = ("cxl.1", "root_port0", "cxl-vmem0")
     devices_seen = [device for device in expected if device in output]
     unsupported = (
@@ -182,7 +181,6 @@ def run_qemu_topology_probe(qemu: str) -> dict[str, object]:
         "devices_seen": devices_seen,
         "diagnostic": output[-6000:],
     }
-
 
 def probe(qemu_override: str | None = None) -> dict[str, object]:
     qemu = qemu_override or shutil.which("qemu-system-x86_64")
