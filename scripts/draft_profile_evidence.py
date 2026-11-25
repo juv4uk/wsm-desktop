@@ -209,7 +209,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--out",
         required=True,
         type=Path,
-        help="write evidence.json and artifacts/wsm-hwcheck-report.json into this profile directory",
+        help="write evidence.json and artifacts/wsm-hwcheck-report.json; profile.scm must already exist",
     )
     parser.add_argument("--compact", action="store_true", help=argparse.SUPPRESS)
     return parser
