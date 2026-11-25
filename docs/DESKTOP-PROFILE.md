@@ -43,8 +43,8 @@ guix system vm systems/desktop.scm
 # 4. Наш пакет окремо.
 guix build -f wsm/packages/wsm.scm
 
-# 5. ISO.
-./scripts/build_iso.sh
+# 5. ISO — звичайний `.iso` файл + окремий GC-root.
+make image-live
 ```
 
 Скрипт вимагає чистого Git worktree та використовує `channels.lock.scm` через
@@ -93,12 +93,19 @@ python3 scripts/qemu_boot_smoke.py --iso build/wsm-desktop-live.iso \
     --boot-marker WSM_LIVE_READY --timeout-seconds 300
 ```
 
-Для UEFI використовуйте пару сумісних split-образів `OVMF_CODE.fd` і
-`OVMF_VARS.fd`. Harness підключає CODE read-only як pflash unit 0, а з
-VARS-template створює **приватну копію** в тимчасовому каталозі та підключає
-її writable як unit 1. Host templates не змінюються. Без будь-якого з двох
-параметрів (`--ovmf-code` або `--ovmf-vars`) запуск відмовляє з кодом 2,
-а не тихо перемикається на BIOS.
+Для UEFI потрібна пара `OVMF_CODE.fd` і `OVMF_VARS.fd` **з одного пакета та
+однієї збірки OVMF**. CODE підключається як read-only pflash; harness копіює
+лише VARS template у приватний тимчасовий файл, який гість може змінювати.
+Вихідний VARS template та NVRAM хоста не змінюються. У dry-run це видно як
+`host_efi_variables_modified=false` і `guest_uefi_vars_writable=true`.
+Без будь-якого з `--ovmf-code` / `--ovmf-vars`, або якщо файли порожні,
+некоректні чи вказують на той самий файл, запуск відмовляє з кодом 2 — жодного
+неявного переходу на BIOS немає.
+
+Builder зберігає GC-root посилання окремо в
+`build/.wsm-desktop-live.iso-root`, а `build/wsm-desktop-live.iso` є
+звичайним файлом, який можна перевіряти й передавати QEMU без dereference
+посилання на `/gnu/store`. Manifest і SHA-256 рахуються від цього regular ISO.
 
 Критерій NO-GO: збірка успішна, але маркера немає в жодному або в одному з
 режимів.
@@ -107,8 +114,8 @@ VARS-template створює **приватну копію** в тимчасов
 
 Ці місця найімовірніше не збігатимуться з реальним Guix, і кожне ламає збірку:
 
-1. ~~`sddm-configuration` з полем `display-server`~~ — **перевірено й виправлено.** У Guix значення `"wayland"` для `sddm-service-type` відоме як зламане: екран лишається чорним (Guix bug#68939), а патч bug#70527 змушує службу ігнорувати це значення й використовувати x11. У профілі тепер типовий x11 без явного поля.
-2. ~~`bluetooth-configuration` з полем `auto-enable?`~~ — **перевірено.** Поле існує, типове значення `#f`, що збігається з наміром профілю: радіо не вмикається без потреби.
+1. `sddm-configuration` з полем `display-server` — звірити з посібником тієї ревізії, яку фіксує `channels.lock.scm`.
+2. `bluetooth-configuration` з полем `auto-enable?`.
 3. `plasma-desktop-service-type` і модуль `(gnu packages kde-plasma)` — назви могли змінитися.
 4. `(include "desktop.scm")` у `live.scm` — шлях відносний до файлу; перевірити, що Guix його знаходить.
 5. `(local-file "../.." ...)` у `wsm/packages/wsm.scm` — залежить від того, звідки викликають `guix build -f`.
