@@ -714,6 +714,31 @@ bool PreflightController::validateDiagnosticPlan(const QJsonObject &plan,
         return false;
     }
 
+    QJsonParseError reportParseError;
+    const QJsonDocument reportDocument =
+        QJsonDocument::fromJson(m_reportBytes, &reportParseError);
+    if (reportParseError.error != QJsonParseError::NoError || !reportDocument.isObject()) {
+        *error = QStringLiteral("План відхилено: валідований апаратний звіт більше не є JSON object.");
+        return false;
+    }
+    const QJsonObject validatedReport = reportDocument.object();
+    const QJsonValue expectedReportId = validatedReport.value(QStringLiteral("report_id"));
+    const QJsonValue expectedSchemaVersion = validatedReport.value(QStringLiteral("schema_version"));
+    const QJsonValue sourceReportId = sourceReport.value(QStringLiteral("report_id"));
+    const QJsonValue sourceSchemaVersion = sourceReport.value(QStringLiteral("schema_version"));
+    if (!expectedReportId.isString() || expectedReportId.toString().isEmpty()
+        || !sourceReportId.isString()
+        || sourceReportId.toString() != expectedReportId.toString()) {
+        *error = QStringLiteral("План відхилено: source_report.report_id не збігається з перевіреним звітом.");
+        return false;
+    }
+    if (!expectedSchemaVersion.isString() || expectedSchemaVersion.toString().isEmpty()
+        || !sourceSchemaVersion.isString()
+        || sourceSchemaVersion.toString() != expectedSchemaVersion.toString()) {
+        *error = QStringLiteral("План відхилено: source_report.schema_version не збігається з перевіреним звітом.");
+        return false;
+    }
+
     const QJsonValue status = plan.value(QStringLiteral("plan_status"));
     if (!status.isString() || status.toString() != QStringLiteral("diagnostic-only")) {
         *error = QStringLiteral("План відхилено: plan_status відсутній або не diagnostic-only.");
