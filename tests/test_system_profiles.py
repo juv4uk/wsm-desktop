@@ -10,7 +10,10 @@ written in them.
 
 from __future__ import annotations
 
+import os
 import re
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -167,6 +170,69 @@ class LiveProfileTests(unittest.TestCase):
 
 
 class IsoScriptTests(unittest.TestCase):
+    def test_script_pins_output_link_and_refuses_overwrite(self) -> None:
+        script = ROOT / "scripts" / "build_iso.sh"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bin_dir = root / "bin"
+            output_dir = root / "out"
+            bin_dir.mkdir()
+            output_dir.mkdir()
+            fake_image = root / "store-image.iso"
+            fake_image.write_bytes(b"synthetic iso")
+            args_log = root / "guix-args.txt"
+            fake_guix = bin_dir / "guix"
+            fake_guix.write_text(
+                "#!/bin/sh\n"
+                ": > \"$WSM_TEST_GUIX_ARGS\"\n"
+                "root=\n"
+                "for argument in \"$@\"; do\n"
+                "  printf '%s\\n' \"$argument\" >> \"$WSM_TEST_GUIX_ARGS\"\n"
+                "  case \"$argument\" in --root=*) root=${argument#--root=} ;; esac\n"
+                "done\n"
+                "[ -n \"$root\" ] || exit 9\n"
+                "ln -s \"$WSM_TEST_IMAGE\" \"$root\"\n",
+                encoding="utf-8",
+            )
+            fake_guix.chmod(0o755)
+            environment = os.environ.copy()
+            environment["PATH"] = str(bin_dir) + os.pathsep + os.defpath
+            environment["WSM_ISO_DIR"] = str(output_dir)
+            environment["WSM_TEST_GUIX_ARGS"] = str(args_log)
+            environment["WSM_TEST_IMAGE"] = str(fake_image)
+
+            result = subprocess.run(
+                ["/bin/sh", str(script)],
+                cwd=ROOT,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            expected = output_dir / "wsm-desktop-live.iso"
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(expected.is_symlink())
+            self.assertEqual(expected.resolve(), fake_image)
+            arguments = args_log.read_text(encoding="utf-8").splitlines()
+            self.assertIn(f"--root={expected}", arguments)
+            self.assertIn("--no-grafts", arguments)
+            self.assertIn("--image-type=iso9660", arguments)
+
+            # The next invocation must fail before calling Guix or replacing
+            # the previous image link.
+            previous_log = args_log.read_text(encoding="utf-8")
+            again = subprocess.run(
+                ["/bin/sh", str(script)],
+                cwd=ROOT,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(again.returncode, 3)
+            self.assertEqual(args_log.read_text(encoding="utf-8"), previous_log)
+            self.assertEqual(expected.resolve(), fake_image)
+
     def test_script_refuses_to_run_without_guix(self) -> None:
         text = (ROOT / "scripts" / "build_iso.sh").read_text(encoding="utf-8")
         self.assertIn("command -v guix", text)
