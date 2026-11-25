@@ -71,8 +71,19 @@ def build_plan(
     if profile_evidence is not None:
         from wsm_install.profile import problems
 
-        for problem in problems(profile_evidence):
+        evidence_problems = problems(profile_evidence)
+        for problem in evidence_problems:
             blockers.append(f"hardware profile evidence is not valid: {problem}")
+        if not evidence_problems:
+            if profile_evidence.get("report_id") != report.get("report_id"):
+                blockers.append(
+                    "hardware profile evidence is bound to a different report_id; "
+                    "collect a new report or select its matching evidence bundle"
+                )
+            if profile_evidence.get("report_schema_version") != report.get("schema_version"):
+                blockers.append(
+                    "hardware profile evidence report_schema_version does not match the current report"
+                )
     else:
         warnings.append(
             "no verified hardware profile evidence for this machine; "

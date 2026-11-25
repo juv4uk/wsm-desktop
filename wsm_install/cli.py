@@ -15,6 +15,7 @@ from typing import Any
 from jsonschema import Draft202012Validator, FormatChecker
 
 from .plan import build_plan, canonical_json, summarize_report
+from .profile import EvidenceUnavailable, load as load_profile_evidence
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SCHEMA = ROOT / "schemas" / "hardware-report.schema.json"
@@ -28,6 +29,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version="wsm-install 0.1.0")
     parser.add_argument("--preflight", action="store_true", help="run report preflight")
     parser.add_argument("--report", required=True, metavar="PATH", help="hardware report JSON")
+    parser.add_argument(
+        "--profile-evidence", type=Path, metavar="PATH",
+        help="optional hardware profile evidence bundle for this exact report",
+    )
     parser.add_argument(
         "--backend", required=True, choices=("guix", "nix"),
         help="backend alias: guix -> guix-system; nix -> nixos",
@@ -155,7 +160,17 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     assert raw is not None
-    plan, blockers, warnings = build_plan(report, raw, args.backend)
+    profile_evidence = None
+    if args.profile_evidence is not None:
+        try:
+            profile_evidence = load_profile_evidence(args.profile_evidence)
+        except EvidenceUnavailable as exc:
+            print(f"BLOCKED: hardware profile evidence is unavailable: {exc}", file=sys.stderr)
+            return 3
+
+    plan, blockers, warnings = build_plan(
+        report, raw, args.backend, profile_evidence=profile_evidence
+    )
     if not args.quiet:
         print(summarize_report(report), file=sys.stderr)
         for warning in warnings:

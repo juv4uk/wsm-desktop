@@ -29,6 +29,21 @@ def load_fixture(name: str) -> tuple[dict, bytes]:
 
 
 class InstallerPlanTests(unittest.TestCase):
+    @staticmethod
+    def valid_profile_evidence(report: dict) -> dict:
+        return {
+            "schema": "wsm-profile-evidence/1",
+            "profile": {"vendor": "Test", "model": "Board", "slug": "test/board"},
+            "report_id": report["report_id"],
+            "report_schema_version": report["schema_version"],
+            "isa_level": "x86-64-v1",
+            "verified_on": "2026-11-26",
+            "verified_by": "WSM test fixture",
+            "verified_functions": [{"name": "boot", "status": "pass"}],
+            "known_limitations": [],
+            "not_assessed": ["suspend/resume"],
+        }
+
     def test_observed_report_emits_deterministic_guix_plan(self) -> None:
         report, raw = load_fixture("desktop-observed.json")
         first, blockers, _ = build_plan(report, raw, "guix")
@@ -62,6 +77,57 @@ class InstallerPlanTests(unittest.TestCase):
         self.assertFalse(blockers)
         self.assertTrue(any("required runtime firmware" in item for item in warnings))
         self.assertTrue(any("offline installation may be required" in item for item in warnings))
+
+    def test_profile_evidence_must_match_source_report_identity(self) -> None:
+        report, raw = load_fixture("desktop-observed.json")
+        evidence = self.valid_profile_evidence(report)
+        evidence["report_id"] = "different-report-id-0001"
+        _, blockers, _ = build_plan(report, raw, "guix", profile_evidence=evidence)
+        self.assertTrue(any("different report_id" in item for item in blockers))
+
+    def test_profile_evidence_must_match_report_schema_version(self) -> None:
+        report, raw = load_fixture("desktop-observed.json")
+        evidence = self.valid_profile_evidence(report)
+        evidence["report_schema_version"] = "9.0.0"
+        _, blockers, _ = build_plan(report, raw, "guix", profile_evidence=evidence)
+        self.assertTrue(any("report_schema_version does not match" in item for item in blockers))
+
+    def test_cli_accepts_matching_profile_evidence_file(self) -> None:
+        report, _ = load_fixture("desktop-observed.json")
+        evidence = self.valid_profile_evidence(report)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report_path = root / "report.json"
+            evidence_path = root / "evidence.json"
+            plan_path = root / "plan.json"
+            report_path.write_bytes((FIXTURES / "desktop-observed.json").read_bytes())
+            evidence_path.write_text(json.dumps(evidence, ensure_ascii=False), encoding="utf-8")
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                result = main([
+                    "--preflight", "--report", str(report_path), "--backend", "guix",
+                    "--dry-run", "--profile-evidence", str(evidence_path),
+                    "--plan-output", str(plan_path),
+                ])
+            self.assertEqual(result, 0, stderr.getvalue())
+            self.assertTrue(plan_path.is_file())
+            self.assertFalse(any("no verified hardware profile" in line for line in stderr.getvalue().splitlines()))
+
+    def test_cli_rejects_unreadable_profile_evidence_without_emitting_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report_path = Path(directory) / "report.json"
+            plan_path = Path(directory) / "plan.json"
+            report_path.write_bytes((FIXTURES / "desktop-observed.json").read_bytes())
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                result = main([
+                    "--preflight", "--report", str(report_path), "--backend", "guix",
+                    "--dry-run", "--profile-evidence", str(Path(directory) / "missing-evidence.json"),
+                    "--plan-output", str(plan_path),
+                ])
+            self.assertEqual(result, 3)
+            self.assertIn("profile evidence is unavailable", stderr.getvalue())
+            self.assertFalse(plan_path.exists())
 
     def test_cli_requires_explicit_dry_run_and_preflight(self) -> None:
         with self.assertRaises(SystemExit) as caught:

@@ -30,7 +30,7 @@ def load_schema() -> dict[str, Any]:
 def load(path: Path) -> dict[str, Any]:
     try:
         return json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise EvidenceUnavailable(f"cannot read evidence bundle {path}: {exc}") from exc
 
 
