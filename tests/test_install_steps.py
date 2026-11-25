@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -20,7 +21,7 @@ from wsm_install.install_steps import (  # noqa: E402
     plan_steps,
     render,
 )
-from wsm_install.partition import Disk, Refused, plan  # noqa: E402
+from wsm_install.partition import Disk, Refused, minimum_disk_size_bytes, plan  # noqa: E402
 
 
 def tool(step) -> str:
@@ -121,11 +122,17 @@ class PathHijackTests(unittest.TestCase):
 
 
 class FilesystemChoiceTests(unittest.TestCase):
-    def test_btrfs_is_available_and_uses_force(self) -> None:
-        steps = plan_steps(layout(), filesystem="btrfs")
-        mkfs = [step for step in steps if tool(step) == "mkfs.btrfs"]
+    def test_btrfs_and_xfs_are_refused_until_the_typed_plan_supports_them(self) -> None:
+        for filesystem in ("btrfs", "xfs"):
+            with self.subTest(filesystem=filesystem), self.assertRaises(Refused) as caught:
+                plan_steps(layout(), filesystem=filesystem)
+            self.assertEqual(caught.exception.code, "filesystem.unsupported")
+
+    def test_ext4_remains_the_supported_root_filesystem(self) -> None:
+        steps = plan_steps(layout(), filesystem="ext4")
+        mkfs = [step for step in steps if tool(step) == "mkfs.ext4"]
         self.assertEqual(len(mkfs), 1)
-        self.assertIn("-f", mkfs[0].command)
+        self.assertIn("-F", mkfs[0].command)
 
     def test_unknown_filesystem_is_refused(self) -> None:
         with self.assertRaises(Refused) as caught:
@@ -150,6 +157,26 @@ class FilesystemChoiceTests(unittest.TestCase):
         with self.assertRaises(Refused) as caught:
             plan_steps(proposed)
         self.assertEqual(caught.exception.code, "layout.partition-plan")
+
+    def test_firmware_specific_minimum_size_is_rechecked_in_step_planner(self) -> None:
+        for firmware in ("uefi", "bios"):
+            with self.subTest(firmware=firmware):
+                proposed = layout(firmware, "/dev/nvme0n1")
+                proposed.disk_size_bytes = minimum_disk_size_bytes(firmware)
+                self.assertTrue(plan_steps(proposed))
+                proposed.disk_size_bytes -= 1
+                with self.assertRaises(Refused) as caught:
+                    plan_steps(proposed)
+                self.assertEqual(caught.exception.code, "disk.too-small")
+
+    def test_backend_command_rechecks_minimum_disk_geometry(self) -> None:
+        for firmware in ("uefi", "bios"):
+            with self.subTest(firmware=firmware):
+                proposed = layout(firmware, "/dev/nvme0n1")
+                proposed.disk_size_bytes = 1
+                with self.assertRaises(Refused) as caught:
+                    backend_command(proposed)
+                self.assertEqual(caught.exception.code, "disk.too-small")
 
     def test_missing_disk_size_is_refused(self) -> None:
         proposed = layout()
@@ -202,6 +229,20 @@ class BackendCommandTests(unittest.TestCase):
 
 
 class RenderTests(unittest.TestCase):
+    def test_documented_command_example_uses_only_allowlisted_guix_profile_paths(self) -> None:
+        document = (ROOT / "docs" / "INSTALL-SEQUENCE.md").read_text(encoding="utf-8")
+        match = re.search(r"```sh\n(.*?)\n```", document, flags=re.DOTALL)
+        self.assertIsNotNone(match)
+        commands = [
+            line.split()[0]
+            for line in match.group(1).splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        allowed = set(TRUSTED_TOOLS.values()) | {"/run/current-system/profile/bin/guix"}
+        self.assertTrue(commands)
+        self.assertTrue(set(commands).issubset(allowed), set(commands) - allowed)
+        self.assertFalse(any("/usr/" in line for line in match.group(1).splitlines()))
+
     def test_render_warns_and_marks_destructive_steps(self) -> None:
         text = render(plan_steps(layout()), backend_command(layout()))
         self.assertIn("NOT EXECUTED", text)
