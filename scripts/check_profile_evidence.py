@@ -10,11 +10,15 @@ import sys
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-import jsonschema
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = ROOT / "schemas" / "profile-evidence.schema.json"
 PROFILES_DIR = ROOT / "profiles" / "hardware"
+
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from wsm_install.profile import problems as profile_problems  # noqa: E402
 
 
 def load_schema() -> dict[str, Any]:
@@ -100,33 +104,10 @@ def validate(
     *,
     artifact_root: Path | None = None,
 ) -> list[str]:
-    """Return problems; an empty list means schema and artifact checks passed."""
-    schema = schema or load_schema()
-    try:
-        jsonschema.validate(document, schema, format_checker=jsonschema.FormatChecker())
-    except jsonschema.ValidationError as exc:
-        location = "/".join(str(part) for part in exc.absolute_path) or "<root>"
-        return [f"schema: {location}: {exc.message}"]
-
-    problems: list[str] = []
-    functions = document["verified_functions"]
-    if not any(item["status"] == "pass" for item in functions):
-        problems.append(
-            "no function passed: a bundle with only not-assessed entries is a "
-            "hypothesis, not evidence"
-        )
-
-    failed = [item["name"] for item in functions if item["status"] == "fail"]
-    limitations = " ".join(document["known_limitations"]).lower()
-    for name in failed:
-        if name.lower() not in limitations:
-            problems.append(
-                f"function {name!r} failed but is not listed in known_limitations"
-            )
-
+    """Apply the installer's shared schema/semantic gate, then verify local artifact bytes."""
+    problems = profile_problems(document, schema)
     for index, artifact in enumerate(document["artifacts"]):
         problems.extend(_validate_artifact(artifact, artifact_root, index))
-
     return problems
 
 
