@@ -155,9 +155,14 @@ class KnownPitfallTests(unittest.TestCase):
         text = profile("desktop.scm")
         self.assertNotIn('(display-server "wayland")', text)
 
-    def test_bluetooth_is_not_auto_enabled(self) -> None:
+    def test_bluetooth_is_auto_enabled(self) -> None:
+        """A Bluetooth mouse cannot be paired by a user who has no mouse.
+
+        This was #f with a "radio nobody asked for" argument, which did not
+        survive contact with a keyboard that has no cable.
+        """
         text = profile("desktop.scm")
-        self.assertIn("(auto-enable? #f)", text)
+        self.assertIn("(auto-enable? #t)", text)
 
 
 class SourceResolutionTests(unittest.TestCase):
@@ -207,6 +212,27 @@ class PerformanceServicesTests(unittest.TestCase):
         for name in ("desktop.scm", "live.scm", "compatibility.scm"):
             with self.subTest(profile=name):
                 self.assertNotIn("mitigations=off", profile(name))
+
+
+class DesktopCompletenessTests(unittest.TestCase):
+    """What separates a booting system from one somebody can work on."""
+
+    def test_printing_is_configured(self) -> None:
+        text = profile("desktop.scm")
+        self.assertIn("cups-service-type", text)
+        # Without the web interface there is no way to add a network printer:
+        # Guix configuration files are read-only, so cupsctl cannot help.
+        self.assertIn("(web-interface? #t)", text)
+
+    def test_a4_is_the_default_paper(self) -> None:
+        self.assertIn('(default-paper-size "A4")', profile("desktop.scm"))
+
+    def test_no_system_wide_pulseaudio(self) -> None:
+        """PipeWire serves the PulseAudio protocol in the user session.
+
+        A system daemon as well means two stacks fighting for one device.
+        """
+        self.assertNotIn("pulseaudio-service-type", profile("desktop.scm"))
 
 
 class HomeEnvironmentTests(unittest.TestCase):
