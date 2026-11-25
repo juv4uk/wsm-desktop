@@ -2,6 +2,8 @@
 
 <!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 
+- Статус: дослідницьке доповнення; не є затвердженим маніфестом
+- Критичний шлях: **ні** — дослідження не блокує перший preview-образ
 - Батьківська задача: [#4 — аудит апаратних інструментів і джерел](https://github.com/juv4uk/wsm-desktop/issues/4)
 - Пов'язані контракти: [#16 — driver/runtime firmware evidence](https://github.com/juv4uk/wsm-desktop/issues/16), [#18 — device topology](https://github.com/juv4uk/wsm-desktop/pull/42), [#20 — display compatibility](https://github.com/juv4uk/wsm-desktop/pull/20), [#25 — network readiness](https://github.com/juv4uk/wsm-desktop/pull/25)
 - Це дослідження upstream-можливостей, а не затверджений пакетний маніфест WSM.
@@ -22,19 +24,6 @@ WSM варто будувати не навколо одного «детект�
 | [devlink health](https://docs.kernel.org/6.19/networking/devlink/devlink-health.html) | `devlink health show` може показати status/config зареєстрованих драйвером health reporters для NIC/switch/accelerator | Покриття залежить від драйвера. `diagnose` викликає driver callback і має admin-only netlink permission; `dump show` може згенерувати новий dump; `recover`, `test`, `set`, `dump clear` не є пасивними | Лише опційний status query через `show`; інші команди — окремий consent-based support mode |
 | [VKMS](https://docs.kernel.org/gpu/vkms.html) + [IGT GPU Tools](https://gitlab.freedesktop.org/drm/igt-gpu-tools) | Віртуальний DRM/KMS display для headless CI/VM перевірок | Для VKMS потрібно завантажити модуль/налаштувати configfs; IGT може вимагати окремої сесії без compositor-а. Це змінює стан тестового kernel і не є live preflight | Ізольована CI/VM lane, не probe на фізичному ПК |
 | [fwupd HSI](https://fwupd.github.io/hsi.html) | Окремі показники firmware/platform security posture | Security posture не доводить наявність runtime firmware blob, успішне виконання `request_firmware()` чи ініціалізацію пристрою | Окремий security report; не змішувати з #16 compatibility evidence |
-
-## Безпековий gate для libdisplay-info 0.4.0
-
-Нові можливості DisplayID у 0.4.0 не означають, що цю версію можна безпечно запускати на довільних EDID. Публічні advisory підтверджують дві окремі помилки читання за межами heap buffer у parser-ах DisplayID:
-
-- **CVE-2026-112271** — DisplayID v1: довжина data block може виходити за межі секції; уразливі версії вказані як libdisplay-info до 0.4.0 включно.
-- **CVE-2026-112272** — DisplayID v2: надмірна довжина data block може просунути parser за межі EDID buffer; advisory прямо описує 0.4.0.
-
-Обидва випадки можуть завершитися аварією процесу під час обробки спеціально сформованого EDID. Джерелом недовірених даних може бути монітор, KVM, capture-пристрій або локальний EDID-файл. Downstream-статус «не уражено» в окремих дистрибутивах не доводить, що upstream 0.4.0 виправлено: для деяких пакетів причина — відсутність відповідного parser-коду в їхній збірці.
-
-**Рішення WSM:** не додавати libdisplay-info 0.4.0 до стандартного live image і не запускати його автоматично в installer preflight до підтвердженого upstream-виправлення та regression-тестів на завеликі довжини блоків у DisplayID v1/v2. До того часу це лише дослідницький optional candidate; обробка недовіреного EDID не повинна відбуватися всередині основного процесу інсталятора. Після визначення fixed commit/release потрібно повторно перевірити downstream package revision, а не покладатися лише на номер версії.
-
-Джерела безпекової перевірки: [CVE-2026-112271 — Red Hat](https://access.redhat.com/security/cve/cve-2026-112271), [CVE-2026-112272 — Red Hat](https://access.redhat.com/security/cve/cve-2026-112272), [CVE-2026-112271 — Amazon Linux advisory](https://explore.alas.aws.amazon.com/CVE-2026-112271.html), [CVE-2026-112272 — Amazon Linux advisory](https://explore.alas.aws.amazon.com/CVE-2026-112272.html).
 
 ## Додаткові hardware providers: AMD SMI та CXL sysfs
 
@@ -215,8 +204,6 @@ EDID/DisplayID надходить від зовнішнього пристрою
 
 Ці vendor statuses не суперечать upstream affected range: вони описують конкретні downstream package contents/patches. WSM має оцінювати саме джерельну ревізію та наявність vulnerable parser logic, а не переносити статус одного дистрибутива на інший.
 
-На дату цього research snapshot (2026-11-25) не підтверджено upstream release після 0.4.0 або конкретний upstream commit, який виправляє обидва дефекти. Отже, не позначати parser як fixed лише за припущенням про новішу package revision: перед допуском потрібні точний source commit/package revision та перевірка відповідних DisplayID v1 і v2 bounds checks. Вразливість стосується parser-а, а не самого EDID transport; downstream status треба встановлювати за реальним вмістом пакета. Red Hat вказує відсутність придатної mitigation для CVE-2026-112271; для CVE-2026-112272 RHEL packages не містять vulnerable DisplayID parser logic. AWS ALAS також має різні стани для двох CVE навіть на тих самих Amazon Linux release.
-
 **Правило для WSM:** не додавати `libdisplay-info 0.4.0` як обов'язковий parser до privileged/live preflight. EDID/DisplayID parsing лишається optional і не запускається з підвищеними привілеями; перед його використанням перевіряти точну upstream/downstream revision на наявність відповідних виправлень. За відсутності такої перевірки використовувати read-only DRM/KMS properties, а parser-specific fields залишати `unknown/not-collected`. Спеціально сформований EDID слід вважати untrusted input.
 
 
@@ -341,10 +328,6 @@ Upstream: [QEMU downloads and releases](https://www.qemu.org/download/), [QEMU 1
 - [Linux PCIe AER sysfs ABI](https://github.com/torvalds/linux/blob/master/Documentation/ABI/testing/sysfs-bus-pci-devices-aer) та [AER implementation](https://github.com/torvalds/linux/blob/master/drivers/pci/pcie/aer.c).
 - [Linux devlink health](https://docs.kernel.org/6.19/networking/devlink/devlink-health.html), [netlink specification](https://docs.kernel.org/netlink/specs/devlink.html), [devlink-health(8)](https://manpages.debian.org/unstable/iproute2/devlink-health.8.en.html).
 - [Linux VKMS](https://docs.kernel.org/gpu/vkms.html) — software-only KMS testing in isolated VM/CI.
-- [Linux FWCTL userspace API](https://docs.kernel.org/userspace-api/fwctl/index.html) and [fwctl subsystem/scopes](https://docs.kernel.org/userspace-api/fwctl/fwctl.html) — sysfs/character-device discovery, FWCTL_INFO, device-specific RPCs, and CONFIGURATION/DEBUG_READ_ONLY/DEBUG_WRITE/DEBUG_WRITE_FULL security scopes.
-- [NVIDIA MFT 4.38.0 over FWCTL](https://networking-docs.nvidia.com/mftswum/4.38.0/mft-over-fwctl) — supported mlx5 operations and per-command scope differences; do not infer that all MFT commands are read-only.
-- [CVE-2026-112271](https://access.redhat.com/security/cve/cve-2026-112271) / [AWS ALAS status](https://explore.alas.aws.amazon.com/CVE-2026-112271.html) — DisplayID v1 out-of-bounds read and downstream package status.
-- [CVE-2026-112272](https://access.redhat.com/security/cve/cve-2026-112272) / [AWS ALAS status](https://explore.alas.aws.amazon.com/CVE-2026-112272.html) — DisplayID v2 out-of-bounds read and different downstream package status.
 - [fwupd HSI](https://fwupd.github.io/hsi.html) — platform security posture, a separate evidence category.
 
 ## Додаткові спостереження щодо Guix packaging

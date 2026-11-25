@@ -1,126 +1,130 @@
 # WSM Desktop
 
-> Hardware-oriented desktop Linux project exploring Nix and GNU Guix as declarative system foundations.
+> Апаратно-орієнтований десктопний Linux, що досліджує Nix і GNU Guix як декларативні основи системи.
 
-**WSM Desktop** is an independent, hardware-oriented project to build a comfortable, reproducible desktop Linux system with a graphical installer. Its central purpose is to select and integrate proven upstream kernels, drivers, firmware and hardware tools for concrete hardware configurations, while making compatibility evidence understandable before installation. Its architecture is evaluating Nix and GNU Guix as separate native system backends; no decision has been made to merge their package stores or system managers.
+**WSM Desktop** — незалежний апаратно-орієнтований проєкт, мета якого — зручна й відтворювана десктопна система Linux із графічним інсталятором. Його головне призначення — відбирати й інтегрувати перевірені upstream-ядра, драйвери, firmware та апаратні інструменти для конкретних конфігурацій обладнання, роблячи докази сумісності зрозумілими ще до встановлення. GNU Guix System обрано системним backend-ом для першого релізу; Nix/NixOS відкладено, а не відкинуто. Проєкт не об'єднує їхні сховища пакетів і системні менеджери.
 
-The project is in **pre-alpha**. There is no supported installation image yet. The repository currently defines the project architecture and development foundations; it must not be used to install or modify a real system.
+Проєкт перебуває у стадії **pre-alpha**. Підтримуваного інсталяційного образу ще немає. Репозиторій визначає архітектуру проєкту та основи розробки; його не можна використовувати для встановлення або зміни реальної системи.
 
-## Project status
+## Стан проєкту
 
-- [x] Project identity and scope
-- [x] Initial architecture and licensing policy
-- [ ] Comparative Nix and Guix backend evaluation
-- [ ] Select and validate the first WSM system backend
-- [ ] Calamares packaging and live-environment feasibility check
-- [ ] Backend-specific deployment adapter prototype
-- [ ] End-to-end installation in QEMU
-- [ ] Hardware compatibility testing
-- [ ] First public preview image
+- [x] Ідентичність і межі проєкту
+- [x] Початкова архітектура та політика ліцензування
+- [ ] Порівняльна оцінка backend-ів Nix і Guix
+- [x] Обрати перший системний backend (GNU Guix; Nix відкладено, див. ADR 0004)
+- [ ] Пакування Calamares і перевірка можливості live-середовища
+- [ ] Прототип адаптера розгортання для обраного backend-а
+- [ ] Наскрізне встановлення в QEMU
+- [ ] Тестування сумісності з обладнанням
+- [ ] Перший публічний preview-образ
 
-See [the roadmap](docs/ROADMAP.md) for milestones and acceptance criteria. The installer frontend is being evaluated in [issue #10](https://github.com/juv4uk/wsm-desktop/issues/10); Calamares is not a locked dependency. The hardware-first/upstream-first direction is explored through [the hardware preflight](docs/hardware/HWCHECK.md) and the [upstream tooling assessment](docs/hardware/UPSTREAM-TOOLING.md). The proposed dual-backend direction is recorded in [ADR 0004](docs/decisions/0004-nix-guix-backend-strategy.md) and is not yet ratified. The current Calamares 3.4.2 assessment is in [docs/CALAMARES-FEASIBILITY.md](docs/CALAMARES-FEASIBILITY.md).
+Milestones і критерії приймання — у [дорожній карті](docs/ROADMAP.md). Frontend інсталятора оцінюється в [issue #10](https://github.com/juv4uk/wsm-desktop/issues/10); Calamares не є зафіксованою залежністю. Напрямок «спершу обладнання, спершу upstream» розкрито в [апаратному preflight](docs/hardware/HWCHECK.md) та [аудиті upstream-інструментів](docs/hardware/UPSTREAM-TOOLING.md). [ADR 0004](docs/decisions/0004-nix-guix-backend-strategy.md) фіксує ратифіковане рішення про backend: перший — GNU Guix, Nix відкладено. Напрямок frontend-а «спершу обладнання» запропоновано в [ADR 0006](docs/decisions/0006-hardware-first-installer-frontend.md); його теж ще не ратифіковано. Поточна оцінка Calamares 3.4.2 — у [docs/CALAMARES-FEASIBILITY.md](docs/CALAMARES-FEASIBILITY.md).
 
-## Technology
+Канонічні issue та документи для кожної теми рішень перелічено в [docs/DECISIONS.md](docs/DECISIONS.md).
 
-| Component | Responsibility |
+## Технології
+
+| Компонент | Відповідальність |
 | --- | --- |
-| Nix / NixOS | Candidate native backend for declarative system configuration, package builds, and activation |
-| GNU Guix System | Candidate native backend for declarative operating-system configuration and package management |
-| Installer frontend | Under evaluation; Calamares is one candidate, not a selected dependency |
-| WSM backend adapter | Project-owned integration between Calamares and one selected system backend |
-| Nonguix (optional) | Separately selected nonfree firmware, drivers, or other packages when required |
-| QEMU | Safe virtual-machine testing before physical hardware installation |
+| GNU Guix System | Обраний backend першого релізу: декларативна конфігурація системи й керування пакетами |
+| Nix / NixOS | Відкладений backend; лише дослідження, не входить у перший preview-образ |
+| Frontend інсталятора | В оцінці; Calamares — один із кандидатів, не обрана залежність |
+| Адаптер WSM backend | Власна інтеграція між frontend-ом і обраним системним backend-ом |
+| Nonguix (опційно) | Окремо обрані nonfree firmware, драйвери чи інші пакети, коли вони потрібні |
+| QEMU | Безпечне тестування у віртуальній машині перед встановленням на фізичне обладнання |
 
-WSM Desktop is not a fork of GNU Guix, Nonguix, or Calamares. We aim to reuse upstream projects and contribute fixes upstream whenever practical.
+WSM Desktop не є форком GNU Guix, Nonguix чи Calamares. Ми прагнемо повторно використовувати upstream-проєкти й повертати виправлення в upstream, коли це практично доцільно.
 
-## Principles
+## Принципи
 
-1. **Usable by default.** The goal is a comfortable desktop operating system, not a command-line-only demonstration.
-2. **Hardware-first.** Compatibility is a first-class system concern. WSM inventories concrete hardware and combinations, records evidence per device and function, and reports unknowns honestly instead of advertising unsupported compatibility.
-3. **Upstream-first reuse.** Prefer maintained upstream kernels, drivers, firmware, tools, packages and trusted build artifacts. Do not rebuild or reimplement what already works well. Build, patch or fork only when a measured compatibility or integration need justifies it; prefer contributing general fixes upstream.
-4. **Reproducible by design.** Pin channel and source revisions for release builds, record build inputs, and make system configuration reviewable.
-5. **Free software first.** The default profile must not require Nonguix or nonfree components.
-6. **Explicit compatibility choices.** Optional nonfree components must be clearly identified, justified by hardware needs, and selected knowingly.
-7. **No hidden trust.** Verify source provenance, licenses, signatures and substitute trust. Never silently add a binary cache or signing key.
-8. **Fail safely.** The installer must validate the hardware report and target plan before writing to disks. Unknown results must be explained; unsafe or impossible installation paths must stop before disk changes.
-9. **Upstream respect.** Preserve upstream notices, licenses, trademarks, security processes and community policies.
+1. **Придатність до використання за замовчуванням.** Мета — зручна десктопна операційна система, а не демонстрація лише з командного рядка.
+2. **Спершу обладнання.** Сумісність є першорядною системною проблемою. WSM інвентаризує конкретне обладнання та комбінації, фіксує докази для кожного пристрою й функції та чесно повідомляє про невідоме замість того, щоб рекламувати непідтверджену сумісність.
+3. **Повторне використання upstream.** Надавати перевагу підтримуваним upstream-ядрам, драйверам, firmware, інструментам, пакетам і довіреним артефактам збірки. Не перебудовувати й не переписувати те, що вже добре працює. Збирати, патчити чи форкати лише тоді, коли цього вимагає вимірювана потреба сумісності чи інтеграції; загальні виправлення повертати в upstream.
+4. **Відтворюваність за задумом.** Фіксувати ревізії каналів і джерел для релізних збірок, записувати вхідні дані збірки й робити конфігурацію системи придатною до перегляду.
+5. **Спершу вільне програмне забезпечення.** Профіль за замовчуванням не повинен потребувати Nonguix чи nonfree компонентів.
+6. **Явні рішення щодо сумісності.** Опційні nonfree компоненти мають бути чітко ідентифіковані, обґрунтовані апаратними потребами й обрані свідомо.
+7. **Жодної прихованої довіри.** Перевіряти походження джерел, ліцензії, підписи та довіру до підстановок. Ніколи не додавати binary cache чи ключ підпису непомітно.
+8. **Безпечна відмова.** Інсталятор повинен перевірити апаратний звіт і план цілі до запису на диски. Невідомі результати мають бути пояснені; небезпечні або неможливі шляхи встановлення повинні зупинятися до змін на диску.
+9. **Повага до upstream.** Зберігати upstream-повідомлення, ліцензії, торгові марки, процеси безпеки й правила спільнот.
 
-## Installation concept
+## Концепція встановлення
 
-The intended installation flow is:
+Цільовий потік встановлення:
 
 ```text
-Live environment
+Live-середовище
     |
     v
-Selected WSM installer frontend (not selected yet)
+Обраний frontend інсталятора WSM (ще не обрано)
     |
-    +--> frontend-native pages for supported tasks
+    +--> власні сторінки frontend-а для підтриманих задач
     |
-    +--> WSM-specific configuration and preflight
+    +--> конфігурація та preflight, специфічні для WSM
               |
               v
-       WSM backend adapter
+       Адаптер WSM backend (wsm_install/backend_guix.py)
               |
-              +--> Nix/NixOS deployment path
+              +--> шлях розгортання GNU Guix (обраний, ADR 0004)
               |
-              +--> GNU Guix deployment path
+              +--> шлях розгортання Nix/NixOS (відкладено, не реалізовано)
               |
               v
-       installed WSM Desktop system
+       встановлена система WSM Desktop
 ```
 
-This is a design target, not a working installer yet. Nix and Guix deployment must remain separate backend implementations until comparative tests justify a supported release model.
+Це проєктна ціль, а не працюючий інсталятор. Адаптер генерує декларацію `operating-system` з підтвердженого плану й повертає argv з allow-list; його запуск ще не реалізовано. Шлях Nix відкладено, а не вилучено, і жодне встановлення не може мати два backend-и.
 
-### Backend ownership
+### Власність над backend-ом
 
-Each installed WSM system must have exactly one backend responsible for system configuration and activation. The Nix/NixOS and Guix deployment paths are separate and must not both attempt to manage the same root filesystem, bootloader, or service manager.
+Кожна встановлена система WSM повинна мати рівно один backend, відповідальний за конфігурацію та активацію системи. Шляхи Nix/NixOS і Guix є окремими й не повинні обидва намагатися керувати тим самим кореневим файловим середовищем, bootloader-ом чи менеджером служб.
 
-For the **Guix backend**, the generated Guix configuration owns the target file systems, user accounts, services, and bootloader. We must not let a stock Calamares bootloader job and `guix system init` both attempt to install or configure the bootloader. If Calamares is selected, its generic user-creation step must not be assumed to create a correct declarative Guix `user-account`.
+Для **Guix backend-а** згенерована конфігурація Guix володіє цільовими файловими системами, обліковими записами користувачів, службами та bootloader-ом. Не можна дозволяти стандартній задачі bootloader-а в Calamares і `guix system init` одночасно встановлювати чи налаштовувати bootloader. Якщо Calamares обрано, його загальний крок створення користувача не можна вважати заміною декларативного `user-account` у Guix.
 
-The Nix/NixOS backend needs its own deployment design; it is not implemented by reusing Guix commands.
+Nix/NixOS backend потребує власного проєкту розгортання; він не реалізується повторним використанням команд Guix.
 
-## Profiles
+## Профілі
 
-The project intends to provide two clearly separated software-policy choices:
+Проєкт має намір надати два чітко розділені варіанти програмної політики:
 
-- **WSM Free** — only components that meet the project's free-software policy.
-- **WSM Compatibility** — explicitly selected components outside that policy, with their licenses and redistribution terms disclosed.
+- **WSM Free** — лише компоненти, що відповідають політиці вільного програмного забезпечення проєкту.
+- **WSM Compatibility** — явно обрані компоненти поза цією політикою, з розкриттям їхніх ліцензій і умов розповсюдження.
 
-These are WSM policy labels, not a claim that both backends already implement the profiles. Their package sources and exact behavior must be defined separately for each backend. On the Guix path, Nonguix may be considered as an optional independent channel; it is not endorsed by the GNU Guix project.
+Це політичні позначки WSM, а не твердження, що обидва backend-и вже реалізують ці профілі. Їхні джерела пакетів і точна поведінка мають визначатися окремо для кожного backend-а. На шляху Guix Nonguix може розглядатися як опційний незалежний канал; він не схвалений проєктом GNU Guix.
 
-## Repository map
+## Структура репозиторію
 
 ```text
-channels/       Guix channel input examples
-docs/           Architecture, decisions, ethics, and development guidance
-installer/      Calamares configuration and WSM integration design
-systems/        Guix System configuration examples
-tests/          Tests for project-owned tooling
-wsm/            Future project Guix channel modules
+channels/       приклади входів Guix-каналів
+docs/           архітектура, рішення, етика та настанови з розробки
+installer/      конфігурація Calamares та проєкт інтеграції WSM
+systems/        приклади конфігурацій Guix System
+tests/          тести власних інструментів проєкту
+wsm/            майбутні модулі Guix-каналу проєкту
 ```
 
-Directories will gain implementation as the relevant design decisions and tests are completed.
+Каталоги отримають реалізацію в міру завершення відповідних проєктних рішень і тестів.
 
-## Upstream documentation
+## Upstream-документація
 
-See [docs/UPSTREAMS.md](docs/UPSTREAMS.md) for the official Guix, Calamares, and Nonguix references used by this project.
+Офіційні посилання на Guix, Calamares і Nonguix, які використовує цей проєкт, — у [docs/UPSTREAMS.md](docs/UPSTREAMS.md).
 
-## Development
+## Розробка
 
-Start with [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). The initial workflow is to inspect and validate the Guix configuration in a virtual machine. Do not test an unfinished installer against a disk containing data you need.
+Починайте з [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). Початковий робочий процес — перевіряти й валідовувати конфігурацію Guix у віртуальній машині. Не тестуйте незавершений інсталятор на диску, дані якого вам потрібні.
 
-## Current architecture status
+## Поточний стан архітектури
 
-The initial Guix configuration remains a useful prototype. A Nix-based experiment is also underway. Issue [#2](https://github.com/juv4uk/wsm-desktop/issues/2) tracks the comparison. Each installed system must have one authoritative backend; the project does not combine Nix and Guix stores or activation systems.
+Рішення про backend закрито. [ADR 0004](docs/decisions/0004-nix-guix-backend-strategy.md) ратифіковано 26.11.2026: GNU Guix System — перший і єдиний підтримуваний backend, що узгоджується з уже прийнятим [ADR 0001](docs/decisions/0001-guix-as-system-foundation.md). Експеримент із Nix збережено як дослідження, він поза критичним шляхом. [Issue #2](https://github.com/juv4uk/wsm-desktop/issues/2) тепер відстежує лише шлях розгортання Guix. Кожна встановлена система повинна мати один авторитетний backend; проєкт не об'єднує сховища Nix і Guix та їхні системи активації.
 
-## Licensing and project identity
+## Ліцензування та ідентичність проєкту
 
-Original source code in this repository is licensed under **GPL-3.0-or-later**. Project documentation is licensed under **CC-BY-SA-4.0**. See [LICENSE](LICENSE), [LICENSES/CC-BY-SA-4.0.txt](LICENSES/CC-BY-SA-4.0.txt), and [docs/LICENSING.md](docs/LICENSING.md).
+Оригінальний код у цьому репозиторії ліцензовано за **GPL-3.0-or-later**. Документація проєкту — за **CC-BY-SA-4.0**. Див. [LICENSE](LICENSE), [LICENSES/CC-BY-SA-4.0.txt](LICENSES/CC-BY-SA-4.0.txt) і [docs/LICENSING.md](docs/LICENSING.md).
 
-GNU, GNU Guix, Nonguix, and Calamares are independent projects. Their names and marks identify their respective projects and are not claims of affiliation or endorsement. WSM Desktop is not an official GNU, Guix, Nonguix, or Calamares distribution.
+GNU, GNU Guix, Nonguix і Calamares є незалежними проєктами. Їхні назви та позначки ідентифікують відповідні проєкти й не є заявою про афіліацію чи схвалення. WSM Desktop не є офіційним дистрибутивом GNU, Guix, Nonguix чи Calamares.
 
 ---
 
-**Project stage:** pre-alpha / backend architecture evaluation.  
-**Current guarantee:** no production installation support; no supported ISO; no validated hardware support list.
+**Стадія проєкту:** pre-alpha / оцінка архітектури backend-а.
+**Поточна гарантія:** підтримки виробничого встановлення немає; підтримуваного ISO немає; перевіреного переліку обладнання немає.
+
+Англійський переклад цього документа: [README.en.md](README.en.md). Канонічною є українська версія.
