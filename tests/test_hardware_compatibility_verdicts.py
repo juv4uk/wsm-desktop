@@ -78,5 +78,10 @@ class HardwareCompatibilityVerdictPolicyTests(unittest.TestCase):
         self.assertIn("не змінює sysfs", self.lower)
 
 
+    def test_not_detected_critical_function_requires_confirmed_fallback(self) -> None:
+        self.assertIn("якщо вона critical і fallback не підтверджено", self.lower)
+        self.assertIn("не дозволяти confirmable plan", self.lower)
+
+
 if __name__ == "__main__":
     unittest.main()
