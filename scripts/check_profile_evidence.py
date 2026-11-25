@@ -64,16 +64,20 @@ def validate(
 def validate_artifact_files(artifacts: list[dict[str, Any]], root: Path) -> list[str]:
     """Verify safe relative artifact paths and their SHA-256 digests."""
     problems: list[str] = []
+    if root.is_symlink() or not root.is_dir():
+        return ["profile directory must be a real directory, not a symlink or missing path"]
     root_path = root.resolve()
 
     for artifact in artifacts:
         relative = artifact["path"]
+        raw_parts = relative.split("/")
         posix_path = PurePosixPath(relative)
         if (
             "\\" in relative
+            or relative.startswith("/")
             or posix_path.is_absolute()
             or not posix_path.parts
-            or any(part in {"", ".", ".."} for part in posix_path.parts)
+            or any(part in {"", ".", ".."} for part in raw_parts)
         ):
             problems.append(
                 f"artifact path {relative!r} must be a safe relative path under the profile directory"
