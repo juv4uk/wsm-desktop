@@ -151,7 +151,7 @@ class CliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             report_path = directory / "hw.json"
-            raw = json.dumps(report(), ensure_ascii=False).encode("utf-8")
+            raw = (ROOT / "tests" / "fixtures" / "hardware" / "desktop-observed.json").read_bytes()
             report_path.write_bytes(raw)
             profile_dir = directory / "profiles" / "asus" / "h170-pro"
             profile_dir.mkdir(parents=True)
@@ -190,7 +190,7 @@ class CliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             report_path = directory / "hw.json"
-            report_path.write_text(json.dumps(report()), encoding="utf-8")
+            report_path.write_bytes((ROOT / "tests" / "fixtures" / "hardware" / "desktop-observed.json").read_bytes())
             profile_dir = directory / "profiles" / "asus" / "h170-pro"
             profile_dir.mkdir(parents=True)
             (profile_dir / "profile.scm").write_bytes(PROFILE_SOURCE_BYTES)
@@ -236,6 +236,69 @@ class CliTests(unittest.TestCase):
             self.assertEqual(completed.returncode, 2)
             self.assertFalse(out.exists())
             self.assertFalse((profile_dir / REPORT_ARTIFACT).exists())
+
+    def test_cli_refuses_report_with_sensitive_identifiers(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            report_value = json.loads(
+                (ROOT / "tests" / "fixtures" / "hardware" / "desktop-observed.json").read_text(encoding="utf-8")
+            )
+            report_value["privacy"]["sensitive_identifiers_included"] = True
+            report_path = directory / "sensitive-report.json"
+            report_path.write_text(json.dumps(report_value), encoding="utf-8")
+            profile_dir = directory / "profile"
+            profile_dir.mkdir()
+            (profile_dir / "profile.scm").write_bytes(PROFILE_SOURCE_BYTES)
+            out = profile_dir / "evidence.json"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "draft_profile_evidence.py"),
+                    "--report", str(report_path),
+                    "--vendor", "ASUS",
+                    "--model", "H170-PRO",
+                    "--slug", "asus/h170-pro",
+                    "--out", str(out),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(completed.returncode, 2)
+            self.assertIn("sensitive_identifiers_included", completed.stderr)
+            self.assertFalse(out.exists())
+            self.assertFalse((profile_dir / REPORT_ARTIFACT).exists())
+
+    def test_cli_refuses_report_with_invalid_collection_timestamp(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            report_value = json.loads(
+                (ROOT / "tests" / "fixtures" / "hardware" / "desktop-observed.json").read_text(encoding="utf-8")
+            )
+            report_value["collected_at"] = "2026-99-99T99:99:99Z"
+            report_path = directory / "bad-date-report.json"
+            report_path.write_text(json.dumps(report_value), encoding="utf-8")
+            profile_dir = directory / "profile"
+            profile_dir.mkdir()
+            (profile_dir / "profile.scm").write_bytes(PROFILE_SOURCE_BYTES)
+            out = profile_dir / "evidence.json"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "draft_profile_evidence.py"),
+                    "--report", str(report_path),
+                    "--vendor", "ASUS",
+                    "--model", "H170-PRO",
+                    "--slug", "asus/h170-pro",
+                    "--out", str(out),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(completed.returncode, 2)
+            self.assertIn("collected_at", completed.stderr)
+            self.assertFalse(out.exists())
 
     def test_cli_rejects_invalid_utf8_source_report(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
