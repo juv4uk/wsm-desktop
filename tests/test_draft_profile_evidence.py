@@ -211,6 +211,32 @@ class CliTests(unittest.TestCase):
             self.assertEqual(second.returncode, 2)
             self.assertEqual(out.read_bytes(), original)
 
+    def test_cli_refuses_to_draft_without_profile_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            report_path = directory / "hw.json"
+            report_path.write_text(json.dumps(report()), encoding="utf-8")
+            profile_dir = directory / "profiles" / "asus" / "h170-pro"
+            profile_dir.mkdir(parents=True)
+            out = profile_dir / "evidence.json"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "draft_profile_evidence.py"),
+                    "--report", str(report_path),
+                    "--vendor", "ASUS",
+                    "--model", "H170-PRO",
+                    "--slug", "asus/h170-pro",
+                    "--out", str(out),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(completed.returncode, 2)
+            self.assertFalse(out.exists())
+            self.assertFalse((profile_dir / REPORT_ARTIFACT).exists())
+
     def test_cli_rejects_invalid_utf8_source_report(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
