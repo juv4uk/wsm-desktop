@@ -86,6 +86,12 @@ def _prepare_artifact_paths(version: str, requested: Path) -> tuple[Path, Path, 
     if not real_parent.is_dir():
         raise SystemExit("build-release-bundle: output parent must be a directory")
 
+    for special in (Path("/dev"), Path("/proc"), Path("/sys")):
+        if real_parent == special or special in real_parent.parents:
+            raise SystemExit(
+                f"build-release-bundle: output directory must not be under {special}"
+            )
+
     repository = ROOT.resolve()
     build_directory = repository / "build"
     if real_parent == repository or repository in real_parent.parents:
@@ -140,8 +146,17 @@ def build(version: str, output: Path) -> dict[str, Any]:
 
     output, sums, manifest_path = _prepare_artifact_paths(version, output)
     prefix = f"wsm-desktop-{version}/"
+    archive_command = [
+        "git",
+        "-C",
+        str(ROOT),
+        "archive",
+        "--format=tar",
+        f"--prefix={prefix}",
+        commit,
+    ]
     archive = subprocess.run(
-        ["git", "-C", str(ROOT), "archive", "--format=tar", f"--prefix={prefix}", "HEAD"],
+        archive_command,
         capture_output=True,
         check=True,
     ).stdout
@@ -160,11 +175,15 @@ def build(version: str, output: Path) -> dict[str, Any]:
                 mtime=0,
             ) as stream:
                 stream.write(archive)
+            raw.flush()
+            os.fsync(raw.fileno())
 
         tarball_digest = sha256_file(output)
         sums_bytes = f"{tarball_digest}  {output.name}\n".encode("utf-8")
         with _open_new_file(sums, created) as stream:
             stream.write(sums_bytes)
+            stream.flush()
+            os.fsync(stream.fileno())
 
         manifest = {
             "schema": "wsm-release-manifest/1",
@@ -172,7 +191,9 @@ def build(version: str, output: Path) -> dict[str, Any]:
             "release": release,
             "source_commit": commit,
             "build": {
-                "command": "git archive --format=tar HEAD | gzip -n -9",
+                "command": (
+                    f"git archive --format=tar --prefix={prefix} {commit} | gzip -n -9"
+                ),
                 "gzip_mtime": 0,
                 "prefix": prefix,
             },
@@ -192,6 +213,8 @@ def build(version: str, output: Path) -> dict[str, Any]:
         ).encode("utf-8")
         with _open_new_file(manifest_path, created) as stream:
             stream.write(manifest_bytes)
+            stream.flush()
+            os.fsync(stream.fileno())
         return manifest
     except BaseException:
         for path in reversed(created):
