@@ -45,7 +45,15 @@ KEYBOARD_PATTERN = re.compile(r"^[a-z]{2}(-[a-z0-9]+)?$")
 # single allowed entry point for the Guix backend; NixOS commands are never
 # reachable from this module.
 GUIX_PROGRAM = "guix"
-GUIX_SUBCOMMAND = ("system", "init")
+GUIX_CHANNEL_LOCK_PATH = "/run/wsm/channels.lock.scm"
+GUIX_SUBCOMMAND = (
+    "time-machine",
+    "-C",
+    GUIX_CHANNEL_LOCK_PATH,
+    "--",
+    "system",
+    "init",
+)
 GUIX_CONFIGURATION_PATH = "/run/wsm/system.scm"
 GUIX_TARGET_MOUNTPOINT = "/mnt"
 
@@ -402,8 +410,9 @@ def render_configuration(plan: dict[str, Any], selection: TargetSelection) -> st
 def build_argv(configuration_path: str, target_mountpoint: str) -> tuple[str, ...]:
     """Return the deployment argv as a typed list, never a shell string.
 
-    ``guix system init`` is the only deployment command this adapter can
-    produce. The caller runs it, and only after revalidating the target.
+    The only deployment operation is ``system init``, invoked through the
+    authenticated channel snapshot at GUIX_CHANNEL_LOCK_PATH. The caller runs
+    this argv only after staging the lock/configuration and revalidating target.
     """
     _require(
         configuration_path == GUIX_CONFIGURATION_PATH,
