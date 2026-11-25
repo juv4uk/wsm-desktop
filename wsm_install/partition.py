@@ -67,7 +67,6 @@ class Layout:
     # Carry the original disk-name acknowledgement into later planning stages.
     # A generated layout must not silently lose the user's destructive consent.
     acknowledgement: str | None = None
-    requires_acknowledgement: bool = True
     disk_size_bytes: int | None = None
 
     def commands(self) -> list[list[str]]:
@@ -144,7 +143,6 @@ def plan(
         firmware=firmware,
         disk=disk.path,
         acknowledgement=acknowledgement,
-        requires_acknowledgement=True,
         disk_size_bytes=disk.size_bytes,
     )
     cursor = 1
