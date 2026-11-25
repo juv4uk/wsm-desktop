@@ -78,6 +78,19 @@ def build_plan(
             blockers.append("hardware profile evidence report_id does not match the current hardware report")
         if profile_evidence.get("report_schema_version") != report.get("schema_version"):
             blockers.append("hardware profile evidence report_schema_version does not match the current hardware report")
+        source_report_artifacts = [
+            item
+            for item in profile_evidence.get("artifacts", [])
+            if isinstance(item, dict) and item.get("kind") == "hardware-report"
+        ]
+        if len(source_report_artifacts) != 1:
+            blockers.append(
+                "hardware profile evidence must contain exactly one source hardware-report artifact"
+            )
+        elif source_report_artifacts[0].get("sha256") != hashlib.sha256(report_bytes).hexdigest():
+            blockers.append(
+                "hardware profile evidence source-report artifact SHA-256 does not match the current hardware report bytes"
+            )
         try:
             evidence_problems = problems(
                 profile_evidence,
