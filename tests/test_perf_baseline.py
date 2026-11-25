@@ -72,10 +72,10 @@ class MeasurementTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             cpuinfo = Path(temporary) / "cpuinfo"
             cpuinfo.write_text(
-                "processor : 0\\n"
-                "vendor_id : GenuineIntel\\n"
-                "model name : Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz\\n"
-                "flags : sse sse2\\n",
+                "processor : 0\n"
+                "vendor_id : GenuineIntel\n"
+                "model name : Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz\n"
+                "flags : sse sse2\n",
                 encoding="utf-8",
             )
             artifact = environment("physical", cpuinfo_path=cpuinfo)
