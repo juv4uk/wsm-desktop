@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - work/hwcheck-qemu-guest
+      - fix/hwcheck-qemu-guest-initramfs
   pull_request:
     paths:
       - ".github/workflows/hwcheck-qemu-guest.yml"
@@ -12,6 +13,8 @@ on:
       - "wsm_hwcheck/**"
       - "schemas/hardware-report.schema.json"
       - "docs/testing/HWCHECK-QEMU-GUEST.md"
+      - "tests/test_qemu_hwcheck_guest.py"
+      - "Makefile"
   workflow_dispatch:
 
 permissions:
