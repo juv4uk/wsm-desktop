@@ -30,7 +30,7 @@ jobs:
           set -euo pipefail
 
           kernel_image="/boot/vmlinuz-$(uname -r)"
-          if [[ ! -r "$kernel_image" ]]; then
+          if [[ ! -e "$kernel_image" ]] || ! sudo test -r "$kernel_image"; then
             echo "Runner kernel image is unavailable: $kernel_image" >&2
             ls -la /boot
             exit 1
@@ -38,6 +38,11 @@ jobs:
 
           workdir="$(mktemp -d)"
           trap 'rm -rf "$workdir"' EXIT
+          # The runner stores its kernel image as root-readable (0600). Copy
+          # that read-only input into our disposable workspace for unprivileged QEMU.
+          sudo cat "$kernel_image" > "$workdir/guest-vmlinuz"
+          chmod 0644 "$workdir/guest-vmlinuz"
+          kernel_image="$workdir/guest-vmlinuz"
           rootfs="$workdir/root"
           mkdir -p "$rootfs/bin" "$rootfs/dev"
 
