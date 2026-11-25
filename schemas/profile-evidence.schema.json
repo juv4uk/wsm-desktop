@@ -10,15 +10,17 @@
     "profile",
     "report_id",
     "report_schema_version",
+    "isa_level",
     "verified_on",
     "verified_by",
     "verified_functions",
     "known_limitations",
-    "not_assessed"
+    "not_assessed",
+    "artifacts"
   ],
   "properties": {
     "schema": {
-      "const": "wsm-profile-evidence/1"
+      "const": "wsm-profile-evidence/2"
     },
     "profile": {
       "type": "object",
@@ -69,8 +71,12 @@
     },
     "verified_by": {
       "type": "string",
-      "minLength": 1,
-      "description": "Who ran the verification. Personal names and e-mail addresses are not accepted."
+      "enum": [
+        "автори проєкту",
+        "local agent",
+        "web agent"
+      ],
+      "description": "Role label only; personal names and e-mail addresses are not accepted."
     },
     "verified_functions": {
       "type": "array",
@@ -123,6 +129,7 @@
         "additionalProperties": false,
         "required": [
           "kind",
+          "path",
           "sha256"
         ],
         "properties": {
@@ -136,9 +143,15 @@
           },
           "note": {
             "type": "string"
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Portable relative POSIX path from the directory containing evidence.json."
           }
         }
-      }
+      },
+      "minItems": 1
     },
     "hardware_signature": {
       "type": "object",
