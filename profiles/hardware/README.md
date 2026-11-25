@@ -33,6 +33,20 @@ profiles/hardware/asus/h170-pro/
 Шаблон — [`template.json`](template.json). Скопіюй, заміни значення, але не
 залишай вигаданих.
 
+## Чернетка з реального звіту
+
+```sh
+python3 scripts/draft_profile_evidence.py \\
+  --report hwcheck-report.json \\
+  --vendor GIGABYTE --model "H170 Gaming 3" \\
+  --slug gigabyte/h170-gaming-3 \\
+  --out profiles/hardware/gigabyte/h170-gaming-3/evidence.json
+```
+
+Генератор копіює точні байти звіту в `artifacts/wsm-hwcheck-report.json` і записує SHA-256. Це provenance, а не функціональний тест. Кожний `pass`/ `fail` у `verified_functions` повинен окремо посилатися через `evidence` на тестовий артефакт; звіт інвентаризації не може бути єдиним доказом роботи функції.
+
+Генератор не створює `profile.scm`, не змінює статуси з `not-assessed` і не перезаписує існуючі файли.
+
 ## Перевірка
 
 ```sh
