@@ -40,6 +40,7 @@ MAX_SERIAL_OUTPUT_TAIL_CHARS = 4000
 MAX_BOOT_MARKER_BYTES = 1024
 PROCESS_READ_CHUNK_BYTES = 64 * 1024
 POST_KILL_DRAIN_SECONDS = 0.5
+MAX_PROCESS_INPUT_BYTES = 16 * 1024
 
 
 @dataclass(frozen=True)
@@ -75,6 +76,7 @@ def run_bounded_process(
     max_stdout_bytes: int = MAX_SERIAL_CAPTURE_BYTES,
     max_stderr_bytes: int = MAX_STDERR_CAPTURE_BYTES,
     read_chunk_bytes: int = PROCESS_READ_CHUNK_BYTES,
+    stdin_bytes: bytes | None = None,
 ) -> BoundedProcessResult:
     """Run a child while streaming stdout/stderr into fixed-size tail buffers.
 
@@ -85,6 +87,8 @@ def run_bounded_process(
         raise ValueError("timeout_seconds must be positive")
     if max_stdout_bytes < 1 or max_stderr_bytes < 1 or read_chunk_bytes < 1:
         raise ValueError("capture limits and read chunk size must be positive")
+    if stdin_bytes is not None and len(stdin_bytes) > MAX_PROCESS_INPUT_BYTES:
+        raise ValueError(f"stdin payload must not exceed {MAX_PROCESS_INPUT_BYTES} bytes")
 
     marker_bytes = marker.encode("utf-8") if marker else b""
     if len(marker_bytes) > MAX_BOOT_MARKER_BYTES:
@@ -95,7 +99,7 @@ def run_bounded_process(
     factory = popen_factory or subprocess.Popen
     process = factory(
         command,
-        stdin=subprocess.DEVNULL,
+        stdin=subprocess.PIPE if stdin_bytes is not None else subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         bufsize=0,
@@ -107,6 +111,26 @@ def run_bounded_process(
         finally:
             process.wait()
         raise OSError("child process pipes were not created")
+
+    if stdin_bytes is not None:
+        if process.stdin is None:
+            try:
+                process.kill()
+            finally:
+                process.wait()
+            raise OSError("child process stdin pipe was not created")
+        try:
+            view = memoryview(stdin_bytes)
+            while view:
+                written = process.stdin.write(view)
+                if written is None or written <= 0:
+                    raise OSError("short write to child process stdin")
+                view = view[written:]
+        except BrokenPipeError:
+            # The child may reject the command and exit before consuming stdin.
+            pass
+        finally:
+            process.stdin.close()
 
     selector = selectors.DefaultSelector()
     stdout_tail = bytearray()
