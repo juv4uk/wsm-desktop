@@ -125,20 +125,63 @@ def _ensure_output_outside_target(destination: Path) -> None:
         )
 
 
-def _ensure_output_not_on_target_filesystem(destination: Path) -> None:
-    """Reject bind-mount aliases of an already mounted target filesystem.
+def _decode_mountinfo_field(value: str) -> str:
+    """Decode octal escapes in Linux /proc/self/mountinfo path fields."""
+    decoded: list[str] = []
+    index = 0
+    while index < len(value):
+        character = value[index]
+        if character != "\\":
+            decoded.append(character)
+            index += 1
+            continue
+        escaped = value[index + 1:index + 4]
+        if len(escaped) != 3 or any(digit not in "01234567" for digit in escaped):
+            raise DeployCliError("mountinfo contains an invalid octal path escape")
+        decoded.append(chr(int(escaped, 8)))
+        index += 4
+    return "".join(decoded)
 
-    A lexical path check is not sufficient when an output directory is a bind
-    mount of the target. Comparing st_dev is deliberately conservative: a
-    subvolume on the same filesystem is refused as well.
+
+def _target_mount_is_present(target: Path) -> bool:
+    """Find the exact target mountpoint, including same-filesystem bind mounts."""
+    mountinfo = Path("/proc/self/mountinfo")
+    try:
+        content = mountinfo.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise DeployCliError(f"cannot read target mount table: {exc}") from exc
+    lines = content.splitlines()
+    if not lines:
+        raise DeployCliError("target mount table is empty; refusing filesystem identity check")
+
+    target_mountpoint = str(target.absolute())
+    target_found = False
+    for line_number, line in enumerate(lines, start=1):
+        fields = line.split()
+        if len(fields) < 10 or "-" not in fields[6:]:
+            raise DeployCliError(
+                f"mountinfo line {line_number} is malformed; refusing filesystem identity check"
+            )
+        if not re.fullmatch(r"[0-9]+:[0-9]+", fields[2]):
+            raise DeployCliError(
+                f"mountinfo line {line_number} has invalid device identity"
+            )
+        mountpoint = _decode_mountinfo_field(fields[4])
+        if mountpoint == target_mountpoint:
+            target_found = True
+    return target_found
+
+
+def _ensure_output_not_on_target_filesystem(destination: Path) -> None:
+    """Reject same-filesystem output aliases when the installer target is mounted.
+
+    os.path.ismount() may not recognize a same-filesystem bind mount. The
+    exact target mountpoint is therefore read from /proc/self/mountinfo.
+    Comparing st_dev is intentionally conservative and also rejects
+    subvolumes on the same filesystem.
     """
     target = Path(GUIX_TARGET_MOUNTPOINT)
-    try:
-        target_is_mounted = os.path.ismount(target)
-    except OSError as exc:
-        raise DeployCliError(f"cannot verify target mount state: {exc}") from exc
-
-    if not target_is_mounted:
+    if not _target_mount_is_present(target):
         return
 
     try:

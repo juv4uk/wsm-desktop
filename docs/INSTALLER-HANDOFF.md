@@ -153,6 +153,8 @@ CLI contract v0.1:
 
 Усі v0.1 плани залишаються diagnostic-only, навіть коли blocker list порожній: це не означає, що вже реалізовано user confirmation, storage/partition plan або backend apply. Поточний CLI не реалізує повний target model з §4: зокрема storage partition plan, selected/pinned backend revision, повний user intent, confirmation token і apply phases ще не існують у його JSON output.
 
+**Окремий acceptance gate Guix adapter-а (майбутній контракт, не CLI v0.1):** щоб CLI handoff міг перейти до фази підтвердження, майбутній frontend має сформувати узгоджений snapshot з `plan_mode=dry-run`, `plan_status=confirmation-ready`, `plan_readiness.confirmable=true`, порожніми `missing_required_roles` і `required_user_actions` та `execution.plan_confirmable=true`. Одночасно `execution.dry_run=true`, `mutations_authorized=false`, `backend_invoked=false` і `disk_access_performed=false`; blockers мають бути порожніми. Backend відхиляє будь-яку суперечність між цими маркерами. `confirmation-ready` означає лише «можна показати користувачеві точні digest-и для окремого підтвердження»; це **не** означає, що користувач уже підтвердив план або дозволив мутації. Наявний CLI v0.1 такого snapshot не створює, тому його diagnostic-only JSON завжди відхиляється Guix handoff-ом.
+
 **Coverage marker і verdict — різні поняття.** Якщо report не містить запису потрібної capability, CLI може відобразити це в `plan_readiness.role_coverage` як `not-collected` і додати warning. Похідний compatibility verdict цієї capability має залишатися `unknown` із збереженням причини, coverage boundary та provenance; `not-collected` не є verdict, не означає `not-detected` або `not-tested` і не задовольняє critical evidence gate. Такий missing-role план залишається diagnostic-only.
 
 **Freshness у CLI v0.1 не реалізована.** CLI перевіряє schema і записує report timestamp/environment, але не доводить same-boot identity, monotonic collection age або незмінність topology у поточній boot-сесії. Тому збіг `collected_at`, architecture та kernel не можна називати перевіркою поточної сесії. PR #41 — окремий consumer-side freshness policy prototype; він не інтегрований у CLI та залишається pending producer/schema approval від #5/#6. До появи узгоджених versioned report fields same-session freshness для confirmation є `unverifiable`.
@@ -362,11 +364,4 @@ Frontend реалізація може змінюватися (Calamares, інш
 
 **Не реалізовано** — кроки `REALIZE` та `APPLY`: адаптер не виконує `guix system init`, не монтує цільовий диск і не перевіряє його ідентичність перед записом. Це наступний крок і він потребує середовища з Guix.
 
-Тести: `tests/test_backend_guix.py` (32 тести) перевіряють backend guardrails; `tests/test_guix_deploy_cli.py` (17 тестів) — standalone CLI, файлову безпеку та двофазне підтвердження. Вони не потребують Guix і не торкаються дисків.
-
-
-## Захист оглядової копії від bind-mount alias
-
-Перевірка, що review `.scm` лежить поза шляхом `/mnt`, доповнюється перевіркою filesystem identity, коли target уже змонтований: CLI порівнює `st_dev` директорії output і target root та відмовляє, якщо вони збігаються. Це консервативно відхиляє також окремі subvolume на тому самому filesystem, зате закриває bind-mount alias за межами шляху `/mnt`. Якщо mount state або filesystem identity неможливо перевірити, CLI завершується fail-closed.
-
-Це захист лише для підготовки оглядової копії. Перед майбутнім `APPLY` потрібна окрема повторна перевірка mount identity безпосередньо перед будь-яким записом; ця перевірка не є заміною такого execution contract.
+Тести: `tests/test_backend_guix.py` (20 тестів) перевіряють backend guardrails; `tests/test_guix_deploy_cli.py` (13 тестів) — standalone CLI, файлову безпеку та двофазне підтвердження. Вони не потребують Guix і не торкаються дисків.
