@@ -9,7 +9,7 @@
 
 ## Try it now
 
-The working component available today is the hardware collector. It reads sysfs and procfs only. It does not modify block devices, partition tables, filesystems, or system state. By default, the report goes to stdout; `--output PATH` writes only the JSON report to the explicitly selected file.
+The working component available today is the hardware collector. It reads sysfs and procfs and, by default, also reads local kernel-module indexes under `/lib/modules/<kernel>/` plus the current-boot kernel log through fixed, read-only `journalctl` or `dmesg` calls with bounded time and output. It does not use a shell, load or unload modules, access the network, or change system state. Unavailable sources leave the corresponding facts `unknown` with a warning. The collector does not modify block devices, partition tables, or filesystems. By default, the report goes to stdout; `--output PATH` writes only the JSON report to the explicitly selected file.
 
 ```console
 $ git clone https://github.com/juv4uk/wsm-desktop.git
@@ -17,6 +17,8 @@ $ cd wsm-desktop
 $ python3 -m wsm_hwcheck --compact            # JSON report to stdout
 $ python3 -m wsm_hwcheck --output hw.json     # or to a file
 ```
+
+A read-only **Hardware Preview RC1** is also available: see the [release notes](RELEASE-NOTES.md) and [hardware-testing instructions](docs/RELEASE-TESTING.md). It collects hardware evidence and diagnostic-only plans; it is not an installer or ISO and does not modify disks.
 
 The report is validated against a versioned schema and marks missing evidence as `unknown` instead of guessing:
 
