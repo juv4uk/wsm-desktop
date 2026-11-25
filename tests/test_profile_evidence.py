@@ -33,7 +33,7 @@ BASE = {
     "report_id": SOURCE_REPORT["report_id"],
     "report_schema_version": SOURCE_REPORT["schema_version"],
     "profile_source": {"path": "profile.scm", "sha256": PROFILE_SOURCE_SHA256},
-    "isa_level": "x86-64-v2",
+    "isa_level": "x86-64-v3",
     "verified_on": "2026-11-26",
     "verified_by": "автори проєкту",
     "verified_functions": [
