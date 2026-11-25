@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from pathlib import Path
 from typing import Any
 
 
@@ -56,6 +57,7 @@ def build_plan(
     report_bytes: bytes,
     backend: str,
     profile_evidence: dict[str, Any] | None = None,
+    profile_evidence_root: Path | None = None,
 ) -> tuple[dict[str, Any], list[str], list[str]]:
     """Build a backend-specific plan without probing or invoking a backend.
 
@@ -68,11 +70,30 @@ def build_plan(
     blockers: list[str] = []
     warnings: list[str] = []
 
+    profile_evidence_provenance: dict[str, str] | None = None
     if profile_evidence is not None:
-        from wsm_install.profile import problems
+        from wsm_install.profile import EvidenceUnavailable, problems
 
-        for problem in problems(profile_evidence):
+        if profile_evidence.get("report_id") != report.get("report_id"):
+            blockers.append("hardware profile evidence report_id does not match the current hardware report")
+        if profile_evidence.get("report_schema_version") != report.get("schema_version"):
+            blockers.append("hardware profile evidence report_schema_version does not match the current hardware report")
+        try:
+            evidence_problems = problems(
+                profile_evidence,
+                artifact_root=profile_evidence_root,
+            )
+        except EvidenceUnavailable as exc:
+            evidence_problems = [str(exc)]
+        for problem in evidence_problems:
             blockers.append(f"hardware profile evidence is not valid: {problem}")
+        if not blockers:
+            profile_evidence_provenance = {
+                "slug": profile_evidence["profile"]["slug"],
+                "report_id": profile_evidence["report_id"],
+                "report_schema_version": profile_evidence["report_schema_version"],
+                "sha256": hashlib.sha256(canonical_json(profile_evidence).encode("utf-8")).hexdigest(),
+            }
     else:
         warnings.append(
             "no verified hardware profile evidence for this machine; "
@@ -141,6 +162,7 @@ def build_plan(
             "required_user_actions": sorted(USER_SELECTION_REQUIRED),
         },
         "backend": {"id": backend_id},
+        "profile_evidence": profile_evidence_provenance,
         "source_report": {
             "schema_version": report["schema_version"],
             "report_id": report["report_id"],
