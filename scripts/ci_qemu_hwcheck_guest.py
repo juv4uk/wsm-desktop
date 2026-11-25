@@ -561,6 +561,73 @@ def _validate_report(report: dict) -> tuple[int, int]:
     return len(devices), len(functional_tests)
 
 
+def _canonical_json_bytes(value: dict) -> bytes:
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+
+def _validate_installer_plan(bundle: dict) -> tuple[str, int]:
+    """Verify report binding and the non-executable wsm-install dry-run plan."""
+    report = bundle.get("hardware_report")
+    plan = bundle.get("installer_plan")
+    if not isinstance(report, dict) or not isinstance(plan, dict):
+        raise RuntimeError("guest bundle must contain hardware_report and installer_plan objects")
+
+    report_bytes = (
+        json.dumps(report, ensure_ascii=False, indent=None, sort_keys=True) + "\n"
+    ).encode("utf-8")
+    report_digest = hashlib.sha256(report_bytes).hexdigest()
+    if bundle.get("report_sha256") != report_digest:
+        raise RuntimeError("guest report digest does not match the exact compact report bytes")
+    if plan.get("source_report", {}).get("sha256") != report_digest:
+        raise RuntimeError("wsm-install plan is not bound to the exact hardware report digest")
+    if plan.get("source_report", {}).get("schema_version") != report.get("schema_version"):
+        raise RuntimeError("wsm-install plan source schema version differs from the report")
+
+    plan_file_bytes = (_canonical_json_bytes(plan).decode("utf-8") + "\n").encode("utf-8")
+    if hashlib.sha256(plan_file_bytes).hexdigest() != bundle.get("plan_sha256"):
+        raise RuntimeError("guest plan digest does not match its canonical plan file bytes")
+
+    plan_without_digest = dict(plan)
+    plan_digest = plan_without_digest.pop("plan_sha256", None)
+    expected_plan_digest = hashlib.sha256(_canonical_json_bytes(plan_without_digest)).hexdigest()
+    if plan_digest != expected_plan_digest:
+        raise RuntimeError("wsm-install plan_sha256 is invalid")
+
+    if plan.get("plan_status") != "diagnostic-only":
+        raise RuntimeError("wsm-install did not return a diagnostic-only plan")
+    readiness = plan.get("plan_readiness", {})
+    if readiness.get("confirmable") is not False:
+        raise RuntimeError("wsm-install plan must remain non-confirmable")
+    backend_id = plan.get("backend", {}).get("id")
+    if backend_id != "guix-system":
+        raise RuntimeError(f"backend alias guix did not resolve to guix-system: {backend_id!r}")
+    if plan.get("blockers") != []:
+        raise RuntimeError("guest wsm-install dry-run returned blockers instead of a diagnostic plan")
+
+    execution = plan.get("execution", {})
+    required_false = (
+        "plan_confirmable",
+        "mutations_authorized",
+        "backend_invoked",
+        "disk_access_performed",
+    )
+    if execution.get("dry_run") is not True:
+        raise RuntimeError("wsm-install execution.dry_run is not true")
+    for field in required_false:
+        if execution.get(field) is not False:
+            raise RuntimeError(f"wsm-install execution.{field} must be false")
+
+    required_actions = readiness.get("required_user_actions", [])
+    if "storage-install-target" not in required_actions:
+        raise RuntimeError("wsm-install omitted explicit user storage-target selection")
+    return backend_id, len(plan.get("warnings", []))
+
+
 def main() -> int:
     qemu = shutil.which("qemu-system-x86_64")
     if not qemu:
@@ -639,7 +706,7 @@ def main() -> int:
             )
 
         try:
-            report = _decode_guest_report(serial)
+            bundle = _decode_guest_bundle(serial)
         except RuntimeError as exc:
             lines = serial.replace(chr(13), chr(10)).splitlines()
             diagnostic_lines = []
@@ -656,14 +723,21 @@ def main() -> int:
                 + "\n".join(diagnostic_lines)
                 + f"\nQEMU stderr tail: {stderr[-1200:]}"
             ) from exc
+        report = bundle.get("hardware_report")
         device_count, functional_test_count = _validate_report(report)
+        backend_id, warning_count = _validate_installer_plan(bundle)
         print(
-            "PASS: actual wsm_hwcheck ran inside a QEMU TCG guest and its report "
-            "validated against schemas/hardware-report.schema.json"
+            "PASS: actual wsm_hwcheck and wsm-install --preflight --dry-run ran "
+            "inside the same QEMU TCG guest"
         )
         print(
             f"CPython 3.11.18 tag={PYTHON_TAG}; external ELF libraries copied={dependency_count}; "
             f"guest devices={device_count}; functional tests={functional_test_count}"
+        )
+        print(
+            f"Installer plan: backend={backend_id}; status=diagnostic-only; "
+            f"confirmable=false; warnings={warning_count}; backend_invoked=false; "
+            "disk_access_performed=false"
         )
         print(
             f"Guest kernel={report['environment']['kernel_release']}; "
