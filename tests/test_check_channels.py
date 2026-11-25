@@ -95,6 +95,13 @@ class FreePolicyTests(unittest.TestCase):
     def test_canonical_free_lock_is_accepted(self) -> None:
         self.assertEqual(check(GOOD_FREE, "free"), [])
 
+    def test_official_savannah_mirror_is_accepted(self) -> None:
+        mirror = GOOD_FREE.replace(
+            "https://git.guix.gnu.org/guix.git",
+            "https://git.savannah.gnu.org/git/guix.git",
+        )
+        self.assertEqual(check(mirror, "free"), [])
+
     def test_nonguix_is_refused_by_free_policy(self) -> None:
         problems = check(GOOD_COMPATIBILITY, "free")
         self.assertTrue(any("exactly one entry" in item for item in problems))
@@ -142,6 +149,43 @@ class CompatibilityPolicyTests(unittest.TestCase):
         )
         problems = check("(list " + GUIX_CHANNEL + " " + bad + ")", "compatibility")
         self.assertTrue(any("exact allow-listed repository URL" in item for item in problems))
+
+    def test_compatibility_channel_rejects_nonguix_subpath_and_suffix_variants(self) -> None:
+        variants = (
+            "https://gitlab.com/nonguix/other",
+            "https://gitlab.com/nonguix/nonguix.evil",
+            "https://gitlab.com/nonguix/nonguix.git",
+        )
+        for url in variants:
+            with self.subTest(url=url):
+                rogue = NONGUIX_CHANNEL.replace(
+                    "https://gitlab.com/nonguix/nonguix", url
+                )
+                problems = check(
+                    "(list " + GUIX_CHANNEL + " " + rogue + ")", "compatibility"
+                )
+                self.assertTrue(
+                    any("exact allow-listed repository URL" in item for item in problems)
+                )
+
+    def test_compatibility_channel_rejects_userinfo_port_query_and_fragment(self) -> None:
+        variants = (
+            "https://user@gitlab.com/nonguix/nonguix",
+            "https://gitlab.com:443/nonguix/nonguix",
+            "https://gitlab.com/nonguix/nonguix?ref=main",
+            "https://gitlab.com/nonguix/nonguix#fragment",
+        )
+        for url in variants:
+            with self.subTest(url=url):
+                rogue = NONGUIX_CHANNEL.replace(
+                    "https://gitlab.com/nonguix/nonguix", url
+                )
+                problems = check(
+                    "(list " + GUIX_CHANNEL + " " + rogue + ")", "compatibility"
+                )
+                self.assertTrue(
+                    any("exact allow-listed repository URL" in item for item in problems)
+                )
 
     def test_compatibility_introduction_requires_full_fingerprint(self) -> None:
         bad = NONGUIX_CHANNEL.replace(NONGUIX_INTRODUCTION_FINGERPRINT, "not-a-fingerprint")
