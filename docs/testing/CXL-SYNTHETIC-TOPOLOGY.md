@@ -183,3 +183,17 @@ done
 7. [ndctl-test-runner: QEMU-based CXL test harness](https://github.com/pmem/ndctl-test-runner/tree/7d5619a59f9fe27be38a8c8d643124c00968dab2)
 8. [GitHub Actions Ubuntu 24.04 runner image release 20261122.23](https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261122.23)
 9. [QEMU RFC: initialize Type 3 regions at guest boot](https://lore-kernel.gnuweeb.org/qemu-devel/0b67947b-e4ee-4e47-b61f-c6ae06501298%40gmail.com/T/) — RFC only, not baseline behavior.
+
+
+## Відтворюваний CXL guest runner
+
+Окремий optional CI lane виконує дві різні перевірки:
+
+- `scripts/ci_probe_qemu_cxl.py` — read-only host capability snapshot і QEMU qdev probe. Він створює лише volatile Type 3 memory object, зупиняє guest CPUs та не завантажує host CXL modules.
+- `scripts/ci_qemu_cxl_guest.py` — disposable Linux guest на exact runner kernel; використовує лише dependency closure від `modprobe --show-depends`, запускає CXL modules всередині guest і читає read-only sysfs. Немає диска, NIC, passthrough, host module loading, CXL region/namespace creation або decoder writes.
+- `tests/test_qemu_cxl_probe.py` і `tests/test_qemu_cxl_guest.py` перевіряють топологію, privacy, safety та streaming resource limits; `make check-cxl-guest` запускає обидва набори.
+- `.github/workflows/qemu-cxl-feasibility.yml` є окремою feasibility lane, а не hardware preflight gate.
+
+Module decompression streams `zstd`/`xz` stdout через selector та зупиняє subprocess на `limit + 1` байті або timeout; expanded bytes не накопичуються без верхньої межі. Успіх означає лише **synthetic QEMU CXL Type 3 guest enumeration** на точній парі runner kernel/QEMU, а не фізичну сумісність чи можливість використовувати CXL RAM.
+
+Поточний distro QEMU runner baseline слід документувати за точним version/image tuple. Окремий QEMU 11.1.3 upstream stable lane має власну задачу #140 і не підміняє цю відтворювану базову перевірку.
