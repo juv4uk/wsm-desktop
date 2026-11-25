@@ -49,6 +49,8 @@ def bundle(**overrides) -> dict:
 
 
 def prepare_artifact_root(root: Path) -> None:
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "profile.scm").write_text(";; synthetic test fixture\\n", encoding="utf-8")
     artifact = root / "artifacts" / "dmesg.txt"
     artifact.parent.mkdir(parents=True, exist_ok=True)
     artifact.write_bytes(ARTIFACT_BYTES)
@@ -237,7 +239,7 @@ class InstallerPlanGateTests(unittest.TestCase):
 
     def test_build_plan_accepts_only_matching_report_and_verified_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary) / "asus" / "h170-pro"
             prepare_artifact_root(root)
             plan, blockers, _warnings = self.build(self.matching_bundle(), root)
         self.assertFalse(any("hardware profile evidence is not valid" in item for item in blockers))
@@ -246,7 +248,7 @@ class InstallerPlanGateTests(unittest.TestCase):
 
     def test_build_plan_rejects_artifact_bytes_changed_after_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary) / "asus" / "h170-pro"
             prepare_artifact_root(root)
             (root / "artifacts" / "dmesg.txt").write_bytes(b"tampered after manifest creation")
             _plan, blockers, _warnings = self.build(self.matching_bundle(), root)
@@ -254,7 +256,7 @@ class InstallerPlanGateTests(unittest.TestCase):
 
     def test_build_plan_rejects_profile_evidence_from_another_report(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary) / "asus" / "h170-pro"
             prepare_artifact_root(root)
             evidence = self.matching_bundle()
             evidence["report_id"] = "another-report-id"
@@ -263,12 +265,27 @@ class InstallerPlanGateTests(unittest.TestCase):
 
     def test_build_plan_rejects_profile_evidence_from_another_schema_version(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
+            root = Path(temporary) / "asus" / "h170-pro"
             prepare_artifact_root(root)
             evidence = self.matching_bundle()
             evidence["report_schema_version"] = "9.9.9"
             _plan, blockers, _warnings = self.build(evidence, root)
         self.assertTrue(any("report_schema_version does not match" in item for item in blockers))
+
+    def test_build_plan_rejects_missing_profile_configuration(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "asus" / "h170-pro"
+            prepare_artifact_root(root)
+            (root / "profile.scm").unlink()
+            _plan, blockers, _warnings = self.build(self.matching_bundle(), root)
+        self.assertTrue(any("no regular profile.scm" in item for item in blockers))
+
+    def test_build_plan_rejects_profile_slug_for_another_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "gigabyte" / "h170-gaming-3"
+            prepare_artifact_root(root)
+            _plan, blockers, _warnings = self.build(self.matching_bundle(), root)
+        self.assertTrue(any("does not match the directory" in item for item in blockers))
 
     def test_build_plan_fails_closed_when_artifact_root_is_missing(self) -> None:
         _plan, blockers, _warnings = self.build(self.matching_bundle(), None)
