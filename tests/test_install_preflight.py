@@ -140,7 +140,7 @@ class InstallerPlanTests(unittest.TestCase):
     def test_plan_output_rejects_hardlink_and_symlink_aliases(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             report_path = Path(directory) / "report.json"
-            report_path.write_bytes((FIXTURES / "desktop-observed.json").read_bytes())
+            report_path.write_bytes(report_bytes)
             hardlink = Path(directory) / "report-hardlink.json"
             symlink = Path(directory) / "report-symlink.json"
             hardlink.hardlink_to(report_path)
@@ -216,7 +216,7 @@ class InstallerPlanTests(unittest.TestCase):
         self.assertTrue(any("not-detected" in item for item in blockers))
 
     def test_cli_accepts_profile_evidence_and_records_provenance(self) -> None:
-        report, _ = load_fixture("desktop-observed.json")
+        report, report_bytes = load_fixture("desktop-observed.json")
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             report_path = root / "report.json"
@@ -241,14 +241,14 @@ class InstallerPlanTests(unittest.TestCase):
             self.assertEqual(plan["profile_evidence"]["report_id"], report["report_id"])
 
     def test_plan_output_cannot_overwrite_profile_evidence_artifact(self) -> None:
-        report, _ = load_fixture("desktop-observed.json")
+        report, report_bytes = load_fixture("desktop-observed.json")
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             report_path = root / "report.json"
             report_path.write_bytes((FIXTURES / "desktop-observed.json").read_bytes())
             profile_dir = root / "test" / "fixture"
             profile_dir.mkdir(parents=True)
-            evidence = make_profile_evidence(report, profile_dir)
+            evidence = make_profile_evidence(report, profile_dir, report_bytes)
             evidence_path = profile_dir / "evidence.json"
             evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
             artifact = profile_dir / "artifacts" / "dmesg.txt"
@@ -289,7 +289,7 @@ class InstallerPlanTests(unittest.TestCase):
         self.assertIn("source-report artifact SHA-256 does not match", stderr.getvalue())
 
     def test_cli_refuses_profile_evidence_for_a_different_report(self) -> None:
-        report, _ = load_fixture("desktop-observed.json")
+        report, report_bytes = load_fixture("desktop-observed.json")
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             report_path = root / "report.json"
