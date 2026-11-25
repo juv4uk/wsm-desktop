@@ -34,10 +34,10 @@
       ],
       "identity": {
         "vendor_id": "0x10de",
-        "device_id": "0x1c82",
         "revision": "a1",
         "manufacturer": "NVIDIA",
-        "model": "Example GPU"
+        "model": "Example GPU",
+        "hardware_device_id": "0x1c82"
       },
       "discovery_status": "discovered",
       "driver": {
