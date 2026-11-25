@@ -128,13 +128,34 @@ class InstallerGuiContractTests(unittest.TestCase):
         self.assertIn("--smoke-test", workflow)
         self.assertNotIn("timeout --kill-after", workflow)
 
-    def test_qml_navigation_requires_a_validated_preflight(self) -> None:
+    def test_qml_navigation_uses_observable_controller_state(self) -> None:
         qml = (GUI / "qml" / "Main.qml").read_text(encoding="utf-8")
-        self.assertIn("function canOpenStep(step)", qml)
-        self.assertIn('wsmController.planStatus === "blocked"', qml)
+        header = (GUI / "src" / "PreflightController.h").read_text(encoding="utf-8")
+        controller = (GUI / "src" / "PreflightController.cpp").read_text(encoding="utf-8")
+        policy = (GUI / "src" / "InstallerWorkflowPolicy.cpp").read_text(encoding="utf-8")
+        tests = (GUI / "tests" / "tst_installer_workflow_policy.cpp").read_text(encoding="utf-8")
+        self.assertIn("readonly property var workflowState", qml)
+        self.assertIn("wsmController.canEnterStep(step)", qml)
+        self.assertIn("diskInventoryState", header)
+        self.assertIn("Q_INVOKABLE bool canEnterStep(int step) const", header)
+        self.assertIn("InstallerWorkflowPolicy::canEnterStep", controller)
+        self.assertIn('QStringLiteral("loading")', controller)
+        self.assertIn('QStringLiteral("unavailable")', controller)
+        self.assertIn('QStringLiteral("loaded")', controller)
+        self.assertIn('step == 3 || step == 4', policy)
+        self.assertIn("choicesAndReviewRequireCompletedDiskInventory", tests)
         self.assertIn("enabled: root.canOpenStep(index)", qml)
         self.assertIn("root.canOpenStep(root.currentStep + 1)", qml)
         self.assertIn("Qt.quit()", qml)
+
+    def test_behavioral_policy_is_built_and_executed_in_ci(self) -> None:
+        cmake = (GUI / "CMakeLists.txt").read_text(encoding="utf-8")
+        workflow = (ROOT / ".github" / "workflows" / "installer-gui.yml").read_text(encoding="utf-8")
+        self.assertIn("WSM_BUILD_TESTS", cmake)
+        self.assertIn("Qt6::Test", cmake)
+        self.assertIn("installer-workflow-policy", cmake)
+        self.assertIn("-DWSM_BUILD_TESTS=ON", workflow)
+        self.assertIn("ctest --test-dir build/wsm-installer", workflow)
 
     def test_installer_workflow_respects_ci_queue_policy(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "installer-gui.yml").read_text(encoding="utf-8")
