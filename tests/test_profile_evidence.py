@@ -71,6 +71,8 @@ def validate_fixture(document: dict | None = None) -> list[str]:
         return validate(bundle() if document is None else document, artifact_root=root)
 
 
+
+class ArtifactIdentityTests(unittest.TestCase):
     def test_duplicate_artifact_paths_are_rejected_even_with_different_kinds(self) -> None:
         document = bundle()
         duplicate = copy.deepcopy(document["artifacts"][0])
