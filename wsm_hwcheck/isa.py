@@ -98,7 +98,7 @@ def read_cpuinfo_flags(path: Path) -> tuple[list[str], dict[str, str]]:
     processor_blocks = 0
     missing_processor_flags = False
 
-    for block in text.split("\\n\\n"):
+    for block in text.split("\n\n"):
         if not block.strip():
             continue
 
