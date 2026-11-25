@@ -122,8 +122,7 @@ bool validateDiagnosticPlan(const QJsonObject &plan,
 
     QJsonObject unhashedPlan = plan;
     unhashedPlan.remove(QStringLiteral("plan_sha256"));
-    const QByteArray canonicalPlan =
-        QJsonDocument(unhashedPlan).toJson(QJsonDocument::Compact);
+    const QByteArray canonicalPlan = canonicalJson(unhashedPlan);
     const QByteArray expectedPlanDigest =
         QCryptographicHash::hash(canonicalPlan, QCryptographicHash::Sha256).toHex();
     if (digest.toLatin1() != expectedPlanDigest) {
