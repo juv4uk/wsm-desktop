@@ -224,11 +224,11 @@ class QemuBootSmokeTests(unittest.TestCase):
             ],
             timeout_seconds=5,
             marker=None,
-            stdin_bytes=b"info qtree\\nquit\\n",
+            stdin_bytes=b"info qtree\nquit\n",
         )
         self.assertEqual(result.returncode, 0)
         self.assertFalse(result.timed_out)
-        self.assertEqual(result.stdout_tail, b"info qtree\\nquit\\n")
+        self.assertEqual(result.stdout_tail, b"info qtree\nquit\n")
 
     def test_bounded_process_rejects_oversized_stdin_before_spawn(self) -> None:
         with patch("scripts.qemu_boot_smoke.subprocess.Popen") as popen:
