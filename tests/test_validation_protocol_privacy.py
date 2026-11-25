@@ -16,6 +16,7 @@ class ValidationProtocolPrivacyTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.display = DISPLAY_PROTOCOL.read_text(encoding="utf-8")
         cls.network = NETWORK_PROTOCOL.read_text(encoding="utf-8")
+        cls.pcie = (ROOT / "docs" / "testing" / "PCIE-LINK-HEALTH.md").read_text(encoding="utf-8")
 
     def test_display_protocol_never_exports_the_raw_kernel_command_line(self) -> None:
         self.assertIn("Не зберігати та не експортувати `/proc/cmdline` цілком", self.display)
@@ -43,6 +44,35 @@ class ValidationProtocolPrivacyTests(unittest.TestCase):
         self.assertIn("RHEL-релізи не уражені", audit)
         self.assertIn("не запускається з підвищеними привілеями", audit)
         self.assertIn("Спеціально сформований EDID слід вважати untrusted input", audit)
+
+    def test_pcie_aer_observations_are_marked_as_testing_abi(self) -> None:
+        self.assertIn("testing ABI", self.pcie)
+        self.assertIn("kernel_release", self.pcie)
+        self.assertIn("назву attribute", self.pcie)
+        self.assertIn("unknown/not-collected", self.pcie)
+        self.assertIn("не підміняти його нулем", self.pcie)
+
+    def test_pcie_aer_counters_keep_source_attribution_and_non_verdict_semantics(self) -> None:
+        self.assertIn("побаченими або повідомленими саме тим компонентом", self.pcie)
+        self.assertIn("не приписувати їх автоматично downstream endpoint", self.pcie)
+        self.assertIn("Ненульове значення не є самостійною причиною блокувати інсталяцію", self.pcie)
+        self.assertIn("Нульове значення означає лише те", self.pcie)
+
+    def test_automatic_devlink_preflight_is_status_only(self) -> None:
+        self.assertIn("`devlink health show`", self.pcie)
+        self.assertIn("Не запускати автоматично", self.pcie)
+        for command in (
+            "`devlink health recover`",
+            "`devlink health test`",
+            "`devlink health diagnose`",
+            "`devlink health dump show`",
+            "`devlink health dump clear`",
+            "`devlink health set`",
+        ):
+            with self.subTest(command=command):
+                self.assertIn(command, self.pcie)
+        self.assertIn("явної згоди користувача", self.pcie)
+
 
     def test_network_endpoint_consent_discloses_source_ip_visibility(self) -> None:
         self.assertIn("source/egress-IP visibility", self.network)
