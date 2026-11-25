@@ -2,6 +2,10 @@
 
 #include "../src/InstallerWorkflowPolicy.h"
 
+#include <QCryptographicHash>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QtTest/QtTest>
 
 class InstallerWorkflowPolicyTests final : public QObject
@@ -49,6 +53,31 @@ private slots:
             QVERIFY(!InstallerWorkflowPolicy::canEnterStep(
                 step, true, true, true, QStringLiteral("diagnostic-only"), QStringLiteral("loaded")));
         }
+    }
+
+    void canonicalJsonMatchesPythonSha256GoldenVector()
+    {
+        QJsonObject nested;
+        nested.insert(QStringLiteral("z"), QStringLiteral("останнє"));
+        nested.insert(QStringLiteral("a"), QStringLiteral("перше"));
+
+        QJsonArray values;
+        values.append(1);
+        values.append(1.25);
+        values.append(true);
+        values.append(QJsonValue(QJsonValue::Null));
+
+        QJsonObject sample;
+        sample.insert(QStringLiteral("z"), values);
+        sample.insert(QStringLiteral("nested"), nested);
+        sample.insert(QStringLiteral("title"), QStringLiteral("WSM український звіт"));
+        sample.insert(QString::fromUtf8("α"), QStringLiteral("є"));
+
+        const QByteArray canonical = QJsonDocument(sample).toJson(QJsonDocument::Compact);
+        QCOMPARE(QString::fromUtf8(canonical),
+                 QString::fromUtf8(R"({"nested":{"a":"перше","z":"останнє"},"title":"WSM український звіт","z":[1,1.25,true,null],"α":"є"})"));
+        QCOMPARE(QCryptographicHash::hash(canonical, QCryptographicHash::Sha256).toHex(),
+                 QByteArrayLiteral("b8a199f51ae78700198d7050bbebc0d40dc1199194c051d0196f16179df2b264"));
     }
 
     void invalidStepsAreRejected()
