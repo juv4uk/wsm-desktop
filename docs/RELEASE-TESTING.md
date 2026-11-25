@@ -146,24 +146,26 @@ guix time-machine -C channels.lock.scm -- system vm --no-graphic systems/minimal
 ## Один вердикт: `release-gate`
 
 ```sh
-python3 scripts/release_gate.py --iso build/wsm-desktop.iso --boot
+python3 scripts/release_gate.py --product free --iso build/wsm-desktop.iso --boot
 ```
 
-Запускає всі перевірки й пише `wsm-release-gate/1`:
+Запускає всі перевірки для явно вибраного продукту й пише `wsm-release-gate/1`.\n\nПараметр `--product` обов'язковий: `free`, `compatibility` або `all`. Це не дозволяє приписати Free ISO стан необраного Compatibility продукту. Для першого Free ISO використовуйте `--product free`; для окремої перевірки Compatibility потрібен її власний lock; `all` перевіряє обидва продукти.
 
 | Критерій | Що перевіряє |
 | --- | --- |
 | `docs` | посилання, наявність заголовків, заборонені шаблони |
-| `channels` | lock-файл за політиками `free` і `compatibility` |
+| `channels` | lock лише вибраного продукту; `all` перевіряє обидва |
 | `tests` | усі набори тестів |
 | `profile-evidence` | валідність bundle-ів заліза |
 | `image` | хеш, маніфест, ISO9660, завантаження в BIOS і UEFI |
 
 `overall` буває `pass`, `fail` або **`incomplete`**. Одне `not-run` робить
 вердикт неповним: перевірка, яку не вдалося виконати, не доводить нічого.
-Відсутній optional Compatibility lock має статус `NOT_CONFIGURED`/`not-run`,
-а не `pass` і не помилку структурного парсера; обов'язковий Free lock має бути
-наявним і проходити перевірку.
+У режимі `--product free` Compatibility lock взагалі не оцінюється й жодного
+твердження про Compatibility не робиться. У режимі `--product compatibility`
+відсутній Compatibility lock має статус `NOT_CONFIGURED`/`not-run`. У режимі
+`--product all` його відсутність робить загальний verdict `incomplete`.
+Обов'язковий lock вибраного продукту має бути наявним і проходити перевірку.
 
 Коди завершення придатні для shell та CI:
 
@@ -175,7 +177,7 @@ python3 scripts/release_gate.py --iso build/wsm-desktop.iso --boot
 Не використовуйте `incomplete` як успіх release job. Це не привід припиняти
 розробку, але це заборона позначати артефакт придатним до публікації.
 
-Приклад сьогоднішнього стану без Compatibility lock та ISO:
+Приклад сьогоднішнього стану для `--product all` без Compatibility lock та ISO:
 
 ```
 overall: incomplete
