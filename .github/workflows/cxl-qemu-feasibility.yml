@@ -1,0 +1,32 @@
+name: CXL QEMU model feasibility
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/cxl-qemu-feasibility.yml"
+      - "scripts/ci_cxl_qemu_feasibility.py"
+      - "tests/test_cxl_qemu_feasibility.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cxl-qemu-model:
+    name: Instantiate a synthetic CXL Type 3 device (no guest boot)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install QEMU system emulator
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes qemu-system-x86
+
+      - name: Test bounded QMP framing
+        run: python3 -m unittest discover -s tests -p 'test_cxl_qemu_feasibility.py' -v
+
+      - name: Inspect runner kernel and instantiate CXL Type 3 model
+        run: python3 scripts/ci_cxl_qemu_feasibility.py --timeout 10
