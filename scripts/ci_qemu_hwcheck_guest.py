@@ -85,7 +85,7 @@ from pathlib import Path
 
 report_path = Path("/tmp/hardware-report.json")
 if report_path.stat().st_size > {max_report_bytes}:
-    raise SystemExit("guest report exceeds the 8 MiB report ceiling")
+    raise SystemExit("guest report exceeds the 512 KiB report ceiling")
 raw = report_path.read_bytes()
 encoded = base64.b64encode(gzip.compress(raw, mtime=0)).decode("ascii")
 print("{report_prefix}" + encoded)
