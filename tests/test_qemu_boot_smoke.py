@@ -188,7 +188,7 @@ class QemuBootSmokeTests(unittest.TestCase):
             captured = BoundedProcessResult(
                 returncode=None,
                 timed_out=True,
-                stdout_tail=b"booting\\nWSM-LIVE-READY\\n",
+                stdout_tail=b"booting\nWSM-LIVE-READY\n",
                 stderr_tail=b"bounded warning",
                 stdout_bytes_seen=24,
                 stderr_bytes_seen=15,
@@ -205,7 +205,7 @@ class QemuBootSmokeTests(unittest.TestCase):
             payload = json.loads(stdout.getvalue())
             self.assertTrue(payload["boot_confirmed"])
             self.assertTrue(payload["qemu_timed_out"])
-            self.assertEqual(payload["serial_output_tail"], "booting\\nWSM-LIVE-READY\\n")
+            self.assertEqual(payload["serial_output_tail"], "booting\nWSM-LIVE-READY\n")
             self.assertEqual(payload["qemu_error"], "bounded warning")
             self.assertFalse(payload["serial_truncated"])
             self.assertFalse(payload["stderr_truncated"])
@@ -217,11 +217,11 @@ class QemuBootSmokeTests(unittest.TestCase):
     def test_bounded_capture_detects_marker_before_retained_tail(self) -> None:
         marker = "WSM_MARKER_AT_STREAM_START"
         child = (
-            "import sys\\n"
-            f"sys.stdout.buffer.write({marker.encode()!r} + b'S' * 200000)\\n"
-            "sys.stdout.flush()\\n"
-            "sys.stderr.buffer.write(b'E' * 100000)\\n"
-            "sys.stderr.flush()\\n"
+            "import sys\n"
+            f"sys.stdout.buffer.write({marker.encode()!r} + b'S' * 200000)\n"
+            "sys.stdout.flush()\n"
+            "sys.stderr.buffer.write(b'E' * 100000)\n"
+            "sys.stderr.flush()\n"
         )
         result = run_bounded_process(
             [sys.executable, "-c", child],
@@ -245,10 +245,10 @@ class QemuBootSmokeTests(unittest.TestCase):
     def test_bounded_capture_detects_marker_split_across_reads(self) -> None:
         marker = "SPLIT-MARKER-BOUNDARY"
         child = (
-            "import os, sys, time\\n"
-            "os.write(1, b'prefix-SPLIT-')\\n"
-            "time.sleep(0.05)\\n"
-            "os.write(1, b'MARKER-BOUNDARY-suffix')\\n"
+            "import os, sys, time\n"
+            "os.write(1, b'prefix-SPLIT-')\n"
+            "time.sleep(0.05)\n"
+            "os.write(1, b'MARKER-BOUNDARY-suffix')\n"
         )
         result = run_bounded_process(
             [sys.executable, "-c", child],
@@ -264,11 +264,11 @@ class QemuBootSmokeTests(unittest.TestCase):
 
     def test_bounded_capture_kills_noisy_child_after_timeout(self) -> None:
         child = (
-            "import os, time\\n"
-            "chunk = b'X' * 8192\\n"
-            "while True:\\n"
-            "    os.write(1, chunk)\\n"
-            "    os.write(2, chunk)\\n"
+            "import os, time\n"
+            "chunk = b'X' * 8192\n"
+            "while True:\n"
+            "    os.write(1, chunk)\n"
+            "    os.write(2, chunk)\n"
         )
         result = run_bounded_process(
             [sys.executable, "-c", child],
