@@ -17,8 +17,6 @@ import time
 from pathlib import Path
 from typing import Sequence
 
-from scripts.qemu_boot_smoke import run_bounded_process
-
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -255,6 +253,7 @@ def run_bounded_file(
         if process.stdout is not None and not process.stdout.closed:
             process.stdout.close()
 
+
 def create_busybox_root(guest_root: Path) -> None:
     busybox = shutil.which("busybox")
     if not busybox:
@@ -398,6 +397,7 @@ def create_initramfs(guest_root: Path, destination: Path) -> None:
         timeout_seconds=30,
         max_bytes=MAX_INITRAMFS_BYTES,
     )
+
 
 def build_qemu_command(qemu: str, kernel: Path, initramfs: Path) -> list[str]:
     return [
