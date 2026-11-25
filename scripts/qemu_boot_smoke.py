@@ -40,7 +40,7 @@ MAX_SERIAL_OUTPUT_TAIL_CHARS = 4000
 MAX_BOOT_MARKER_BYTES = 1024
 PROCESS_READ_CHUNK_BYTES = 64 * 1024
 POST_KILL_DRAIN_SECONDS = 0.5
-MAX_PROCESS_INPUT_BYTES = 16 * 1024
+MAX_PROCESS_INPUT_BYTES = 4 * 1024
 
 
 @dataclass(frozen=True)
@@ -78,7 +78,7 @@ def run_bounded_process(
     read_chunk_bytes: int = PROCESS_READ_CHUNK_BYTES,
     stdin_bytes: bytes | None = None,
 ) -> BoundedProcessResult:
-    """Run a child while streaming stdout/stderr into fixed-size tail buffers.
+    """Run a child with bounded stdin and stream stdout/stderr into fixed-size tails.
 
     Marker detection scans the complete serial byte stream, independently of
     the retained tail. A short overlap preserves markers split across reads.
