@@ -124,6 +124,8 @@ def read_cpuinfo_flags(path: Path) -> tuple[list[str], dict[str, str]]:
     # Keep compatibility with small/nonstandard cpuinfo fixtures that expose
     # flags but omit the processor label: each flags block is still a sample.
     sample_count = processor_blocks or len(processor_flag_sets)
+    if not processor_flag_sets:
+        missing_processor_flags = True
     heterogeneous = len({frozenset(flags) for flags in processor_flag_sets}) > 1
 
     if not processor_flag_sets or missing_processor_flags:
