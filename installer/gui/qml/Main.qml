@@ -19,6 +19,25 @@ ApplicationWindow {
     property bool reviewAcknowledged: false
     property string hostname: "wsm-desktop"
     property string username: "wsm"
+
+    function canOpenStep(step) {
+        if (step === 0 || step === 1)
+            return true
+        if (!wsmController.reportReady)
+            return false
+        if (step === 4)
+            return wsmController.planAvailable || wsmController.planStatus === "blocked"
+        return step === 2 || step === 3
+    }
+
+    function enterStep(step) {
+        if (!canOpenStep(step))
+            return
+        reviewAcknowledged = false
+        if (step === 2 && currentStep !== 2)
+            wsmController.refreshDisks()
+        currentStep = step
+    }
     readonly property var stepTitles: [
         qsTr("Вступ"),
         qsTr("Обладнання"),
@@ -109,10 +128,8 @@ ApplicationWindow {
                         horizontalPadding: 10
                         height: 42
                         highlighted: root.currentStep === index
-                        onClicked: {
-                            root.currentStep = index
-                            root.reviewAcknowledged = false
-                        }
+                        enabled: root.canOpenStep(index)
+                        onClicked: root.enterStep(index)
                     }
                 }
 
@@ -567,7 +584,7 @@ ApplicationWindow {
                         Label {
                             visible: root.reviewAcknowledged
                             Layout.fillWidth: true
-                            text: qsTr("Перегляд завершено. Програма закривається без змін на накопичувачах.")
+                            text: qsTr("Перегляд підтверджено. Натисніть «Готово», щоб закрити програму. Зміни на накопичувачах не виконувалися.")
                             color: "#28613b"
                             wrapMode: Text.WordWrap
                         }
@@ -605,10 +622,16 @@ ApplicationWindow {
             Button {
                 text: root.currentStep === 4 ? qsTr("Готово") : qsTr("Далі")
                 highlighted: true
-                enabled: root.currentStep < 4 && !wsmController.busy
+                enabled: !wsmController.busy
+                    && (root.currentStep === 4
+                        ? root.reviewAcknowledged
+                        : root.canOpenStep(root.currentStep + 1))
                 onClicked: {
-                    root.currentStep += 1
-                    root.reviewAcknowledged = false
+                    if (root.currentStep === 4) {
+                        Qt.quit()
+                    } else {
+                        root.enterStep(root.currentStep + 1)
+                    }
                 }
             }
         }
