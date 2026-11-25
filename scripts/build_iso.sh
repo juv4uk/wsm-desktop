@@ -116,9 +116,28 @@ if grep -Eiq 'channel authentication disabled' "$CHANNELS_FILE" "$CHANNELS_LOG";
     exit 7
 fi
 
+RESOLVED_CHANNEL_COMMIT=$(python3 - "$CHANNELS_FILE" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+matches = re.findall(r'\(commit\s+"([0-9a-f]{40})"\)', text)
+if len(matches) != 1:
+    raise SystemExit("expected exactly one resolved Guix channel commit")
+print(matches[0])
+PY
+)
+if [ "$RESOLVED_CHANNEL_COMMIT" != "$CHANNEL_COMMIT" ]; then
+    printf '%s\n' "build-iso: resolved channel commit does not match channels.lock.scm." >&2
+    printf '%s\n' "build-iso: expected=$CHANNEL_COMMIT resolved=$RESOLVED_CHANNEL_COMMIT" >&2
+    exit 8
+fi
+
 printf '%s\n' "build-iso: building with locked Guix channel; see build.log"
 if guix time-machine -C "$LOCK" -L "$ROOT" -- system image \
     --no-grafts \
+    --save-provenance \
     --root="$ISO_ROOT" \
     --image-type=iso9660 \
     --system=x86_64-linux \
@@ -246,6 +265,7 @@ fi
 
 WSM_SOURCE_COMMIT="$SOURCE_COMMIT" \
 WSM_CHANNEL_COMMIT="$CHANNEL_COMMIT" \
+WSM_RESOLVED_CHANNEL_COMMIT="$RESOLVED_CHANNEL_COMMIT" \
 WSM_CHANNEL_TRUST_WARNING="$CHANNEL_TRUST_WARNING" \
 WSM_GUIX_LOCKED_VERSION="$GUIX_LOCKED_VERSION" \
 WSM_PROFILE="$PROFILE" \
@@ -291,10 +311,12 @@ manifest = {
         "filename": iso.name,
         "format": "iso9660",
         "system": "x86_64-linux",
+        "regular_file": iso.is_file() and not iso.is_symlink(),
         "store_path": str(store_path),
         "gc_root": gc_root.name,
         "size_bytes": iso.stat().st_size,
         "sha256": digest(iso),
+        "store_object_sha256": digest(store_path),
     },
     "source": {
         "commit": os.environ["WSM_SOURCE_COMMIT"],
@@ -304,6 +326,7 @@ manifest = {
         "channel_lock": lock.name,
         "channel_lock_sha256": digest(lock),
         "locked_guix_channel_commit": os.environ["WSM_CHANNEL_COMMIT"],
+        "resolved_guix_channel_commit": os.environ["WSM_RESOLVED_CHANNEL_COMMIT"],
         "untrusted_channel_warning_present": os.environ["WSM_CHANNEL_TRUST_WARNING"] == "true",
     },
     "guix": {
@@ -320,7 +343,8 @@ manifest = {
     "build": {
         "command": [
             "guix", "time-machine", "-C", str(lock), "-L", str(lock.parent), "--",
-            "system", "image", "--no-grafts", f"--root={gc_root}", "--image-type=iso9660",
+            "system", "image", "--no-grafts", "--save-provenance",
+            f"--root={gc_root}", "--image-type=iso9660",
             "--system=x86_64-linux", str(profile),
         ],
         "log": build_log.name,
