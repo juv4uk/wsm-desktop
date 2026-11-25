@@ -542,9 +542,9 @@ def main() -> int:
                 else:
                     diagnostic_lines.append(line[:500])
             raise RuntimeError(
-                f"{exc}; guest serial diagnostics (report payload redacted):\\n"
-                + "\\n".join(diagnostic_lines)
-                + f"\\nQEMU stderr tail: {stderr[-1200:]}"
+                f"{exc}; guest serial diagnostics (report payload redacted):\n"
+                + "\n".join(diagnostic_lines)
+                + f"\nQEMU stderr tail: {stderr[-1200:]}"
             ) from exc
         device_count, functional_test_count = _validate_report(report)
         print(
