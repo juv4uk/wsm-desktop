@@ -188,6 +188,24 @@ class ReleaseBundleTests(unittest.TestCase):
             self.assertIn(f"wsm-desktop-{release['version']}/scripts/wsm_hardware_check.py", names)
 
 
+    def test_output_name_must_match_the_published_asset(self) -> None:
+        """A custom --output would put a name in SHA256SUMS nobody can verify."""
+        from scripts.build_release_bundle import build, load_release
+
+        release = load_release()
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(SystemExit) as caught:
+                build(release["version"], Path(directory) / "bundle.tar.gz")
+            self.assertIn("wsm-desktop-", str(caught.exception))
+            self.assertIn("sha256sum -c", str(caught.exception))
+
+            # The canonical name still builds and checksums itself correctly.
+            canonical = Path(directory) / f"wsm-desktop-{release['version']}-source.tar.gz"
+            build(release["version"], canonical)
+            sums = (canonical.parent / "SHA256SUMS").read_text(encoding="utf-8")
+            self.assertIn(f"  {canonical.name}", sums)
+
+
 def gzip_open(path: Path):  # pragma: no cover - tiny helper for readable test
     import gzip
 
