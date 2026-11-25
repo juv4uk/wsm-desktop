@@ -29,8 +29,10 @@ command -v busybox >/dev/null || fail "static BusyBox is missing"
 command -v cpio >/dev/null || fail "cpio is missing"
 command -v timeout >/dev/null || fail "timeout is missing"
 
-KERNEL="/boot/vmlinuz-$(uname -r)"
-[[ -r "$KERNEL" ]] || fail "runner kernel image not found at $KERNEL"
+mapfile -t KERNEL_IMAGES < <(find /boot -maxdepth 1 -type f -name "vmlinuz-*" -print | sort -V)
+((${#KERNEL_IMAGES[@]} > 0)) || fail "no bootable Linux kernel image found under /boot"
+KERNEL="${KERNEL_IMAGES[-1]}"
+printf "QEMU guest smoke: selected guest kernel %s\\n" "$(basename "$KERNEL")"
 
 mkdir -p "$ROOTFS/bin" "$ROOTFS/dev" "$ROOTFS/proc" "$ROOTFS/sys"
 cp "$(command -v busybox)" "$ROOTFS/bin/busybox"
