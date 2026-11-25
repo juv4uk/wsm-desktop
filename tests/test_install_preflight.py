@@ -28,17 +28,26 @@ def load_fixture(name: str) -> tuple[dict, bytes]:
     return json.loads(raw), raw
 
 
-def make_profile_evidence(report: dict, root: Path) -> dict:
-    """Create a synthetic bundle for CLI integration tests; never real hardware evidence."""
+def make_profile_evidence(report: dict, root: Path, report_bytes: bytes) -> dict:
+    """Create a synthetic evidence bundle bound to exact profile/report bytes."""
+    profile_path = root / "profile.scm"
+    if not profile_path.is_file() or profile_path.is_symlink():
+        raise AssertionError("test fixture must create profile.scm before evidence")
+    profile_bytes = profile_path.read_bytes()
     payload = b"synthetic installer test evidence\n"
-    artifact = root / "artifacts" / "dmesg.txt"
-    artifact.parent.mkdir(parents=True, exist_ok=True)
-    artifact.write_bytes(payload)
+    artifact_dir = root / "artifacts"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    (artifact_dir / "dmesg.txt").write_bytes(payload)
+    (artifact_dir / "wsm-hwcheck-report.json").write_bytes(report_bytes)
     return {
         "schema": "wsm-profile-evidence/2",
         "profile": {"vendor": "TEST", "model": "FIXTURE", "slug": "test/fixture"},
         "report_id": report["report_id"],
         "report_schema_version": report["schema_version"],
+        "profile_source": {
+            "path": "profile.scm",
+            "sha256": hashlib.sha256(profile_bytes).hexdigest(),
+        },
         "isa_level": "x86-64-v2",
         "verified_on": "2026-11-26",
         "verified_by": "local agent",
@@ -49,13 +58,19 @@ def make_profile_evidence(report: dict, root: Path) -> dict:
         }],
         "known_limitations": [],
         "not_assessed": ["physical-device-functionality"],
-        "artifacts": [{
-            "kind": "test-log",
-            "path": "artifacts/dmesg.txt",
-            "sha256": hashlib.sha256(payload).hexdigest(),
-        }],
+        "artifacts": [
+            {
+                "kind": "test-log",
+                "path": "artifacts/dmesg.txt",
+                "sha256": hashlib.sha256(payload).hexdigest(),
+            },
+            {
+                "kind": "wsm-hwcheck-report",
+                "path": "artifacts/wsm-hwcheck-report.json",
+                "sha256": hashlib.sha256(report_bytes).hexdigest(),
+            },
+        ],
     }
-
 
 class InstallerPlanTests(unittest.TestCase):
     def test_observed_report_emits_deterministic_guix_plan(self) -> None:
@@ -142,7 +157,7 @@ class InstallerPlanTests(unittest.TestCase):
             profile_bytes = b";; synthetic test profile\\n"
             profile_path = profile_dir / "profile.scm"
             profile_path.write_bytes(profile_bytes)
-            evidence = make_profile_evidence(report, profile_dir)
+            evidence = make_profile_evidence(report, profile_dir, report_path.read_bytes())
             evidence_path = profile_dir / "evidence.json"
             evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
             artifact_path = profile_dir / "artifacts" / "dmesg.txt"
@@ -248,7 +263,7 @@ class InstallerPlanTests(unittest.TestCase):
             profile_dir = root / "test" / "fixture"
             profile_dir.mkdir(parents=True)
             (profile_dir / "profile.scm").write_text(";; synthetic test fixture\n", encoding="utf-8")
-            evidence = make_profile_evidence(report, profile_dir)
+            evidence = make_profile_evidence(report, profile_dir, report_path.read_bytes())
             evidence_path = profile_dir / "evidence.json"
             evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
             plan_path = root / "plan.json"
@@ -273,7 +288,7 @@ class InstallerPlanTests(unittest.TestCase):
             profile_dir = root / "test" / "fixture"
             profile_dir.mkdir(parents=True)
             (profile_dir / "profile.scm").write_text(";; synthetic test fixture\\n", encoding="utf-8")
-            evidence = make_profile_evidence(report, profile_dir)
+            evidence = make_profile_evidence(report, profile_dir, report_path.read_bytes())
             evidence["report_id"] = "different-report"
             evidence_path = profile_dir / "evidence.json"
             evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
