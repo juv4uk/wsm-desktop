@@ -22,7 +22,7 @@ if ! command -v guix >/dev/null 2>&1; then
     printf '%s\n' "build-iso: guix not found in PATH." >&2
     exit 127
 fi
-for tool in git python3 readlink grep; do
+for tool in git python3 readlink grep cp mktemp; do
     if ! command -v "$tool" >/dev/null 2>&1; then
         printf '%s\n' "build-iso: required tool not found: $tool" >&2
         exit 127
