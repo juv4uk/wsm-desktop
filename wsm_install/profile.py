@@ -87,6 +87,8 @@ def _file_sha256_problem(
     try:
         if not resolved.is_file():
             return [f"{label}/path is not a regular file"]
+        if resolved.stat().st_size == 0:
+            return [f"{label}/path must not be an empty file"]
         digest = hashlib.sha256()
         with resolved.open("rb") as stream:
             for chunk in iter(lambda: stream.read(1024 * 1024), b""):
@@ -104,9 +106,12 @@ def _artifact_problems(
     artifact_root: Path | None,
     index: int,
 ) -> list[str]:
-    """Verify one manifest artifact against its actual file bytes."""
+    """Verify one manifest artifact is stored under artifacts/ and matches its bytes."""
+    raw_path = artifact["path"]
+    if not raw_path.startswith("artifacts/"):
+        return [f"artifacts/{index}/path must be stored under the profile's artifacts/ directory"]
     return _file_sha256_problem(
-        artifact["path"],
+        raw_path,
         artifact["sha256"],
         artifact_root,
         f"artifacts/{index}",
@@ -160,14 +165,16 @@ def problems(
             continue
         artifact_by_path[path] = artifact
 
-    source_report_sha256 = next(
-        (
-            artifact["sha256"]
-            for artifact in document["artifacts"]
-            if artifact["kind"] == "wsm-hwcheck-report"
-        ),
-        None,
-    )
+    source_reports = [
+        artifact
+        for artifact in document["artifacts"]
+        if artifact["kind"] == "wsm-hwcheck-report"
+    ]
+    if len(source_reports) != 1:
+        found.append(
+            "evidence must contain exactly one wsm-hwcheck-report artifact"
+        )
+    source_report_sha256 = source_reports[0]["sha256"] if len(source_reports) == 1 else None
     for item in functions:
         status = item["status"]
         if status in {"pass", "fail"}:
