@@ -29,6 +29,9 @@ from pathlib import Path
 import jsonschema
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 SCHEMA_PATH = ROOT / "schemas" / "profile-evidence.schema.json"
 PROFILES_DIR = ROOT / "profiles" / "hardware"
 
@@ -44,36 +47,14 @@ def load_schema() -> dict:
 
 
 def validate(document: dict, schema: dict | None = None) -> list[str]:
-    """Return a list of problems. An empty list means the bundle is acceptable."""
-    schema = schema or load_schema()
-    problems: list[str] = []
+    """Return a list of problems. An empty list means the bundle is acceptable.
 
-    try:
-        jsonschema.validate(document, schema)
-    except jsonschema.ValidationError as exc:
-        location = "/".join(str(part) for part in exc.absolute_path) or "<root>"
-        problems.append(f"schema: {location}: {exc.message}")
-        return problems
+    The rules live in wsm_install/profile.py so the installer and this checker
+    cannot disagree about what counts as evidence.
+    """
+    from wsm_install.profile import problems as profile_problems
 
-    functions = document["verified_functions"]
-    if not any(item["status"] == "pass" for item in functions):
-        problems.append(
-            "no function passed: a bundle with only not-assessed entries is a "
-            "hypothesis, not evidence"
-        )
-
-    failed = [item["name"] for item in functions if item["status"] == "fail"]
-    limitations = " ".join(document["known_limitations"]).lower()
-    for name in failed:
-        if name.lower() not in limitations:
-            problems.append(
-                f"function {name!r} failed but is not listed in known_limitations"
-            )
-
-    if EMAIL.search(document["verified_by"]):
-        problems.append("verified_by must not contain an e-mail address")
-
-    return problems
+    return profile_problems(document, schema)
 
 
 def validate_directory(path: Path) -> list[str]:
