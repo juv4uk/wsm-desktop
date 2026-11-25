@@ -9,7 +9,7 @@
 
 ## Try it now
 
-The working component available today is the hardware collector. It reads sysfs and procfs only. It does not modify block devices, partition tables, filesystems, or system state. By default, the report goes to stdout; `--output PATH` writes only the JSON report to the explicitly selected file.
+The working component available today is the hardware collector. It reads sysfs and procfs, and the default mode supplements inventory with local module indexes from `/lib/modules/<kernel>` and bounded current-boot kernel-log queries through `journalctl` or `dmesg`. These are read-only sources: no shell, network access, module loading, block-device writes, partition-table changes, filesystem changes, or other system-state changes. By default, the report goes to stdout; `--output PATH` writes only the JSON report to the explicitly selected file.
 
 ```console
 $ git clone https://github.com/juv4uk/wsm-desktop.git
