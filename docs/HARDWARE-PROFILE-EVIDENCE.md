@@ -27,6 +27,9 @@
 | `known_limitations` | усе, що не працює |
 | `not_assessed` | **непорожній** — жодна машина не перевірена повністю |
 | `artifacts` | непорожній перелік файлів із `kind`, відносним `path` та SHA-256 реальних байтів |
+Кожен `artifacts[].path` мусить починатися з `artifacts/`, бути безпечним POSIX-relative шляхом до звичайного **непорожнього** файла всередині теки профілю; SHA-256 перевіряється за фактичними байтами.
+
+Bundle мусить містити **рівно один** `wsm-hwcheck-report` artifact. Він є provenance джерельного звіту, а не функціональним тестом. Решта функціональних артефактів мають тип `functional-test-log` і зберігаються під `artifacts/`.
 
 ## Правила, які перевіряються
 
@@ -39,7 +42,7 @@ JSON Schema перевіряє форму. Скрипт перевіряє те,
 
 ## Функціональні артефакти — окремо від hwcheck provenance
 
-Кожен елемент `verified_functions` зі статусом `pass` або `fail` мусить містити `evidence` — список шляхів до артефактів у `artifacts`. Кожен шлях має точно збігатися з `artifacts[].path`. Порожній список, невідомий шлях або посилання лише на артефакт типу `wsm-hwcheck-report` відхиляються.
+Кожен елемент `verified_functions` зі статусом `pass` або `fail` мусить містити `evidence` — список шляхів до артефактів у `artifacts`. Кожен шлях має точно збігатися з унікальним `artifacts[].path`, а кожен файл мусить бути непорожнім і лежати під `artifacts/`. Порожній список, невідомий шлях або посилання лише на артефакт типу `wsm-hwcheck-report` відхиляються.
 
 Це навмисне розділення двох типів доказу:
 
@@ -101,7 +104,7 @@ wsm-install --preflight --report report.json --backend guix --dry-run \
   --profile-evidence profiles/hardware/vendor/model/evidence.json
 ```
 
-Повний scanner `--dir` вимагає пару `profile.scm` і `evidence.json` у кожній теці `<vendor>/<model>`; orphan evidence та профіль без bundle відхиляються. Ця перевірка входить у `make check`.
+Повний scanner `--dir` вимагає пару `profile.scm` і `evidence.json` у кожній **оголошеній** теці профілю `<vendor>/<model>`; якщо присутній будь-який із цих двох маркерів, другий обов'язковий. README-only research/reference каталоги (наприклад, Windows/WSL owner snapshot без `profile.scm` та `evidence.json`) ігноруються й не стають hardware profiles. Orphan evidence та profile source без bundle відхиляються. Ця перевірка входить у `make check`.
 
 ## Як інсталятор знаходить профіль
 
