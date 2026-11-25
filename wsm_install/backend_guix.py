@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import unicodedata
 from dataclasses import dataclass
 from typing import Any
 
@@ -30,7 +31,7 @@ ADAPTER_VERSION = "0.1.0"
 
 # Allow-lists. Anything that does not match is refused, not escaped and hoped
 # for: a wrong hostname is a cheap failure, an injected form is not.
-DEVICE_PATTERN = re.compile(r"^/dev/[a-zA-Z0-9._-]+$")
+DEVICE_PATTERN = re.compile(r"/dev/[a-zA-Z0-9][a-zA-Z0-9._-]*")
 HOSTNAME_PATTERN = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")
 ACCOUNT_PATTERN = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
 LABEL_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,16}$")
@@ -43,6 +44,8 @@ KEYBOARD_PATTERN = re.compile(r"^[a-z]{2}(-[a-z0-9]+)?$")
 # reachable from this module.
 GUIX_PROGRAM = "guix"
 GUIX_SUBCOMMAND = ("system", "init")
+GUIX_CONFIGURATION_PATH = "/run/wsm/system.scm"
+GUIX_TARGET_MOUNTPOINT = "/mnt"
 
 
 class HandoffError(Exception):
@@ -71,20 +74,20 @@ class TargetSelection:
 
     def digest(self) -> str:
         """Stable digest of the selection, used to detect post-confirmation edits."""
-        material = "|".join(
-            [
-                self.disk,
-                self.hostname,
-                self.timezone,
-                self.locale,
-                self.keyboard_layout,
-                self.username,
-                self.full_name,
-                self.root_label,
-                self.efi_label,
-                self.boot_mode,
-            ]
-        )
+        # Hash a canonical JSON array, not a delimiter-joined string: user
+        # text such as a full name may itself contain the delimiter.
+        material = canonical_json([
+            self.disk,
+            self.hostname,
+            self.timezone,
+            self.locale,
+            self.keyboard_layout,
+            self.username,
+            self.full_name,
+            self.root_label,
+            self.efi_label,
+            self.boot_mode,
+        ])
         return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
@@ -176,26 +179,26 @@ def validate_plan(plan: dict[str, Any]) -> None:
     )
 
 
-def validate_selection(selection: TargetSelection) -> None:
+def _matches(pattern: re.Pattern[str], value: object) -> bool:,    """Use full-string matching; `re.match` plus `$` accepts a final newline.""",    return isinstance(value, str) and pattern.fullmatch(value) is not None,,def validate_selection(selection: TargetSelection) -> None:
     """Refuse any selection value that is not in its allow-list."""
     _require(
-        bool(DEVICE_PATTERN.match(selection.disk)),
+        _matches(DEVICE_PATTERN, selection.disk),
         "selection.disk",
         f"target disk {selection.disk!r} is not a plain /dev path",
     )
     _require(
-        bool(HOSTNAME_PATTERN.match(selection.hostname)),
+        _matches(HOSTNAME_PATTERN, selection.hostname),
         "selection.hostname",
         f"hostname {selection.hostname!r} is not a valid hostname",
     )
     _require(
-        bool(ACCOUNT_PATTERN.match(selection.username)),
+        _matches(ACCOUNT_PATTERN, selection.username),
         "selection.username",
         f"username {selection.username!r} is not a valid account name",
     )
     _require(
-        bool(LABEL_PATTERN.match(selection.root_label))
-        and bool(LABEL_PATTERN.match(selection.efi_label)),
+        _matches(LABEL_PATTERN, selection.root_label)
+        and _matches(LABEL_PATTERN, selection.efi_label),
         "selection.label",
         "filesystem labels must be 1-16 characters of letters, digits, dot, dash or underscore",
     )
@@ -205,17 +208,17 @@ def validate_selection(selection: TargetSelection) -> None:
         "root and EFI filesystem labels must differ",
     )
     _require(
-        bool(LOCALE_PATTERN.match(selection.locale)),
+        _matches(LOCALE_PATTERN, selection.locale),
         "selection.locale",
         f"locale {selection.locale!r} is not a valid locale name",
     )
     _require(
-        bool(TIMEZONE_PATTERN.match(selection.timezone)),
+        _matches(TIMEZONE_PATTERN, selection.timezone),
         "selection.timezone",
         f"timezone {selection.timezone!r} is not a valid timezone name",
     )
     _require(
-        bool(KEYBOARD_PATTERN.match(selection.keyboard_layout)),
+        _matches(KEYBOARD_PATTERN, selection.keyboard_layout),
         "selection.keyboard_layout",
         f"keyboard layout {selection.keyboard_layout!r} is not a valid layout name",
     )
@@ -225,9 +228,14 @@ def validate_selection(selection: TargetSelection) -> None:
         f"boot mode {selection.boot_mode!r} must be 'efi' or 'bios'",
     )
     _require(
-        "\n" not in selection.full_name and len(selection.full_name) <= 80,
+        isinstance(selection.full_name, str)
+        and len(selection.full_name) <= 80
+        and not any(
+            unicodedata.category(character) in {"Cc", "Cf", "Zl", "Zp"}
+            for character in selection.full_name
+        ),
         "selection.full_name",
-        "full name must be a single line of at most 80 characters",
+        "full name must be a single line of at most 80 characters without control or format characters",
     )
 
 
@@ -315,14 +323,14 @@ def build_argv(configuration_path: str, target_mountpoint: str) -> tuple[str, ..
     produce. The caller runs it, and only after revalidating the target.
     """
     _require(
-        configuration_path.startswith("/") and "\n" not in configuration_path,
+        configuration_path == GUIX_CONFIGURATION_PATH,
         "argv.config_path",
-        "configuration path must be an absolute path on one line",
+        f"configuration path must be the installer-owned path {GUIX_CONFIGURATION_PATH!r}",
     )
     _require(
-        target_mountpoint.startswith("/") and "\n" not in target_mountpoint,
+        target_mountpoint == GUIX_TARGET_MOUNTPOINT,
         "argv.mountpoint",
-        "target mountpoint must be an absolute path on one line",
+        f"target mountpoint must be the installer-owned mount root {GUIX_TARGET_MOUNTPOINT!r}",
     )
     return (GUIX_PROGRAM, *GUIX_SUBCOMMAND, configuration_path, target_mountpoint)
 
