@@ -23,6 +23,8 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from .plan import canonical_json
+
 BACKEND_ID = "guix-system"
 ADAPTER_VERSION = "0.1.0"
 
@@ -157,6 +159,14 @@ def validate_plan(plan: dict[str, Any]) -> None:
         bool(plan.get("plan_sha256")),
         "plan.hash",
         "plan carries no plan_sha256; it cannot be confirmed",
+    )
+    expected_plan_sha256 = hashlib.sha256(
+        canonical_json({key: value for key, value in plan.items() if key != "plan_sha256"}).encode("utf-8")
+    ).hexdigest()
+    _require(
+        plan["plan_sha256"] == expected_plan_sha256,
+        "plan.digest_mismatch",
+        "plan contents do not match plan_sha256; refusing stale or modified plan data",
     )
     source = plan.get("source_report") or {}
     _require(
