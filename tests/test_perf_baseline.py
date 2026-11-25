@@ -131,7 +131,13 @@ class MeasurementTests(unittest.TestCase):
             measure("vm", 5)
 
     def test_artifact_records_what_makes_it_comparable(self) -> None:
-        artifact = measure("qemu", 5)
+        # Unit tests validate artifact construction, not the real benchmark load.
+        synthetic = {
+            name: (lambda value=float(index + 1): value)
+            for index, name in enumerate(WORKLOADS)
+        }
+        with patch.dict(perf.WORKLOADS, synthetic):
+            artifact = measure("qemu", 5)
         self.assertEqual(artifact["schema"], "wsm-perf-baseline/1")
         self.assertEqual(artifact["mode"], "qemu")
         for field in ("kernel_release", "isa_level", "memory", "governor", "storage_class"):
@@ -140,14 +146,37 @@ class MeasurementTests(unittest.TestCase):
         self.assertIn("not comparable", artifact["comparable_with"])
 
     def test_every_workload_produces_a_result(self) -> None:
-        artifact = measure("physical", 5)
-        self.assertEqual(set(artifact["workloads"]), set(WORKLOADS))
+        names = set(WORKLOADS)
+        synthetic = {
+            name: (lambda value=float(index + 1): value)
+            for index, name in enumerate(sorted(names))
+        }
+        with patch.dict(perf.WORKLOADS, synthetic):
+            artifact = measure("physical", 5)
+        self.assertEqual(set(artifact["workloads"]), names)
         for name, result in artifact["workloads"].items():
             with self.subTest(workload=name):
                 self.assertGreater(result["median"], 0.0)
 
     def test_environment_does_not_guess_the_storage_class(self) -> None:
         self.assertEqual(environment("physical")["storage_class"], "unknown")
+
+    def test_measure_runs_one_warmup_plus_each_requested_sample(self) -> None:
+        calls = {name: 0 for name in WORKLOADS}
+
+        def tracked(name: str, value: float):
+            def run() -> float:
+                calls[name] += 1
+                return value
+            return run
+
+        synthetic = {
+            name: tracked(name, float(index + 1))
+            for index, name in enumerate(WORKLOADS)
+        }
+        with patch.dict(perf.WORKLOADS, synthetic):
+            measure("qemu", 5)
+        self.assertEqual(calls, {name: 6 for name in calls})
 
 
 if __name__ == "__main__":
