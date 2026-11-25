@@ -45,7 +45,10 @@ class ValidationProtocolPrivacyTests(unittest.TestCase):
         self.assertIn("CVE-2026-112271", audit)
         self.assertIn("CVE-2026-112272", audit)
         self.assertIn("through 0.4.0", audit)
-        self.assertIn("RHEL-релізи не уражені", audit)
+        self.assertIn("Amazon Linux 2023 та 2027 Preview як **Pending Fix**", audit)
+        self.assertIn("ці самі Amazon Linux package targets як **Not Affected**", audit)
+        self.assertIn("RHEL releases не уражені", audit)
+        self.assertIn("SUSE так само оцінює перелічені SLE products як **Not affected**", audit)
         self.assertIn("не запускається з підвищеними привілеями", audit)
         self.assertIn("Crafted EDID слід вважати untrusted input", audit)
 
