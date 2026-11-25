@@ -3,9 +3,9 @@
 PYTHON ?= python3
 GUIX ?= guix
 
-.PHONY: check check-docs check-hardware-schema check-hwcheck check-system vm-system
+.PHONY: check check-docs check-hardware-schema check-hwcheck check-installer check-system vm-system
 
-check: check-docs check-hardware-schema check-hwcheck
+check: check-docs check-hardware-schema check-hwcheck check-installer
 
 check-docs:
 	$(PYTHON) scripts/check_docs.py
@@ -21,3 +21,6 @@ check-hardware-schema:
 
 check-hwcheck:
 	$(PYTHON) tests/test_hwcheck.py
+
+check-installer:
+	$(PYTHON) tests/test_install_preflight.py
