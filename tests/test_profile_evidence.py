@@ -22,7 +22,7 @@ ARTIFACT_BYTES = b"synthetic dmesg evidence\n"
 ARTIFACT_SHA256 = hashlib.sha256(ARTIFACT_BYTES).hexdigest()
 
 BASE = {
-    "schema": "wsm-profile-evidence/1",
+    "schema": "wsm-profile-evidence/2",
     "profile": {"vendor": "ASUS", "model": "H170-PRO", "slug": "asus/h170-pro"},
     "report_id": "0f3c9a1e-2b44-4c8d-9f10-77a1b2c3d4e5",
     "report_schema_version": "1.0.0",
@@ -208,11 +208,30 @@ class DirectoryTests(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertIn("no hardware profile directories yet", stdout.getvalue())
 
+    def test_evidence_without_profile_configuration_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            model = root / "gigabyte" / "h170-gaming-3"
+            prepare_artifact_root(model)
+            evidence = bundle(profile={
+                "vendor": "GIGABYTE",
+                "model": "H170 Gaming 3",
+                "slug": "gigabyte/h170-gaming-3",
+            })
+            (model / "evidence.json").write_text(json.dumps(evidence), encoding="utf-8")
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                result = main(["--dir", str(root)])
+        self.assertEqual(result, 1)
+        self.assertIn("missing mandatory profile.scm", stderr.getvalue())
+
+
     def test_directory_slug_must_match_vendor_and_model(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             model = root / "gigabyte" / "h170-gaming-3"
             prepare_artifact_root(model)
+            (model / "profile.scm").write_text(";; synthetic fixture\n", encoding="utf-8")
             evidence = model / "evidence.json"
             document = bundle(
                 profile={
@@ -230,6 +249,7 @@ class DirectoryTests(unittest.TestCase):
             root = Path(temporary)
             model = root / "gigabyte" / "h170-gaming-3"
             prepare_artifact_root(model)
+            (model / "profile.scm").write_text(";; synthetic fixture\n", encoding="utf-8")
             evidence = model / "evidence.json"
             document = bundle(
                 profile={
