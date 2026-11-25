@@ -168,7 +168,7 @@ class SourceResolutionTests(unittest.TestCase):
         self.assertIn("current-filename", text)
 
     def test_package_source_selector_imports_its_srfi_procedures(self) -> None:
-        """The local-file select? closure uses any and string-contains."""
+        """The local-file select? callback uses any and string-contains."""
         text = (ROOT / "wsm" / "packages" / "wsm.scm").read_text(encoding="utf-8")
         self.assertIn("#:use-module (srfi srfi-1)", text)
         self.assertIn("#:use-module (srfi srfi-13)", text)
@@ -191,6 +191,55 @@ class LiveProfileTests(unittest.TestCase):
     def test_live_profile_installs_the_wsm_tools(self) -> None:
         self.assertIn("wsm-tools", profile("live.scm"))
         self.assertIn("wsm-tools", (ROOT / "wsm" / "packages" / "wsm.scm").read_text(encoding="utf-8"))
+
+
+class PerformanceServicesTests(unittest.TestCase):
+    def test_desktop_profile_pulls_the_performance_services(self) -> None:
+        self.assertIn("%wsm-performance-services", profile("desktop.scm"))
+        self.assertIn("(wsm systems performance)", profile("desktop.scm"))
+
+    def test_performance_module_lives_at_its_module_path(self) -> None:
+        """(wsm systems performance) must be wsm/systems/performance.scm."""
+        self.assertTrue((ROOT / "wsm" / "systems" / "performance.scm").is_file())
+
+    def test_zram_uses_zstd_and_no_deprecated_priority(self) -> None:
+        text = (ROOT / "wsm" / "systems" / "performance.scm").read_text(encoding="utf-8")
+        self.assertIn("(compression-algorithm 'zstd)", text)
+        # -1 is deprecated upstream; leaving the field out keeps the default.
+        self.assertNotIn("(priority -1)", text)
+
+    def test_no_security_mitigations_are_disabled(self) -> None:
+        """Speed is never bought by switching mitigations off."""
+        for name in ("desktop.scm", "live.scm", "compatibility.scm"):
+            with self.subTest(profile=name):
+                self.assertNotIn("mitigations=off", profile(name))
+
+
+class CompatibilityProfileTests(unittest.TestCase):
+    def test_compatibility_profile_uses_the_nonguix_transformation(self) -> None:
+        text = profile("compatibility.scm")
+        self.assertIn("nonguix-transformation-nvidia", text)
+        self.assertIn("#:driver nvda-580", text)
+        # Without this the Xorg session never learns about the nvidia module.
+        self.assertIn("#:configure-xorg? sddm-service-type", text)
+
+    def test_compatibility_profile_blacklists_nouveau(self) -> None:
+        self.assertIn("modprobe.blacklist=nouveau", profile("compatibility.scm"))
+
+    def test_free_profiles_do_not_import_nonguix(self) -> None:
+        """A single Nonguix import in desktop.scm would poison the Free profile."""
+        for name in ("desktop.scm", "live.scm"):
+            code = "\n".join(
+                line for line in profile(name).splitlines()
+                if not line.strip().startswith(";")
+            )
+            with self.subTest(profile=name):
+                self.assertNotIn("nonguix", code.lower())
+                self.assertNotIn("nongnu", code.lower())
+
+    def test_compatibility_profile_is_not_reachable_from_the_live_image(self) -> None:
+        """The live image stays Free; Compatibility is a deliberate separate build."""
+        self.assertNotIn("compatibility.scm", profile("live.scm"))
 
 
 class IsoScriptTests(unittest.TestCase):
