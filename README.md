@@ -2,7 +2,7 @@
 
 > Hardware-oriented desktop Linux project exploring Nix and GNU Guix as declarative system foundations.
 
-**WSM Desktop** is an independent, hardware-oriented project to build a comfortable, reproducible desktop Linux system with a graphical installer. Its central purpose is to select and integrate proven upstream kernels, drivers, firmware and hardware tools for concrete hardware configurations, while making compatibility evidence understandable before installation. Its architecture is evaluating Nix and GNU Guix as separate native system backends; no decision has been made to merge their package stores or system managers.
+**WSM Desktop** is an independent, hardware-oriented project to build a comfortable, reproducible desktop Linux system with a graphical installer. Its central purpose is to select and integrate proven upstream kernels, drivers, firmware and hardware tools for concrete hardware configurations, while making compatibility evidence understandable before installation. GNU Guix System is the selected system backend for the first release; Nix/NixOS is deferred, not rejected. The project does not merge their package stores or system managers.
 
 The project is in **pre-alpha**. There is no supported installation image yet. The repository currently defines the project architecture and development foundations; it must not be used to install or modify a real system.
 
@@ -11,7 +11,7 @@ The project is in **pre-alpha**. There is no supported installation image yet. T
 - [x] Project identity and scope
 - [x] Initial architecture and licensing policy
 - [ ] Comparative Nix and Guix backend evaluation
-- [ ] Select and validate the first WSM system backend
+- [x] Select the first WSM system backend (GNU Guix; Nix deferred, see ADR 0004)
 - [ ] Calamares packaging and live-environment feasibility check
 - [ ] Backend-specific deployment adapter prototype
 - [ ] End-to-end installation in QEMU
@@ -24,8 +24,8 @@ See [the roadmap](docs/ROADMAP.md) for milestones and acceptance criteria. The i
 
 | Component | Responsibility |
 | --- | --- |
-| Nix / NixOS | Candidate native backend for declarative system configuration, package builds, and activation |
-| GNU Guix System | Candidate native backend for declarative operating-system configuration and package management |
+| GNU Guix System | Selected backend for the first release: declarative operating-system configuration and package management |
+| Nix / NixOS | Deferred backend; research only, not part of the first preview image |
 | Installer frontend | Under evaluation; Calamares is one candidate, not a selected dependency |
 | WSM backend adapter | Project-owned integration between Calamares and one selected system backend |
 | Nonguix (optional) | Separately selected nonfree firmware, drivers, or other packages when required |
@@ -112,7 +112,7 @@ Start with [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). The initial workflow is t
 
 ## Current architecture status
 
-The initial Guix configuration remains a useful prototype. A Nix-based experiment is also underway. Issue [#2](https://github.com/juv4uk/wsm-desktop/issues/2) tracks the comparison. Each installed system must have one authoritative backend; the project does not combine Nix and Guix stores or activation systems.
+The backend decision is closed. [ADR 0004](docs/decisions/0004-nix-guix-backend-strategy.md) was ratified on 2026-11-26: GNU Guix System is the first and only supported backend, consistent with the already accepted [ADR 0001](docs/decisions/0001-guix-as-system-foundation.md). The Nix experiment is kept as research and is off the critical path. Issue [#2](https://github.com/juv4uk/wsm-desktop/issues/2) now tracks the Guix deployment path only. Each installed system must have one authoritative backend; the project does not combine Nix and Guix stores or activation systems.
 
 ## Licensing and project identity
 
