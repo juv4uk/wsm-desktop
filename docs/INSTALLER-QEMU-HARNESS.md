@@ -1,40 +1,57 @@
-# Disposable QEMU installer harness
+# Disposable QEMU installer harness — first increment
 
 <!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 
-- Status: **QEMU harness and synthetic-ISO CI integration available; Guix/WSM guest acceptance pending**
-- Related: #1 (Guix VM milestone), #13 (read-only CLI), #14 (QEMU integration), #23 (session freshness), #27 (harness)
-- Harness: `scripts/qemu_boot_smoke.py`
-- Synthetic-ISO integration: `.github/workflows/qemu-harness-iso-integration.yml`
-- Generic Linux guest smoke: `scripts/ci_qemu_guest_smoke.sh`
+- Status: **harness groundwork; guest integration pending**
+- Related: #1 (Guix VM milestone), #13 (read-only CLI), #14 (QEMU integration), #23 (session freshness)
+- Script: `scripts/qemu_boot_smoke.py`
 
-## What is implemented
+## What this increment proves
 
-The project harness accepts a user-supplied regular ISO, validates bounded disk/RAM/CPU/time parameters, creates a new qcow2 in a temporary directory, runs QEMU with TCG and no network, captures serial output, and optionally requires an exact caller-supplied boot marker. QEMU block-device arguments use structured JSON nodes; the harness does not attach host block devices or pass through USB/GPU devices or EFI variables.
+The script provides a guarded QEMU boot-smoke runner for a user-supplied live ISO. It creates a new qcow2 disk inside a temporary directory, boots with software emulation, disables networking, captures serial output, and optionally confirms a caller-supplied boot marker.
 
-The dedicated synthetic-ISO CI workflow builds a tiny disposable GRUB/BusyBox guest, passes it through the actual project harness, and requires the guest-only marker `WSM_QEMU_HARNESS_ISO_BOOT_OK`. A separate `qemu-guest-smoke` job in `.github/workflows/checks.yml` directly boots the GitHub runner kernel with a minimal BusyBox initramfs and checks `WSM_QEMU_GUEST_INIT_OK`. These tests cover different layers: direct guest-kernel execution and the project's ISO/QEMU harness.
+This is intentionally not described as an end-to-end installer test. It does **not** yet run `wsm-install` inside the guest. That step requires a reproducible guest/live image containing the CLI and an agreed guest-side invocation channel. The Guix VM artifact and boot status are being coordinated through #1.
 
-## What a pass means — and does not mean
+## Safety model
 
-The direct guest smoke proves that a generic Linux kernel and init process can execute under QEMU TCG. The synthetic-ISO integration proves that the project harness can create its disposable disk, launch QEMU, capture serial output, and observe a marker from a controlled guest.
+- The only writable virtual disk is a newly created qcow2 file inside an automatically cleaned temporary directory.
+- The ISO is attached as a CD-ROM source.
+- No host block device, physical disk, USB passthrough, GPU passthrough, shared host folder, or host EFI variable store is attached.
+- QEMU uses TCG software emulation and no network interface.
+- No firmware update, package installation, bootloader write, or host mount is performed.
+- The script never invokes Guix, Nix, or the installer backend.
 
-Neither test boots a Guix-generated WSM system image. Neither runs `wsm-install` inside a WSM guest. Neither validates the host's physical GPU, Wi-Fi, audio, display, storage, or firmware. They must not be presented as WSM ISO, installer, or physical-hardware compatibility evidence.
+## Usage
 
-## Isolation
+Install QEMU's `qemu-system-x86_64` and `qemu-img` in the disposable test environment, then:
 
-- Only GitHub-hosted runners and QEMU TCG are used.
-- Guest networking is disabled.
-- Writable qcow2 images and generated ISO/initramfs files live only in temporary runner directories and are deleted after the run.
-- No host disks, host block devices, USB/GPU passthrough, shared host folders, EFI variable store, or physical hardware access is used.
-- No Guix/Nix backend, firmware updater, or installer apply operation is invoked.
-- Workflows use `contents: read` and no repository secrets.
+```sh
+python3 scripts/qemu_boot_smoke.py --iso /path/to/wsm-live.iso \
+  --timeout-seconds 120 --boot-marker 'WSM-LIVE-READY'
+```
 
-## Next acceptance steps
+Inspect the captured serial output in the JSON result. A boot is reported as confirmed only when the exact configured marker appears. A QEMU process timeout is expected for a live system that remains running; it is not itself a failure if the marker was observed.
 
-1. Obtain the verified, authenticated Guix channel lock from #39; do not substitute a moving channel snapshot.
-2. Build the minimal Guix/WSM guest artifact from that exact snapshot in a bounded disposable runner.
-3. Boot that artifact through `scripts/qemu_boot_smoke.py` and capture the guest marker/log.
-4. Execute `wsm-install --preflight ... --dry-run` inside the guest without host-folder or host-device passthrough.
-5. Assert the guest plan reports `dry_run=true`, `backend_invoked=false`, `disk_access_performed=false`, and `plan_confirmable=false`.
+Output capture is bounded while QEMU is running: up to 1 MiB of serial data and 256 KiB of stderr are retained as rolling tails. The configured boot marker is scanned across the complete serial stream, including chunk boundaries, even when it falls outside the retained tail. The JSON reports total byte counts and explicit `serial_output_truncated` / `qemu_error_truncated` flags; `serial_output_tail` remains limited to the final 4,000 characters.
 
-A generic guest boot or synthetic ISO marker is not a substitute for these steps.
+To inspect the generated command without launching QEMU:
+
+```sh
+python3 scripts/qemu_boot_smoke.py --iso /path/to/wsm-live.iso --dry-run
+```
+
+## Exit codes
+
+- `0` — configured serial boot marker observed, or command-only dry-run completed.
+- `2` — invalid input or required QEMU binaries missing.
+- `3` — QEMU disk creation or process launch failure.
+- `4` — boot was not confirmed (missing marker or marker not observed).
+
+## Remaining integration work
+
+1. Confirm the Guix VM/live-image artifact and exact boot marker from #1.
+2. Add a guest-side invocation mechanism for `wsm-install --preflight ... --dry-run` without host-folder or device passthrough.
+3. Verify the guest plan JSON reports `backend_invoked=false` and `disk_access_performed=false`.
+4. Add a reboot/session-change test once the freshness contract in #23 and producer fields in #5/#6 are ratified.
+
+A passing unit test or QEMU command construction test is not a VM boot. A boot marker is not proof that the installer CLI ran inside the guest.

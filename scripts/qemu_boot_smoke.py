@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 from pathlib import Path
 from typing import Sequence
 
@@ -28,6 +29,10 @@ MIN_CPUS = 1
 MAX_CPUS = 16
 MIN_TIMEOUT_SECONDS = 1
 MAX_TIMEOUT_SECONDS = 30 * 60
+MAX_SERIAL_CAPTURE_BYTES = 1024 * 1024
+MAX_STDERR_CAPTURE_BYTES = 256 * 1024
+MAX_BOOT_MARKER_BYTES = 4096
+CAPTURE_CHUNK_BYTES = 64 * 1024
 
 
 def parse_disk_size_mib(value: str) -> int:
@@ -74,6 +79,117 @@ def validate_iso(path: Path) -> Path:
     if resolved.stat().st_size == 0:
         raise ValueError("ISO file is empty")
     return resolved
+
+
+def _capture_stream(
+    stream,
+    max_bytes: int,
+    marker_bytes: bytes | None = None,
+) -> tuple[bytes, bool, bool, int]:
+    """Consume a binary stream while retaining only a bounded tail.
+
+    Marker detection scans the complete stream, including matches split across
+    read boundaries. Memory use is bounded by max_bytes, one read chunk, and
+    the marker overlap.
+    """
+    if max_bytes < 1:
+        raise ValueError("capture limit must be positive")
+
+    tail = bytearray()
+    marker_seen = False
+    overlap = b""
+    total_bytes = 0
+
+    while True:
+        chunk = stream.read(CAPTURE_CHUNK_BYTES)
+        if not chunk:
+            break
+        total_bytes += len(chunk)
+
+        if marker_bytes and not marker_seen:
+            scan = overlap + chunk
+            marker_seen = marker_bytes in scan
+            keep = len(marker_bytes) - 1
+            overlap = scan[-keep:] if keep else b""
+
+        tail.extend(chunk)
+        excess = len(tail) - max_bytes
+        if excess > 0:
+            del tail[:excess]
+
+    return bytes(tail), total_bytes > max_bytes, marker_seen, total_bytes
+
+
+def _run_qemu_with_bounded_capture(
+    command: list[str],
+    timeout_seconds: int,
+    marker_bytes: bytes | None,
+) -> tuple[bool, int | None, tuple[bytes, bool, bool, int], tuple[bytes, bool, bool, int]]:
+    """Run QEMU while concurrently draining both pipes into bounded tails."""
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        bufsize=0,
+    )
+    if process.stdout is None or process.stderr is None:
+        process.kill()
+        process.wait()
+        raise OSError("QEMU stdout/stderr pipes could not be opened")
+
+    captured: dict[str, tuple[bytes, bool, bool, int]] = {}
+    reader_errors: list[BaseException] = []
+
+    def consume(name: str, stream, limit: int, marker: bytes | None = None) -> None:
+        try:
+            captured[name] = _capture_stream(stream, limit, marker)
+        except BaseException as exc:
+            reader_errors.append(exc)
+
+    readers = [
+        threading.Thread(
+            target=consume,
+            args=("serial", process.stdout, MAX_SERIAL_CAPTURE_BYTES, marker_bytes),
+            name="wsm-qemu-serial-capture",
+            daemon=True,
+        ),
+        threading.Thread(
+            target=consume,
+            args=("stderr", process.stderr, MAX_STDERR_CAPTURE_BYTES),
+            name="wsm-qemu-stderr-capture",
+            daemon=True,
+        ),
+    ]
+    for reader in readers:
+        reader.start()
+
+    timed_out = False
+    try:
+        returncode = process.wait(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        try:
+            process.kill()
+        except ProcessLookupError:
+            pass
+        returncode = process.wait()
+
+    for reader in readers:
+        reader.join()
+    process.stdout.close()
+    process.stderr.close()
+
+    if reader_errors:
+        raise OSError(f"failed to capture QEMU output: {reader_errors[0]}") from reader_errors[0]
+    if "serial" not in captured or "stderr" not in captured:
+        raise OSError("QEMU output capture did not complete")
+
+    return (
+        timed_out,
+        None if timed_out else returncode,
+        captured["serial"],
+        captured["stderr"],
+    )
 
 
 def build_qemu_command(
@@ -142,6 +258,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ValueError as exc:
         print(f"qemu-boot-smoke: {exc}", file=sys.stderr)
         return 2
+    if args.boot_marker and len(args.boot_marker.encode("utf-8")) > MAX_BOOT_MARKER_BYTES:
+        print(
+            f"qemu-boot-smoke: boot marker exceeds {MAX_BOOT_MARKER_BYTES} UTF-8 bytes",
+            file=sys.stderr,
+        )
+        return 2
 
     qemu = shutil.which("qemu-system-x86_64") or "qemu-system-x86_64"
     qemu_img = shutil.which("qemu-img") or "qemu-img"
@@ -149,7 +271,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     with tempfile.TemporaryDirectory(prefix="wsm-qemu-smoke-") as temporary:
         work = Path(temporary).resolve()
         qcow2 = work / "disposable.qcow2"
-        serial_log = work / "serial.log"
         command = build_qemu_command(qemu, iso, qcow2, args.memory_mib, args.cpus)
 
         if args.dry_run:
@@ -187,32 +308,23 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"qemu-boot-smoke: cannot create disposable qcow2 image: {exc}", file=sys.stderr)
             return 3
 
-        timed_out = False
-        qemu_error: str | None = None
+        marker_bytes = args.boot_marker.encode("utf-8") if args.boot_marker else None
         try:
-            # QEMU's chardev option parser is key/value based, not JSON.
-            # Redirect the stdio serial backend from Python so filesystem paths
-            # never enter QEMU's chardev option string.
-            with serial_log.open("w", encoding="utf-8") as serial_stream:
-                completed = subprocess.run(
+            timed_out, qemu_returncode, serial_capture, stderr_capture = (
+                _run_qemu_with_bounded_capture(
                     command,
-                    check=False,
-                    timeout=args.timeout_seconds,
-                    stdout=serial_stream,
-                    stderr=subprocess.PIPE,
-                    text=True,
+                    args.timeout_seconds,
+                    marker_bytes,
                 )
-            qemu_returncode = completed.returncode
-            qemu_error = completed.stderr.strip() or None
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            qemu_returncode = None
+            )
         except OSError as exc:
-            print(f"qemu-boot-smoke: cannot start QEMU: {exc}", file=sys.stderr)
+            print(f"qemu-boot-smoke: cannot run/capture QEMU: {exc}", file=sys.stderr)
             return 3
 
-        serial = serial_log.read_text(encoding="utf-8", errors="replace") if serial_log.exists() else ""
-        marker_seen = bool(args.boot_marker and args.boot_marker in serial)
+        serial_bytes_tail, serial_truncated, marker_seen, serial_total_bytes = serial_capture
+        stderr_bytes_tail, stderr_truncated, _, stderr_total_bytes = stderr_capture
+        serial = serial_bytes_tail.decode("utf-8", errors="replace")
+        qemu_error = stderr_bytes_tail.decode("utf-8", errors="replace").strip() or None
         result = {
             "mode": "qemu-boot-smoke",
             "iso": str(iso),
@@ -221,7 +333,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             "qemu_timed_out": timed_out,
             "qemu_returncode": qemu_returncode,
             "serial_output_tail": serial[-4000:],
+            "serial_output_truncated": serial_truncated,
+            "serial_output_bytes": serial_total_bytes,
             "qemu_error": qemu_error,
+            "qemu_error_truncated": stderr_truncated,
+            "qemu_error_bytes": stderr_total_bytes,
             "host_device_passthrough": False,
             "network_enabled": False,
             "efi_variable_store": False,

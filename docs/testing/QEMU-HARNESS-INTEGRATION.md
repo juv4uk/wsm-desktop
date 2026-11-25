@@ -10,7 +10,7 @@
 
 The generic guest-boot experiment in #34 proves that QEMU TCG can execute a Linux kernel and a minimal `/init`. This experiment goes one step further: it builds a tiny bootable ISO inside the GitHub-hosted runner and sends that ISO through the actual `scripts/qemu_boot_smoke.py` program.
 
-It therefore exercises the project harness's input validation, disposable qcow2 creation, QEMU command construction, serial capture, marker detection, and JSON result contract.
+It therefore exercises the project harness's input validation, disposable qcow2 creation, QEMU command construction, serial capture, marker detection, and JSON result contract. Serial and stderr capture are bounded in-flight; marker detection scans the full serial stream while only bounded tails are retained.
 
 ## Test construction
 

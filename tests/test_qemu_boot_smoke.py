@@ -23,10 +23,15 @@ from scripts.qemu_boot_smoke import (
     MAX_DISK_MIB,
     MAX_MEMORY_MIB,
     MAX_TIMEOUT_SECONDS,
+    MAX_BOOT_MARKER_BYTES,
+    MAX_SERIAL_CAPTURE_BYTES,
+    MAX_STDERR_CAPTURE_BYTES,
+    CAPTURE_CHUNK_BYTES,
     MIN_CPUS,
     MIN_DISK_MIB,
     MIN_MEMORY_MIB,
     MIN_TIMEOUT_SECONDS,
+    _capture_stream,
     build_qemu_command,
     main,
     parse_disk_size_mib,
@@ -89,6 +94,45 @@ class QemuBootSmokeTests(unittest.TestCase):
             self.assertIn("tmp,comma", blockdev[0]["filename"])
             self.assertEqual(command[command.index("-serial") + 1], "stdio")
             self.assertNotIn("tmp,comma", command)
+
+
+    def test_serial_capture_keeps_bounded_tail_and_finds_early_marker(self) -> None:
+        marker = b"WSM_EARLY_BOOT_MARKER"
+        payload = marker + (b"x" * (MAX_SERIAL_CAPTURE_BYTES * 2))
+        tail, truncated, marker_seen, total = _capture_stream(
+            io.BytesIO(payload), max_bytes=256, marker_bytes=marker
+        )
+        self.assertEqual(len(tail), 256)
+        self.assertEqual(tail, payload[-256:])
+        self.assertTrue(truncated)
+        self.assertTrue(marker_seen)
+        self.assertEqual(total, len(payload))
+
+    def test_serial_capture_detects_marker_across_read_boundary(self) -> None:
+        marker = b"WSM_SPLIT_BOUNDARY_MARKER"
+        payload = (b"a" * (CAPTURE_CHUNK_BYTES - 3)) + marker + (b"z" * 100)
+        tail, truncated, marker_seen, total = _capture_stream(
+            io.BytesIO(payload), max_bytes=128, marker_bytes=marker
+        )
+        self.assertTrue(marker_seen)
+        self.assertTrue(truncated)
+        self.assertEqual(total, len(payload))
+        self.assertEqual(tail, payload[-128:])
+
+    def test_stderr_capture_is_bounded_and_reports_truncation(self) -> None:
+        payload = b"Q" * (MAX_STDERR_CAPTURE_BYTES + 4096)
+        tail, truncated, marker_seen, total = _capture_stream(
+            io.BytesIO(payload), max_bytes=MAX_STDERR_CAPTURE_BYTES
+        )
+        self.assertEqual(len(tail), MAX_STDERR_CAPTURE_BYTES)
+        self.assertEqual(tail, payload[-MAX_STDERR_CAPTURE_BYTES:])
+        self.assertTrue(truncated)
+        self.assertFalse(marker_seen)
+        self.assertEqual(total, len(payload))
+
+    def test_capture_rejects_nonpositive_limit(self) -> None:
+        with self.assertRaises(ValueError):
+            _capture_stream(io.BytesIO(b"data"), max_bytes=0)
 
     def test_resource_limits_accept_all_documented_edges(self) -> None:
         validate_limits(MIN_TIMEOUT_SECONDS, MIN_MEMORY_MIB, MIN_CPUS, f"{MIN_DISK_MIB}M")
@@ -170,28 +214,76 @@ class QemuBootSmokeTests(unittest.TestCase):
             iso.write_bytes(b"synthetic ISO placeholder")
             calls = []
 
+            class FakeProcess:
+                def __init__(self):
+                    self.serial_bytes = b"booting\nWSM-LIVE-READY\n" + (b"x" * (MAX_SERIAL_CAPTURE_BYTES + 100))
+                    self.stderr_bytes = b"QEMU diagnostic\n" + (b"e" * (MAX_STDERR_CAPTURE_BYTES + 100))
+                    self.stdout = io.BytesIO(self.serial_bytes)
+                    self.stderr = io.BytesIO(self.stderr_bytes)
+                    self.wait_calls = 0
+                    self.killed = False
+
+                def wait(self, timeout=None):
+                    self.wait_calls += 1
+                    if self.wait_calls == 1:
+                        raise subprocess.TimeoutExpired(["qemu"], timeout)
+                    return -9
+
+                def kill(self):
+                    self.killed = True
+
+            fake_process = FakeProcess()
+
             def fake_run(command, **kwargs):
                 calls.append(command)
-                if command[0] == "qemu-img":
-                    Path(command[4]).touch()
-                    return subprocess.CompletedProcess(command, 0, "", "")
-                self.assertEqual(command[command.index("-serial") + 1], "stdio")
-                kwargs["stdout"].write("booting\\nWSM-LIVE-READY\\n")
-                raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+                self.assertEqual(command[0], "qemu-img")
+                Path(command[4]).touch()
+                return subprocess.CompletedProcess(command, 0, "", "")
 
             stdout = io.StringIO()
             with patch("scripts.qemu_boot_smoke.shutil.which", side_effect=lambda name: name), patch(
                 "scripts.qemu_boot_smoke.subprocess.run", side_effect=fake_run
-            ), contextlib.redirect_stdout(stdout):
+            ), patch(
+                "scripts.qemu_boot_smoke.subprocess.Popen", return_value=fake_process
+            ) as popen, contextlib.redirect_stdout(stdout):
                 result = main(["--iso", str(iso), "--boot-marker", "WSM-LIVE-READY"])
             self.assertEqual(result, 0)
             payload = json.loads(stdout.getvalue())
             self.assertTrue(payload["boot_confirmed"])
             self.assertTrue(payload["qemu_timed_out"])
-            self.assertEqual(len(calls), 2)
+            self.assertEqual(payload["qemu_returncode"], None)
+            self.assertTrue(payload["serial_output_truncated"])
+            self.assertTrue(payload["qemu_error_truncated"])
+            self.assertLessEqual(len(payload["serial_output_tail"]), 4000)
+            self.assertLessEqual(
+                len(payload["qemu_error"].encode("utf-8")),
+                MAX_STDERR_CAPTURE_BYTES,
+            )
+            self.assertEqual(payload["serial_output_bytes"], len(fake_process.serial_bytes))
+            self.assertEqual(payload["qemu_error_bytes"], len(fake_process.stderr_bytes))
+            self.assertEqual(len(calls), 1)
             self.assertEqual(calls[0][1:4], ["create", "-f", "qcow2"])
-            self.assertIn("-nic", calls[1])
-            self.assertIn("none", calls[1])
+            popen.assert_called_once()
+            qemu_command = popen.call_args.args[0]
+            self.assertEqual(qemu_command[qemu_command.index("-serial") + 1], "stdio")
+            self.assertTrue(fake_process.killed)
+
+    def test_oversized_boot_marker_is_rejected_before_qemu(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            iso = Path(directory) / "live.iso"
+            iso.write_bytes(b"synthetic ISO placeholder")
+            stderr = io.StringIO()
+            with patch("scripts.qemu_boot_smoke.subprocess.run") as run, patch(
+                "scripts.qemu_boot_smoke.subprocess.Popen"
+            ) as popen, contextlib.redirect_stderr(stderr):
+                result = main([
+                    "--iso", str(iso),
+                    "--boot-marker", "m" * (MAX_BOOT_MARKER_BYTES + 1),
+                ])
+            self.assertEqual(result, 2)
+            run.assert_not_called()
+            popen.assert_not_called()
+            self.assertIn("boot marker exceeds", stderr.getvalue())
 
     @unittest.skipUnless(
         shutil.which("qemu-system-x86_64") and shutil.which("qemu-img"),
