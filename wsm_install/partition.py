@@ -68,6 +68,7 @@ class Layout:
     # A generated layout must not silently lose the user's destructive consent.
     acknowledgement: str | None = None
     requires_acknowledgement: bool = True
+    disk_size_bytes: int | None = None
 
     def commands(self) -> list[list[str]]:
         """sgdisk invocations as data. The caller decides whether to run them."""
@@ -143,6 +144,7 @@ def plan(
         disk=disk.path,
         acknowledgement=acknowledgement,
         requires_acknowledgement=disk.has_existing_data,
+        disk_size_bytes=disk.size_bytes,
     )
     cursor = 1
     if firmware == "bios":
