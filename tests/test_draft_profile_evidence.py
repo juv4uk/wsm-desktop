@@ -9,13 +9,14 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT))
 
-from draft_profile_evidence import REPORT_ARTIFACT, draft, pci_ids_from, problems_from  # noqa: E402
+from draft_profile_evidence import REPORT_ARTIFACT, draft, pci_ids_from, problems_from, write_bundle  # noqa: E402
 from wsm_install.profile import problems as validate  # noqa: E402
 
 
@@ -185,6 +186,62 @@ class CliTests(unittest.TestCase):
                 written["profile_source"]["sha256"],
                 hashlib.sha256((profile_dir / "profile.scm").read_bytes()).hexdigest(),
             )
+
+    def test_write_bundle_removes_partial_evidence_and_artifact_after_write_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            report_path = directory / "hw.json"
+            raw = json.dumps(report(), ensure_ascii=False, sort_keys=True).encode("utf-8")
+            report_path.write_bytes(raw)
+            profile_dir = directory / "profiles" / "gigabyte" / "ga-h170-gaming3"
+            profile_dir.mkdir(parents=True)
+            profile_path = profile_dir / "profile.scm"
+            profile_path.write_bytes(PROFILE_SOURCE_BYTES)
+            out = profile_dir / "evidence.json"
+            source_bundle = draft(
+                report(),
+                "Gigabyte",
+                "GA-H170-Gaming 3",
+                "gigabyte/ga-h170-gaming3",
+                raw,
+                PROFILE_SOURCE_BYTES,
+            )
+
+            original_open = Path.open
+
+            class FailingWriter:
+                def __init__(self, stream):
+                    self.stream = stream
+
+                def __enter__(self):
+                    self.stream.__enter__()
+                    return self
+
+                def __exit__(self, exc_type, exc, traceback):
+                    return self.stream.__exit__(exc_type, exc, traceback)
+
+                def write(self, value):
+                    self.stream.write(value[:12])
+                    raise OSError("injected evidence write failure")
+
+            def fail_evidence_write(path, *args, **kwargs):
+                stream = original_open(path, *args, **kwargs)
+                if Path(path) == out:
+                    return FailingWriter(stream)
+                return stream
+
+            with patch.object(Path, "open", fail_evidence_write):
+                with self.assertRaisesRegex(OSError, "injected evidence write failure"):
+                    write_bundle(out, report_path, raw, PROFILE_SOURCE_BYTES, source_bundle)
+
+            self.assertFalse(out.exists(), "partial evidence.json must be removed")
+            self.assertFalse((profile_dir / REPORT_ARTIFACT).exists(), "source artifact must be rolled back")
+            self.assertEqual(
+                write_bundle(out, report_path, raw, PROFILE_SOURCE_BYTES, source_bundle),
+                profile_dir / REPORT_ARTIFACT,
+            )
+            self.assertTrue(out.is_file())
+            self.assertTrue((profile_dir / REPORT_ARTIFACT).is_file())
 
     def test_cli_refuses_to_overwrite_existing_evidence_or_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
