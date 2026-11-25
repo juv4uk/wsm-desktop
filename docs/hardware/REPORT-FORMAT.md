@@ -18,11 +18,11 @@ It preserves the distinction between observations made on the current machine, e
 The first schema is 1.0.0 and targets JSON Schema Draft 2020-12.
 
 - A breaking change increments the major version.
-- A backward-compatible optional-field addition increments the minor version; consumers must tolerate unknown optional fields when that schema revision is selected.
+- A backward-compatible optional-field addition increments the minor version and requires a published schema for that exact minor version plus explicit consumer support.
 - Clarifications that do not change validation behavior increment the patch version.
-- Producers write the exact schema version. Consumers reject unsupported major versions with an explanation rather than silently misreading them.
+- Producers write the exact schema version. Consumers select the validator for that exact version and reject unsupported versions with an explanation rather than silently misreading them.
 
-The v1 schema is strict for device and fact objects. New properties require a schema revision and review. This also prevents unreviewed fields such as serial numbers from silently entering reports.
+The v1.0.0 schema sets `additionalProperties: false` for its closed objects. Therefore, a v1.0.0 consumer does **not** generically tolerate unknown properties. A new optional field is accepted only after the corresponding schema revision and consumer support are released. Do not advertise forward-field tolerance that the selected schema validator does not implement.
 
 ## Evidence model
 
