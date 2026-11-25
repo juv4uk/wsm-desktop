@@ -40,6 +40,15 @@ class ValidationProtocolPrivacyTests(unittest.TestCase):
         self.assertIn("resolver або endpoint може логувати ці дані", self.network)
         self.assertIn("source/egress IP не зберігається в публічному profile record", self.network)
 
+    def test_displayid_parser_cves_are_treated_as_untrusted_input_risk(self) -> None:
+        audit = (ROOT / "docs" / "hardware" / "UPSTREAM-TOOLING-ADDENDUM-2026-11-25.md").read_text(encoding="utf-8")
+        self.assertIn("CVE-2026-112271", audit)
+        self.assertIn("CVE-2026-112272", audit)
+        self.assertIn("through 0.4.0", audit)
+        self.assertIn("RHEL-релізи не уражені", audit)
+        self.assertIn("не запускати з підвищеними привілеями", audit)
+        self.assertIn("Crafted EDID слід вважати untrusted input", audit)
+
 
 if __name__ == "__main__":
     unittest.main()
