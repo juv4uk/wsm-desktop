@@ -171,7 +171,60 @@ class GuestReportTests(unittest.TestCase):
             guest.parse_guest_output(output)
 
 
+    def test_initramfs_streaming_enforces_hard_size_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            destination = root / "archive.cpio.gz"
+            command = [
+                sys.executable,
+                "-c",
+                "import sys; sys.stdout.buffer.write(b'X' * 8192)",
+            ]
+            with self.assertRaisesRegex(guest.ProbeError, "exceeded the 1024-byte ceiling"):
+                guest.run_bounded_file(
+                    command,
+                    cwd=root,
+                    destination=destination,
+                    timeout_seconds=5,
+                    max_bytes=1024,
+                )
+            self.assertFalse(destination.exists())
+
+    def test_initramfs_streaming_never_deletes_preexisting_destination(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            destination = root / "archive.cpio.gz"
+            destination.write_bytes(b"preserve")
+            with self.assertRaises(FileExistsError):
+                guest.run_bounded_file(
+                    [sys.executable, "-c", "print('unused')"],
+                    cwd=root,
+                    destination=destination,
+                    timeout_seconds=5,
+                    max_bytes=1024,
+                )
+            self.assertEqual(destination.read_bytes(), b"preserve")
+
+
 class GuestPolicyTests(unittest.TestCase):
+    def test_qemu_command_disables_user_config_and_network(self) -> None:
+        command = guest.build_qemu_command(
+            "/usr/bin/qemu-system-x86_64",
+            Path("/tmp/vmlinuz"),
+            Path("/tmp/initramfs.cpio.gz"),
+        )
+        self.assertIn("-no-user-config", command)
+        self.assertIn("-nodefaults", command)
+        self.assertIn("-accel", command)
+        self.assertIn("tcg", command)
+        nic_index = command.index("-nic")
+        self.assertEqual(command[nic_index + 1], "none")
+        self.assertNotIn("-net", command)
+        self.assertNotIn("-netdev", command)
+        self.assertNotIn("-drive", command)
+        self.assertNotIn("-blockdev", command)
+
+
     def test_guest_sysfs_mount_is_read_only(self) -> None:
         script = guest.render_init(["/lib/modules/test/kernel/drivers/cxl/cxl_core.ko"])
         self.assertIn("mount -t sysfs -o ro sysfs /sys", script)
