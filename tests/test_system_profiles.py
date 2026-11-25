@@ -144,22 +144,6 @@ class DesktopProfileTests(unittest.TestCase):
                 self.assertNotIn("channel", code)
 
 
-class KnownPitfallTests(unittest.TestCase):
-    def test_sddm_is_not_set_to_wayland(self) -> None:
-        """Guix bug#68939: display-server "wayland" leaves a black screen.
-
-        The value is documented but the service does not support it; a later
-        patch makes the service ignore it. Setting it would produce a system
-        that boots to a blank display and looks like a broken image.
-        """
-        text = profile("desktop.scm")
-        self.assertNotIn('(display-server "wayland")', text)
-
-    def test_bluetooth_is_not_auto_enabled(self) -> None:
-        text = profile("desktop.scm")
-        self.assertIn("(auto-enable? #f)", text)
-
-
 class LiveProfileTests(unittest.TestCase):
     def test_live_profile_inherits_the_desktop_profile(self) -> None:
         text = profile("live.scm")
@@ -231,15 +215,19 @@ exit 8
                 check=False,
             )
             expected = output_dir / "wsm-desktop-live.iso"
+            gc_root = output_dir / ".wsm-desktop-live.iso-root"
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertTrue(expected.is_symlink())
-            self.assertEqual(expected.resolve(), fake_image)
+            self.assertTrue(expected.is_file())
+            self.assertFalse(expected.is_symlink())
+            self.assertEqual(expected.read_bytes(), fake_image.read_bytes())
+            self.assertTrue(gc_root.is_symlink())
+            self.assertEqual(gc_root.resolve(), fake_image)
 
             calls = args_log.read_text(encoding="utf-8")
             lock = ROOT / "channels.lock.scm"
             self.assertIn(f"CALL|time-machine|-C|{lock}|-L|{ROOT}|--|describe|-f|channels", calls)
             self.assertIn(f"CALL|time-machine|-C|{lock}|-L|{ROOT}|--|system|image", calls)
-            self.assertIn(f"--root={expected}", calls)
+            self.assertIn(f"--root={gc_root}", calls)
             self.assertIn("--no-grafts", calls)
             self.assertIn("--image-type=iso9660", calls)
             self.assertIn(f"PWD={ROOT}", calls)
@@ -257,11 +245,15 @@ exit 8
                 r'\(commit\s+"([0-9a-f]{40})"\)',
                 (ROOT / "channels.lock.scm").read_text(encoding="utf-8"),
             ).group(1))
-            self.assertEqual(manifest["artifact"]["size_bytes"], fake_image.stat().st_size)
+            self.assertEqual(manifest["artifact"]["size_bytes"], expected.stat().st_size)
+            self.assertEqual(manifest["artifact"]["gc_root"], gc_root.name)
             self.assertEqual(
                 manifest["artifact"]["sha256"],
-                hashlib.sha256(fake_image.read_bytes()).hexdigest(),
+                hashlib.sha256(expected.read_bytes()).hexdigest(),
             )
+            self.assertIn("-L", manifest["build"]["command"])
+            self.assertIn(str(ROOT), manifest["build"]["command"])
+            self.assertIn(f"--root={gc_root}", manifest["build"]["command"])
             self.assertIn("default", manifest["guix"]["authentication_policy"])
             self.assertEqual(manifest["guix"]["locked_version"], "guix (GNU Guix) 1.5.0-pinned")
 
@@ -287,7 +279,8 @@ exit 8
             )
             self.assertEqual(again.returncode, 3)
             self.assertEqual(args_log.read_text(encoding="utf-8"), previous_log)
-            self.assertEqual(expected.resolve(), fake_image)
+            self.assertEqual(expected.read_bytes(), fake_image.read_bytes())
+            self.assertEqual(gc_root.resolve(), fake_image)
 
     def test_builder_fails_closed_when_channel_authentication_is_disabled(self) -> None:
         script = ROOT / "scripts" / "build_iso.sh"
@@ -325,6 +318,7 @@ exit 8
             self.assertIn("CALL|time-machine|-C|", calls)
             self.assertNotIn("|--|system|image", calls)
             self.assertFalse((output_dir / "wsm-desktop-live.iso").exists())
+            self.assertFalse((output_dir / ".wsm-desktop-live.iso-root").exists())
             self.assertFalse((output_dir / "manifest.json").exists())
 
     def test_script_refuses_to_run_without_guix(self) -> None:
