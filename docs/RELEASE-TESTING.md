@@ -161,20 +161,31 @@ python3 scripts/release_gate.py --iso build/wsm-desktop.iso --boot
 
 `overall` буває `pass`, `fail` або **`incomplete`**. Одне `not-run` робить
 вердикт неповним: перевірка, яку не вдалося виконати, не доводить нічого.
+Відсутній optional Compatibility lock має статус `NOT_CONFIGURED`/`not-run`,
+а не `pass` і не помилку структурного парсера; обов'язковий Free lock має бути
+наявним і проходити перевірку.
 
-Код виходу 1 буває лише при справжньому провалі. `incomplete` — це не привід
-зупиняти роботу, це привід знати, чого саме бракує.
+Коди завершення придатні для shell та CI:
 
-Приклад сьогоднішнього стану:
+- `0` — усі критерії мають `pass`;
+- `1` — є щонайменше один справжній `fail`;
+- `2` — немає `fail`, але принаймні один критерій `not-run`, отже verdict
+  `incomplete`.
+
+Не використовуйте `incomplete` як успіх release job. Це не привід припиняти
+розробку, але це заборона позначати артефакт придатним до публікації.
+
+Приклад сьогоднішнього стану без Compatibility lock та ISO:
 
 ```
 overall: incomplete
   docs               pass
-  channels           pass
+  channels           not-run   compatibility: NOT_CONFIGURED
   tests              pass
   profile-evidence   not-run   no hardware profile bundles exist yet
   image              not-run   no --iso supplied; nothing to verify
 ```
 
-Тобто: документація й канали в порядку, тести зелені, але **образу немає**, і
-доказів заліза теж. Це чесна картина, а не «майже готово».
+Тобто: documentation і тестовий набір зелені, але Compatibility lock не
+налаштований, реальних profile bundles немає й **образ не перевірено**. Це
+чесна картина, а не «майже готово».
