@@ -62,14 +62,45 @@ def check_docs() -> dict[str, str]:
 
 
 def check_channels() -> dict[str, str]:
-    results = []
-    for policy in ("free", "compatibility"):
-        code, detail = run([sys.executable, "scripts/check_channels.py", "--policy", policy])
-        results.append((policy, code, detail))
-    failed = [f"{policy}: {detail}" for policy, code, detail in results if code != 0]
-    if failed:
-        return criterion("channels", "fail", "; ".join(failed))
-    return criterion("channels", "pass", "free and compatibility policies both hold")
+    """Check Free always; treat an absent optional Compatibility lock explicitly."""
+    checker = [sys.executable, "scripts/check_channels.py"]
+    free_lock = ROOT / "channels.lock.scm"
+    free_code, free_detail = run(
+        [*checker, "--policy", "free", "--lock", str(free_lock)]
+    )
+    if free_code != 0:
+        return from_exit("channels", free_code, f"Free lock: {free_detail}")
+
+    compatibility_lock = ROOT / "channels.compatibility.lock.scm"
+    if not compatibility_lock.is_file():
+        return criterion(
+            "channels",
+            "pass",
+            "Free structural policy passed; Compatibility: NOT_CONFIGURED "
+            "(no compatibility lock, no Compatibility product claim)",
+        )
+
+    compatibility_code, compatibility_detail = run(
+        [
+            *checker,
+            "--policy",
+            "compatibility",
+            "--lock",
+            str(compatibility_lock),
+        ]
+    )
+    if compatibility_code != 0:
+        return from_exit(
+            "channels",
+            compatibility_code,
+            f"Free lock passed; Compatibility lock: {compatibility_detail}",
+        )
+    return criterion(
+        "channels",
+        "pass",
+        "Free and configured Compatibility structural policies passed; "
+        "cryptographic authentication remains a separate Guix check",
+    )
 
 
 def check_tests() -> dict[str, str]:
