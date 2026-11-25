@@ -342,7 +342,7 @@ Frontend реалізація може змінюватися (Calamares, інш
 
 **Не реалізовано** — кроки `REALIZE` та `APPLY`: адаптер не виконує `guix system init`, не монтує цільовий диск і не перевіряє його ідентичність перед записом. Це наступний крок і він потребує середовища з Guix.
 
-Тести: `tests/test_backend_guix.py` (20 тестів) покривають відмови з розділу 8 і не потребують Guix.
+Тести: `tests/test_backend_guix.py` (32 тести) покривають відмови з розділу 8 і не потребують Guix.
 
 
 ## Standalone Guix handoff CLI та backend provenance
