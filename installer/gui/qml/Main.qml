@@ -3,6 +3,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import "InstallerFlow.js" as InstallerFlow
 
 ApplicationWindow {
     id: root
@@ -25,9 +26,18 @@ ApplicationWindow {
             return true
         if (!wsmController.reportReady)
             return false
-        if (step === 4)
+        if (step === 2)
+            return true
+        if (step === 3 || step === 4) {
+            var inventorySettled = wsmController.diskInventoryState === "loaded"
+                || wsmController.diskInventoryState === "unavailable"
+            if (!inventorySettled)
+                return false
+            if (step === 3)
+                return true
             return wsmController.planAvailable || wsmController.planStatus === "blocked"
-        return step === 2 || step === 3
+        }
+        return false
     }
 
     function enterStep(step) {
@@ -396,9 +406,36 @@ ApplicationWindow {
                         }
 
                         Label {
-                            text: wsmController.disks.length === 0
-                                ? qsTr("Список ще не отримано або фізичні диски не виявлені.")
-                                : qsTr("Виявлено дисків: %1").arg(wsmController.disks.length)
+                            visible: wsmController.diskInventoryState === "not-run"
+                            text: qsTr("Інвентаризацію дисків ще не запускали.")
+                            font.bold: true
+                        }
+
+                        Label {
+                            visible: wsmController.diskInventoryState === "loading"
+                            text: qsTr("Інвентаризація дисків виконується…")
+                            font.bold: true
+                        }
+
+                        Label {
+                            visible: wsmController.diskInventoryState === "unavailable"
+                            Layout.fillWidth: true
+                            text: qsTr("Перелік дисків недоступний. Можна продовжити лише діагностичний перегляд без вибору цільового диска.")
+                            color: "#9b2c2c"
+                            wrapMode: Text.WordWrap
+                        }
+
+                        Label {
+                            visible: wsmController.diskInventoryState === "loaded"
+                                && wsmController.disks.length === 0
+                            text: qsTr("lsblk успішно завершився, але фізичних дисків не виявлено.")
+                            font.bold: true
+                        }
+
+                        Label {
+                            visible: wsmController.diskInventoryState === "loaded"
+                                && wsmController.disks.length > 0
+                            text: qsTr("Виявлено дисків: %1").arg(wsmController.disks.length)
                             font.bold: true
                         }
 
@@ -544,6 +581,13 @@ ApplicationWindow {
                                         .arg(wsmController.selectedDisk.length
                                             ? wsmController.selectedDisk
                                             : qsTr("не обрано"))
+                                    wrapMode: Text.WordWrap
+                                }
+                                Label {
+                                    visible: wsmController.diskInventoryState === "unavailable"
+                                    Layout.fillWidth: true
+                                    text: qsTr("Перелік дисків недоступний; ціль не визначена. Цей перегляд не дозволяє інсталяцію.")
+                                    color: "#9b2c2c"
                                     wrapMode: Text.WordWrap
                                 }
                             }
