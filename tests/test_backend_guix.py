@@ -62,6 +62,14 @@ def confirmed_plan(backend: str = "guix") -> dict:
     return plan
 
 
+def refresh_plan_hash(plan: dict) -> None:
+    """Recompute the digest after a test deliberately changes a plan."""
+    plan.pop("plan_sha256", None)
+    plan["plan_sha256"] = hashlib.sha256(
+        canonical_json(plan).encode("utf-8")
+    ).hexdigest()
+
+
 def handoff(plan: dict, target: TargetSelection, **kwargs):
     return prepare(
         plan,
@@ -163,9 +171,29 @@ class HandoffRefusalTests(unittest.TestCase):
         plan, _, _ = build_plan(json.loads(report_bytes), report_bytes, "guix")
         self.assert_refused("plan.not_confirmable", plan, selection())
 
+    def test_plan_payload_must_match_its_digest(self) -> None:
+        plan = confirmed_plan()
+        plan["warnings"].append("post-confirmation mutation")
+        self.assert_refused("plan.digest_mismatch", plan, selection())
+
+    def test_rehashed_plan_still_requires_the_original_confirmation(self) -> None:
+        plan = confirmed_plan()
+        confirmed = plan["plan_sha256"]
+        plan["warnings"].append("user confirmation was for an earlier plan")
+        refresh_plan_hash(plan)
+        with self.assertRaises(HandoffError) as caught:
+            prepare(
+                plan,
+                selection(),
+                confirmed_plan_sha256=confirmed,
+                confirmed_target_digest=selection().digest(),
+            )
+        self.assertEqual(caught.exception.code, "handoff.plan_changed")
+
     def test_blockers_stop_the_handoff(self) -> None:
         plan = confirmed_plan()
         plan["blockers"] = ["boot-path: required critical device discovery is unknown"]
+        refresh_plan_hash(plan)
         self.assert_refused("plan.blockers", plan, selection())
 
     def test_other_backend_is_refused(self) -> None:
@@ -175,6 +203,7 @@ class HandoffRefusalTests(unittest.TestCase):
     def test_disk_access_already_performed_is_refused(self) -> None:
         plan = confirmed_plan()
         plan["execution"]["disk_access_performed"] = True
+        refresh_plan_hash(plan)
         self.assert_refused("plan.disk_access", plan, selection())
 
     def test_second_bootloader_owner_is_refused(self) -> None:
