@@ -28,12 +28,15 @@ def load_fixture(name: str) -> tuple[dict, bytes]:
     return json.loads(raw), raw
 
 
-def make_profile_evidence(report: dict, root: Path) -> dict:
+def make_profile_evidence(report: dict, root: Path, report_bytes: bytes) -> dict:
     """Create a synthetic bundle for CLI integration tests; never real hardware evidence."""
     payload = b"synthetic installer test evidence\n"
-    artifact = root / "artifacts" / "dmesg.txt"
-    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifacts = root / "artifacts"
+    artifacts.mkdir(parents=True, exist_ok=True)
+    artifact = artifacts / "dmesg.txt"
     artifact.write_bytes(payload)
+    source_report = artifacts / "hardware-report.json"
+    source_report.write_bytes(report_bytes)
     return {
         "schema": "wsm-profile-evidence/2",
         "profile": {"vendor": "TEST", "model": "FIXTURE", "slug": "test/fixture"},
@@ -45,11 +48,18 @@ def make_profile_evidence(report: dict, root: Path) -> dict:
         "verified_functions": [{"name": "synthetic-fixture", "status": "pass"}],
         "known_limitations": [],
         "not_assessed": ["physical-device-functionality"],
-        "artifacts": [{
-            "kind": "test-log",
-            "path": "artifacts/dmesg.txt",
-            "sha256": hashlib.sha256(payload).hexdigest(),
-        }],
+        "artifacts": [
+            {
+                "kind": "test-log",
+                "path": "artifacts/dmesg.txt",
+                "sha256": hashlib.sha256(payload).hexdigest(),
+            },
+            {
+                "kind": "hardware-report",
+                "path": "artifacts/hardware-report.json",
+                "sha256": hashlib.sha256(report_bytes).hexdigest(),
+            },
+        ],
     }
 
 
@@ -97,7 +107,7 @@ class InstallerPlanTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             report_path = Path(directory) / "report.json"
             plan_path = Path(directory) / "plan.json"
-            report_path.write_bytes((FIXTURES / "desktop-observed.json").read_bytes())
+            report_path.write_bytes(report_bytes)
             stderr = io.StringIO()
             with contextlib.redirect_stderr(stderr):
                 result = main([
@@ -187,7 +197,7 @@ class InstallerPlanTests(unittest.TestCase):
             self.assertEqual(result, 2)
 
     def test_offline_mode_is_enforced_by_report_contract(self) -> None:
-        report, _ = load_fixture("desktop-observed.json")
+        report, report_bytes = load_fixture("desktop-observed.json")
         report["privacy"]["network_requests_performed"] = True
         with tempfile.TemporaryDirectory() as directory:
             report_path = Path(directory) / "network.json"
@@ -214,7 +224,7 @@ class InstallerPlanTests(unittest.TestCase):
             profile_dir = root / "test" / "fixture"
             profile_dir.mkdir(parents=True)
             (profile_dir / "profile.scm").write_text(";; synthetic test fixture\n", encoding="utf-8")
-            evidence = make_profile_evidence(report, profile_dir)
+            evidence = make_profile_evidence(report, profile_dir, report_bytes)
             evidence_path = profile_dir / "evidence.json"
             evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
             plan_path = root / "plan.json"
@@ -253,6 +263,30 @@ class InstallerPlanTests(unittest.TestCase):
         self.assertEqual(result, 2)
         self.assertIn("must not overwrite", stderr.getvalue())
         self.assertEqual(artifact.read_bytes(), original)
+
+    def test_cli_refuses_report_content_change_with_same_report_id(self) -> None:
+        report, report_bytes = load_fixture("desktop-observed.json")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report_path = root / "report.json"
+            report_path.write_bytes(report_bytes)
+            profile_dir = root / "test" / "fixture"
+            profile_dir.mkdir(parents=True)
+            evidence = make_profile_evidence(report, profile_dir, report_bytes)
+            evidence_path = profile_dir / "evidence.json"
+            evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+
+            changed_report = dict(report)
+            changed_report["warnings"] = list(report.get("warnings", [])) + ["same id, different bytes"]
+            report_path.write_text(json.dumps(changed_report), encoding="utf-8")
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                result = main([
+                    "--preflight", "--report", str(report_path), "--backend", "guix",
+                    "--dry-run", "--profile-evidence", str(evidence_path),
+                ])
+        self.assertEqual(result, 3)
+        self.assertIn("source-report artifact SHA-256 does not match", stderr.getvalue())
 
     def test_cli_refuses_profile_evidence_for_a_different_report(self) -> None:
         report, _ = load_fixture("desktop-observed.json")
