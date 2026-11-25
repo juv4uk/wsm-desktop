@@ -246,40 +246,51 @@ def render_guest_init(library_path: str) -> str:
     )
 
 
-def _copy_runtime_dependencies(python_home: Path, rootfs: Path) -> list[Path]:
-    """Copy only external shared libraries reported by ldd for the pinned runtime."""
-    home_resolved = python_home.resolve()
+def _copy_runtime_dependencies(
+    python_home: Path,
+    rootfs: Path,
+    *,
+    additional_elf_roots: tuple[Path, ...] = (),
+) -> list[Path]:
+    """Copy external libraries used by the pinned Python runtime and guest extensions."""
+    runtime_roots = tuple(
+        dict.fromkeys(path.resolve() for path in (python_home, *additional_elf_roots))
+    )
     dependencies: set[Path] = set()
     elf_count = 0
-    for binary in _elf_files(python_home):
-        elf_count += 1
-        completed = subprocess.run(
-            ["ldd", str(binary)],
-            check=False,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=10,
-        )
-        output = completed.stdout + completed.stderr
-        if "not a dynamic executable" in output or "statically linked" in output:
-            continue
-        if completed.returncode not in (0, 1):
-            raise RuntimeError(f"ldd failed for pinned runtime object {binary}: {output[-1200:]}")
-        found, missing = _parse_ldd_paths(output)
-        if missing:
-            raise RuntimeError(
-                f"unresolved shared libraries for {binary}: {'; '.join(missing)}"
+    for runtime_root in runtime_roots:
+        for binary in _elf_files(runtime_root):
+            elf_count += 1
+            completed = subprocess.run(
+                ["ldd", str(binary)],
+                check=False,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=10,
             )
-        for library in found:
-            try:
-                resolved = library.resolve(strict=True)
-            except OSError as exc:
-                raise RuntimeError(f"ldd reported a missing library path {library}") from exc
-            if resolved == home_resolved or home_resolved in resolved.parents:
+            output = completed.stdout + completed.stderr
+            if "not a dynamic executable" in output or "statically linked" in output:
                 continue
-            dependencies.add(library)
+            if completed.returncode not in (0, 1):
+                raise RuntimeError(f"ldd failed for guest runtime object {binary}: {output[-1200:]}")
+            found, missing = _parse_ldd_paths(output)
+            if missing:
+                raise RuntimeError(
+                    f"unresolved shared libraries for {binary}: {'; '.join(missing)}"
+                )
+            for library in found:
+                try:
+                    resolved = library.resolve(strict=True)
+                except OSError as exc:
+                    raise RuntimeError(f"ldd reported a missing library path {library}") from exc
+                if any(
+                    resolved == root or root in resolved.parents
+                    for root in runtime_roots
+                ):
+                    continue
+                dependencies.add(library)
 
     if elf_count == 0:
         raise RuntimeError("no ELF files found in pinned CPython installation")
@@ -307,15 +318,23 @@ def _build_initramfs(work: Path) -> tuple[Path, int]:
     _safe_extract_tar(archive, extract_root)
     python_home = _find_python_home(extract_root)
 
+    guest_site = _install_guest_python_dependencies(work)
     copied_python = rootfs / "opt" / "python"
     shutil.copytree(python_home, copied_python, symlinks=True)
-    libraries = _copy_runtime_dependencies(python_home, rootfs)
+    copied_site = rootfs / "opt" / "guest-site"
+    shutil.copytree(guest_site, copied_site, symlinks=True)
+    libraries = _copy_runtime_dependencies(
+        python_home,
+        rootfs,
+        additional_elf_roots=(guest_site,),
+    )
     library_dirs = sorted({str(path.parent) for path in libraries})
     library_path = os.pathsep.join(["/opt/python/lib", *library_dirs])
 
     runtime_env = os.environ.copy()
     runtime_env.update({
         "PYTHONHOME": str(python_home),
+        "PYTHONPATH": str(guest_site),
         "LD_LIBRARY_PATH": os.pathsep.join([str(python_home / "lib"), *library_dirs]),
     })
     _run = subprocess.run(
@@ -323,7 +342,7 @@ def _build_initramfs(work: Path) -> tuple[Path, int]:
             str(python_home / "bin" / "python3.11"),
             "-S",
             "-c",
-            "import json, selectors, subprocess, pathlib, gzip, base64",
+            "import json, selectors, subprocess, pathlib, gzip, base64, jsonschema",
         ],
         check=True,
         capture_output=True,
@@ -357,6 +376,12 @@ def _build_initramfs(work: Path) -> tuple[Path, int]:
         )
 
     shutil.copytree(ROOT / "wsm_hwcheck", rootfs / "opt" / "wsm" / "wsm_hwcheck")
+    shutil.copytree(ROOT / "wsm_install", rootfs / "opt" / "wsm" / "wsm_install")
+    (rootfs / "opt" / "wsm" / "schemas").mkdir(parents=True, exist_ok=True)
+    shutil.copy2(
+        ROOT / "schemas" / "hardware-report.schema.json",
+        rootfs / "opt" / "wsm" / "schemas" / "hardware-report.schema.json",
+    )
     init_script = render_guest_init(library_path)
     init_path = rootfs / "init"
     init_path.write_text(init_script, encoding="utf-8")
