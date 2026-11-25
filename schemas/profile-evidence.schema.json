@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/juv4uk/wsm-desktop/schemas/profile-evidence.schema.json",
   "title": "WSM hardware profile evidence",
-  "description": "Evidence bundle that turns a hardware profile from a hypothesis into a claim. A profile without a valid bundle is not a profile.",
+  "description": "Evidence bundle that turns a hardware profile from a hypothesis into a verifiable claim.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -10,11 +10,13 @@
     "profile",
     "report_id",
     "report_schema_version",
+    "isa_level",
     "verified_on",
     "verified_by",
     "verified_functions",
     "known_limitations",
-    "not_assessed"
+    "not_assessed",
+    "artifacts"
   ],
   "properties": {
     "schema": {"const": "wsm-profile-evidence/1"},
@@ -45,8 +47,8 @@
     "verified_on": {"type": "string", "format": "date"},
     "verified_by": {
       "type": "string",
-      "minLength": 1,
-      "description": "Who ran the verification. Personal names and e-mail addresses are not accepted."
+      "enum": ["автори проєкту", "local agent", "web agent"],
+      "description": "Non-personal role identifier. Personal names and e-mail addresses are not accepted."
     },
     "verified_functions": {
       "type": "array",
@@ -74,12 +76,19 @@
     },
     "artifacts": {
       "type": "array",
+      "minItems": 1,
+      "description": "At least one evidence file, stored relative to the profile directory and checked against its SHA-256.",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["kind", "sha256"],
+        "required": ["kind", "path", "sha256"],
         "properties": {
           "kind": {"type": "string", "minLength": 1},
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Safe relative POSIX path from the profile directory, e.g. artifacts/dmesg.txt."
+          },
           "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
           "note": {"type": "string"}
         }
