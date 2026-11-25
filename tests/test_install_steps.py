@@ -166,7 +166,7 @@ class BackendCommandTests(unittest.TestCase):
         self.assertEqual(
             command,
             [
-                "guix", "time-machine", "-C", CHANNEL_LOCK_PATH, "--",
+                "/run/current-system/profile/bin/guix", "time-machine", "-C", CHANNEL_LOCK_PATH, "--",
                 "system", "init", SYSTEM_CONFIG_PATH, TARGET_MOUNTPOINT,
             ],
         )
