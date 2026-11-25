@@ -11,14 +11,43 @@
   "verified_on": "2026-11-26",
   "verified_by": "автори проєкту",
   "verified_functions": [
-    {"name": "graphics", "status": "not-assessed", "note": "що саме перевіряли"},
-    {"name": "storage", "status": "not-assessed"},
-    {"name": "network", "status": "not-assessed"},
-    {"name": "audio", "status": "not-assessed"}
+    {
+      "name": "graphics",
+      "status": "not-assessed",
+      "note": "що саме перевіряли"
+    },
+    {
+      "name": "storage",
+      "status": "not-assessed"
+    },
+    {
+      "name": "network",
+      "status": "not-assessed"
+    },
+    {
+      "name": "audio",
+      "status": "not-assessed"
+    }
   ],
-  "known_limitations": ["кожне обмеження окремим рядком"],
-  "not_assessed": ["suspend/resume", "що ще не перевірено"],
+  "known_limitations": [
+    "кожне обмеження окремим рядком"
+  ],
+  "not_assessed": [
+    "suspend/resume",
+    "що ще не перевірено"
+  ],
   "artifacts": [
-    {"kind": "dmesg", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "note": "замінити на справжній хеш"}
-  ]
+    {
+      "kind": "dmesg",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "note": "замінити на справжній хеш"
+    }
+  ],
+  "hardware_signature": {
+    "pci_ids": [
+      "0000:0000"
+    ],
+    "match": "all",
+    "notes": "vendor:device у нижньому регістрі, як у lspci -nn; замінити на справжні"
+  }
 }

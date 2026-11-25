@@ -17,14 +17,26 @@
     "not_assessed"
   ],
   "properties": {
-    "schema": {"const": "wsm-profile-evidence/1"},
+    "schema": {
+      "const": "wsm-profile-evidence/1"
+    },
     "profile": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["vendor", "model", "slug"],
+      "required": [
+        "vendor",
+        "model",
+        "slug"
+      ],
       "properties": {
-        "vendor": {"type": "string", "minLength": 1},
-        "model": {"type": "string", "minLength": 1},
+        "vendor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
         "slug": {
           "type": "string",
           "pattern": "^[a-z0-9]+(-[a-z0-9]+)*/[a-z0-9]+(-[a-z0-9]+)*$",
@@ -37,12 +49,24 @@
       "minLength": 8,
       "description": "report_id from wsm-hwcheck; the evidence must point at the report it came from"
     },
-    "report_schema_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "report_schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
     "isa_level": {
       "type": "string",
-      "enum": ["x86-64-v1", "x86-64-v2", "x86-64-v3", "x86-64-v4", "unknown"]
+      "enum": [
+        "x86-64-v1",
+        "x86-64-v2",
+        "x86-64-v3",
+        "x86-64-v4",
+        "unknown"
+      ]
     },
-    "verified_on": {"type": "string", "format": "date"},
+    "verified_on": {
+      "type": "string",
+      "format": "date"
+    },
     "verified_by": {
       "type": "string",
       "minLength": 1,
@@ -54,22 +78,42 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name", "status"],
+        "required": [
+          "name",
+          "status"
+        ],
         "properties": {
-          "name": {"type": "string", "minLength": 1},
-          "status": {"enum": ["pass", "fail", "not-assessed"]},
-          "note": {"type": "string"}
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "enum": [
+              "pass",
+              "fail",
+              "not-assessed"
+            ]
+          },
+          "note": {
+            "type": "string"
+          }
         }
       }
     },
     "known_limitations": {
       "type": "array",
-      "items": {"type": "string", "minLength": 1}
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
     },
     "not_assessed": {
       "type": "array",
       "minItems": 1,
-      "items": {"type": "string", "minLength": 1},
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
       "description": "What was not verified. Must be non-empty: no profile is fully verified."
     },
     "artifacts": {
@@ -77,11 +121,52 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["kind", "sha256"],
+        "required": [
+          "kind",
+          "sha256"
+        ],
         "properties": {
-          "kind": {"type": "string", "minLength": 1},
-          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-          "note": {"type": "string"}
+          "kind": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "hardware_signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pci_ids"
+      ],
+      "description": "How to recognise this machine from a wsm-hwcheck report. Without a signature a profile can only be applied by hand.",
+      "properties": {
+        "pci_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{4}:[0-9a-f]{4}$"
+          },
+          "description": "vendor:device in lowercase hex, as in lspci -nn"
+        },
+        "match": {
+          "enum": [
+            "all",
+            "any"
+          ],
+          "default": "all",
+          "description": "all: every id must be present; any: one is enough"
+        },
+        "notes": {
+          "type": "string"
         }
       }
     }

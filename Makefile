@@ -29,6 +29,9 @@ check-profile-evidence:
 	$(PYTHON) tests/test_profile_evidence.py
 	$(PYTHON) scripts/check_profile_evidence.py
 
+check-profile-match:
+	$(PYTHON) tests/test_profile_match.py
+
 check-profiles-matrix:
 	$(PYTHON) tests/test_profiles.py
 
