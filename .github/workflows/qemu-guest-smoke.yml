@@ -1,0 +1,40 @@
+name: QEMU guest boot smoke
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/qemu-guest-smoke.yml"
+      - "scripts/ci_qemu_guest_smoke.sh"
+      - "docs/testing/QEMU-GUEST-CI.md"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/qemu-guest-smoke.yml"
+      - "scripts/ci_qemu_guest_smoke.sh"
+      - "docs/testing/QEMU-GUEST-CI.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qemu-guest-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qemu-guest-smoke:
+    name: Boot a minimal Linux guest with QEMU TCG
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install isolated QEMU test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            qemu-system-x86 busybox-static cpio gzip
+
+      - name: Boot minimal guest and verify serial marker
+        run: bash scripts/ci_qemu_guest_smoke.sh
