@@ -73,7 +73,7 @@ def _validate_preview(disk: str, steps: Sequence[Step]) -> None:
         if any(
             not isinstance(argument, str)
             or not argument
-            or any(character in argument for character in ("\\x00", "\\n", "\\r"))
+            or any(ord(character) < 32 or ord(character) == 127 for character in argument)
             for argument in step.command
         ):
             raise ExecutorError(
