@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Volnist
 
 #include "PreflightController.h"
+#include "InstallerWorkflowPolicy.h"
 
 #include <QDir>
 #include <algorithm>
@@ -133,6 +134,7 @@ QString PreflightController::error() const { return m_error; }
 QVariantMap PreflightController::environment() const { return m_environment; }
 QVariantList PreflightController::devices() const { return m_devices; }
 QVariantList PreflightController::disks() const { return m_disks; }
+QString PreflightController::diskInventoryState() const { return m_diskInventoryState; }
 QString PreflightController::selectedDisk() const { return m_selectedDisk; }
 bool PreflightController::planAvailable() const { return m_planAvailable; }
 QString PreflightController::planStatus() const { return m_planStatus; }
@@ -182,6 +184,21 @@ void PreflightController::setError(const QString &value)
     emit errorChanged();
 }
 
+void PreflightController::setDiskInventoryState(const QString &value)
+{
+    if (m_diskInventoryState == value)
+        return;
+    m_diskInventoryState = value;
+    emit diskInventoryChanged();
+}
+
+bool PreflightController::canEnterStep(int step) const
+{
+    return InstallerWorkflowPolicy::canEnterStep(
+        step, m_busy, m_reportReady, m_planAvailable,
+        m_planStatus, m_diskInventoryState);
+}
+
 void PreflightController::refreshHardware()
 {
     if (m_busy) {
@@ -201,6 +218,13 @@ void PreflightController::refreshHardware()
     m_reportBytes.clear();
     m_reportPath.clear();
     m_temporaryDirectory.reset();
+    const QString previousSelection = m_selectedDisk;
+    m_selectedDisk.clear();
+    m_disks.clear();
+    emit disksChanged();
+    if (!previousSelection.isEmpty())
+        emit selectedDiskChanged();
+    setDiskInventoryState(QStringLiteral("not-run"));
     emit reportReadyChanged();
     emit planChanged();
 
@@ -231,9 +255,11 @@ void PreflightController::refreshDisks()
     emit disksChanged();
     if (!previousSelection.isEmpty())
         emit selectedDiskChanged();
+    setDiskInventoryState(QStringLiteral("loading"));
 
     const QString lsblk = lsblkExecutable();
     if (lsblk.isEmpty()) {
+        setDiskInventoryState(QStringLiteral("unavailable"));
         setError(QStringLiteral("Не знайдено lsblk. Список накопичувачів недоступний."));
         setStatus(QStringLiteral("Неможливо прочитати перелік накопичувачів."));
         return;
@@ -282,6 +308,8 @@ void PreflightController::startProcess(ProcessPurpose purpose,
                                        const QStringList &arguments)
 {
     if (program.isEmpty()) {
+        if (purpose == ProcessPurpose::DiskInventory)
+            setDiskInventoryState(QStringLiteral("unavailable"));
         setError(QStringLiteral("Не знайдено потрібну програму в PATH."));
         return;
     }
@@ -383,6 +411,8 @@ void PreflightController::handleProcessStartFailure(QProcess *process)
     m_processTimedOut = false;
     process->deleteLater();
     setBusy(false);
+    if (m_processPurpose == ProcessPurpose::DiskInventory)
+        setDiskInventoryState(QStringLiteral("unavailable"));
     setError(QStringLiteral("Не вдалося запустити процес: %1").arg(message));
     setStatus(QStringLiteral("Операцію перервано до виконання."));
 }
@@ -411,11 +441,15 @@ void PreflightController::handleProcessFinished(QProcess *process,
     setBusy(false);
 
     if (timedOut) {
+        if (m_processPurpose == ProcessPurpose::DiskInventory)
+            setDiskInventoryState(QStringLiteral("unavailable"));
         setError(QStringLiteral("Операція перевищила обмежений час виконання та була зупинена."));
         setStatus(QStringLiteral("Операцію перервано за тайм-аутом; повторіть перевірку."));
         return;
     }
     if (m_outputOverflow) {
+        if (m_processPurpose == ProcessPurpose::DiskInventory)
+            setDiskInventoryState(QStringLiteral("unavailable"));
         setError(QStringLiteral("Вивід дочірнього процесу перевищив ліміт stdout 16 MiB або stderr 1 MiB."));
         setStatus(QStringLiteral("Операцію зупинено до обробки неповної відповіді."));
         return;
@@ -756,6 +790,7 @@ bool PreflightController::validateDiagnosticPlan(const QJsonObject &plan,
 void PreflightController::handleDiskResult(int exitCode, bool crashed)
 {
     if (crashed || exitCode != 0) {
+        setDiskInventoryState(QStringLiteral("unavailable"));
         const QString detail = QString::fromUtf8(m_standardError).trimmed();
         setError(detail.isEmpty()
                      ? QStringLiteral("lsblk завершився з кодом %1.").arg(exitCode)
@@ -771,14 +806,21 @@ void PreflightController::parseDiskInventory(const QByteArray &bytes)
     QJsonParseError parseError;
     const QJsonDocument document = QJsonDocument::fromJson(bytes, &parseError);
     if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+        setDiskInventoryState(QStringLiteral("unavailable"));
         setError(QStringLiteral("lsblk повернув некоректний JSON: %1")
                      .arg(parseError.errorString()));
         return;
     }
 
+    const QJsonValue blockDevicesValue = document.object().value(QStringLiteral("blockdevices"));
+    if (!blockDevicesValue.isArray()) {
+        setDiskInventoryState(QStringLiteral("unavailable"));
+        setError(QStringLiteral("lsblk JSON не містить масиву blockdevices."));
+        return;
+    }
+
     m_disks.clear();
-    const QJsonArray blockDevices = document.object()
-        .value(QStringLiteral("blockdevices")).toArray();
+    const QJsonArray blockDevices = blockDevicesValue.toArray();
     for (const QJsonValue &value : blockDevices) {
         const QJsonObject disk = value.toObject();
         if (jsonString(disk, QStringLiteral("type"), {}) != QStringLiteral("disk"))
@@ -818,6 +860,7 @@ void PreflightController::parseDiskInventory(const QByteArray &bytes)
     emit disksChanged();
     if (previousSelection != m_selectedDisk)
         emit selectedDiskChanged();
+    setDiskInventoryState(QStringLiteral("loaded"));
 
     setError({});
     if (m_disks.isEmpty())
