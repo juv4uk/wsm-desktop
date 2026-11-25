@@ -6,6 +6,7 @@ from __future__ import annotations
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -87,6 +88,31 @@ class QemuCxlGuestTests(unittest.TestCase):
         self.assertIn("counts=not-reported", untrusted)
         self.assertNotIn("0000:00:1f.0", untrusted)
         self.assertNotIn("secret", untrusted)
+
+    def test_decompressor_stops_at_expanded_byte_budget(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "synthetic.ko.zst"
+            source.write_bytes(b"compressed-fixture")
+            real_popen = guest.subprocess.Popen
+
+            def oversized_child(command, **kwargs):
+                child = [
+                    sys.executable,
+                    "-c",
+                    "import os; os.write(1, b'x' * 4096)",
+                ]
+                return real_popen(child, **kwargs)
+
+            with patch("scripts.ci_qemu_cxl_guest.subprocess.Popen", side_effect=oversized_child):
+                with self.assertRaisesRegex(guest.CxlGuestError, "byte budget"):
+                    guest.decompress_module(source, total_remaining=128)
+
+    def test_raw_module_respects_remaining_total_budget(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "synthetic.ko"
+            source.write_bytes(b"x" * 129)
+            with self.assertRaisesRegex(guest.CxlGuestError, "remaining byte budget"):
+                guest.decompress_module(source, total_remaining=128)
 
     def test_sysfs_report_uses_synthetic_names_not_host_addresses(self) -> None:
         source = (ROOT / "scripts" / "ci_qemu_cxl_guest.py").read_text(encoding="utf-8")
