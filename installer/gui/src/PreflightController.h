@@ -26,6 +26,7 @@ class PreflightController final : public QObject
     Q_PROPERTY(QVariantMap environment READ environment NOTIFY reportReadyChanged)
     Q_PROPERTY(QVariantList devices READ devices NOTIFY reportReadyChanged)
     Q_PROPERTY(QVariantList disks READ disks NOTIFY disksChanged)
+    Q_PROPERTY(QString diskInventoryState READ diskInventoryState NOTIFY diskInventoryChanged)
     Q_PROPERTY(QString selectedDisk READ selectedDisk NOTIFY selectedDiskChanged)
     Q_PROPERTY(bool planAvailable READ planAvailable NOTIFY planChanged)
     Q_PROPERTY(QString planStatus READ planStatus NOTIFY planChanged)
@@ -44,6 +45,7 @@ public:
     QVariantMap environment() const;
     QVariantList devices() const;
     QVariantList disks() const;
+    QString diskInventoryState() const;
     QString selectedDisk() const;
     bool planAvailable() const;
     QString planStatus() const;
@@ -55,6 +57,7 @@ public:
     Q_INVOKABLE void refreshDisks();
     Q_INVOKABLE void selectDisk(const QString &devicePath);
     Q_INVOKABLE void clearDiskSelection();
+    Q_INVOKABLE bool canEnterStep(int step) const;
 
 signals:
     void busyChanged();
@@ -62,6 +65,7 @@ signals:
     void statusChanged();
     void errorChanged();
     void disksChanged();
+    void diskInventoryChanged();
     void selectedDiskChanged();
     void planChanged();
 
@@ -88,6 +92,7 @@ private:
     void setBusy(bool value);
     void setStatus(const QString &value);
     void setError(const QString &value);
+    void setDiskInventoryState(const QString &value);
     QString pythonExecutable() const;
     QString lsblkExecutable() const;
 
@@ -99,6 +104,7 @@ private:
     QString m_status = QStringLiteral("Готово до локальної перевірки.");
     QString m_error;
     QString m_selectedDisk;
+    QString m_diskInventoryState = QStringLiteral("not-run");
     QString m_planStatus = QStringLiteral("not-run");
     QString m_planDigest;
     QVariantMap m_environment;
