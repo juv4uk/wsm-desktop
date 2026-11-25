@@ -28,3 +28,6 @@ check-installer:
 
 check-qemu-harness:
 	$(PYTHON) tests/test_qemu_boot_smoke.py
+
+check-validation-protocols:
+	$(PYTHON) tests/test_validation_protocol_privacy.py
