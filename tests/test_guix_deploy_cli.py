@@ -104,8 +104,9 @@ class GuixDeployCliTests(unittest.TestCase):
         self.assertEqual(payload["status"], "prepared-not-executed")
         self.assertEqual(
             payload["argv"],
-            ["guix", "system", "init", str(self.output_path), "/mnt"],
+            ["guix", "system", "init", "/run/wsm/system.scm", "/mnt"],
         )
+        self.assertEqual(payload["configuration_path"], str(self.output_path))
         self.assertFalse(payload["deployment_executed"])
         self.assertFalse(payload["target_disk_mutated"])
         self.assertTrue(self.output_path.is_file())
@@ -236,15 +237,17 @@ class GuixDeployCliTests(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("cannot open plan", stderr.getvalue())
 
-    def test_malformed_mountpoint_refuses_without_file(self) -> None:
-        code, _stdout, stderr = self.run_cli(
-            "--output", str(self.output_path),
-            "--mountpoint", "relative",
-            "--confirm-plan-sha256", self.plan["plan_sha256"],
-            "--confirm-target-digest", self.selection.digest(),
-        )
-        self.assertEqual(code, 3)
-        self.assertIn("argv.mountpoint", stderr)
+    def test_custom_mountpoint_is_not_a_cli_option(self) -> None:
+        # The backend allow-list fixes the installer-owned mount root; a CLI
+        # option would only invite callers to request an argv we must refuse.
+        with self.assertRaises(SystemExit) as raised:
+            self.run_cli(
+                "--output", str(self.output_path),
+                "--mountpoint", "relative",
+                "--confirm-plan-sha256", self.plan["plan_sha256"],
+                "--confirm-target-digest", self.selection.digest(),
+            )
+        self.assertEqual(raised.exception.code, 2)
         self.assertFalse(self.output_path.exists())
 
 

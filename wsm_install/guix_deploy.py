@@ -14,6 +14,8 @@ import sys
 from typing import Any
 
 from .backend_guix import (
+    GUIX_CONFIGURATION_PATH,
+    GUIX_TARGET_MOUNTPOINT,
     HandoffError,
     TargetSelection,
     prepare,
@@ -202,8 +204,14 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="validate inputs and print the exact digests required by the prepare step",
     )
-    parser.add_argument("--output", metavar="PATH", help="new absolute .scm path; existing files are never overwritten")
-    parser.add_argument("--mountpoint", default="/mnt", help="target mount point for the displayed argv (default: /mnt)")
+    parser.add_argument(
+        "--output",
+        metavar="PATH",
+        help=(
+            "new absolute .scm review copy; existing files are never overwritten. "
+            f"The displayed deployment argv always uses the installer-owned path {GUIX_CONFIGURATION_PATH}."
+        ),
+    )
     parser.add_argument("--confirm-plan-sha256", metavar="HEX", help="plan digest explicitly confirmed by the caller")
     parser.add_argument("--confirm-target-digest", metavar="HEX", help="target digest explicitly confirmed by the caller")
     return parser
@@ -273,8 +281,8 @@ def main(argv: list[str] | None = None) -> int:
             confirmed_plan_sha256=args.confirm_plan_sha256,
             confirmed_target_digest=args.confirm_target_digest,
             external_bootloader_job=False,
-            configuration_path=str(destination),
-            target_mountpoint=args.mountpoint,
+            configuration_path=GUIX_CONFIGURATION_PATH,
+            target_mountpoint=GUIX_TARGET_MOUNTPOINT,
         )
 
         _write_new_file(destination, handoff.configuration)

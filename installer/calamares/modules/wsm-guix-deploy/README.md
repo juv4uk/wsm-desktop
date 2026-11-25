@@ -31,7 +31,7 @@ python3 -m wsm_install.guix_deploy \\
 CLI:
 - відмовляє diagnostic-only або зміненим планам, blockers, неузгодженим digest-ам і невалідному вибору;
 - створює новий файл із правами \`0600\`, не перезаписує наявний і не приймає symlink або duplicate JSON keys;
-- повертає argv на кшталт \`guix system init ...\`, але **ніколи не запускає цю команду**;
+- повертає argv як типізований список із фіксованими \`/run/wsm/system.scm\` і \`/mnt\`, але **ніколи не запускає цю команду**; \`--output\` задає лише оглядову копію й не змінює allowlist argv;
 - не монтує, не форматує та не змінює цільовий диск.
 
 Поточний \`wsm-install\` CLI все ще генерує \`confirmable=false\`; повноцінний frontend, який збирає всі обов'язкові selections і видає confirmed plan, ще не реалізовано. Тому handoff CLI наразі тестується на синтетичному confirmed fixture.
