@@ -28,7 +28,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from check_channels import default_lock
+CHANNEL_LOCKS = {
+    "free": ROOT / "channels.lock.scm",
+    "compatibility": ROOT / "channels.compatibility.lock.scm",
+}
 
 SCHEMA = "wsm-release-gate/1"
 VERSION = "0.1.0"
@@ -69,7 +72,7 @@ def check_channels() -> dict[str, str]:
     """Check required Free lock and report an absent optional Compatibility lock honestly."""
     results: list[tuple[str, str, str]] = []
     for policy in ("free", "compatibility"):
-        lock = default_lock(policy)
+        lock = CHANNEL_LOCKS[policy]
         if not lock.is_file():
             if policy == "free":
                 results.append(("free", "fail", f"required Free lock is missing: {lock.name}"))
