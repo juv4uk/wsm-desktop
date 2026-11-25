@@ -57,7 +57,7 @@ def make_draft(root: Path, source_report: dict | None = None) -> tuple[dict, byt
     root.mkdir(parents=True, exist_ok=True)
     profile_path = root / "profile.scm"
     profile_path.write_bytes(PROFILE_SOURCE_BYTES)
-    bundle = draft(source_report, "ASUS", "H170-PRO", "asus/h170-pro", raw, PROFILE_SOURCE_BYTES)
+    bundle = draft(source_report, "Gigabyte", "GA-H170-Gaming 3", "gigabyte/ga-h170-gaming3", raw, PROFILE_SOURCE_BYTES)
     artifact = root / REPORT_ARTIFACT
     artifact.parent.mkdir(parents=True, exist_ok=True)
     artifact.write_bytes(raw)
@@ -139,11 +139,11 @@ class DraftTests(unittest.TestCase):
 
     def test_report_without_id_is_refused(self) -> None:
         with self.assertRaises(SystemExit):
-            draft({"devices": [], "schema_version": "1.0.0", "collected_at": "2026-11-26"}, "ASUS", "H170-PRO", "asus/h170-pro", b"{}", b";; profile\n")
+            draft({"devices": [], "schema_version": "1.0.0", "collected_at": "2026-11-26"}, "Gigabyte", "GA-H170-Gaming 3", "gigabyte/ga-h170-gaming3", b"{}", b";; profile\n")
 
     def test_report_without_schema_version_is_refused(self) -> None:
         with self.assertRaises(SystemExit):
-            draft({"devices": [], "report_id": "report-123", "collected_at": "2026-11-26"}, "ASUS", "H170-PRO", "asus/h170-pro", b"{}", b";; profile\n")
+            draft({"devices": [], "report_id": "report-123", "collected_at": "2026-11-26"}, "Gigabyte", "GA-H170-Gaming 3", "gigabyte/ga-h170-gaming3", b"{}", b";; profile\n")
 
 
 class CliTests(unittest.TestCase):
@@ -153,7 +153,7 @@ class CliTests(unittest.TestCase):
             report_path = directory / "hw.json"
             raw = (ROOT / "tests" / "fixtures" / "hardware" / "desktop-observed.json").read_bytes()
             report_path.write_bytes(raw)
-            profile_dir = directory / "profiles" / "asus" / "h170-pro"
+            profile_dir = directory / "profiles" / "gigabyte" / "ga-h170-gaming3"
             profile_dir.mkdir(parents=True)
             (profile_dir / "profile.scm").write_bytes(PROFILE_SOURCE_BYTES)
             out = profile_dir / "evidence.json"
@@ -162,9 +162,9 @@ class CliTests(unittest.TestCase):
                     sys.executable,
                     str(ROOT / "scripts" / "draft_profile_evidence.py"),
                     "--report", str(report_path),
-                    "--vendor", "ASUS",
-                    "--model", "H170-PRO",
-                    "--slug", "asus/h170-pro",
+                    "--vendor", "Gigabyte",
+                    "--model", "GA-H170-Gaming 3",
+                    "--slug", "gigabyte/ga-h170-gaming3",
                     "--out", str(out),
                 ],
                 capture_output=True,
@@ -191,7 +191,7 @@ class CliTests(unittest.TestCase):
             directory = Path(temporary)
             report_path = directory / "hw.json"
             report_path.write_bytes((ROOT / "tests" / "fixtures" / "hardware" / "desktop-observed.json").read_bytes())
-            profile_dir = directory / "profiles" / "asus" / "h170-pro"
+            profile_dir = directory / "profiles" / "gigabyte" / "ga-h170-gaming3"
             profile_dir.mkdir(parents=True)
             (profile_dir / "profile.scm").write_bytes(PROFILE_SOURCE_BYTES)
             out = profile_dir / "evidence.json"
@@ -199,9 +199,9 @@ class CliTests(unittest.TestCase):
                 sys.executable,
                 str(ROOT / "scripts" / "draft_profile_evidence.py"),
                 "--report", str(report_path),
-                "--vendor", "ASUS",
-                "--model", "H170-PRO",
-                "--slug", "asus/h170-pro",
+                "--vendor", "Gigabyte",
+                "--model", "GA-H170-Gaming 3",
+                "--slug", "gigabyte/ga-h170-gaming3",
                 "--out", str(out),
             ]
             first = subprocess.run(command, capture_output=True, text=True, check=False)
@@ -216,7 +216,7 @@ class CliTests(unittest.TestCase):
             directory = Path(temporary)
             report_path = directory / "hw.json"
             report_path.write_text(json.dumps(report()), encoding="utf-8")
-            profile_dir = directory / "profiles" / "asus" / "h170-pro"
+            profile_dir = directory / "profiles" / "gigabyte" / "ga-h170-gaming3"
             profile_dir.mkdir(parents=True)
             out = profile_dir / "evidence.json"
             completed = subprocess.run(
@@ -224,9 +224,9 @@ class CliTests(unittest.TestCase):
                     sys.executable,
                     str(ROOT / "scripts" / "draft_profile_evidence.py"),
                     "--report", str(report_path),
-                    "--vendor", "ASUS",
-                    "--model", "H170-PRO",
-                    "--slug", "asus/h170-pro",
+                    "--vendor", "Gigabyte",
+                    "--model", "GA-H170-Gaming 3",
+                    "--slug", "gigabyte/ga-h170-gaming3",
                     "--out", str(out),
                 ],
                 capture_output=True,
@@ -255,9 +255,9 @@ class CliTests(unittest.TestCase):
                     sys.executable,
                     str(ROOT / "scripts" / "draft_profile_evidence.py"),
                     "--report", str(report_path),
-                    "--vendor", "ASUS",
-                    "--model", "H170-PRO",
-                    "--slug", "asus/h170-pro",
+                    "--vendor", "Gigabyte",
+                    "--model", "GA-H170-Gaming 3",
+                    "--slug", "gigabyte/ga-h170-gaming3",
                     "--out", str(out),
                 ],
                 capture_output=True,
@@ -287,9 +287,9 @@ class CliTests(unittest.TestCase):
                     sys.executable,
                     str(ROOT / "scripts" / "draft_profile_evidence.py"),
                     "--report", str(report_path),
-                    "--vendor", "ASUS",
-                    "--model", "H170-PRO",
-                    "--slug", "asus/h170-pro",
+                    "--vendor", "Gigabyte",
+                    "--model", "GA-H170-Gaming 3",
+                    "--slug", "gigabyte/ga-h170-gaming3",
                     "--out", str(out),
                 ],
                 capture_output=True,
@@ -314,9 +314,9 @@ class CliTests(unittest.TestCase):
                     sys.executable,
                     str(ROOT / "scripts" / "draft_profile_evidence.py"),
                     "--report", str(report_path),
-                    "--vendor", "ASUS",
-                    "--model", "H170-PRO",
-                    "--slug", "asus/h170-pro",
+                    "--vendor", "Gigabyte",
+                    "--model", "GA-H170-Gaming 3",
+                    "--slug", "gigabyte/ga-h170-gaming3",
                     "--out", str(out),
                 ],
                 capture_output=True,
