@@ -107,6 +107,7 @@ class InstallerFreshnessTests(unittest.TestCase):
             report(),
             live(),
             expected_report_sha256="c" * 64,
+            expected_boot_session_sha256=BOOT_A,
         )
         self.assertEqual(decision.status, FreshnessStatus.REPORT_DIGEST_MISMATCH)
         self.assertFalse(decision.confirmable)
