@@ -52,8 +52,9 @@ CHANNEL_LOCK_PATH = GUIX_CHANNEL_LOCK_PATH
 # root - so no step may rely on PATH lookup at all.
 # These are stable paths inside Guix System's immutable system profile,
 # not FHS /usr paths and not names resolved through inherited PATH. Each
-# program must be present in the live image's package closure; absent paths
-# are a preflight refusal, never a reason to fall back to PATH.
+# program must be present in the live image's package closure. The planner
+# never checks or resolves them via PATH; a future executor must verify each
+# absolute path before use and refuse when the package is absent.
 SYSTEM_PROFILE = "/run/current-system/profile"
 TRUSTED_TOOLS = {
     "sgdisk": f"{SYSTEM_PROFILE}/sbin/sgdisk",
