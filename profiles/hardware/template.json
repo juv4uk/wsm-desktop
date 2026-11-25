@@ -1,9 +1,9 @@
 {
   "schema": "wsm-profile-evidence/1",
   "profile": {
-    "vendor": "ASUS",
-    "model": "H170-PRO",
-    "slug": "asus/h170-pro"
+    "vendor": "Gigabyte",
+    "model": "GA-H170-Gaming3",
+    "slug": "gigabyte/ga-h170-gaming3"
   },
   "report_id": "замінити на report_id зі звіту wsm-hwcheck",
   "report_schema_version": "1.0.0",

@@ -62,6 +62,31 @@ class LevelEvaluationTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, "isa.not-x86")
 
 
+class OwnerHardwareTests(unittest.TestCase):
+    """Skylake i5-6400 from wsm-os/docs/OWNER-HARDWARE-PROFILE.md.
+
+    The owner's machine reports AVX2, FMA and BMI2 but no AVX-512, so it is v3
+    by construction and can never be v4. Encoding that here stops a future
+    change from quietly claiming more than the hardware has.
+    """
+
+    SKYLAKE = V3 + ["adx", "aes", "pclmulqdq", "rdrand", "rdseed", "vmx", "smep", "smap", "pcid"]
+
+    def test_skylake_i5_6400_is_v3(self) -> None:
+        result = evaluate(self.SKYLAKE, "x86_64")
+        self.assertEqual(result["highest_supported"], "x86-64-v3")
+
+    def test_skylake_is_not_v4(self) -> None:
+        result = evaluate(self.SKYLAKE, "x86_64")
+        self.assertFalse(result["x86-64-v4"]["supported"])
+        self.assertIn("avx512f", result["x86-64-v4"]["missing"])
+
+    def test_skylake_qualifies_for_v2_and_v3(self) -> None:
+        result = evaluate(self.SKYLAKE, "x86_64")
+        self.assertTrue(result["x86-64-v2"]["supported"])
+        self.assertTrue(result["x86-64-v3"]["supported"])
+
+
 class CpuinfoParsingTests(unittest.TestCase):
     def write(self, text: str) -> Path:
         handle = tempfile.NamedTemporaryFile("w", suffix=".cpuinfo", delete=False, encoding="utf-8")

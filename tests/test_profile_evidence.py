@@ -18,7 +18,7 @@ from check_profile_evidence import validate  # noqa: E402
 
 BASE = {
     "schema": "wsm-profile-evidence/1",
-    "profile": {"vendor": "ASUS", "model": "H170-PRO", "slug": "asus/h170-pro"},
+    "profile": {"vendor": "Gigabyte", "model": "GA-H170-Gaming3", "slug": "gigabyte/ga-h170-gaming3"},
     "report_id": "0f3c9a1e-2b44-4c8d-9f10-77a1b2c3d4e5",
     "report_schema_version": "1.0.0",
     "isa_level": "x86-64-v2",
