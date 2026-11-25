@@ -174,7 +174,7 @@ case " $* " in
         exit 0 ;;
     *" system image "*)
         for argument in "$@"; do
-            case "$argument" in --root=*) root=\${argument#--root=} ;; esac
+            case "$argument" in --root=*) root=${argument#--root=} ;; esac
         done
         [ -n "$root" ] || exit 9
         ln -s "$WSM_TEST_IMAGE" "$root"
