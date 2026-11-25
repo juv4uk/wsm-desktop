@@ -16,11 +16,17 @@ import shlex
 from dataclasses import dataclass
 from typing import Any
 
+from wsm_install.backend_guix import (
+    GUIX_CHANNEL_LOCK_PATH,
+    GUIX_CONFIGURATION_PATH,
+    GUIX_TARGET_MOUNTPOINT,
+    build_argv,
+)
 from wsm_install.partition import DEVICE_PATH, Layout, Refused
 
-TARGET_MOUNTPOINT = "/mnt"
-SYSTEM_CONFIG_PATH = "/run/wsm/system.scm"
-CHANNEL_LOCK_PATH = "/run/wsm/channels.lock.scm"
+TARGET_MOUNTPOINT = GUIX_TARGET_MOUNTPOINT
+SYSTEM_CONFIG_PATH = GUIX_CONFIGURATION_PATH
+CHANNEL_LOCK_PATH = GUIX_CHANNEL_LOCK_PATH
 
 FILESYSTEMS = {
     "ext4": {"mkfs": "mkfs.ext4", "args": ["-F"], "root": True},
@@ -201,17 +207,7 @@ def backend_command(
             "backend.system-file",
             f"system configuration path must be exactly {SYSTEM_CONFIG_PATH!r}",
         )
-    return [
-        "guix",
-        "time-machine",
-        "-C",
-        CHANNEL_LOCK_PATH,
-        "--",
-        "system",
-        "init",
-        SYSTEM_CONFIG_PATH,
-        TARGET_MOUNTPOINT,
-    ]
+    return list(build_argv(SYSTEM_CONFIG_PATH, TARGET_MOUNTPOINT))
 
 
 def render(steps: list[Step], command: list[str]) -> str:
