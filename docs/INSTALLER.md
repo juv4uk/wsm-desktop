@@ -2,6 +2,10 @@
 
 <!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 
+## Обрана версія для прототипу
+
+Початковий кандидат — **Calamares 3.4.2** (tag `v3.4.2`). До завершення feasibility/build перевірок це кандидат, а не підтримувана чи зафіксована релізна залежність. Деталі — у [оцінці можливості інтеграції](CALAMARES-FEASIBILITY.md).
+
 ## Ролі
 
 Calamares — це UI та workflow engine. Він не замінює штатний механізм розгортання Guix System.
@@ -57,6 +61,12 @@ Guix configuration має бути єдиним джерелом істини д
 - не записувати секрети в логи.
 
 Використання os.system(), shell=True або довільної shell-команди, складеної з тексту інтерфейсу, заборонене.
+
+## Обов'язкові можливості збірки
+
+Для WSM prototype потрібні Qt 6, Python job modules API та справжній Calamares `partition` module із KPMcore. Збірка, у якій KPMcore відсутній і partition module пропущений, не проходить критерії WSM, навіть якщо основний executable зібрався.
+
+Потрібно перевірити Qt6 Polkit integration та runtime paths у Guix. Не вимикайте INSTALL_POLKIT для кінцевого образу без окремої перевіреної політики привілеїв і security review.
 
 ## Поточний стан
 
