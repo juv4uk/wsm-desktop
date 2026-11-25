@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Build a deterministic source bundle from a Git commit plus checksums."""
+"""Build a deterministic source bundle without overwriting existing files."""
 
 from __future__ import annotations
 
 import argparse
 import gzip
 import hashlib
+import io
 import json
+import os
+import stat
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,14 +18,8 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 RELEASE_INFO = ROOT / "RELEASE-INFO.json"
-
-
-def sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+SUMS_NAME = "SHA256SUMS"
+MANIFEST_NAME = "release-manifest.json"
 
 
 def git_output(arguments: list[str]) -> str:
@@ -45,6 +42,99 @@ def load_release() -> dict[str, Any]:
     return value
 
 
+def _safe_output_parent(parent: Path) -> Path:
+    """Create a non-symlink output directory outside the repository tree."""
+    requested = parent.expanduser()
+    if not requested.is_absolute():
+        requested = Path.cwd() / requested
+    if ".." in requested.parts:
+        raise SystemExit("build-release-bundle: output path must not contain '..'")
+
+    current = Path(requested.anchor)
+    for component in requested.parts[1:]:
+        current = current / component
+        try:
+            metadata = current.lstat()
+        except FileNotFoundError:
+            try:
+                current.mkdir(mode=0o700)
+                metadata = current.lstat()
+            except OSError as exc:
+                raise SystemExit(
+                    f"build-release-bundle: cannot create output directory {current}: {exc}"
+                ) from exc
+        except OSError as exc:
+            raise SystemExit(
+                f"build-release-bundle: cannot inspect output directory {current}: {exc}"
+            ) from exc
+
+        if stat.S_ISLNK(metadata.st_mode):
+            raise SystemExit(
+                f"build-release-bundle: output directory contains a symlink: {current}"
+            )
+        if not stat.S_ISDIR(metadata.st_mode):
+            raise SystemExit(
+                f"build-release-bundle: output parent component is not a directory: {current}"
+            )
+
+    resolved = current.resolve(strict=True)
+    repository = ROOT.resolve()
+    try:
+        resolved.relative_to(repository)
+    except ValueError:
+        pass
+    else:
+        raise SystemExit(
+            "build-release-bundle: output directory must be outside the repository tree"
+        )
+
+    for special in (Path("/dev"), Path("/proc"), Path("/sys")):
+        if resolved == special or special in resolved.parents:
+            raise SystemExit(
+                f"build-release-bundle: output directory must not be under {special}"
+            )
+    return resolved
+
+
+def _require_absent(path: Path) -> None:
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        raise SystemExit(f"build-release-bundle: cannot inspect artifact path {path}: {exc}") from exc
+    raise SystemExit(
+        f"build-release-bundle: refusing to overwrite existing artifact: {path}"
+    )
+
+
+def _write_new_file(path: Path, payload: bytes) -> None:
+    """Create a new regular file with exclusive/no-follow semantics."""
+    flags = (
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_EXCL
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    try:
+        descriptor = os.open(path, flags, 0o644)
+    except FileExistsError as exc:
+        raise SystemExit(
+            f"build-release-bundle: refusing to overwrite existing artifact: {path}"
+        ) from exc
+    except OSError as exc:
+        raise SystemExit(f"build-release-bundle: cannot create artifact {path}: {exc}") from exc
+
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+    except OSError as exc:
+        raise SystemExit(f"build-release-bundle: cannot write artifact {path}: {exc}") from exc
+
+
 def build(version: str, output: Path) -> dict[str, Any]:
     release = load_release()
     if version != release["version"]:
@@ -52,21 +142,25 @@ def build(version: str, output: Path) -> dict[str, Any]:
             f"build-release-bundle: requested {version}, RELEASE-INFO.json says {release['version']}"
         )
 
-    # SHA256SUMS names the file it checksums. If the builder is allowed to pick
-    # any name, the published checksum file refers to a path nobody downloads,
-    # and `sha256sum -c SHA256SUMS` fails silently for the user. Pin the name.
     canonical_name = f"wsm-desktop-{version}-source.tar.gz"
     if output.name != canonical_name:
         raise SystemExit(
             f"build-release-bundle: output must be named {canonical_name!r}; "
             f"SHA256SUMS would otherwise name {output.name!r}, which is not the "
-            f"published asset and breaks `sha256sum -c SHA256SUMS`"
+            "published asset and breaks `sha256sum -c SHA256SUMS`"
         )
 
     commit = git_output(["rev-parse", "HEAD"])
     dirty = git_output(["status", "--porcelain"])
     if dirty:
         raise SystemExit("build-release-bundle: working tree must be clean before bundling")
+
+    output_parent = _safe_output_parent(output.parent)
+    output_path = output_parent / canonical_name
+    sums_path = output_parent / SUMS_NAME
+    manifest_path = output_parent / MANIFEST_NAME
+    for artifact_path in (output_path, sums_path, manifest_path):
+        _require_absent(artifact_path)
 
     prefix = f"wsm-desktop-{version}/"
     archive = subprocess.run(
@@ -75,22 +169,23 @@ def build(version: str, output: Path) -> dict[str, Any]:
         check=True,
     ).stdout
 
-    output.parent.mkdir(parents=True, exist_ok=True)
-    # gzip.open() only accepts mtime on newer Pythons; GzipFile keeps the
-    # release reproducible on the documented Python >= 3.10 baseline.
-    with output.open("wb") as raw:
-        with gzip.GzipFile(
-            filename="",
-            mode="wb",
-            compresslevel=9,
-            fileobj=raw,
-            mtime=0,
-        ) as stream:
-            stream.write(archive)
+    compressed = io.BytesIO()
+    # GzipFile with mtime=0 keeps the archive stable on the same platform and
+    # compression implementation; the release manifest records the exact source commit.
+    with gzip.GzipFile(
+        filename="",
+        mode="wb",
+        compresslevel=9,
+        fileobj=compressed,
+        mtime=0,
+    ) as stream:
+        stream.write(archive)
+    tarball_bytes = compressed.getvalue()
+    tarball_digest = hashlib.sha256(tarball_bytes).hexdigest()
 
-    tarball_digest = sha256_file(output)
-    sums = output.with_name("SHA256SUMS")
-    sums.write_text(f"{tarball_digest}  {output.name}\n", encoding="utf-8")
+    _write_new_file(output_path, tarball_bytes)
+    sums_bytes = f"{tarball_digest}  {canonical_name}\n".encode("utf-8")
+    _write_new_file(sums_path, sums_bytes)
 
     manifest = {
         "schema": "wsm-release-manifest/1",
@@ -103,31 +198,33 @@ def build(version: str, output: Path) -> dict[str, Any]:
             "prefix": prefix,
         },
         "artifacts": {
-            output.name: {
+            canonical_name: {
                 "sha256": tarball_digest,
-                "bytes": output.stat().st_size,
+                "bytes": len(tarball_bytes),
             },
-            sums.name: {
-                "sha256": sha256_file(sums),
-                "bytes": sums.stat().st_size,
+            SUMS_NAME: {
+                "sha256": hashlib.sha256(sums_bytes).hexdigest(),
+                "bytes": len(sums_bytes),
             },
         },
     }
-    manifest_path = output.with_name("release-manifest.json")
-    manifest_path.write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    manifest_bytes = (
+        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    ).encode("utf-8")
+    _write_new_file(manifest_path, manifest_bytes)
     return manifest
 
 
 def main(argv: list[str] | None = None) -> int:
+    release = load_release()
+    version = release["version"]
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--version", default=load_release()["version"])
+    parser.add_argument("--version", default=version)
     parser.add_argument(
         "--output",
         type=Path,
-        default=ROOT / "build" / f"wsm-desktop-{load_release()['version']}-source.tar.gz",
+        default=ROOT.parent / f"{ROOT.name}-release" / f"wsm-desktop-{version}-source.tar.gz",
+        help="destination using the canonical source-tarball filename; parent directory is created safely",
     )
     args = parser.parse_args(argv)
     manifest = build(args.version, args.output)
