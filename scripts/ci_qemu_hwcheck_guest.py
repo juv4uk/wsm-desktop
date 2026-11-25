@@ -35,8 +35,15 @@ PYTHON_SHA256 = "75b92c55bc6a5f58fe4d08fc5261c983b2b17930192d62946fe7c9cf6fd6631
 REPORT_BEGIN = "WSM_HWCHECK_REPORT_BEGIN"
 REPORT_END = "WSM_HWCHECK_REPORT_END"
 REPORT_PREFIX = "WSM_HWCHECK_REPORT_Z64:"
-QEMU_TIMEOUT_SECONDS = 75
-GUEST_MEMORY_MIB = 512
+MAX_PYTHON_ARCHIVE_BYTES = 40 * 1024 * 1024
+MAX_TAR_MEMBERS = 50_000
+MAX_TAR_EXPANDED_BYTES = 256 * 1024 * 1024
+MAX_INITRAMFS_BYTES = 256 * 1024 * 1024
+MAX_REPORT_BYTES = 8 * 1024 * 1024
+BUSYBOX_APPLETS = ("sh", "mount", "mkdir", "sleep", "sync", "poweroff")
+
+QEMU_TIMEOUT_SECONDS = 90
+GUEST_MEMORY_MIB = 1024
 
 GUEST_INIT = """#!/bin/sh
 set -eu
@@ -78,6 +85,8 @@ import gzip
 from pathlib import Path
 
 raw = Path("/tmp/hardware-report.json").read_bytes()
+if len(raw) > {max_report_bytes}:
+    raise SystemExit("guest report exceeds the 8 MiB report ceiling")
 encoded = base64.b64encode(gzip.compress(raw, mtime=0)).decode("ascii")
 print("{report_prefix}" + encoded)
 PYREPORT
@@ -94,18 +103,33 @@ guest_fail "poweroff-returned"
 
 
 def _download_pinned_python(destination: Path) -> None:
+    """Download the immutable CPython archive with a streaming size and digest bound."""
     request = urllib.request.Request(
         PYTHON_URL,
         headers={"User-Agent": "wsm-hwcheck-qemu-ci/1.0"},
     )
     digest = hashlib.sha256()
-    with urllib.request.urlopen(request, timeout=90) as response, destination.open("wb") as out:
-        while True:
-            chunk = response.read(1024 * 1024)
-            if not chunk:
-                break
-            digest.update(chunk)
-            out.write(chunk)
+    total_bytes = 0
+    try:
+        with urllib.request.urlopen(request, timeout=90) as response, destination.open("wb") as out:
+            status = getattr(response, "status", 200)
+            if status != 200:
+                raise RuntimeError(f"pinned CPython download returned HTTP {status}")
+            content_length = response.headers.get("Content-Length")
+            if content_length and int(content_length) > MAX_PYTHON_ARCHIVE_BYTES:
+                raise RuntimeError("pinned CPython archive exceeds the 40 MiB download ceiling")
+            while True:
+                chunk = response.read(1024 * 1024)
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+                if total_bytes > MAX_PYTHON_ARCHIVE_BYTES:
+                    raise RuntimeError("pinned CPython archive exceeds the 40 MiB download ceiling")
+                digest.update(chunk)
+                out.write(chunk)
+    except (OSError, ValueError) as exc:
+        raise RuntimeError(f"could not download pinned CPython archive: {exc}") from exc
+
     actual = digest.hexdigest()
     if actual != PYTHON_SHA256:
         raise RuntimeError(
@@ -114,21 +138,20 @@ def _download_pinned_python(destination: Path) -> None:
 
 
 def _safe_extract_tar(archive: Path, destination: Path) -> None:
+    """Extract a pinned tarball with path, entry-count and expanded-size bounds."""
     with tarfile.open(archive, "r:gz") as tar:
         members = tar.getmembers()
+        if len(members) > MAX_TAR_MEMBERS:
+            raise RuntimeError("pinned CPython archive contains too many entries")
+        expanded_bytes = sum(max(member.size, 0) for member in members)
+        if expanded_bytes > MAX_TAR_EXPANDED_BYTES:
+            raise RuntimeError("pinned CPython archive expands beyond the 256 MiB ceiling")
         for member in members:
             relative = PurePosixPath(member.name)
             if relative.is_absolute() or ".." in relative.parts:
                 raise RuntimeError(f"unsafe path in pinned Python archive: {member.name}")
-            if member.issym() or member.islnk():
-                link = PurePosixPath(
-                    os.path.normpath(str(relative.parent / member.linkname))
-                )
-                if link.is_absolute() or ".." in link.parts:
-                    raise RuntimeError(
-                        f"unsafe link in pinned Python archive: {member.name} -> {member.linkname}"
-                    )
-        tar.extractall(destination, members=members)
+        # The data filter rejects unsafe links, special files and ownership/mode abuse.
+        tar.extractall(destination, members=members, filter="data")
 
 
 def _find_python_home(extract_root: Path) -> Path:
@@ -225,6 +248,15 @@ def _copy_runtime_dependencies(python_home: Path, rootfs: Path) -> list[Path]:
     return copied
 
 
+def _install_busybox_applets(bin_dir: Path) -> None:
+    """Create every BusyBox applet link required by the guest init script."""
+    for applet in BUSYBOX_APPLETS:
+        link = bin_dir / applet
+        if link.exists() or link.is_symlink():
+            raise RuntimeError(f"BusyBox applet path already exists: {link}")
+        link.symlink_to("busybox")
+
+
 def _build_initramfs(work: Path) -> tuple[Path, int]:
     rootfs = work / "rootfs"
     for name in ("bin", "dev", "proc", "sys", "tmp", "opt"):
@@ -268,7 +300,7 @@ def _build_initramfs(work: Path) -> tuple[Path, int]:
     if not busybox:
         raise RuntimeError("busybox-static is required on the CI host")
     shutil.copy2(busybox, rootfs / "bin" / "busybox")
-    (rootfs / "bin" / "sh").symlink_to("busybox")
+    _install_busybox_applets(rootfs / "bin")
 
     device_nodes = (
         ("console", 5, 1, 0o600),
@@ -292,6 +324,7 @@ def _build_initramfs(work: Path) -> tuple[Path, int]:
         report_begin=REPORT_BEGIN,
         report_prefix=REPORT_PREFIX,
         report_end=REPORT_END,
+        max_report_bytes=MAX_REPORT_BYTES,
     )
     init_path = rootfs / "init"
     init_path.write_text(init_script, encoding="utf-8")
@@ -313,6 +346,8 @@ def _build_initramfs(work: Path) -> tuple[Path, int]:
         )
     if not initramfs.is_file() or initramfs.stat().st_size == 0:
         raise RuntimeError("failed to create guest initramfs")
+    if initramfs.stat().st_size > MAX_INITRAMFS_BYTES:
+        raise RuntimeError("guest initramfs exceeds the 256 MiB ceiling")
     return initramfs, len(libraries)
 
 
