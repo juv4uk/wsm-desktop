@@ -51,7 +51,8 @@ check-hygiene:
 	$(PYTHON) tests/test_repo_hygiene.py
 
 release-gate:
-	$(PYTHON) scripts/release_gate.py $(if $(ISO),--iso $(ISO)) $(if $(BOOT),--boot)
+	@test -n "$(PRODUCT)" || { echo "set PRODUCT=free, PRODUCT=compatibility, or PRODUCT=all" >&2; exit 2; }
+	$(PYTHON) scripts/release_gate.py --product "$(PRODUCT)" $(if $(ISO),--iso "$(ISO)") $(if $(BOOT),--boot)
 
 check-channels:
 	$(PYTHON) tests/test_check_channels.py
