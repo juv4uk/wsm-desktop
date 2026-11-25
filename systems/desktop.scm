@@ -25,8 +25,9 @@
              (gnu services networking)
              (gnu services sddm)
              (gnu services sound)
-             (gnu packages fonts)
-             (gnu packages kde-plasma))
+             (gnu packages fonts))
+;; (gnu packages kde-plasma) не потрібен: пакет plasma приходить через
+;; plasma-desktop-service-type, а не через поле packages.
 
 (operating-system
   (host-name "wsm")

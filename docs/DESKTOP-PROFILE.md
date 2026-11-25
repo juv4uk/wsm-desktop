@@ -106,7 +106,7 @@ python3 scripts/qemu_boot_smoke.py --iso build/wsm-desktop.iso \
 
 1. ~~`sddm-configuration` з полем `display-server`~~ — **перевірено й виправлено.** У Guix значення `"wayland"` для `sddm-service-type` відоме як зламане: екран лишається чорним (Guix bug#68939), а патч bug#70527 змушує службу ігнорувати це значення й використовувати x11. У профілі тепер типовий x11 без явного поля.
 2. ~~`bluetooth-configuration` з полем `auto-enable?`~~ — **перевірено.** Поле існує, типове значення `#f`, що збігається з наміром профілю: радіо не вмикається без потреби.
-3. `plasma-desktop-service-type` і модуль `(gnu packages kde-plasma)` — назви могли змінитися.
+3. ~~`plasma-desktop-service-type`~~ — **перевірено.** Служба існує в `(gnu services desktop)`, її значення — `plasma-desktop-configuration`. GNU Guix 1.5 (січень 2026) постачає KDE Plasma 6.5 і саме цю службу. Невикористаний імпорт `(gnu packages kde-plasma)` прибрано: пакет `plasma` приходить через службу. Що саме буде в зібраному образі, вирішує зафіксована ревізія каналу — це перевіряється на `channels.lock.scm`, а не тут.
 4. `(include "desktop.scm")` у `live.scm` — шлях відносний до файлу; перевірити, що Guix його знаходить.
 5. `(local-file "../.." ...)` у `wsm/packages/wsm.scm` — залежить від того, звідки викликають `guix build -f`.
 
