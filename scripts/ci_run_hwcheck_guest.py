@@ -100,7 +100,7 @@ def validate_hardware_report(report: Any, schema: dict[str, Any]) -> int:
         for test_index, test in enumerate(functional_tests):
             functional_test_count += 1
             status = test.get("status")
-            if status not in {"unknown", "not-tested"}:
+            if status not in {"unknown", "not-run"}:
                 raise ValueError(
                     f"devices/{index}/functional_tests/{test_index} claims an unexecuted status {status!r}"
                 )
