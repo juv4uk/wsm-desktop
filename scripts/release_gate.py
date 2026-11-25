@@ -75,7 +75,7 @@ def check_channels() -> dict[str, str]:
     if not compatibility_lock.is_file():
         return criterion(
             "channels",
-            "pass",
+            "not-run",
             "Free structural policy passed; Compatibility: NOT_CONFIGURED "
             "(no compatibility lock, no Compatibility product claim)",
         )
