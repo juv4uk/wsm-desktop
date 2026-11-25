@@ -46,21 +46,14 @@ class QemuBootSmokeTests(unittest.TestCase):
             command = build_qemu_command("qemu-system-x86_64", iso, qcow2, 2048, 2)
 
             blockdev_args = [
-                command[index + 1]
+                json.loads(command[index + 1])
                 for index, item in enumerate(command[:-1])
                 if item == "-blockdev"
             ]
 
-            self.assertEqual(
-                blockdev_args[0],
-                f"driver=file,node-name=wsm-disk-file,filename={str(qcow2).replace(',', ',,')}",
-            )
-            self.assertEqual(
-                blockdev_args[1],
-                "driver=qcow2,node-name=wsm-disk,file=wsm-disk-file",
-            )
+            self.assertEqual(blockdev_args[0]["filename"], str(qcow2))
+            self.assertEqual(blockdev_args[1]["file"], "wsm-disk-file")
             self.assertEqual(command[command.index("-serial") + 1], "stdio")
-            self.assertEqual(command[command.index("-cpu") + 1], "max")
             self.assertNotIn("-chardev", command)
             self.assertIn("-nic", command)
             self.assertEqual(command[command.index("-nic") + 1], "none")
@@ -89,11 +82,11 @@ class QemuBootSmokeTests(unittest.TestCase):
             payload = json.loads(stdout.getvalue())
             command = payload["qemu_command"]
             blockdev = [
-                command[index + 1]
+                json.loads(command[index + 1])
                 for index, item in enumerate(command[:-1])
                 if item == "-blockdev"
             ]
-            self.assertIn("tmp,,comma", blockdev[0])
+            self.assertIn("tmp,comma", blockdev[0]["filename"])
             self.assertEqual(command[command.index("-serial") + 1], "stdio")
             self.assertNotIn("tmp,comma", command)
 

@@ -29,7 +29,6 @@ jobs:
         run: make check
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
-
   qemu-guest-smoke:
     name: Boot a minimal Linux guest with QEMU TCG
     runs-on: ubuntu-24.04
@@ -37,29 +36,10 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
-      - name: Install isolated QEMU test dependencies
+      - name: Install isolated QEMU guest-smoke dependencies
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
             qemu-system-x86 busybox-static cpio gzip
       - name: Boot minimal guest and verify serial marker
         run: bash scripts/ci_qemu_guest_smoke.sh
-
-  qemu-harness-integration:
-    name: Boot a synthetic ISO through the WSM QEMU harness
-    runs-on: ubuntu-24.04
-    timeout-minutes: 8
-    steps:
-      - name: Check out source
-        uses: actions/checkout@v4
-      - name: Install isolated QEMU harness integration tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends \
-            qemu-system-x86 qemu-utils \
-            grub-common grub-pc-bin xorriso mtools \
-            busybox-static cpio gzip
-      - name: Run harness tests with the real QEMU CLI
-        run: python -m unittest discover -s tests -p 'test_qemu_boot_smoke.py' -v
-      - name: Boot a synthetic ISO through the project harness
-        run: bash scripts/ci_qemu_harness_iso_integration.sh
