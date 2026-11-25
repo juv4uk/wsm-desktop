@@ -179,6 +179,11 @@ class QemuHwcheckGuestSafetyTests(unittest.TestCase):
         serial = "\r\n".join(
             [guest.REPORT_BEGIN, *chunk_lines, guest.REPORT_END]
         )
+        self.assertTrue(chunk_lines)
+        self.assertTrue(
+            all(len(line) <= len(guest.REPORT_CHUNK_PREFIX) + 7 + guest.REPORT_CHUNK_CHARS
+                for line in chunk_lines)
+        )
         self.assertEqual(guest._decode_guest_report(serial), expected)
 
     def test_report_decoder_rejects_missing_chunk_sequence(self) -> None:
