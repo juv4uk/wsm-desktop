@@ -175,8 +175,20 @@ class InstallerFreshnessTests(unittest.TestCase):
         self.assertNotEqual(topology_digest(first), topology_digest(changed))
 
     def test_invalid_max_age_is_rejected(self):
-        with self.assertRaises(ValueError):
-            self.decide(max_age_seconds=0)
+        for value in (0, True, 1.5):
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError):
+                    self.decide(max_age_seconds=value)
+
+    def test_boolean_monotonic_values_are_unverifiable(self):
+        for report_value, live_value in (
+            (report(collected_monotonic_ns=True), live()),
+            (report(), live(monotonic_now_ns=True)),
+        ):
+            with self.subTest(report_value=report_value, live_value=live_value):
+                decision = self.decide(report_value=report_value, live_value=live_value)
+                self.assertEqual(decision.status, FreshnessStatus.UNVERIFIABLE)
+                self.assertFalse(decision.confirmable)
 
 
 if __name__ == "__main__":
