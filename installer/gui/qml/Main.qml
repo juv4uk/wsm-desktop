@@ -21,20 +21,15 @@ ApplicationWindow {
     property string username: "wsm"
 
     function canOpenStep(step) {
-        if (step === 0 || step === 1)
-            return true
-        if (!wsmController.reportReady)
-            return false
-        if (step === 4)
-            return wsmController.planAvailable || wsmController.planStatus === "blocked"
-        return step === 2 || step === 3
+        return wsmController.canEnterStep(step)
     }
 
     function enterStep(step) {
         if (!canOpenStep(step))
             return
         reviewAcknowledged = false
-        if (step === 2 && currentStep !== 2)
+        if (step === 2 && currentStep !== 2
+                && wsmController.diskInventoryState === "not-run")
             wsmController.refreshDisks()
         currentStep = step
     }
@@ -396,10 +391,19 @@ ApplicationWindow {
                         }
 
                         Label {
-                            text: wsmController.disks.length === 0
-                                ? qsTr("Список ще не отримано або фізичні диски не виявлені.")
-                                : qsTr("Виявлено дисків: %1").arg(wsmController.disks.length)
+                            Layout.fillWidth: true
+                            text: wsmController.diskInventoryState === "not-run"
+                                ? qsTr("Інвентаризацію ще не запускали.")
+                                : wsmController.diskInventoryState === "loading"
+                                    ? qsTr("Триває read-only інвентаризація накопичувачів…")
+                                    : wsmController.diskInventoryState === "unavailable"
+                                        ? qsTr("Інвентаризація недоступна. Причина показана внизу; жоден диск не можна вважати перевіреним.")
+                                        : wsmController.disks.length === 0
+                                            ? qsTr("Інвентаризація завершилася успішно; фізичних дисків не виявлено.")
+                                            : qsTr("Інвентаризацію завершено. Виявлено дисків: %1").arg(wsmController.disks.length)
+                            color: wsmController.diskInventoryState === "unavailable" ? "#9b2c2c" : "#354555"
                             font.bold: true
+                            wrapMode: Text.WordWrap
                         }
 
                         Repeater {
@@ -525,6 +529,23 @@ ApplicationWindow {
                             font.pixelSize: 25
                             font.bold: true
                             color: "#182633"
+                        }
+
+                        Frame {
+                            visible: wsmController.diskInventoryState === "unavailable"
+                            Layout.fillWidth: true
+                            background: Rectangle {
+                                color: "#fff7e6"
+                                radius: 8
+                                border.color: "#ead6a8"
+                            }
+                            Label {
+                                anchors.fill: parent
+                                anchors.margins: 14
+                                text: qsTr("Перелік дисків недоступний. Це не доказ відсутності або несправності накопичувачів. Дозволено лише діагностичний перегляд; дискова ціль не визначена.")
+                                color: "#684c16"
+                                wrapMode: Text.WordWrap
+                            }
                         }
 
                         Frame {
