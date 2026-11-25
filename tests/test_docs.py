@@ -27,8 +27,18 @@ class DocumentationTests(unittest.TestCase):
 
 class DocumentationLanguageTests(unittest.TestCase):
     def test_ukrainian_detection(self) -> None:
-        self.assertTrue(check_docs.is_ukrainian("Внесок у WSM Desktop"))
+        self.assertTrue(
+            check_docs.is_ukrainian(
+                "Внесок у WSM Desktop. Дякуємо за інтерес до проєкту; "
+                "найцінніший внесок зараз — перевірювані технічні дослідження."
+            )
+        )
         self.assertFalse(check_docs.is_ukrainian("Contributing to WSM Desktop"))
+
+    def test_ukrainian_detection_rejects_a_mixed_heading(self) -> None:
+        # A short heading dominated by a proper name is not a Ukrainian document.
+        # Pinning the boundary keeps a future relaxation visible as a decision.
+        self.assertFalse(check_docs.is_ukrainian("Внесок у WSM Desktop"))
 
     def test_ukrainian_detection_tolerates_technical_terms(self) -> None:
         body = "Документація ведеться українською; терміни Guix, Nix і Calamares не перекладаємо. " * 10
