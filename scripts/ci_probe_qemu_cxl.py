@@ -172,7 +172,11 @@ def run_qemu_topology_probe(qemu: str) -> dict[str, object]:
         "status": status,
         "exit_code": completed.returncode,
         "devices_seen": devices_seen,
-        "diagnostic": (\n            "QEMU instantiated the expected synthetic CXL qdev objects."\n            if status == "type3-topology-instantiated"\n            else "QEMU did not instantiate the complete synthetic CXL qdev set; raw monitor output is suppressed."\n        ),
+        "diagnostic": (
+            "QEMU instantiated the expected synthetic CXL qdev objects."
+            if status == "type3-topology-instantiated"
+            else "QEMU did not instantiate the complete synthetic CXL qdev set; raw monitor output is suppressed."
+        ),
     }
 
 
