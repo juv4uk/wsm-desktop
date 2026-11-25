@@ -32,8 +32,10 @@ SCHEMA = "wsm-release-verdict/1"
 VERSION = "0.1.0"
 MARKER = "WSM_LIVE_READY"
 # ISO9660 volume descriptor: "CD001" at sector 16, offset 32769.
-ISO_MAGIC_OFFSET = 0x8001
+ISO_DESCRIPTOR_OFFSET = 16 * 2048
+ISO_MAGIC_OFFSET = ISO_DESCRIPTOR_OFFSET + 1
 ISO_MAGIC = b"CD001"
+ISO_DESCRIPTOR_VERSION = 1
 
 
 def sha256_of(path: Path) -> str:
@@ -84,37 +86,60 @@ def check_manifest(iso: Path, manifest: dict[str, Any], sums: dict[str, str]) ->
             break
     if named is None:
         return criterion("manifest", "fail", f"{iso.name} is not described in the release manifest")
-    recorded = str(named.get("sha256", "")).lower()
-    if recorded and sums.get(iso.name) and recorded != sums[iso.name]:
+    sums_digest = sums.get(iso.name)
+    if not sums_digest:
+        return criterion("manifest", "fail", "SHA256SUMS has no digest for the published file")
+    recorded_value = named.get("sha256")
+    if not isinstance(recorded_value, str) or len(recorded_value) != 64:
+        return criterion("manifest", "fail", "manifest has no valid SHA-256 for the published file")
+    recorded = recorded_value.lower()
+    if any(character not in "0123456789abcdef" for character in recorded):
+        return criterion("manifest", "fail", "manifest SHA-256 is not hexadecimal")
+    if recorded != sums_digest:
         return criterion(
             "manifest", "fail", "manifest and SHA256SUMS disagree about the same file"
         )
-    return criterion("manifest", "pass", "manifest describes the published file")
+    return criterion("manifest", "pass", "manifest describes the published file and digest")
 
 
 def check_iso_structure(iso: Path) -> dict[str, str]:
     size = iso.stat().st_size
-    if size < ISO_MAGIC_OFFSET + len(ISO_MAGIC):
+    if size < ISO_MAGIC_OFFSET + len(ISO_MAGIC) + 1:
         return criterion("iso-structure", "fail", f"file is only {size} bytes")
     with iso.open("rb") as handle:
-        handle.seek(ISO_MAGIC_OFFSET)
+        handle.seek(ISO_DESCRIPTOR_OFFSET)
+        descriptor_type = handle.read(1)
         magic = handle.read(len(ISO_MAGIC))
-    if magic != ISO_MAGIC:
+        version = handle.read(1)
+    if descriptor_type != b"\\x01" or magic != ISO_MAGIC or version != bytes([ISO_DESCRIPTOR_VERSION]):
         return criterion(
             "iso-structure",
             "fail",
-            "no ISO9660 volume descriptor at sector 16; this is not a bootable ISO",
+            "sector 16 is not an ISO9660 Primary Volume Descriptor (type 1, CD001, version 1)",
         )
-    return criterion("iso-structure", "pass", f"ISO9660 descriptor present, {size} bytes")
+    return criterion("iso-structure", "pass", f"ISO9660 Primary Volume Descriptor present, {size} bytes")
 
 
-def check_boot(iso: Path, firmware: str, timeout: int, ovmf_code: Path | None) -> dict[str, str]:
+def check_boot(
+    iso: Path,
+    firmware: str,
+    timeout: int,
+    ovmf_code: Path | None,
+    ovmf_vars: Path | None,
+) -> dict[str, str]:
     identifier = f"boot-{firmware}"
     smoke = Path(__file__).with_name("qemu_boot_smoke.py")
     if shutil.which("qemu-system-x86_64") is None:
         return criterion(identifier, "not-run", "qemu-system-x86_64 is not installed")
-    if firmware == "uefi" and (ovmf_code is None or not ovmf_code.is_file()):
-        return criterion(identifier, "not-run", "UEFI needs --ovmf-code and the image is absent")
+    if firmware == "uefi" and (
+        ovmf_code is None or not ovmf_code.is_file()
+        or ovmf_vars is None or not ovmf_vars.is_file()
+    ):
+        return criterion(
+            identifier,
+            "not-run",
+            "UEFI needs both --ovmf-code and --ovmf-vars from the same OVMF package/build",
+        )
 
     command = [
         sys.executable,
@@ -129,7 +154,7 @@ def check_boot(iso: Path, firmware: str, timeout: int, ovmf_code: Path | None) -
         firmware,
     ]
     if firmware == "uefi":
-        command += ["--ovmf-code", str(ovmf_code)]
+        command += ["--ovmf-code", str(ovmf_code), "--ovmf-vars", str(ovmf_vars)]
 
     completed = subprocess.run(command, capture_output=True, text=True, check=False)
     if completed.returncode != 0:
@@ -170,6 +195,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--boot", action="store_true", help="also boot the ISO in QEMU (slow)")
     parser.add_argument("--timeout-seconds", type=int, default=300)
     parser.add_argument("--ovmf-code", type=Path)
+    parser.add_argument("--ovmf-vars", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--compact", action="store_true")
     return parser
@@ -202,8 +228,10 @@ def main(argv: list[str] | None = None) -> int:
     criteria.append(check_iso_structure(iso))
 
     if args.boot:
-        criteria.append(check_boot(iso, "bios", args.timeout_seconds, None))
-        criteria.append(check_boot(iso, "uefi", args.timeout_seconds, args.ovmf_code))
+        criteria.append(check_boot(iso, "bios", args.timeout_seconds, None, None))
+        criteria.append(
+            check_boot(iso, "uefi", args.timeout_seconds, args.ovmf_code, args.ovmf_vars)
+        )
     else:
         for firmware in ("bios", "uefi"):
             criteria.append(
@@ -219,7 +247,13 @@ def main(argv: list[str] | None = None) -> int:
     else:
         sys.stdout.write(rendered)
 
-    return 1 if result["overall"] == "fail" else 0
+    if result["overall"] == "pass":
+        return 0
+    if result["overall"] == "fail":
+        return 1
+    # Incomplete is deliberately non-zero so shell/CI release gates cannot
+    # mistake a skipped BIOS/UEFI check for a successful verification.
+    return 2
 
 
 if __name__ == "__main__":
