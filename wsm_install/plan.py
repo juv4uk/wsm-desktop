@@ -89,8 +89,15 @@ def build_plan(
         if profile_evidence_root is not None:
             profile_root = Path(profile_evidence_root)
             profile_file = profile_root / "profile.scm"
-            if profile_root.is_symlink() or not profile_root.is_dir():
-                evidence_problems.append("profile directory is missing or is a symbolic link")
+            if (
+                profile_root.is_symlink()
+                or profile_root.parent.is_symlink()
+                or profile_root.parent.parent.is_symlink()
+                or not profile_root.is_dir()
+            ):
+                evidence_problems.append(
+                    "profile directory, vendor directory or hardware root is missing or is a symbolic link"
+                )
             elif profile_file.is_symlink() or not profile_file.is_file():
                 evidence_problems.append("profile directory has no regular profile.scm")
             elif not evidence_problems:
