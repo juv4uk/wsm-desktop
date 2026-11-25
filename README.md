@@ -13,7 +13,7 @@ The project is in **pre-alpha**. There is no supported installation image yet. T
 - [ ] Comparative Nix and Guix backend evaluation
 - [ ] Select and validate the first WSM system backend
 - [ ] Calamares packaging and live-environment feasibility check
-- [ ] Guix deployment backend prototype
+- [ ] Backend-specific deployment adapter prototype
 - [ ] End-to-end installation in QEMU
 - [ ] Hardware compatibility testing
 - [ ] First public preview image
