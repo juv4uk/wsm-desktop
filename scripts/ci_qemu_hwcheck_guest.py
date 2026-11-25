@@ -192,6 +192,26 @@ def _parse_ldd_paths(output: str) -> tuple[set[Path], list[str]]:
     return libraries, missing
 
 
+def _install_busybox_applets(bin_dir: Path) -> None:
+    """Create every BusyBox applet link required by the guest init script."""
+    for applet in BUSYBOX_APPLETS:
+        link = bin_dir / applet
+        if link.exists() or link.is_symlink():
+            raise RuntimeError(f"BusyBox applet path already exists: {link}")
+        link.symlink_to("busybox")
+
+
+def render_guest_init(library_path: str) -> str:
+    """Render the complete init script before any QEMU process is started."""
+    return GUEST_INIT.format(
+        ld_library_path=library_path,
+        report_begin=REPORT_BEGIN,
+        report_prefix=REPORT_PREFIX,
+        report_end=REPORT_END,
+        max_report_bytes=MAX_REPORT_BYTES,
+    )
+
+
 def _copy_runtime_dependencies(python_home: Path, rootfs: Path) -> list[Path]:
     """Copy only external shared libraries reported by ldd for the pinned runtime."""
     home_resolved = python_home.resolve()
@@ -284,11 +304,7 @@ def _build_initramfs(work: Path) -> tuple[Path, int]:
     if not busybox:
         raise RuntimeError("busybox-static is required on the CI host")
     shutil.copy2(busybox, rootfs / "bin" / "busybox")
-    for applet in BUSYBOX_APPLETS:
-        link = rootfs / "bin" / applet
-        if link.exists() or link.is_symlink():
-            raise RuntimeError(f"BusyBox applet path already exists: {link}")
-        link.symlink_to("busybox")
+    _install_busybox_applets(rootfs / "bin")
 
     device_nodes = (
         ("console", 5, 1, 0o600),
@@ -307,13 +323,7 @@ def _build_initramfs(work: Path) -> tuple[Path, int]:
         )
 
     shutil.copytree(ROOT / "wsm_hwcheck", rootfs / "opt" / "wsm" / "wsm_hwcheck")
-    init_script = GUEST_INIT.format(
-        ld_library_path=library_path,
-        report_begin=REPORT_BEGIN,
-        report_prefix=REPORT_PREFIX,
-        report_end=REPORT_END,
-        max_report_bytes=MAX_REPORT_BYTES,
-    )
+    init_script = render_guest_init(library_path)
     init_path = rootfs / "init"
     init_path.write_text(init_script, encoding="utf-8")
     init_path.chmod(0o755)
