@@ -23,6 +23,7 @@ check-hwcheck:
 	$(PYTHON) tests/test_hwcheck.py
 
 check-installer:
+	$(PYTHON) tests/test_backend_guix.py
 	$(PYTHON) tests/test_install_preflight.py
 	$(PYTHON) tests/test_install_preflight_acceptance.py
 	$(PYTHON) tests/test_installer_freshness.py

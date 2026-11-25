@@ -31,3 +31,11 @@ Before deployment, it must validate:
 ## Test strategy
 
 Unit tests must mock the Calamares runtime and command executor. Integration tests must use disposable QEMU disks. Failure-path tests must prove that invalid or incomplete plans result in zero deployment commands.
+
+## Implementation status
+
+The backend half of this module now exists as `wsm_install/backend_guix.py` and
+does not depend on Calamares. It validates a confirmed plan, renders the Guix
+`operating-system` declaration and returns an allow-listed argv tuple. Running
+that argv is still unimplemented, so no deployment happens from this repository
+yet.
