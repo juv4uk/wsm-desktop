@@ -18,19 +18,30 @@ The ordering matters and is the whole point:
    that is not part of the target tree lands on the live system;
 4. only then hand the target to the backend.
 
-What this module deliberately does not decide: which filesystem the user wants.
-ext4 is the default because it is boring and every recovery tool knows it. btrfs
-is a legitimate choice with real advantages (snapshots, compression) and real
-costs (more moving parts, more ways to be surprised). That is the user's call,
-not a default I should smuggle in.
+This first vertical slice deliberately supports ext4 only. Btrfs and XFS
+must remain refused until the filesystem choice is carried in the typed install
+plan/digest and the Guix operating-system renderer emits the matching root
+filesystem type. Formatting one filesystem and declaring another to Guix is
+not a supported install plan.
 """
 
 from __future__ import annotations
 
+import shlex
 from dataclasses import dataclass
 from typing import Any
 
-from wsm_install.partition import Layout, Refused
+from wsm_install.backend_guix import (
+    GUIX_CHANNEL_LOCK_PATH,
+    GUIX_CONFIGURATION_PATH,
+    GUIX_TARGET_MOUNTPOINT,
+    build_argv,
+)
+from wsm_install.partition import DEVICE_PATH, Layout, Refused, minimum_disk_size_bytes
+
+TARGET_MOUNTPOINT = GUIX_TARGET_MOUNTPOINT
+SYSTEM_CONFIG_PATH = GUIX_CONFIGURATION_PATH
+CHANNEL_LOCK_PATH = GUIX_CHANNEL_LOCK_PATH
 
 # Absolute paths for every tool a privileged step runs.
 #
@@ -39,21 +50,27 @@ from wsm_install.partition import Layout, Refused
 # supply a file named like a standard utility that then executed as root
 # (fix #8172). The same shape applies here - these steps are meant to be run as
 # root - so no step may rely on PATH lookup at all.
+# These are stable paths inside Guix System's immutable system profile,
+# not FHS /usr paths and not names resolved through inherited PATH. Each
+# program must be present in the live image's package closure. The planner
+# never checks or resolves them via PATH; a future executor must verify each
+# absolute path before use and refuse when the package is absent.
+SYSTEM_PROFILE = "/run/current-system/profile"
 TRUSTED_TOOLS = {
-    "partprobe": "/usr/sbin/partprobe",
-    "udevadm": "/usr/bin/udevadm",
-    "mkfs.ext4": "/usr/sbin/mkfs.ext4",
-    "mkfs.btrfs": "/usr/sbin/mkfs.btrfs",
-    "mkfs.xfs": "/usr/sbin/mkfs.xfs",
-    "mkfs.fat": "/usr/sbin/mkfs.fat",
-    "mount": "/usr/bin/mount",
-    "mkdir": "/usr/bin/mkdir",
+    "sgdisk": f"{SYSTEM_PROFILE}/sbin/sgdisk",
+    "partprobe": f"{SYSTEM_PROFILE}/sbin/partprobe",
+    "udevadm": f"{SYSTEM_PROFILE}/bin/udevadm",
+    "mkfs.ext4": f"{SYSTEM_PROFILE}/sbin/mkfs.ext4",
+    "mkfs.fat": f"{SYSTEM_PROFILE}/sbin/mkfs.fat",
+    "mount": f"{SYSTEM_PROFILE}/bin/mount",
+    "mkdir": f"{SYSTEM_PROFILE}/bin/mkdir",
 }
 
+# The first installer vertical slice supports ext4 only. Btrfs/XFS must not be
+# exposed until the filesystem choice is part of the typed install plan/digest
+# and the Guix operating-system renderer emits the same root filesystem type.
 FILESYSTEMS = {
     "ext4": {"mkfs": "mkfs.ext4", "args": ["-F"], "root": True},
-    "btrfs": {"mkfs": "mkfs.btrfs", "args": ["-f"], "root": True},
-    "xfs": {"mkfs": "mkfs.xfs", "args": ["-f"], "root": True},
 }
 
 
@@ -73,6 +90,87 @@ class Step:
         }
 
 
+def _validate_layout_confirmation(layout: Layout) -> None:
+    if not DEVICE_PATH.fullmatch(layout.disk):
+        raise Refused("disk.path", f"{layout.disk!r} is not an allow-listed whole block device")
+    if (
+        isinstance(layout.disk_size_bytes, bool)
+        or not isinstance(layout.disk_size_bytes, int)
+        or layout.disk_size_bytes <= 0
+    ):
+        raise Refused("disk.size-unrecorded", "layout does not retain the observed disk size")
+    minimum_size = minimum_disk_size_bytes(layout.firmware)
+    if layout.disk_size_bytes < minimum_size:
+        raise Refused(
+            "disk.too-small",
+            f"layout records {layout.disk_size_bytes} bytes; "
+            f"the {layout.firmware} layout requires at least {minimum_size} bytes",
+        )
+    if layout.acknowledgement != layout.disk:
+        raise Refused(
+            "disk.acknowledgement",
+            "the layout no longer carries the acknowledgement naming its exact target disk",
+        )
+
+
+def _validate_layout_shape(layout: Layout) -> None:
+    """Reject mutated or hand-crafted partition tables outside the planner contract."""
+    if layout.firmware == "uefi":
+        expected = [
+            {
+                "number": 1,
+                "start": "1MiB",
+                "end": "513MiB",
+                "typecode": "ef00",
+                "name": "wsm-esp",
+                "role": "esp",
+            },
+            {
+                "number": 2,
+                "start": "513MiB",
+                "end": "0",
+                "typecode": "8300",
+                "name": "wsm-root",
+                "role": "root",
+            },
+        ]
+    elif layout.firmware == "bios":
+        expected = [
+            {
+                "number": 1,
+                "start": "1MiB",
+                "end": "2MiB",
+                "typecode": "ef02",
+                "name": "wsm-bios-boot",
+                "role": "bios-grub",
+            },
+            {
+                "number": 2,
+                "start": "2MiB",
+                "end": "0",
+                "typecode": "8300",
+                "name": "wsm-root",
+                "role": "root",
+            },
+        ]
+    else:
+        raise Refused("disk.firmware", f"unsupported firmware mode {layout.firmware!r}")
+
+    if layout.partitions != expected:
+        raise Refused(
+            "layout.partition-plan",
+            "partition entries were modified or do not match the supported WSM layout",
+        )
+
+
+def _validate_target(target: str) -> None:
+    if target != TARGET_MOUNTPOINT:
+        raise Refused(
+            "target.fixed",
+            f"target must be exactly {TARGET_MOUNTPOINT!r}, got {target!r}",
+        )
+
+
 def _partition_by_role(layout: Layout, role: str) -> dict[str, Any]:
     for partition in layout.partitions:
         if partition["role"] == role:
@@ -81,12 +179,11 @@ def _partition_by_role(layout: Layout, role: str) -> dict[str, Any]:
 
 
 def device_for(disk: str, number: int) -> str:
-    """Name the partition device the way the kernel does.
-
-    /dev/sda + 1 is /dev/sda1, but /dev/nvme0n1 + 1 is /dev/nvme0n1p1. Getting
-    this wrong formats the disk instead of the partition, so it is computed in
-    one place and tested.
-    """
+    """Name a partition device using an allow-listed whole-disk path."""
+    if not DEVICE_PATH.fullmatch(disk):
+        raise Refused("disk.path", f"{disk!r} is not an allow-listed whole block device")
+    if isinstance(number, bool) or not isinstance(number, int) or number < 1:
+        raise Refused("partition.number", f"partition number must be positive, got {number!r}")
     if disk[-1].isdigit():
         return f"{disk}p{number}"
     return f"{disk}{number}"
@@ -95,35 +192,54 @@ def device_for(disk: str, number: int) -> str:
 def plan_steps(
     layout: Layout,
     filesystem: str = "ext4",
-    target: str = "/mnt",
+    target: str = TARGET_MOUNTPOINT,
     hostname: str | None = None,
 ) -> list[Step]:
-    """Build the ordered step list for a layout, or refuse."""
+    """Build a non-executable ordered plan, or refuse.
+
+    Layout.commands() describes GPT mutations. Include them before partprobe:
+    partprobe only re-reads a partition table; it cannot create one.
+    """
+    _validate_layout_confirmation(layout)
+    _validate_layout_shape(layout)
+    _validate_target(target)
+
     if filesystem not in FILESYSTEMS:
         raise Refused(
             "filesystem.unsupported",
             f"{filesystem!r} is not supported; choose one of {sorted(FILESYSTEMS)}",
         )
-    if not target.startswith("/") or target == "/":
-        raise Refused(
-            "target.unsafe",
-            f"target must be an absolute mount point below /, got {target!r}",
-        )
+    if layout.firmware not in {"uefi", "bios"}:
+        raise Refused("disk.firmware", f"unsupported firmware mode {layout.firmware!r}")
 
     root = _partition_by_role(layout, "root")
-    esp = None
-    if layout.firmware == "uefi":
-        esp = _partition_by_role(layout, "esp")
+    esp = _partition_by_role(layout, "esp") if layout.firmware == "uefi" else None
+    if layout.firmware == "bios":
+        _partition_by_role(layout, "bios-grub")
 
-    root_device = device_for(layout.disk, root["number"])
-    steps: list[Step] = [
+    root_device = device_for(layout.disk, root.get("number"))
+    esp_device = device_for(layout.disk, esp.get("number")) if esp is not None else None
+
+    steps: list[Step] = []
+    for index, raw_command in enumerate(layout.commands()):
+        if not raw_command or raw_command[0] != "sgdisk" or raw_command[-1] != layout.disk:
+            raise Refused("layout.command", "partition layout contains an unexpected disk command")
+        command = [TRUSTED_TOOLS["sgdisk"], *raw_command[1:]]
+        purpose = (
+            "erase the existing partition table before creating the requested GPT layout"
+            if index == 0 and "--zap-all" in raw_command
+            else "create or define a partition in the requested GPT layout"
+        )
+        steps.append(Step(command, purpose, destructive=True))
+
+    steps.extend([
         Step(
             [TRUSTED_TOOLS["partprobe"], layout.disk],
-            "re-read the partition table; the kernel does not always notice new partitions",
+            "ask the kernel to re-read the newly written partition table",
         ),
         Step(
             [TRUSTED_TOOLS["udevadm"], "settle"],
-            "wait for device nodes to appear before touching them",
+            "wait for partition device nodes to appear before formatting",
         ),
         Step(
             [TRUSTED_TOOLS[FILESYSTEMS[filesystem]["mkfs"]],
@@ -131,51 +247,54 @@ def plan_steps(
             f"create {filesystem} on the root partition",
             destructive=True,
         ),
-    ]
+    ])
 
-    if esp is not None:
-        esp_device = device_for(layout.disk, esp["number"])
+    if esp_device is not None:
         steps.append(
             Step(
                 [TRUSTED_TOOLS["mkfs.fat"], "-F", "32", esp_device],
-                "format the EFI system partition as FAT32; UEFI firmware reads nothing else",
+                "format the EFI system partition as FAT32",
                 destructive=True,
             )
         )
 
     steps.append(
-        Step([TRUSTED_TOOLS["mount"], root_device, target], f"mount the root filesystem at {target}")
+        Step(
+            [TRUSTED_TOOLS["mount"], root_device, TARGET_MOUNTPOINT],
+            "mount the root filesystem in the fixed target",
+        )
     )
 
-    if esp is not None:
-        steps.append(
+    if esp_device is not None:
+        steps.extend([
             Step(
-                [TRUSTED_TOOLS["mkdir"], "-p", f"{target}/boot/efi"],
-                "create the ESP mount point inside the target",
-            )
-        )
-        steps.append(
+                [TRUSTED_TOOLS["mkdir"], "-p", f"{TARGET_MOUNTPOINT}/boot/efi"],
+                "create the ESP mount point inside the target tree",
+            ),
             Step(
-                [TRUSTED_TOOLS["mount"], device_for(layout.disk, esp["number"]),
-                 f"{target}/boot/efi"],
-                "mount the ESP inside the target tree; outside it the bootloader lands on the live system",
-            )
-        )
+                [TRUSTED_TOOLS["mount"], esp_device, f"{TARGET_MOUNTPOINT}/boot/efi"],
+                "mount the ESP inside the target tree, not on the live system",
+            ),
+        ])
 
     return steps
 
 
-def backend_command(layout: Layout, system_file: str, target: str = "/mnt") -> list[str]:
-    """The handoff command. This module does not run it, and neither should a UI."""
-    if not system_file.endswith(".scm"):
+def backend_command(
+    layout: Layout,
+    system_file: str = SYSTEM_CONFIG_PATH,
+    target: str = TARGET_MOUNTPOINT,
+) -> list[str]:
+    """Return a fixed, lock-pinned Guix argv. Never execute it here."""
+    _validate_layout_confirmation(layout)
+    _validate_layout_shape(layout)
+    _validate_target(target)
+    if system_file != SYSTEM_CONFIG_PATH:
         raise Refused(
             "backend.system-file",
-            f"expected a .scm system file, got {system_file!r}",
+            f"system configuration path must be exactly {SYSTEM_CONFIG_PATH!r}",
         )
-    # guix lives in a profile path that differs per system, so it is the one
-    # command allowed to be resolved by the caller - and the caller runs it
-    # interactively, not from a root shell.
-    return ["guix", "system", "init", system_file, target]
+    return list(build_argv(SYSTEM_CONFIG_PATH, TARGET_MOUNTPOINT))
 
 
 def render(steps: list[Step], command: list[str]) -> str:
@@ -183,8 +302,8 @@ def render(steps: list[Step], command: list[str]) -> str:
     for step in steps:
         marker = "DESTRUCTIVE" if step.destructive else "safe"
         lines.append(f"# [{marker}] {step.purpose}")
-        lines.append(" ".join(step.command))
+        lines.append(shlex.join(step.command))
         lines.append("")
     lines.append("# handoff to the backend")
-    lines.append(" ".join(command))
+    lines.append(shlex.join(command))
     return "\n".join(lines) + "\n"
