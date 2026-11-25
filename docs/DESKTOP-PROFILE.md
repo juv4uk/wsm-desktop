@@ -43,8 +43,8 @@ guix system vm systems/desktop.scm
 # 4. Наш пакет окремо.
 guix build -f wsm/packages/wsm.scm
 
-# 5. ISO.
-./scripts/build_iso.sh
+# 5. ISO — звичайний `.iso` файл + окремий GC-root.
+make image-live
 ```
 
 Скрипт вимагає чистого Git worktree та використовує `channels.lock.scm` через
