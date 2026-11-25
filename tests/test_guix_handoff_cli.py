@@ -143,6 +143,24 @@ class GuixHandoffCliTests(unittest.TestCase):
             "target remains untouched",
         )
 
+    def test_blocking_critical_device_finding_stops_before_output(self) -> None:
+        self.plan["blockers"] = ["critical-device-unresolved"]
+        self.plan.pop("plan_sha256", None)
+        self.plan["plan_sha256"] = hashlib.sha256(
+            canonical_json(self.plan).encode("utf-8")
+        ).hexdigest()
+        self._write_inputs()
+
+        status, _, stderr = self._run()
+
+        self.assertEqual(status, 2)
+        self.assertIn("plan.blockers", stderr)
+        self.assertFalse(self.output.exists())
+        self.assertEqual(
+            self.target_sentinel.read_text(encoding="utf-8"),
+            "target remains untouched",
+        )
+
     def test_confirmation_must_match_the_selected_target(self) -> None:
         self._write_inputs(target_digest="0" * 64)
 
