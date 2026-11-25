@@ -39,6 +39,11 @@ def confirmed_plan() -> dict:
     plan["plan_readiness"]["confirmable"] = True
     plan["plan_readiness"]["missing_required_roles"] = []
     plan["plan_readiness"]["required_user_actions"] = []
+    plan["plan_status"] = "confirmation-ready"
+    plan["execution"]["plan_confirmable"] = True
+    plan["execution"]["mutations_authorized"] = False
+    plan["execution"]["backend_invoked"] = False
+    plan["execution"]["disk_access_performed"] = False
     plan.pop("plan_sha256", None)
     plan["plan_sha256"] = hashlib.sha256(canonical_json(plan).encode("utf-8")).hexdigest()
     return plan
@@ -150,6 +155,32 @@ class GuixDeployCliTests(unittest.TestCase):
         code, _stdout, stderr = self.run_cli("--show-confirmation")
         self.assertEqual(code, 2)
         self.assertIn("plan field 'backend' must be a JSON object", stderr)
+        self.assertFalse(self.output_path.exists())
+
+    def test_diagnostic_status_is_refused_even_with_confirmable_flag(self) -> None:
+        diagnostic = copy.deepcopy(self.plan)
+        diagnostic["plan_status"] = "diagnostic-only"
+        diagnostic.pop("plan_sha256", None)
+        diagnostic["plan_sha256"] = hashlib.sha256(
+            canonical_json(diagnostic).encode("utf-8")
+        ).hexdigest()
+        write_json(self.plan_path, diagnostic)
+        code, _stdout, stderr = self.run_cli("--show-confirmation")
+        self.assertEqual(code, 3)
+        self.assertIn("plan.not_confirmation_ready", stderr)
+        self.assertFalse(self.output_path.exists())
+
+    def test_execution_confirmation_mismatch_is_refused(self) -> None:
+        invalid = copy.deepcopy(self.plan)
+        invalid["execution"]["plan_confirmable"] = False
+        invalid.pop("plan_sha256", None)
+        invalid["plan_sha256"] = hashlib.sha256(
+            canonical_json(invalid).encode("utf-8")
+        ).hexdigest()
+        write_json(self.plan_path, invalid)
+        code, _stdout, stderr = self.run_cli("--show-confirmation")
+        self.assertEqual(code, 3)
+        self.assertIn("plan.execution_not_confirmable", stderr)
         self.assertFalse(self.output_path.exists())
 
     def test_diagnostic_only_plan_is_refused_before_creating_output(self) -> None:
