@@ -162,7 +162,8 @@
           "path": {
             "type": "string",
             "minLength": 1,
-            "description": "Portable relative POSIX path from the directory containing evidence.json."
+            "description": "Safe relative POSIX path under the profile's artifacts/ directory, e.g. artifacts/functional-test.log.",
+            "pattern": "^artifacts/.+$"
           }
         }
       },
