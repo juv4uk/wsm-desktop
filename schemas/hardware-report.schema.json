@@ -127,8 +127,7 @@
             "enum": [
               "unprivileged-read-only",
               "privileged-read-only",
-              "offline-database",
-              "remote-lookup"
+              "offline-database"
             ]
           },
           "exit_code": {
@@ -168,7 +167,8 @@
       "required": [
         "profile",
         "network_upload_performed",
-        "sensitive_identifiers_included"
+        "sensitive_identifiers_included",
+        "network_requests_performed"
       ],
       "properties": {
         "profile": {
@@ -198,6 +198,9 @@
               "other"
             ]
           }
+        },
+        "network_requests_performed": {
+          "const": false
         }
       }
     }
