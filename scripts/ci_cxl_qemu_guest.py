@@ -526,7 +526,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if status != "type3-memdev-discovered":
             raise CxlGuestError(
                 "Linux guest did not expose a Type-3 memdev and CXL port in sysfs; "
-                safe_summary
+                + safe_summary
             )
         if not devices or not any(name.startswith("mem") for name in devices):
             raise CxlGuestError("CXL guest reported Type-3 status without a memdev entry")
