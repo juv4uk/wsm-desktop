@@ -13,42 +13,31 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from check_channels import check, channels_of, parse, tokenize  # noqa: E402
 
-INTRODUCTION = '''
-(introduction
- (make-channel-introduction
-  "9edb3f66fd807b096b48283debdcddccfea34bad"
-  (openpgp-fingerprint
-   "BBB0 2DDF 2CEA F6A8 0D1D  E643 A2A0 6DF2 A33A 54FA")))
-'''
+INTRODUCTION = """(introduction
+  (make-channel-introduction
+    "9edb3f66fd807b096b48283debdcddccfea34bad"
+    (openpgp-fingerprint
+      "BBB0 2DDF 2CEA F6A8 0D1D  E643 A2A0 6DF2 A33A 54FA")))"""
 
-GOOD = '''
-;; A comment mentioning nonguix does not add a channel.
-(list (channel
-       (name 'guix)
-       (url "https://git.guix.gnu.org/guix.git")
-       (branch #f)
-       (commit "4e5195be20d9b124df8a8bb69213412236e4668e")
-       ''' + INTRODUCTION + '''))
-'''
+CHANNEL = """(channel
+  (name 'guix)
+  (url "https://git.guix.gnu.org/guix.git")
+  (branch #f)
+  (commit "4e5195be20d9b124df8a8bb69213412236e4668e")
+  """ + INTRODUCTION + ")"
 
+GOOD = "(list " + CHANNEL + ")"
 GOOD_SAVANNAH = GOOD.replace(
     "https://git.guix.gnu.org/guix.git",
     "https://git.savannah.gnu.org/git/guix.git",
 )
 
-
-def with_field(field: str, replacement: str) -> str:
-    return GOOD.replace(field, replacement)
-
-
-NONGUIX = '''
-(channel
- (name 'nonguix)
- (url "https://gitlab.com/nonguix/nonguix")
- (branch #f)
- (commit "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
- ''' + INTRODUCTION + ''')
-'''
+NONGUIX = """(channel
+  (name 'nonguix)
+  (url "https://gitlab.com/nonguix/nonguix")
+  (branch #f)
+  (commit "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+  """ + INTRODUCTION + ")"
 
 
 class ParseTests(unittest.TestCase):
@@ -79,17 +68,16 @@ class RuleTests(unittest.TestCase):
         self.assertEqual(check(GOOD_SAVANNAH), [])
 
     def test_comment_mentioning_nonguix_does_not_add_a_channel(self) -> None:
-        self.assertEqual(check(GOOD), [])
+        self.assertEqual(check(";; nonguix\n" + GOOD), [])
 
     def test_third_party_channel_is_refused(self) -> None:
-        text = GOOD.rstrip()[:-1] + NONGUIX + ")"
-        problems = check(text)
+        problems = check("(list " + CHANNEL + " " + NONGUIX + ")")
         self.assertTrue(any("exactly one channel" in item for item in problems))
         self.assertTrue(any("nonguix" in item for item in problems))
 
     def test_duplicate_guix_entry_is_refused(self) -> None:
-        text = GOOD.rstrip()[:-1] + GOOD[GOOD.index("(channel"):GOOD.rindex(")")] + "))"
-        self.assertTrue(any("exactly one channel" in item for item in check(text)))
+        problems = check("(list " + CHANNEL + " " + CHANNEL + ")")
+        self.assertTrue(any("exactly one channel" in item for item in problems))
 
     def test_unexpected_repository_path_on_allowed_host_is_refused(self) -> None:
         text = GOOD.replace(
@@ -100,6 +88,13 @@ class RuleTests(unittest.TestCase):
 
     def test_http_is_refused(self) -> None:
         text = GOOD.replace("https://git.guix.gnu.org", "http://git.guix.gnu.org")
+        self.assertTrue(any("exact allow-listed" in item for item in check(text)))
+
+    def test_unexpected_host_is_refused(self) -> None:
+        text = GOOD.replace(
+            "https://git.guix.gnu.org/guix.git",
+            "https://evil.example/guix.git",
+        )
         self.assertTrue(any("exact allow-listed" in item for item in check(text)))
 
     def test_url_userinfo_port_query_and_fragment_are_refused(self) -> None:
@@ -128,15 +123,20 @@ class RuleTests(unittest.TestCase):
         )
         self.assertTrue(any("full lowercase commit" in item for item in check(text)))
 
-    def test_duplicate_field_is_refused(self) -> None:
+    def test_duplicate_channel_field_is_refused(self) -> None:
         text = GOOD.replace(
-            '(name \\'guix)',
-            '(name \\'guix) (name \\'guix)',
+            "(name 'guix)",
+            "(name 'guix) (name 'guix)",
         )
         self.assertTrue(any("duplicate channel field" in item for item in check(text)))
 
     def test_missing_introduction_is_refused(self) -> None:
-        text = GOOD.replace("       " + INTRODUCTION, "")
+        channel = CHANNEL.replace(INTRODUCTION, "")
+        self.assertTrue(any("missing required fields" in item for item in check("(list " + channel + ")")))
+
+    def test_introduction_only_in_comment_is_refused(self) -> None:
+        channel = CHANNEL.replace(INTRODUCTION, "")
+        text = "(list " + channel + " ; " + INTRODUCTION + "\n)"
         self.assertTrue(any("missing required fields" in item for item in check(text)))
 
     def test_wrong_introduction_commit_is_refused(self) -> None:
@@ -147,21 +147,15 @@ class RuleTests(unittest.TestCase):
         self.assertTrue(any("canonical Guix introduction" in item for item in check(text)))
 
     def test_wrong_or_malformed_fingerprint_is_refused(self) -> None:
-        for fingerprint in (
-            "0000 0000 0000 0000",
-            "not-a-fingerprint",
-        ):
+        original = "BBB0 2DDF 2CEA F6A8 0D1D  E643 A2A0 6DF2 A33A 54FA"
+        for fingerprint in ("0000 0000 0000 0000", "not-a-fingerprint"):
             with self.subTest(fingerprint=fingerprint):
-                text = GOOD.replace(
-                    "BBB0 2DDF 2CEA F6A8 0D1D  E643 A2A0 6DF2 A33A 54FA",
-                    fingerprint,
-                )
+                text = GOOD.replace(original, fingerprint)
                 self.assertTrue(any("canonical Guix introduction" in item for item in check(text)))
 
-    def test_introduction_only_in_comment_is_refused(self) -> None:
-        text = GOOD.replace("       " + INTRODUCTION, "")
-        text = text.replace("(name 'guix)", "(name 'guix)")
-        self.assertTrue(any("missing required fields" in item for item in check(text)))
+    def test_malformed_introduction_shape_is_refused(self) -> None:
+        text = GOOD.replace("(openpgp-fingerprint", "(unknown-fingerprint")
+        self.assertTrue(any("canonical Guix introduction" in item for item in check(text)))
 
     def test_empty_list_is_refused(self) -> None:
         self.assertTrue(any("exactly one channel" in item for item in check("(list)")))
