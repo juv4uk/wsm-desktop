@@ -135,7 +135,9 @@ jobs:
           assert marker in payload["serial_output_tail"], payload
           assert payload["host_device_passthrough"] is False, payload
           assert payload["network_enabled"] is False, payload
-          assert payload["efi_variable_store"] is False, payload
+          assert payload["host_efi_variables_modified"] is False
+          assert payload["guest_uefi_vars_writable"] is False
+          assert payload["guest_uefi_vars_source"] == "not-applicable", payload
           assert payload["guest_installer_execution"] is False, payload
           print("PASS: the project harness booted the synthetic ISO and observed the guest marker.")
           print("Scope: generic QEMU harness integration only; not a WSM installer or hardware test.")

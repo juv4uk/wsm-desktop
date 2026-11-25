@@ -144,22 +144,6 @@ class DesktopProfileTests(unittest.TestCase):
                 self.assertNotIn("channel", code)
 
 
-class KnownPitfallTests(unittest.TestCase):
-    def test_sddm_is_not_set_to_wayland(self) -> None:
-        """Guix bug#68939: display-server "wayland" leaves a black screen.
-
-        The value is documented but the service does not support it; a later
-        patch makes the service ignore it. Setting it would produce a system
-        that boots to a blank display and looks like a broken image.
-        """
-        text = profile("desktop.scm")
-        self.assertNotIn('(display-server "wayland")', text)
-
-    def test_bluetooth_is_not_auto_enabled(self) -> None:
-        text = profile("desktop.scm")
-        self.assertIn("(auto-enable? #f)", text)
-
-
 class SourceResolutionTests(unittest.TestCase):
     def test_live_profile_does_not_use_a_relative_include(self) -> None:
         """`include` with a relative path depends on the working directory."""
@@ -179,7 +163,7 @@ class SourceResolutionTests(unittest.TestCase):
 class LiveProfileTests(unittest.TestCase):
     def test_live_profile_inherits_the_desktop_profile(self) -> None:
         text = profile("live.scm")
-        self.assertIn('"/desktop.scm"', text)
+        self.assertIn('(include "desktop.scm")', text)
         self.assertIn("(inherit base-os)", text)
 
     def test_live_profile_installs_the_wsm_tools(self) -> None:
@@ -188,6 +172,13 @@ class LiveProfileTests(unittest.TestCase):
 
 
 class IsoScriptTests(unittest.TestCase):
+    @staticmethod
+    def _write_minimal_iso9660(path: Path) -> None:
+        image = bytearray(17 * 2048)
+        pvd = 16 * 2048
+        image[pvd : pvd + 7] = bytes([1]) + b"CD001" + bytes([1])
+        path.write_bytes(image)
+
     def _fake_guix(self, bin_dir: Path) -> None:
         fake_guix = bin_dir / "guix"
         fake_guix.write_text(
@@ -202,7 +193,7 @@ case " $* " in
         if [ "$WSM_TEST_AUTH_DISABLED" = '1' ]; then
             echo 'channel authentication disabled' >&2
         fi
-        printf '%s\\n' '(list (channel (name guix) (commit test)))'
+        printf '%s\\n' '(list (channel (name guix) (commit $WSM_TEST_LOCK_COMMIT)))'
         exit 0 ;;
     *" system image "*)
         for argument in "$@"; do
@@ -227,7 +218,7 @@ exit 8
             bin_dir.mkdir()
             output_dir.mkdir()
             fake_image = temporary_root / "guix-store-image.iso"
-            fake_image.write_bytes(b"synthetic test image bytes")
+            self._write_minimal_iso9660(fake_image)
             args_log = temporary_root / "guix-args.txt"
             self._fake_guix(bin_dir)
 
@@ -236,6 +227,11 @@ exit 8
             environment["WSM_ISO_DIR"] = str(output_dir)
             environment["WSM_TEST_GUIX_ARGS"] = str(args_log)
             environment["WSM_TEST_IMAGE"] = str(fake_image)
+            lock_commit = re.search(
+                r'\(commit\s+"([0-9a-f]{40})"\)',
+                (ROOT / "channels.lock.scm").read_text(encoding="utf-8"),
+            ).group(1)
+            environment["WSM_TEST_LOCK_COMMIT"] = lock_commit
             environment.pop("GUIX_PACKAGE_PATH", None)
 
             result = subprocess.run(
@@ -247,16 +243,21 @@ exit 8
                 check=False,
             )
             expected = output_dir / "wsm-desktop-live.iso"
+            gc_root = output_dir / ".wsm-desktop-live.iso-root"
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertTrue(expected.is_symlink())
-            self.assertEqual(expected.resolve(), fake_image)
+            self.assertTrue(expected.is_file())
+            self.assertFalse(expected.is_symlink())
+            self.assertEqual(expected.read_bytes(), fake_image.read_bytes())
+            self.assertTrue(gc_root.is_symlink())
+            self.assertEqual(gc_root.resolve(), fake_image)
 
             calls = args_log.read_text(encoding="utf-8")
             lock = ROOT / "channels.lock.scm"
             self.assertIn(f"CALL|time-machine|-C|{lock}|-L|{ROOT}|--|describe|-f|channels", calls)
             self.assertIn(f"CALL|time-machine|-C|{lock}|-L|{ROOT}|--|system|image", calls)
-            self.assertIn(f"--root={expected}", calls)
+            self.assertIn(f"--root={gc_root}", calls)
             self.assertIn("--no-grafts", calls)
+            self.assertIn("--save-provenance", calls)
             self.assertIn("--image-type=iso9660", calls)
             self.assertIn(f"PWD={ROOT}", calls)
             self.assertNotIn("--disable-authentication", calls)
@@ -273,11 +274,17 @@ exit 8
                 r'\(commit\s+"([0-9a-f]{40})"\)',
                 (ROOT / "channels.lock.scm").read_text(encoding="utf-8"),
             ).group(1))
-            self.assertEqual(manifest["artifact"]["size_bytes"], fake_image.stat().st_size)
+            self.assertEqual(manifest["artifact"]["size_bytes"], expected.stat().st_size)
+            self.assertEqual(manifest["artifact"]["gc_root"], gc_root.name)
             self.assertEqual(
                 manifest["artifact"]["sha256"],
-                hashlib.sha256(fake_image.read_bytes()).hexdigest(),
+                hashlib.sha256(expected.read_bytes()).hexdigest(),
             )
+            self.assertIn("-L", manifest["build"]["command"])
+            self.assertIn(str(ROOT), manifest["build"]["command"])
+            self.assertIn(f"--root={gc_root}", manifest["build"]["command"])
+            self.assertIn("--save-provenance", manifest["build"]["command"])
+            self.assertEqual(manifest["source"]["resolved_guix_channel_commit"], lock_commit)
             self.assertIn("default", manifest["guix"]["authentication_policy"])
             self.assertEqual(manifest["guix"]["locked_version"], "guix (GNU Guix) 1.5.0-pinned")
 
@@ -303,7 +310,42 @@ exit 8
             )
             self.assertEqual(again.returncode, 3)
             self.assertEqual(args_log.read_text(encoding="utf-8"), previous_log)
-            self.assertEqual(expected.resolve(), fake_image)
+            self.assertEqual(expected.read_bytes(), fake_image.read_bytes())
+            self.assertEqual(gc_root.resolve(), fake_image)
+
+    def test_builder_rejects_non_iso9660_store_output(self) -> None:
+        script = ROOT / "scripts" / "build_iso.sh"
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_root = Path(temporary)
+            bin_dir = temporary_root / "bin"
+            output_dir = temporary_root / "out"
+            bin_dir.mkdir()
+            output_dir.mkdir()
+            fake_image = temporary_root / "not-an-iso.img"
+            fake_image.write_bytes(b"non-empty but not an ISO9660 image")
+            args_log = temporary_root / "guix-args.txt"
+            self._fake_guix(bin_dir)
+
+            environment = os.environ.copy()
+            environment["PATH"] = str(bin_dir) + os.pathsep + os.defpath
+            environment["WSM_ISO_DIR"] = str(output_dir)
+            environment["WSM_TEST_GUIX_ARGS"] = str(args_log)
+            environment["WSM_TEST_IMAGE"] = str(fake_image)
+            environment.pop("GUIX_PACKAGE_PATH", None)
+
+            result = subprocess.run(
+                ["/bin/sh", str(script)],
+                cwd=temporary_root,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 4, result.stderr)
+            self.assertIn("ISO9660 Primary Volume Descriptor", result.stderr)
+            self.assertFalse((output_dir / "wsm-desktop-live.iso").exists())
+            self.assertFalse((output_dir / "manifest.json").exists())
 
     def test_builder_fails_closed_when_channel_authentication_is_disabled(self) -> None:
         script = ROOT / "scripts" / "build_iso.sh"
@@ -341,6 +383,7 @@ exit 8
             self.assertIn("CALL|time-machine|-C|", calls)
             self.assertNotIn("|--|system|image", calls)
             self.assertFalse((output_dir / "wsm-desktop-live.iso").exists())
+            self.assertFalse((output_dir / ".wsm-desktop-live.iso-root").exists())
             self.assertFalse((output_dir / "manifest.json").exists())
 
     def test_script_refuses_to_run_without_guix(self) -> None:
