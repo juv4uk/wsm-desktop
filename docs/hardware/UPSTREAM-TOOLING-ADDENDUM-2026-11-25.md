@@ -135,6 +135,38 @@ Linux CXL sysfs надає кілька потенційних read-only спо�
 - [Linux EDAC scrub control](https://docs.kernel.org/edac/scrub.html) — CXL patrol scrub/ECS та інші scrub capabilities; частина operations змінює scrub policy або запускає роботу.
 - [PCI CMA/SPDM sysfs RFC history](https://lkml.iu.edu/hypermail/linux/kernel/2602.1/03817.html) — authentication state та повторна автентифікація через write; WSM preflight не повинен запускати reauthentication.
 
+## FWCTL — device firmware RPC, не інвентаризація сумісності
+
+Linux **FWCTL (Firmware Control)** — upstream userspace API для обмежених RPC до firmware конкретної device function. Це спільний механізм транспорту й enforcement scope; payload та операції залишаються device- і driver-specific. FWCTL орієнтований на debugging, management і provisioning, а не лише на пасивний hardware inventory.
+
+### Виявлення та прив'язка до пристрою
+
+- Kernel експонує клас \`/sys/class/fwctl/fwctlNN/\` і character device \`/dev/fwctl/fwctlNN\`.
+- \`FWCTL_INFO\` повертає device type та driver-defined metadata/capabilities. Це опис FW interface, а не verdict «пристрій сумісний» чи «працює».
+- FWCTL instance можна пов'язати з іншим subsystem object через sysfs ancestry/links (наприклад, PCI function або InfiniBand device). WSM має створювати report relationship лише за реальною sysfs relation, а не за номером \`fwctlNN\`, назвою інтерфейсу чи порядком enumeration.
+- Не кожна платформа або device function має FWCTL driver. Відсутність \`/sys/class/fwctl\` або node означає \`not-collected/not-supported-by-current-kernel\`, а не несумісність пристрою.
+
+### Kernel-enforced RPC scopes
+
+| Scope | Семантика upstream | WSM policy |
+| --- | --- | --- |
+| \`FWCTL_RPC_CONFIGURATION\` | Read/write device configuration; область може включати persistent/flash configuration, окремі зміни застосовуються після reset | Не запускати в preflight; будь-який write/configuration — тільки окрема сервісна процедура із consent |
+| \`FWCTL_RPC_DEBUG_READ_ONLY\` | Read-only debug information; сумісний із kernel lockdown, без розкриття секретів за контрактом FWCTL | Кандидат лише для окремого reviewed allowlist. Scope сам по собі не встановлює, що конкретна відповідь корисна, стабільна чи придатна до публікації |
+| \`FWCTL_RPC_DEBUG_WRITE\` | Write до debug data; може вивести пристрій із fully-supported state та taint-ить kernel | Заборонити в автоматичному preflight |
+| \`FWCTL_RPC_DEBUG_WRITE_FULL\` | Full debug access; потребує \`CAP_SYS_RAWIO\` і taint-ить kernel | Заборонити в автоматичному preflight і не обходити lockdown |
+
+### Практичне значення для WSM
+
+- **Не відкривати \`/dev/fwctl/*\` і не надсилати RPC у звичайному hardware preflight.** Навіть якщо API спільний, формат і семантика команд визначаються конкретним driver/device type; FWCTL дозволяє не лише читання, а й configuration, flash, debugging та provisioning.
+- Якщо в майбутньому буде потрібен opt-in support mode, він повинен мати versioned allowlist за driver/device type, RPC opcode та scope; описувати точний effect кожної операції; мати верхні межі request/response bytes і timeout; вимагати явної згоди до відкриття device node; записувати provider/kernel/firmware version і provenance, але не зберігати raw RPC payload без окремої потреби.
+- Не приймати довільні RPC id/payload із CLI, report або зовнішнього profile. Не використовувати \`DEBUG_WRITE\`, \`DEBUG_WRITE_FULL\`, \`CONFIGURATION\` у preflight. Навіть read-only RPC не є функціональним тестом і не дає загального health verdict.
+- Не підміняти FWCTL інструментами прямого доступу до PCI config space, \`/dev/mem\`, raw CR-space або старими privileged helper-модулями. Мета FWCTL — обмежений, kernel-mediated device RPC, не ще один raw hardware interface.
+- FWCTL не є заміною \`fwupd\`/LVFS: він забезпечує device-native RPC transport, тоді як fwupd/LVFS — окрема система firmware update metadata/distribution.
+
+NVIDIA MFT 4.38.0 документує fwctl transport для підтримуваних mlx5 NIC functions через \`/dev/fwctl/*\`; для деяких команд read і write використовують різні scope. Наприклад, register GET позначений як \`DEBUG_READ_ONLY\`, register SET — як \`DEBUG_WRITE_FULL\`, а HCA capability query/set — як \`CONFIGURATION\`. Тому **не можна вважати весь MFT CLI read-only** лише тому, що він використовує FWCTL. Це приклад одного vendor provider-а, не гарантія підтримки всіх NVIDIA пристроїв чи WSM kernels.
+
+**Рекомендована роль:** optional expert/service integration після окремого threat model та package/kernel compatibility review; не core preflight dependency і не джерело загального compatibility verdict.
+
 ## Правила інтеграції
 
 ### PCIe AER
