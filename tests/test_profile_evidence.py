@@ -64,6 +64,10 @@ class ShapeTests(unittest.TestCase):
     def test_minimal_bundle_with_verified_artifact_is_accepted(self) -> None:
         self.assertEqual(validate_fixture(), [])
 
+    def test_invalid_calendar_date_is_refused(self) -> None:
+        problems = validate_fixture(bundle(verified_on="2026-99-99"))
+        self.assertTrue(any("format" in item.lower() or "date" in item.lower() for item in problems))
+
     def test_missing_isa_level_is_refused(self) -> None:
         document = bundle()
         del document["isa_level"]
