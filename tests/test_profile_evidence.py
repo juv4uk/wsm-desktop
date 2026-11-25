@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from check_profile_evidence import main, validate, validate_directory  # noqa: E402
 from wsm_install.plan import build_plan  # noqa: E402
 
-ARTIFACT_BYTES = b"synthetic dmesg evidence\n"
+ARTIFACT_BYTES = b"synthetic functional test output\n"
 ARTIFACT_SHA256 = hashlib.sha256(ARTIFACT_BYTES).hexdigest()
 PROFILE_SOURCE_BYTES = b";; synthetic profile source\n"
 PROFILE_SOURCE_SHA256 = hashlib.sha256(PROFILE_SOURCE_BYTES).hexdigest()
@@ -37,13 +37,13 @@ BASE = {
     "verified_on": "2026-11-26",
     "verified_by": "автори проєкту",
     "verified_functions": [
-        {"name": "graphics", "status": "pass", "note": "synthetic fixture only", "evidence": ["artifacts/dmesg.txt"]},
-        {"name": "storage", "status": "pass", "evidence": ["artifacts/dmesg.txt"]},
+        {"name": "graphics", "status": "pass", "note": "synthetic fixture only", "evidence": ["artifacts/functional-test.log"]},
+        {"name": "storage", "status": "pass", "evidence": ["artifacts/functional-test.log"]},
     ],
     "known_limitations": ["NVK reclocking unavailable on Pascal"],
     "not_assessed": ["suspend/resume", "audio over HDMI"],
     "artifacts": [
-        {"kind": "dmesg", "path": "artifacts/dmesg.txt", "sha256": ARTIFACT_SHA256},
+        {"kind": "functional-test-log", "path": "artifacts/functional-test.log", "sha256": ARTIFACT_SHA256},
         {"kind": "wsm-hwcheck-report", "path": "artifacts/wsm-hwcheck-report.json", "sha256": SOURCE_REPORT_SHA256},
     ],
 }
@@ -60,7 +60,7 @@ def prepare_artifact_root(root: Path, source_report_bytes: bytes = SOURCE_REPORT
     (root / "profile.scm").write_bytes(PROFILE_SOURCE_BYTES)
     artifact_dir = root / "artifacts"
     artifact_dir.mkdir(parents=True, exist_ok=True)
-    (artifact_dir / "dmesg.txt").write_bytes(ARTIFACT_BYTES)
+    (artifact_dir / "functional-test.log").write_bytes(ARTIFACT_BYTES)
     (artifact_dir / "wsm-hwcheck-report.json").write_bytes(source_report_bytes)
 
 
@@ -69,6 +69,37 @@ def validate_fixture(document: dict | None = None) -> list[str]:
         root = Path(temporary)
         prepare_artifact_root(root)
         return validate(bundle() if document is None else document, artifact_root=root)
+
+
+    def test_duplicate_artifact_paths_are_rejected_even_with_different_kinds(self) -> None:
+        document = bundle()
+        duplicate = copy.deepcopy(document["artifacts"][0])
+        duplicate["kind"] = "wsm-hwcheck-report"
+        document["artifacts"].append(duplicate)
+        problems = validate_fixture(document)
+        self.assertTrue(any("duplicate artifact path" in item for item in problems))
+
+    def test_copy_of_source_report_bytes_cannot_be_relabelled_as_functional(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            prepare_artifact_root(root)
+            copied = root / "artifacts" / "copied-report.log"
+            copied.write_bytes(SOURCE_REPORT_BYTES)
+            document = bundle()
+            document["artifacts"].append({
+                "kind": "functional-test-log",
+                "path": "artifacts/copied-report.log",
+                "sha256": SOURCE_REPORT_SHA256,
+            })
+            document["verified_functions"][0]["evidence"] = ["artifacts/copied-report.log"]
+            problems = validate(document, artifact_root=root)
+        self.assertTrue(any("bytes identical to the source hardware report" in item for item in problems))
+
+    def test_unknown_artifact_kind_is_rejected(self) -> None:
+        document = bundle()
+        document["artifacts"][0]["kind"] = "mystery-proof"
+        problems = validate_fixture(document)
+        self.assertTrue(any("kind" in item for item in problems))
 
 
 class ShapeTests(unittest.TestCase):
@@ -112,7 +143,7 @@ class ArtifactTests(unittest.TestCase):
         self.assertEqual(validate_fixture(), [])
         document = bundle(
             artifacts=[
-                {"kind": "dmesg", "path": "artifacts/dmesg.txt", "sha256": "0" * 64}
+                {"kind": "functional-test-log", "path": "artifacts/functional-test.log", "sha256": "0" * 64}
             ]
         )
         problems = validate_fixture(document)
@@ -127,7 +158,7 @@ class ArtifactTests(unittest.TestCase):
     def test_artifact_path_cannot_escape_bundle_directory(self) -> None:
         document = bundle(
             artifacts=[
-                {"kind": "dmesg", "path": "../outside.txt", "sha256": ARTIFACT_SHA256}
+                {"kind": "functional-test-log", "path": "../outside.txt", "sha256": ARTIFACT_SHA256}
             ]
         )
         problems = validate_fixture(document)
@@ -136,7 +167,7 @@ class ArtifactTests(unittest.TestCase):
     def test_absolute_artifact_path_is_rejected(self) -> None:
         document = bundle(
             artifacts=[
-                {"kind": "dmesg", "path": "/etc/passwd", "sha256": ARTIFACT_SHA256}
+                {"kind": "functional-test-log", "path": "/etc/passwd", "sha256": ARTIFACT_SHA256}
             ]
         )
         problems = validate_fixture(document)
@@ -150,8 +181,8 @@ class ArtifactTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             prepare_artifact_root(root)
-            target = root / "artifacts" / "dmesg.txt"
-            real_file = root / "artifacts" / "real-dmesg.txt"
+            target = root / "artifacts" / "functional-test.log"
+            real_file = root / "artifacts" / "real-functional-test.log"
             target.rename(real_file)
             target.symlink_to(real_file)
             problems = validate(bundle(), artifact_root=root)
@@ -169,8 +200,8 @@ class RuleTests(unittest.TestCase):
     def test_failure_must_appear_in_known_limitations(self) -> None:
         document = bundle(
             verified_functions=[
-                {"name": "graphics", "status": "pass", "evidence": ["artifacts/dmesg.txt"]},
-                {"name": "wifi", "status": "fail", "evidence": ["artifacts/dmesg.txt"]},
+                {"name": "graphics", "status": "pass", "evidence": ["artifacts/functional-test.log"]},
+                {"name": "wifi", "status": "fail", "evidence": ["artifacts/functional-test.log"]},
             ]
         )
         problems = validate_fixture(document)
@@ -192,18 +223,18 @@ class RuleTests(unittest.TestCase):
         document = bundle(
             artifacts=[{
                 "kind": "wsm-hwcheck-report",
-                "path": "artifacts/dmesg.txt",
+                "path": "artifacts/functional-test.log",
                 "sha256": ARTIFACT_SHA256,
             }]
         )
         problems = validate_fixture(document)
-        self.assertTrue(any("source hardware report as functional proof" in item for item in problems))
+        self.assertTrue(any("non-functional artifact kind" in item for item in problems))
 
     def test_failure_listed_in_limitations_is_accepted(self) -> None:
         document = bundle(
             verified_functions=[
-                {"name": "graphics", "status": "pass", "evidence": ["artifacts/dmesg.txt"]},
-                {"name": "wifi", "status": "fail", "evidence": ["artifacts/dmesg.txt"]},
+                {"name": "graphics", "status": "pass", "evidence": ["artifacts/functional-test.log"]},
+                {"name": "wifi", "status": "fail", "evidence": ["artifacts/functional-test.log"]},
             ],
             known_limitations=["wifi does not associate on 5 GHz"],
         )
@@ -261,7 +292,7 @@ class InstallerPlanGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "asus" / "h170-pro"
             prepare_artifact_root(root, self.report_bytes)
-            (root / "artifacts" / "dmesg.txt").write_bytes(b"tampered after manifest creation")
+            (root / "artifacts" / "functional-test.log").write_bytes(b"tampered after manifest creation")
             _plan, blockers, _warnings = self.build(self.matching_bundle(), root)
         self.assertTrue(any("does not match the bytes" in item for item in blockers))
 
