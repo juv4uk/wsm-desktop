@@ -142,3 +142,39 @@ guix time-machine -C channels.lock.scm -- system vm --no-graphic systems/minimal
 - [#1 — Guix VM proof](https://github.com/juv4uk/wsm-desktop/issues/1) — лише питання щодо VM-доказу.
 
 Не відкривайте новий ADR і не змінюйте канонічний handoff-контракт у межах цього RC.
+
+## Один вердикт: `release-gate`
+
+```sh
+python3 scripts/release_gate.py --iso build/wsm-desktop.iso --boot
+```
+
+Запускає всі перевірки й пише `wsm-release-gate/1`:
+
+| Критерій | Що перевіряє |
+| --- | --- |
+| `docs` | посилання, наявність заголовків, заборонені шаблони |
+| `channels` | lock-файл за політиками `free` і `compatibility` |
+| `tests` | усі набори тестів |
+| `profile-evidence` | валідність bundle-ів заліза |
+| `image` | хеш, маніфест, ISO9660, завантаження в BIOS і UEFI |
+
+`overall` буває `pass`, `fail` або **`incomplete`**. Одне `not-run` робить
+вердикт неповним: перевірка, яку не вдалося виконати, не доводить нічого.
+
+Код виходу 1 буває лише при справжньому провалі. `incomplete` — це не привід
+зупиняти роботу, це привід знати, чого саме бракує.
+
+Приклад сьогоднішнього стану:
+
+```
+overall: incomplete
+  docs               pass
+  channels           pass
+  tests              pass
+  profile-evidence   not-run   no hardware profile bundles exist yet
+  image              not-run   no --iso supplied; nothing to verify
+```
+
+Тобто: документація й канали в порядку, тести зелені, але **образу немає**, і
+доказів заліза теж. Це чесна картина, а не «майже готово».
