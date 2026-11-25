@@ -191,7 +191,7 @@ def main(argv: list[str] | None = None) -> int:
         print("wsm-install: no plan emitted because required critical evidence is unresolved", file=sys.stderr)
         return 3
 
-    rendered = canonical_json(plan) + "\\n"
+    rendered = canonical_json(plan) + "\n"
     if args.plan_output:
         protected_profile_inputs: tuple[Path, ...] = ()
         if (
