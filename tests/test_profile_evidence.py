@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from check_profile_evidence import validate, validate_directory  # noqa: E402
 
-ARTIFACT_BYTES = b"kernel log\\n"
+ARTIFACT_BYTES = b"kernel log\n"
 ARTIFACT_HASH = hashlib.sha256(ARTIFACT_BYTES).hexdigest()
 
 BASE = {
