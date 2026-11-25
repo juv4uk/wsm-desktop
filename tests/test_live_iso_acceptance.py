@@ -269,7 +269,7 @@ case "$*" in
       esac
     done
     test -n "$root_path"
-    store_path="\${root_path}.store-object"
+    store_path="$root_path.store-object"
     python3 - "$store_path" "$WSM_TEST_ISO_KIND" <<'PY'
 import sys
 from pathlib import Path
@@ -340,7 +340,7 @@ exit 97
             self.assertEqual(artifact["sha256"], digest)
             self.assertEqual(artifact["store_object_sha256"], digest)
             self.assertEqual(
-                manifest["guix"]["resolved_guix_channel_commit"], locked_commit
+                manifest["source"]["resolved_guix_channel_commit"], locked_commit
             )
 
             command = manifest["build"]["command"]
