@@ -31,6 +31,19 @@ The `wsm_install` command prints a diagnostic plan for this machine. It remains 
 
 The project is in **pre-alpha**. There is no supported installation image yet. The repository currently defines the project architecture and development foundations; it must not be used to install or modify a real system.
 
+## Release 0.1.0-rc1
+
+The first public pre-release is [WSM Desktop 0.1.0-rc1 — Hardware Preview](https://github.com/juv4uk/wsm-desktop/releases/tag/0.1.0-rc1). It ships the read-only tools and a reproducible source bundle, not an installation image: there is no supported installation in it.
+
+Verify what you downloaded:
+
+```sh
+sha256sum -c SHA256SUMS
+python3 -c 'import json; d=json.load(open("release-manifest.json")); n="wsm-desktop-0.1.0-rc1-source.tar.gz"; print(d["source_commit"], d["artifacts"][n]["sha256"])'
+```
+
+The tarball is built with `git archive HEAD | gzip -n -9` at `mtime=0`, so the same commit yields the same bytes. Full scope, known limitations and how to report back are in [RELEASE-NOTES.md](RELEASE-NOTES.md).
+
 ## Project status
 
 - [x] Project identity and scope

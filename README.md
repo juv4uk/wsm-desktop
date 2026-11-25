@@ -41,6 +41,19 @@ $ python -m wsm_install --preflight --report hw.json --backend guix --dry-run
 > встановлення або зміни реальної системи. Колектор вище працює лише на читання і
 > безпечний для запуску.
 
+## Реліз 0.1.0-rc1
+
+Перший публічний pre-release — [WSM Desktop 0.1.0-rc1 — Hardware Preview](https://github.com/juv4uk/wsm-desktop/releases/tag/0.1.0-rc1). Це read-only інструменти та відтворюваний вихідний бандл, а не інсталяційний образ: підтримуваного встановлення в ньому немає.
+
+Перевірка цілісності завантаженого:
+
+```sh
+sha256sum -c SHA256SUMS
+python3 -c 'import json; d=json.load(open("release-manifest.json")); n="wsm-desktop-0.1.0-rc1-source.tar.gz"; print(d["source_commit"], d["artifacts"][n]["sha256"])'
+```
+
+Tarball будується з `git archive HEAD | gzip -n -9` з `mtime=0`, тож той самий коміт дає ті самі байти. Повні межі, відомі обмеження й порядок зворотного зв'язку — у [RELEASE-NOTES.md](RELEASE-NOTES.md).
+
 ## Стан проєкту
 
 - [x] Ідентичність і межі проєкту
