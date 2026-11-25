@@ -30,7 +30,7 @@ def verifier_payload(overrides: dict[str, str] | None = None) -> dict:
 
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from release_gate import check_channels, check_image, criterion, from_exit, verdict  # noqa: E402
+from release_gate import check_channels, check_image, check_tests, criterion, from_exit, verdict  # noqa: E402
 
 
 class VerdictTests(unittest.TestCase):
@@ -65,6 +65,17 @@ class ExitMappingTests(unittest.TestCase):
 
     def test_timeout_is_fail_not_missing_tool(self) -> None:
         self.assertEqual(from_exit("x", 124, "timed out")["status"], "fail")
+
+
+class TestRunnerTests(unittest.TestCase):
+    def test_tests_use_one_bounded_unittest_discovery_process(self) -> None:
+        with patch("release_gate.run", return_value=(0, "OK")) as run_check:
+            result = check_tests()
+        self.assertEqual(result["status"], "pass")
+        self.assertIn("test modules", result["detail"])
+        command = run_check.call_args.args[0]
+        self.assertEqual(command[1:4], ["-m", "unittest", "discover"])
+        self.assertEqual(run_check.call_args.kwargs["timeout"], 900)
 
 
 class ChannelTests(unittest.TestCase):
