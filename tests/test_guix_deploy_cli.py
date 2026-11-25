@@ -174,15 +174,20 @@ class GuixDeployCliTests(unittest.TestCase):
     def test_output_may_not_alias_plan_input(self) -> None:
         scm_plan = self.root / "input.scm"
         write_json(scm_plan, self.plan)
-        # The suffix is valid, but this is still the protected input file.
-        selection_digest = self.selection.digest()
-        code, _stdout, stderr = self.run_cli(
+        # The suffix is valid, but the same path is also supplied as --plan.
+        arguments = [
+            "--plan", str(scm_plan),
+            "--selection", str(self.selection_path),
             "--output", str(scm_plan),
             "--confirm-plan-sha256", self.plan["plan_sha256"],
-            "--confirm-target-digest", selection_digest,
-        )
+            "--confirm-target-digest", self.selection.digest(),
+        ]
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            code = main(arguments)
         self.assertEqual(code, 2)
-        self.assertIn("must not overwrite an input", stderr)
+        self.assertIn("must not overwrite an input", stderr.getvalue())
         self.assertEqual(json.loads(scm_plan.read_text(encoding="utf-8")), self.plan)
 
     def test_duplicate_json_keys_are_rejected(self) -> None:
