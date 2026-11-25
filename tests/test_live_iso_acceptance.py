@@ -147,12 +147,16 @@ class HarnessCliTests(unittest.TestCase):
         self.assertFalse(payload["host_efi_variables_modified"])
         self.assertFalse(payload["guest_uefi_vars_writable"])
 
-    def test_acceptance_document_uses_builder_output_path(self) -> None:
+    def test_acceptance_document_uses_builder_output_path_and_make_target(self) -> None:
         builder = (ROOT / "scripts" / "build_iso.sh").read_text(encoding="utf-8")
         docs = (ROOT / "docs" / "DESKTOP-PROFILE.md").read_text(encoding="utf-8")
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
         self.assertIn('ISO_OUTPUT="$OUTPUT_DIR/wsm-desktop-live.iso"', builder)
         self.assertIn("--iso build/wsm-desktop-live.iso", docs)
         self.assertNotIn("--iso build/wsm-desktop.iso", docs)
+        self.assertIn("image-live:", makefile)
+        self.assertIn("./scripts/build_iso.sh", makefile)
+        self.assertIn("make image-live", docs)
 
 
 if __name__ == "__main__":
