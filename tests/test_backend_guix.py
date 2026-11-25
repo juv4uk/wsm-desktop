@@ -171,6 +171,24 @@ class HandoffRefusalTests(unittest.TestCase):
         plan, _, _ = build_plan(json.loads(report_bytes), report_bytes, "guix")
         self.assert_refused("plan.not_confirmable", plan, selection())
 
+    def test_source_report_id_rejects_scheme_comment_injection(self) -> None:
+        plan = confirmed_plan()
+        plan["source_report"]["report_id"] = "A" * 16 + chr(10) + '(newline (display "injected"))'
+        refresh_plan_hash(plan)
+        self.assert_refused("plan.report_id", plan, selection())
+
+    def test_source_report_sha256_requires_lowercase_hex(self) -> None:
+        plan = confirmed_plan()
+        plan["source_report"]["sha256"] = "a" * 63 + chr(10) + '(newline (display "injected"))'
+        refresh_plan_hash(plan)
+        self.assert_refused("plan.report_sha256", plan, selection())
+
+    def test_source_report_must_be_an_object(self) -> None:
+        plan = confirmed_plan()
+        plan["source_report"] = ["not", "an", "object"]
+        refresh_plan_hash(plan)
+        self.assert_refused("plan.provenance", plan, selection())
+
     def test_plan_payload_must_match_its_digest(self) -> None:
         plan = confirmed_plan()
         plan["warnings"].append("post-confirmation mutation")
@@ -276,6 +294,39 @@ class HandoffRefusalTests(unittest.TestCase):
         with self.assertRaises(HandoffError) as caught:
             handoff(confirmed_plan(), selection(), configuration_path="system.scm")
         self.assertEqual(caught.exception.code, "argv.config_path")
+
+    def test_device_path_rejects_trailing_newline_and_extra_segments(self) -> None:
+        for disk in ("/dev/vda\n", "/dev/vda/../../etc/passwd"):
+            with self.subTest(disk=disk):
+                self.assert_refused("selection.disk", confirmed_plan(), selection(disk=disk))
+
+    def test_full_name_rejects_control_format_and_surrogate_characters(self) -> None:
+        for full_name in ("Ada\rLovelace", "Ada\tLovelace", "Ada\x00Lovelace", "Ada\u2028Lovelace", "Ada\u202eLovelace", "Ada\ud800Lovelace"):
+            with self.subTest(full_name=repr(full_name)):
+                self.assert_refused("selection.full_name", confirmed_plan(), selection(full_name=full_name))
+
+    def test_target_selection_digest_is_unambiguous(self) -> None:
+        left = selection(full_name="Ada|Lovelace", root_label="wsm-root")
+        right = selection(full_name="Ada", root_label="Lovelace|wsm-root")
+        self.assertNotEqual(left.digest(), right.digest())
+
+    def test_target_selection_digest_handles_unpaired_surrogate(self) -> None:
+        value = selection(full_name="Ada\ud800Lovelace").digest()
+        self.assertEqual(len(value), 64)
+
+    def test_configuration_path_must_be_installer_owned(self) -> None:
+        for path in ("system.scm", "/etc/passwd", "/run/wsm/../../etc/passwd"):
+            with self.subTest(path=path):
+                with self.assertRaises(HandoffError) as caught:
+                    handoff(confirmed_plan(), selection(), configuration_path=path)
+                self.assertEqual(caught.exception.code, "argv.config_path")
+
+    def test_target_mountpoint_must_be_installer_owned(self) -> None:
+        for mountpoint in ("/", "/tmp/target", "/mnt/../", "/mnt/wsm"):
+            with self.subTest(mountpoint=mountpoint):
+                with self.assertRaises(HandoffError) as caught:
+                    handoff(confirmed_plan(), selection(), target_mountpoint=mountpoint)
+                self.assertEqual(caught.exception.code, "argv.mountpoint")
 
 
 if __name__ == "__main__":
