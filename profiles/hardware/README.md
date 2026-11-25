@@ -23,6 +23,7 @@ profiles/hardware/asus/h170-pro/
 `evidence.json` використовує контракт `wsm-profile-evidence/2` і зобов'язаний містити:
 
 - `report_id` зі звіту `wsm-hwcheck` — докази посилаються на джерело;
+- `profile_source.sha256` — digest саме тих байтів `profile.scm`, на яких виконувалися тести;
 - `isa_level` — підтверджений рівень `wsm-cpu-isa/1` або явне `unknown`;
 - `verified_functions` — що саме перевірено, зі статусом `pass`, `fail` або
   `not-assessed`;
@@ -43,7 +44,7 @@ python3 scripts/draft_profile_evidence.py \\
   --out profiles/hardware/gigabyte/h170-gaming-3/evidence.json
 ```
 
-Генератор копіює точні байти звіту в `artifacts/wsm-hwcheck-report.json` і записує SHA-256. Це provenance, а не функціональний тест. Кожний `pass`/ `fail` у `verified_functions` повинен окремо посилатися через `evidence` на тестовий артефакт; звіт інвентаризації не може бути єдиним доказом роботи функції.
+Перед запуском у теці вже має бути `profile.scm`. Генератор копіює точні байти звіту в `artifacts/wsm-hwcheck-report.json`, записує його SHA-256 і обчислює `profile_source.sha256` з байтів `profile.scm`. Це provenance, а не функціональний тест. Кожний `pass`/ `fail` у `verified_functions` повинен окремо посилатися через `evidence` на тестовий артефакт; звіт інвентаризації не може бути єдиним доказом роботи функції.
 
 Генератор не створює `profile.scm`, не змінює статуси з `not-assessed` і не перезаписує існуючі файли.
 
