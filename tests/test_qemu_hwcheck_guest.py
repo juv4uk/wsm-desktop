@@ -10,6 +10,11 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from scripts import ci_qemu_hwcheck_guest as guest
 
