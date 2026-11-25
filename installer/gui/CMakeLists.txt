@@ -23,6 +23,7 @@ qt_add_qml_module(wsm-installer
     VERSION 1.0
     QML_FILES
         qml/Main.qml
+        qml/InstallerFlow.js
 )
 
 target_link_libraries(wsm-installer
