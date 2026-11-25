@@ -120,6 +120,8 @@ def build_plan(
             blockers.append(
                 "hardware profile evidence source-report SHA-256 does not match the current report bytes"
             )
+        # Exact digest equality binds the embedded report byte-for-byte to report_bytes,
+        # including report_id and schema_version, rather than trusting claimed IDs alone.
 
         for problem in evidence_problems:
             blockers.append(f"hardware profile evidence is not valid: {problem}")
