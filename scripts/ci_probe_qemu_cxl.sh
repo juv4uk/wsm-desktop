@@ -12,7 +12,7 @@ QEMU_BIN="$(command -v qemu-system-x86_64 || true)"
 report "# CXL QEMU capability probe"
 report ""
 report "- Runner: ${ImageVersion:-unknown} / ${ImageOS:-unknown}"
-report "- Kernel release: `$KERNEL_RELEASE`"
+report "- Kernel release: $KERNEL_RELEASE"
 report "- Probe mode: host-side QEMU model construction only"
 report "- No kernel modules are loaded; no guest is booted."
 
