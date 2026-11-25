@@ -67,6 +67,7 @@ jobs:
           timeout --signal=TERM --kill-after=5s 60s \
             qemu-system-x86_64 \
               -machine q35,accel=tcg \
+              -cpu max \
               -m 512M \
               -smp 1 \
               -kernel "$kernel_image" \
