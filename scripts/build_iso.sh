@@ -76,15 +76,10 @@ for output in "$ISO_OUTPUT" "$BUILD_LOG" "$CHANNELS_FILE" "$CHANNELS_LOG" "$MANI
     fi
 done
 
-# Guix must discover the repository's own (wsm packages ...) modules while
-# evaluating the live profile. Keep any caller-provided package paths.
-if [ -n "${GUIX_PACKAGE_PATH:-}" ]; then
-    export GUIX_PACKAGE_PATH="$ROOT:$GUIX_PACKAGE_PATH"
-else
-    export GUIX_PACKAGE_PATH="$ROOT"
-fi
-
-GUIX_CLIENT_VERSION=$(guix --version | sed -n '1p')
+# Read the version from the pinned channel, not only from the bootstrap
+# Guix executable. The -L option makes the repository's WSM modules visible
+# inside this exact time-machine invocation.
+GUIX_LOCKED_VERSION=$(guix time-machine -C "$LOCK" -L "$ROOT" -- --version | sed -n '1p')
 PROFILE_SHA256=$(python3 - "$PROFILE" <<'PY'
 import hashlib
 import sys
@@ -101,7 +96,7 @@ printf '%s\n' "build-iso: output=$ISO_OUTPUT"
 printf '%s\n' "build-iso: resolving locked channels (Guix authentication is not disabled)"
 
 # Resolve the exact channel set through the same time-machine lock used below.
-if guix time-machine -C "$LOCK" -- describe -f channels >"$CHANNELS_FILE" 2>"$CHANNELS_LOG"; then
+if guix time-machine -C "$LOCK" -L "$ROOT" -- describe -f channels >"$CHANNELS_FILE" 2>"$CHANNELS_LOG"; then
     :
 else
     status=$?
@@ -120,7 +115,7 @@ if grep -Eiq 'channel authentication disabled' "$CHANNELS_FILE" "$CHANNELS_LOG";
 fi
 
 printf '%s\n' "build-iso: building with locked Guix channel; see build.log"
-if guix time-machine -C "$LOCK" -- system image \
+if guix time-machine -C "$LOCK" -L "$ROOT" -- system image \
     --no-grafts \
     --root="$ISO_OUTPUT" \
     --image-type=iso9660 \
@@ -159,7 +154,7 @@ fi
 WSM_SOURCE_COMMIT="$SOURCE_COMMIT" \
 WSM_CHANNEL_COMMIT="$CHANNEL_COMMIT" \
 WSM_CHANNEL_TRUST_WARNING="$CHANNEL_TRUST_WARNING" \
-WSM_GUIX_CLIENT_VERSION="$GUIX_CLIENT_VERSION" \
+WSM_GUIX_LOCKED_VERSION="$GUIX_LOCKED_VERSION" \
 WSM_PROFILE="$PROFILE" \
 WSM_PROFILE_SHA256="$PROFILE_SHA256" \
 WSM_LOCK="$LOCK" \
@@ -216,7 +211,7 @@ manifest = {
         "untrusted_channel_warning_present": os.environ["WSM_CHANNEL_TRUST_WARNING"] == "true",
     },
     "guix": {
-        "bootstrap_client_version": os.environ["WSM_GUIX_CLIENT_VERSION"],
+        "locked_version": os.environ["WSM_GUIX_LOCKED_VERSION"],
         "resolved_channels_file": channels.name,
         "resolved_channels_sha256": digest(channels),
         "channel_resolution_log": channels_log.name,
