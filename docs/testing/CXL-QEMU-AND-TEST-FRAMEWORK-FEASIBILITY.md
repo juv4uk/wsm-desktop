@@ -48,7 +48,7 @@ QEMU запускали з одним synthetic volatile Type 3 пристроє
 - `cxl_memdev_count=1`;
 - `cxl_region_created=false`.
 
-У `/sys/bus/cxl/devices` виявлено 11 імен вузлів:
+У `/sys/bus/cxl/devices` зафіксовано такі назви вузлів у текстовому переліку:
 
 ```text
 decoder0.0
@@ -63,6 +63,8 @@ nvdimm-bridge0
 port1
 root0
 ```
+
+**Уточнення до повноти:** у звітах/коментарях до #94 та #104 вказано загальний `node_count=12`, але наведений тут текстовий список містить 11 окремих назв. Workflow run #45688904621 не має збереженого artifact із повним allow-listed виводом; тому цей список не можна називати повним і не слід виводити відсутнє ім'я за індексами, порядком enumeration або припущенням. Для закриття розбіжності потрібен точний serial/JSON fragment із самого run.
 
 Read-only `devtype` observations:
 
