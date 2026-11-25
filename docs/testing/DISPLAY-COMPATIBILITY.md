@@ -36,11 +36,12 @@
 
 ~~~sh
 uname -r
-cat /proc/cmdline
 lspci -nnk
 ~~~
 
-Зберігати тільки потрібні для відтворення поля: kernel release, boot parameters, PCI vendor/device/subsystem IDs, GPU class та фактичний driver binding. Перед експортом видалити hostname та інші локальні ідентифікатори, якщо вони потрапили до журналу.
+Не зберігати та не експортувати `/proc/cmdline` цілком: kernel command line може містити локальні шляхи, мережеві параметри, boot credentials або інші чутливі значення. Якщо для відтворення справді потрібен окремий параметр, використовувати лише явно allowlisted parser для конкретних несекретних ключів; невідомі ключі відкидати, значення редагувати, raw command line ніколи не записувати до report або CI log.
+
+Зберігати тільки потрібні для відтворення поля: kernel release, allowlisted non-sensitive boot facts (якщо такі потрібні), PCI vendor/device/subsystem IDs, GPU class та фактичний driver binding. Перед експортом видалити hostname та інші локальні ідентифікатори, якщо вони потрапили до журналу.
 
 ### 3.2 DRM connector-и через sysfs
 
@@ -77,7 +78,7 @@ edid-decode --version
 edid-decode --hide-serial-numbers --skip-hex-dump /sys/class/drm/cardX-CONNECTOR/edid
 ~~~
 
-Перший запуск читає оригінальні байти й придатний для приватної перевірки EDID, зокрема checksum. Не об'єднувати EDID кількох connector-ів в один потік і не зберігати raw EDID у публічному профілі. Опція `--skip-hex-dump` прибирає початковий hex dump, а `--hide-serial-numbers` маскує серійні номери в текстовому виводі; локальний вивід усе одно слід перевірити на інші ідентифікатори перед експортом.
+Перший запуск читає оригінальні байти й придатний для приватної перевірки EDID, зокрема checksum. Не об'єднувати EDID кількох connector-ів в один потік і не зберігати raw EDID або manufacturer/product/name/serial strings у публічному профілі за замовчуванням. Опція `--skip-hex-dump` прибирає початковий hex dump, а `--hide-serial-numbers` маскує серійні номери в текстовому виводі, але ці прапорці **не гарантують повного видалення ідентифікаторів**. Будь-який експорт EDID-derived manufacturer/model strings потребує окремо обґрунтованої мети й явної згоди; за замовчуванням експортувати лише opaque report-local display ID та санітизовані capability facts.
 
 **Не використовувати `--replace-unique-ids` для перевірки цілісності оригіналу:** ця опція замінює унікальні ідентифікатори та перераховує EDID checksums, тому може приховати checksum-помилки, які були в початкових байтах. Її можна застосувати лише в окремому другому проході для формування санітизованого текстового представлення; результат такого проходу не є доказом checksum-цілісності оригінального EDID. Якщо потрібен локальний діагностичний файл, він залишається приватним і видаляється після перевірки за правилами власника системи.
 
@@ -149,7 +150,7 @@ D4 дозволений лише після окремої, явно погод�
 | Kernel / driver | Точні версії та фактичне binding evidence |
 | GPU | PCI IDs, report-local device ID |
 | DRM connector | Report-local ID, тип і status observation |
-| Display | Privacy-safe vendor/model, якщо відомі; інакше unknown |
+| Display | Opaque report-local ID та санітизовані capability facts; manufacturer/model strings — лише за окремо обґрунтованої мети й явної згоди |
 | Topology evidence | Relationship ID/type/source або unknown |
 | Advertised modes | KMS-exposed modes; EDID parse — окрема довідкова інформація |
 | Active mode | Фактичний режим із джерелом або not-collected |
