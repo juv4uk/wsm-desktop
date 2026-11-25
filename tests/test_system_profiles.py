@@ -190,7 +190,7 @@ class LiveIsoSecurityTests(unittest.TestCase):
     def test_live_image_does_not_enable_passwordless_sudo(self) -> None:
         self.assertNotIn("NOPASSWD", self.text)
         self.assertNotIn("sudoers", self.text.lower())
-        self.assertNotIn('(supplementary-groups '("wheel"', self.text)
+        self.assertNotIn('"wheel"', self.user)
 
 
 class IsoScriptTests(unittest.TestCase):
