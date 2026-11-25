@@ -257,7 +257,7 @@ def _pci_devices(sysfs_root: Path, observed_at: str) -> list[dict[str, Any]]:
         }
         fields = {
             "vendor_id": "vendor",
-            "hardware_device_id": "device",
+            "device_id": "device",
             "subsystem_vendor_id": "subsystem_vendor",
             "subsystem_device_id": "subsystem_device",
             "revision": "revision",
@@ -312,7 +312,7 @@ def _usb_devices(sysfs_root: Path, observed_at: str) -> list[dict[str, Any]]:
             continue
         identity: dict[str, Any] = {
             "vendor_id": vendor,
-            "hardware_device_id": product,
+            "device_id": product,
             "local_path": _relative_sysfs(entry, sysfs_root),
         }
         for key, filename in (
