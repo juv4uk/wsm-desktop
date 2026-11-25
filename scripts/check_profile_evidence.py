@@ -9,17 +9,20 @@ The directory scanner also rejects profile.scm files without evidence.json.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import sys
-from pathlib import Path, PurePosixPath, PureWindowsPath
+from pathlib import Path
 from typing import Any
 
-import jsonschema
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = ROOT / "schemas" / "profile-evidence.schema.json"
 PROFILES_DIR = ROOT / "profiles" / "hardware"
+
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from wsm_install.profile import problems as profile_problems  # noqa: E402
 
 
 def load_schema() -> dict[str, Any]:
@@ -31,110 +34,8 @@ def validate(
     schema: dict[str, Any] | None = None,
     artifact_root: Path | None = None,
 ) -> list[str]:
-    """Return problems. artifact_root enables on-disk path and digest checks."""
-    schema = schema or load_schema()
-    try:
-        jsonschema.validate(document, schema, format_checker=jsonschema.FormatChecker())
-    except jsonschema.ValidationError as exc:
-        location = "/".join(str(part) for part in exc.absolute_path) or "<root>"
-        return [f"schema: {location}: {exc.message}"]
-
-    problems: list[str] = []
-    functions = document["verified_functions"]
-    if not any(item["status"] == "pass" for item in functions):
-        problems.append(
-            "no function passed: a bundle with only not-assessed entries is a "
-            "hypothesis, not evidence"
-        )
-
-    failed = [item["name"] for item in functions if item["status"] == "fail"]
-    limitations = " ".join(document["known_limitations"]).lower()
-    for name in failed:
-        if name.lower() not in limitations:
-            problems.append(
-                f"function {name!r} failed but is not listed in known_limitations"
-            )
-
-    if artifact_root is not None:
-        problems.extend(validate_artifact_files(document["artifacts"], artifact_root))
-
-    return problems
-
-
-def validate_artifact_files(artifacts: list[dict[str, Any]], root: Path) -> list[str]:
-    """Verify safe relative artifact paths and their SHA-256 digests."""
-    problems: list[str] = []
-    if root.is_symlink() or not root.is_dir():
-        return ["profile directory must be a real directory, not a symlink or missing path"]
-    root_path = root.resolve()
-
-    for artifact in artifacts:
-        relative = artifact["path"]
-        raw_parts = relative.split("/")
-        posix_path = PurePosixPath(relative)
-        if (
-            "\\" in relative
-            or relative.startswith("/")
-            or posix_path.is_absolute()
-            or bool(PureWindowsPath(relative).drive)
-            or ":" in relative
-            or not posix_path.parts
-            or any(part in {"", ".", ".."} for part in raw_parts)
-        ):
-            problems.append(
-                f"artifact path {relative!r} must be a safe relative path under the profile directory"
-            )
-            continue
-
-        candidate = root
-        has_symlink = False
-        for part in posix_path.parts:
-            candidate = candidate / part
-            if candidate.is_symlink():
-                has_symlink = True
-                break
-        if has_symlink:
-            problems.append(f"artifact path {relative!r} must not traverse a symlink")
-            continue
-
-        try:
-            resolved = candidate.resolve(strict=True)
-            resolved.relative_to(root_path)
-        except (OSError, ValueError):
-            problems.append(f"artifact path {relative!r} is missing or escapes the profile directory")
-            continue
-
-        if not resolved.is_file():
-            problems.append(f"artifact path {relative!r} is not a regular file")
-            continue
-
-        digest = hashlib.sha256()
-        try:
-            with resolved.open("rb") as stream:
-                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                    digest.update(chunk)
-        except OSError as exc:
-            problems.append(f"artifact path {relative!r} cannot be read: {exc}")
-            continue
-
-        actual = digest.hexdigest()
-        if actual != artifact["sha256"]:
-            problems.append(
-                f"artifact path {relative!r} sha256 mismatch: "
-                f"expected {artifact['sha256']}, got {actual}"
-            )
-
-    return problems
-
-
-def read_document(path: Path) -> tuple[dict[str, Any] | None, list[str]]:
-    try:
-        document = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        return None, [f"cannot read evidence JSON: {exc}"]
-    if not isinstance(document, dict):
-        return None, ["evidence JSON root must be an object"]
-    return document, []
+    """Reuse the installer's single semantic and artifact validator."""
+    return profile_problems(document, schema, artifact_root=artifact_root)
 
 
 def validate_directory(path: Path, root: Path = PROFILES_DIR) -> list[str]:
