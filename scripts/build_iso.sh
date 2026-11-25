@@ -184,6 +184,7 @@ def digest(path: Path) -> str:
             hasher.update(chunk)
     return hasher.hexdigest()
 
+published = False
 try:
     if destination.exists() or destination.is_symlink():
         raise SystemExit(f"refusing to overwrite existing ISO: {destination}")
@@ -194,12 +195,18 @@ try:
     if digest(temporary) != digest(store_image):
         raise SystemExit("materialized ISO checksum differs from the Guix store image")
     os.chmod(temporary, 0o644)
-    with temporary.open("rb") as stream:
+    with temporary.open("rb+") as stream:
         os.fsync(stream.fileno())
     # link() atomically creates the destination and refuses to overwrite it.
     os.link(temporary, destination)
+    published = True
     temporary.unlink()
 except Exception:
+    if published:
+        try:
+            destination.unlink()
+        except OSError:
+            pass
     try:
         temporary.unlink()
     except OSError:
