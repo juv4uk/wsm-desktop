@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/juv4uk/wsm-desktop/schemas/profile-evidence.schema.json",
+  "$id": "https://github.com/juv4uk/wsm-desktop/schemas/profile-evidence.schema.json#v2",
   "title": "WSM hardware profile evidence",
-  "description": "Evidence bundle that turns a hardware profile from a hypothesis into a claim. A profile without a valid bundle is not a profile.",
+  "description": "Version 2 evidence bundle. Breaking update to initial v1 draft: binds evidence to a hardware report, includes a machine-match signature, and requires hashed local artifacts.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -10,15 +10,17 @@
     "profile",
     "report_id",
     "report_schema_version",
+    "isa_level",
     "verified_on",
     "verified_by",
     "verified_functions",
     "known_limitations",
-    "not_assessed"
+    "not_assessed",
+    "artifacts"
   ],
   "properties": {
     "schema": {
-      "const": "wsm-profile-evidence/1"
+      "const": "wsm-profile-evidence/2"
     },
     "profile": {
       "type": "object",
@@ -69,8 +71,12 @@
     },
     "verified_by": {
       "type": "string",
-      "minLength": 1,
-      "description": "Who ran the verification. Personal names and e-mail addresses are not accepted."
+      "enum": [
+        "автори проєкту",
+        "local agent",
+        "web agent"
+      ],
+      "description": "Non-personal role identifier. Personal names and e-mail addresses are not accepted."
     },
     "verified_functions": {
       "type": "array",
@@ -118,17 +124,25 @@
     },
     "artifacts": {
       "type": "array",
+      "minItems": 1,
+      "description": "At least one evidence file, stored relative to the profile directory and checked against its SHA-256.",
       "items": {
         "type": "object",
         "additionalProperties": false,
         "required": [
           "kind",
+          "path",
           "sha256"
         ],
         "properties": {
           "kind": {
             "type": "string",
             "minLength": 1
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Safe relative POSIX path from the profile directory, e.g. artifacts/dmesg.txt."
           },
           "sha256": {
             "type": "string",
