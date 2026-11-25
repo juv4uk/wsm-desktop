@@ -159,24 +159,25 @@ class IsoScriptTests(unittest.TestCase):
     def _fake_guix(self, bin_dir: Path) -> None:
         fake_guix = bin_dir / "guix"
         fake_guix.write_text(
-            "#!/bin/sh\n"
-            "printf 'CALL' >> \"$WSM_TEST_GUIX_ARGS\"\n"
-            "for argument in \"$@\"; do printf '|%s' \"$argument\" >> \"$WSM_TEST_GUIX_ARGS\"; done\n"
-            "printf '\\nPWD=%s\\nGUIX_PACKAGE_PATH=%s\\n' \"$PWD\" \"$GUIX_PACKAGE_PATH\" >> \"$WSM_TEST_GUIX_ARGS\"\n"
-            "if [ \"$1\" = '--version' ]; then echo 'guix (GNU Guix) 1.5.0-test'; exit 0; fi\n"
-            "if [ \"$5\" = 'describe' ]; then\n"
-            "  if [ \"${WSM_TEST_AUTH_DISABLED:-0}\" = '1' ]; then echo 'channel authentication disabled' >&2; fi\n"
-            "  printf '%s\\n' '(list (channel (name \'guix\') (commit \'test\')))'\n"
-            "  exit 0\n"
-            "fi\n"
-            "if [ \"$5\" = 'system' ] && [ \"$6\" = 'image' ]; then\n"
-            "  root=\n"
-            "  for argument in \"$@\"; do case \"$argument\" in --root=*) root=${argument#--root=} ;; esac; done\n"
-            "  [ -n \"$root\" ] || exit 9\n"
-            "  ln -s \"$WSM_TEST_IMAGE\" \"$root\"\n"
-            "  exit 0\n"
-            "fi\n"
-            "exit 8\n",
+            "#!/bin/sh\\n"
+            "printf 'CALL' >> \\"$WSM_TEST_GUIX_ARGS\\"\\n"
+            "for argument in \\"$@\\"; do printf '|%s' \\"$argument\\" >> \\"$WSM_TEST_GUIX_ARGS\\"; done\\n"
+            "printf '\\\\nPWD=%s\\\\n' \\"$PWD\\" >> \\"$WSM_TEST_GUIX_ARGS\\"\\n"
+            "root=\\n"
+            "last=\\n"
+            "for argument in \\"$@\\"; do last=$argument; case \\"$argument\\" in --root=*) root=${argument#--root=} ;; esac; done\\n"
+            "case \\" $* \\" in\\n"
+            "  *\\" -- --version \\"*) echo 'guix (GNU Guix) 1.5.0-pinned'; exit 0 ;;\\n"
+            "  *\\" describe -f channels \\"*)\\n"
+            "    if [ \\"${WSM_TEST_AUTH_DISABLED:-0}\\" = '1' ]; then echo 'channel authentication disabled' >&2; fi\\n"
+            "    printf '%s\\\\n' '(list (channel (name \\'guix\\') (commit \\'test\\')))'\\n"
+            "    exit 0 ;;\\n"
+            "  *\\" system image \\"*)\\n"
+            "    [ -n \\"$root\\" ] || exit 9\\n"
+            "    ln -s \\"$WSM_TEST_IMAGE\\" \\"$root\\"\\n"
+            "    exit 0 ;;\\n"
+            "esac\\n"
+            "exit 8\\n",
             encoding="utf-8",
         )
         fake_guix.chmod(0o755)
@@ -216,12 +217,11 @@ class IsoScriptTests(unittest.TestCase):
 
             calls = args_log.read_text(encoding="utf-8")
             lock = ROOT / "channels.lock.scm"
-            self.assertIn(f"CALL|time-machine|-C|{lock}|--|describe|-f|channels", calls)
-            self.assertIn(f"CALL|time-machine|-C|{lock}|--|system|image", calls)
+            self.assertIn(f"CALL|time-machine|-C|{lock}|-L|{ROOT}|--|describe|-f|channels", calls)
+            self.assertIn(f"CALL|time-machine|-C|{lock}|-L|{ROOT}|--|system|image", calls)
             self.assertIn(f"--root={expected}", calls)
             self.assertIn("--no-grafts", calls)
             self.assertIn("--image-type=iso9660", calls)
-            self.assertIn(f"GUIX_PACKAGE_PATH={ROOT}", calls)
             self.assertIn(f"PWD={ROOT}", calls)
             self.assertNotIn("--disable-authentication", calls)
 
@@ -243,6 +243,7 @@ class IsoScriptTests(unittest.TestCase):
                 hashlib.sha256(fake_image.read_bytes()).hexdigest(),
             )
             self.assertIn("default", manifest["guix"]["authentication_policy"])
+            self.assertEqual(manifest["guix"]["locked_version"], "guix (GNU Guix) 1.5.0-pinned")
 
             checksum_entries = {}
             for line in checksums_path.read_text(encoding="utf-8").splitlines():
