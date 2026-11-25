@@ -10,3 +10,13 @@ SPDX-License-Identifier = "CC-BY-SA-4.0"
 path = ["*.scm", "**/*.scm", "*.py", "**/*.py", "Makefile", ".github/workflows/**"]
 precedence = "aggregate"
 SPDX-License-Identifier = "GPL-3.0-or-later"
+
+[[annotations]]
+path = ["schemas/**", "requirements-dev.txt"]
+precedence = "aggregate"
+SPDX-License-Identifier = "GPL-3.0-or-later"
+
+[[annotations]]
+path = ["tests/fixtures/**"]
+precedence = "aggregate"
+SPDX-License-Identifier = "CC-BY-SA-4.0"

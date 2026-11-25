@@ -1,0 +1,122 @@
+{
+  "schema_version": "1.0.0",
+  "report_id": "example-desktop-20261125-a1",
+  "collected_at": "2026-11-25T13:45:00Z",
+  "environment": {
+    "architecture": "x86_64",
+    "kernel_release": "6.12.0-example",
+    "boot_mode": "uefi",
+    "virtualization": "none-detected",
+    "platform": {
+      "system_vendor": "Example Vendor",
+      "product_name": "Example Desktop",
+      "board_vendor": "Example Board Co.",
+      "board_name": "Example H170 Board",
+      "board_version": "1.0"
+    }
+  },
+  "collectors": [
+    {
+      "name": "wsm-sysfs",
+      "version": "0.1.0",
+      "available": true,
+      "scope": "unprivileged-read-only",
+      "exit_code": 0
+    }
+  ],
+  "devices": [
+    {
+      "device_id": "dev-0001",
+      "category": "gpu",
+      "bus": "pci",
+      "criticality": [
+        "primary-display"
+      ],
+      "identity": {
+        "vendor_id": "0x10de",
+        "revision": "a1",
+        "manufacturer": "NVIDIA",
+        "model": "Example GPU",
+        "device_id": "0x1c82"
+      },
+      "discovery_status": "discovered",
+      "driver": {
+        "status": "bound",
+        "module": "nvidia",
+        "module_loaded": true,
+        "bound_driver": "nvidia"
+      },
+      "firmware": {
+        "requirement": "unknown",
+        "runtime_status": "unknown",
+        "redistribution_status": "unknown"
+      },
+      "functional_tests": [],
+      "evidence": [
+        {
+          "kind": "live-observation",
+          "source": "sysfs:/sys/bus/pci/devices",
+          "observed_at": "2026-11-25T13:45:00Z",
+          "confidence": "confirmed",
+          "summary": "PCI function enumerated and driver symlink resolves to nvidia."
+        }
+      ],
+      "recommendations": []
+    },
+    {
+      "device_id": "dev-0002",
+      "category": "display",
+      "bus": "edid",
+      "criticality": [
+        "primary-display"
+      ],
+      "identity": {},
+      "discovery_status": "discovered",
+      "driver": {
+        "status": "not-applicable"
+      },
+      "firmware": {
+        "requirement": "not-required",
+        "runtime_status": "not-needed",
+        "redistribution_status": "not-applicable"
+      },
+      "display": {
+        "connector": "DP-1",
+        "connected": true,
+        "advertised_modes": [
+          "2560x1440",
+          "1920x1080"
+        ],
+        "active_mode": "2560x1440"
+      },
+      "functional_tests": [],
+      "evidence": [
+        {
+          "kind": "live-observation",
+          "source": "sysfs:/sys/class/drm",
+          "observed_at": "2026-11-25T13:45:00Z",
+          "confidence": "confirmed",
+          "summary": "Connector DP-1 reports connected status and an active mode; no end-to-end display test was performed."
+        }
+      ],
+      "recommendations": []
+    }
+  ],
+  "warnings": [],
+  "limitations": [
+    "Illustrative fixture only; values are not a real user probe.",
+    "Connector state and active mode are observations, not functional display-test results; EDID identity and GPU relationship are not represented."
+  ],
+  "privacy": {
+    "profile": "strict-local",
+    "network_upload_performed": false,
+    "sensitive_identifiers_included": false,
+    "redactions_applied": [
+      "serial-number",
+      "mac-address",
+      "uuid",
+      "hostname"
+    ],
+    "network_requests_performed": false
+  }
+}
