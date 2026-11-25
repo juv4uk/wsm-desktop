@@ -110,6 +110,12 @@ class InstallerGuiContractTests(unittest.TestCase):
         self.assertIn('{"disk_access_performed", false}', source)
         self.assertIn("plan_sha256", source)
         self.assertIn("diagnostic-only", source)
+        self.assertIn('QStringLiteral("plan_version")', source)
+        self.assertIn('QStringLiteral("plan_mode")', source)
+        self.assertIn('QStringLiteral("source_report")', source)
+        self.assertIn("QCryptographicHash::hash(m_reportBytes", source)
+        self.assertIn("unhashedPlan.remove", source)
+        self.assertIn("QJsonDocument::Compact", source)
 
     def test_qml_smoke_mode_does_not_probe_hardware(self) -> None:
         main = (GUI / "src" / "main.cpp").read_text(encoding="utf-8")
@@ -120,6 +126,21 @@ class InstallerGuiContractTests(unittest.TestCase):
         self.assertIn("if (!wsmSmokeTest)", qml)
         self.assertIn("--smoke-test", workflow)
         self.assertNotIn("timeout --kill-after", workflow)
+
+    def test_qml_navigation_requires_a_validated_preflight(self) -> None:
+        qml = (GUI / "qml" / "Main.qml").read_text(encoding="utf-8")
+        self.assertIn("function canOpenStep(step)", qml)
+        self.assertIn('wsmController.planStatus === "blocked"', qml)
+        self.assertIn("enabled: root.canOpenStep(index)", qml)
+        self.assertIn("root.canOpenStep(root.currentStep + 1)", qml)
+        self.assertIn("Qt.quit()", qml)
+
+    def test_installer_workflow_respects_ci_queue_policy(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "installer-gui.yml").read_text(encoding="utf-8")
+        self.assertIn("push:", workflow)
+        self.assertIn("branches:\n      - main", workflow)
+        self.assertIn("concurrency:", workflow)
+        self.assertIn("cancel-in-progress: true", workflow)
 
     def test_guix_package_expression_has_balanced_parentheses(self) -> None:
         source = (ROOT / "wsm" / "packages" / "installer.scm").read_text(encoding="utf-8")
