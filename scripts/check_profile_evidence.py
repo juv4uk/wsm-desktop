@@ -12,7 +12,7 @@ import argparse
 import hashlib
 import json
 import sys
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 import jsonschema
@@ -34,7 +34,7 @@ def validate(
     """Return problems. artifact_root enables on-disk path and digest checks."""
     schema = schema or load_schema()
     try:
-        jsonschema.validate(document, schema)
+        jsonschema.validate(document, schema, format_checker=jsonschema.FormatChecker())
     except jsonschema.ValidationError as exc:
         location = "/".join(str(part) for part in exc.absolute_path) or "<root>"
         return [f"schema: {location}: {exc.message}"]
@@ -76,6 +76,8 @@ def validate_artifact_files(artifacts: list[dict[str, Any]], root: Path) -> list
             "\\" in relative
             or relative.startswith("/")
             or posix_path.is_absolute()
+            or bool(PureWindowsPath(relative).drive)
+            or ":" in relative
             or not posix_path.parts
             or any(part in {"", ".", ".."} for part in raw_parts)
         ):
@@ -128,7 +130,7 @@ def validate_artifact_files(artifacts: list[dict[str, Any]], root: Path) -> list
 def read_document(path: Path) -> tuple[dict[str, Any] | None, list[str]]:
     try:
         document = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         return None, [f"cannot read evidence JSON: {exc}"]
     if not isinstance(document, dict):
         return None, ["evidence JSON root must be an object"]
