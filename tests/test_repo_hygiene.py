@@ -111,6 +111,28 @@ class CiOnlyScriptTests(unittest.TestCase):
         self.assertIn("MARKER=", text)
 
 
+class DecisionStatusTests(unittest.TestCase):
+    """Two ADRs must not both claim to be the accepted answer."""
+
+    def test_only_one_installer_adr_claims_to_be_accepted(self) -> None:
+        accepted = []
+        for path in sorted((ROOT / "docs" / "decisions").glob("*.md")):
+            text = path.read_text(encoding="utf-8")
+            if "instal" not in text.lower()[:400]:
+                continue
+            head = text[:600].lower()
+            if "статус: прийнято" in head or "status: accepted" in head:
+                accepted.append(path.name)
+        self.assertLessEqual(
+            len(accepted), 1,
+            f"more than one installer decision claims acceptance: {accepted}",
+        )
+
+    def test_installer_document_states_that_nothing_is_chosen(self) -> None:
+        text = (ROOT / "docs" / "INSTALLER.md").read_text(encoding="utf-8")
+        self.assertIn("інсталятор не вибрано", text.lower())
+
+
 class VersionedArtifactTests(unittest.TestCase):
     """A reader can only refuse an unknown version if the version is pinned."""
 
