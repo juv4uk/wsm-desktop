@@ -1,11 +1,14 @@
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;;
-;; Minimal Guix System bring-up example for a disposable VM.
-;; This is not the finished WSM Desktop configuration and is not an
-;; installer-generated configuration.
+;; Мінімальний приклад Guix System для первинної перевірки у disposable QEMU VM.
+;; Це не завершена конфігурація WSM Desktop і не конфігурація інсталятора.
 ;;
-;; For a real target, replace the filesystem labels with verified target
-;; identifiers and review the bootloader target before any deployment.
+;; У GNU/Linux звичайний \`guix system vm' використовує пряме завантаження ядра
+;; і не перевіряє оголошений bootloader. Для повного BIOS/GRUB-шляху застосовуйте
+;; \`guix system vm --full-boot' у відокремленій BIOS/SeaBIOS VM.
+;; \`guix system image --image-type=qcow2' — окрема операція генерації образу.
+;; Для UEFI потрібні grub-efi-bootloader, ESP у /boot/efi та GPT.
+;; Деталі й зафіксовані межі перевірки див. у systems/README.md.
 
 (use-modules (gnu))
 
@@ -17,8 +20,8 @@
 
   (bootloader
    (bootloader-configuration
-    (bootloader grub-efi-bootloader)
-    (targets '("/boot/efi"))))
+    (bootloader grub-bootloader)
+    (targets '("/dev/vda"))))
 
   (file-systems
    (cons*
@@ -26,8 +29,4 @@
       (mount-point "/")
       (device (file-system-label "wsm-root"))
       (type "ext4"))
-    (file-system
-      (mount-point "/boot/efi")
-      (device (file-system-label "wsm-efi"))
-      (type "vfat"))
     %base-file-systems)))
