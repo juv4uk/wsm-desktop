@@ -1,0 +1,12 @@
+version = 1
+SPDX-PackageName = "WSM Desktop"
+
+[[annotations]]
+path = ["README.md", "CONTRIBUTING.md", "SECURITY.md", "docs/**", "systems/README.md", "installer/**/README.md", "wsm/README.md"]
+precedence = "aggregate"
+SPDX-License-Identifier = "CC-BY-SA-4.0"
+
+[[annotations]]
+path = ["*.scm", "**/*.scm", "*.py", "**/*.py", "Makefile", ".github/workflows/**"]
+precedence = "aggregate"
+SPDX-License-Identifier = "GPL-3.0-or-later"

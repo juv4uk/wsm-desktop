@@ -1,0 +1,14 @@
+/result
+/build/
+/dist/
+/output/
+*.iso
+*.img
+*.qcow2
+*.raw
+*.log
+*.swp
+*.swo
+__pycache__/
+.pytest_cache/
+.coverage
