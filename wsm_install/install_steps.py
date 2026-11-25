@@ -50,16 +50,21 @@ CHANNEL_LOCK_PATH = GUIX_CHANNEL_LOCK_PATH
 # supply a file named like a standard utility that then executed as root
 # (fix #8172). The same shape applies here - these steps are meant to be run as
 # root - so no step may rely on PATH lookup at all.
+# These are stable paths inside Guix System's immutable system profile,
+# not FHS /usr paths and not names resolved through inherited PATH. Each
+# program must be present in the live image's package closure; absent paths
+# are a preflight refusal, never a reason to fall back to PATH.
+SYSTEM_PROFILE = "/run/current-system/profile"
 TRUSTED_TOOLS = {
-    "sgdisk": "/usr/sbin/sgdisk",
-    "partprobe": "/usr/sbin/partprobe",
-    "udevadm": "/usr/bin/udevadm",
-    "mkfs.ext4": "/usr/sbin/mkfs.ext4",
-    "mkfs.btrfs": "/usr/sbin/mkfs.btrfs",
-    "mkfs.xfs": "/usr/sbin/mkfs.xfs",
-    "mkfs.fat": "/usr/sbin/mkfs.fat",
-    "mount": "/usr/bin/mount",
-    "mkdir": "/usr/bin/mkdir",
+    "sgdisk": f"{SYSTEM_PROFILE}/sbin/sgdisk",
+    "partprobe": f"{SYSTEM_PROFILE}/sbin/partprobe",
+    "udevadm": f"{SYSTEM_PROFILE}/bin/udevadm",
+    "mkfs.ext4": f"{SYSTEM_PROFILE}/sbin/mkfs.ext4",
+    "mkfs.btrfs": f"{SYSTEM_PROFILE}/sbin/mkfs.btrfs",
+    "mkfs.xfs": f"{SYSTEM_PROFILE}/sbin/mkfs.xfs",
+    "mkfs.fat": f"{SYSTEM_PROFILE}/sbin/mkfs.fat",
+    "mount": f"{SYSTEM_PROFILE}/bin/mount",
+    "mkdir": f"{SYSTEM_PROFILE}/bin/mkdir",
 }
 
 FILESYSTEMS = {
