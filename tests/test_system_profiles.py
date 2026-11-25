@@ -187,6 +187,28 @@ class LiveProfileTests(unittest.TestCase):
         self.assertIn("wsm-tools", (ROOT / "wsm" / "packages" / "wsm.scm").read_text(encoding="utf-8"))
 
 
+class PerformanceServicesTests(unittest.TestCase):
+    def test_desktop_profile_pulls_the_performance_services(self) -> None:
+        self.assertIn("%wsm-performance-services", profile("desktop.scm"))
+        self.assertIn("(wsm systems performance)", profile("desktop.scm"))
+
+    def test_performance_module_lives_at_its_module_path(self) -> None:
+        """(wsm systems performance) must be wsm/systems/performance.scm."""
+        self.assertTrue((ROOT / "wsm" / "systems" / "performance.scm").is_file())
+
+    def test_zram_uses_zstd_and_no_deprecated_priority(self) -> None:
+        text = (ROOT / "wsm" / "systems" / "performance.scm").read_text(encoding="utf-8")
+        self.assertIn("(compression-algorithm 'zstd)", text)
+        # -1 is deprecated upstream; leaving the field out keeps the default.
+        self.assertNotIn("(priority -1)", text)
+
+    def test_no_security_mitigations_are_disabled(self) -> None:
+        """Speed is never bought by switching mitigations off."""
+        for name in ("desktop.scm", "live.scm", "compatibility.scm"):
+            with self.subTest(profile=name):
+                self.assertNotIn("mitigations=off", profile(name))
+
+
 class CompatibilityProfileTests(unittest.TestCase):
     def test_compatibility_profile_uses_the_nonguix_transformation(self) -> None:
         text = profile("compatibility.scm")
