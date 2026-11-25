@@ -45,6 +45,10 @@ A real-hardware report from another machine is a sixth, external evidence type. 
 | [Debian Installer firmware detection](https://d-i.debian.org/doc/installation-guide/nb.amd64/ch02s02.html) | Good installer precedent: missing firmware can be inferred from kernel logs and modalias information; matching firmware packages can be discovered on installation media or loaded from removable media. | Debian-specific implementation and package names cannot be copied as a WSM backend-neutral mechanism. | **Architecture reference** for offline firmware lookup and removable-media recovery. |
 | [h-node](https://h-node.org/) | Community catalogue relevant to hardware freedom and whether devices work with free software. | Its purpose and evidence model differ from live driver/firmware/function diagnostics. Data reuse and machine-readable interface/terms need review. | **Policy/reference-only candidate** until its data model, licensing and integration path are verified. |
 
+## Найновіше українське доповнення
+
+Актуальні upstream-джерела станом на 25.11.2026, включно з hwloc 2.16.0, libdisplay-info 0.4.0, drm_info 2.10.0, PCIe AER counters, devlink health та межами VKMS/IGT, зібрані в окремому [українському доповненні](UPSTREAM-TOOLING-ADDENDUM-2026-11-25.md). Воно також фіксує privacy, read-only межі та вимогу не заявляти наявність пакунків у WSM closure до перевірки за pinned channel lock (#39).
+
 ## Key findings that affect implementation
 
 ### hw-probe should be optional and privacy-gated

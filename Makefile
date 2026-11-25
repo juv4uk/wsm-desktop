@@ -3,7 +3,7 @@
 PYTHON ?= python3
 GUIX ?= guix
 
-.PHONY: check check-docs check-hardware-schema check-hwcheck check-installer check-qemu-harness check-validation-protocols check-minimal-system check-system vm-system
+.PHONY: check check-docs check-hardware-schema check-hwcheck check-installer check-qemu-harness check-validation-protocols check-system vm-system
 
 check: check-docs check-hardware-schema check-hwcheck check-installer check-qemu-harness check-validation-protocols check-minimal-system
 
@@ -25,6 +25,7 @@ check-hwcheck:
 check-installer:
 	$(PYTHON) tests/test_install_preflight.py
 	$(PYTHON) tests/test_install_preflight_acceptance.py
+	$(PYTHON) tests/test_installer_freshness.py
 
 check-qemu-harness:
 	$(PYTHON) tests/test_qemu_boot_smoke.py
