@@ -85,6 +85,16 @@ def discover_profile_directories(profiles_dir: Path) -> tuple[list[Path], list[s
             if model.is_symlink():
                 problems.append(f"model directory must not be a symbolic link: {model}")
                 continue
+            profile_file = model / "profile.scm"
+            evidence_file = model / "evidence.json"
+            # A README-only research reference is not a declared hardware profile.
+            # Once either profile marker exists (including a dangling symlink),
+            # require the complete profile/evidence pair below.
+            if not any(
+                path.exists() or path.is_symlink()
+                for path in (profile_file, evidence_file)
+            ):
+                continue
             directories.append(model)
     return directories, problems
 
