@@ -209,7 +209,7 @@ case " $* " in
         if [ "$WSM_TEST_AUTH_DISABLED" = '1' ]; then
             echo 'channel authentication disabled' >&2
         fi
-        printf '%s\\n' "(list (channel (name guix) (commit \"$WSM_TEST_CHANNEL_COMMIT\")))"
+        printf '%s\\n' "(list (channel (name guix) (commit \\"$WSM_TEST_CHANNEL_COMMIT\\")))"
         exit 0 ;;
     *" system image "*)
         for argument in "$@"; do
