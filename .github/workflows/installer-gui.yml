@@ -72,3 +72,6 @@ jobs:
 
       - name: Test installer navigation state machine
         run: QT_QPA_PLATFORM=offscreen qmltestrunner -input installer/gui/tests
+
+      - name: Verify Qt/Python canonical plan JSON parity
+        run: python3 scripts/test_installer_gui_plan_json.py build/wsm-installer/wsm-installer
