@@ -18,11 +18,11 @@ The ordering matters and is the whole point:
    that is not part of the target tree lands on the live system;
 4. only then hand the target to the backend.
 
-What this module deliberately does not decide: which filesystem the user wants.
-ext4 is the default because it is boring and every recovery tool knows it. btrfs
-is a legitimate choice with real advantages (snapshots, compression) and real
-costs (more moving parts, more ways to be surprised). That is the user's call,
-not a default I should smuggle in.
+This first vertical slice deliberately supports ext4 only. Btrfs and XFS
+must remain refused until the filesystem choice is carried in the typed install
+plan/digest and the Guix operating-system renderer emits the matching root
+filesystem type. Formatting one filesystem and declaring another to Guix is
+not a supported install plan.
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ from wsm_install.backend_guix import (
     GUIX_TARGET_MOUNTPOINT,
     build_argv,
 )
-from wsm_install.partition import DEVICE_PATH, Layout, Refused
+from wsm_install.partition import DEVICE_PATH, Layout, Refused, minimum_disk_size_bytes
 
 TARGET_MOUNTPOINT = GUIX_TARGET_MOUNTPOINT
 SYSTEM_CONFIG_PATH = GUIX_CONFIGURATION_PATH
@@ -61,17 +61,16 @@ TRUSTED_TOOLS = {
     "partprobe": f"{SYSTEM_PROFILE}/sbin/partprobe",
     "udevadm": f"{SYSTEM_PROFILE}/bin/udevadm",
     "mkfs.ext4": f"{SYSTEM_PROFILE}/sbin/mkfs.ext4",
-    "mkfs.btrfs": f"{SYSTEM_PROFILE}/sbin/mkfs.btrfs",
-    "mkfs.xfs": f"{SYSTEM_PROFILE}/sbin/mkfs.xfs",
     "mkfs.fat": f"{SYSTEM_PROFILE}/sbin/mkfs.fat",
     "mount": f"{SYSTEM_PROFILE}/bin/mount",
     "mkdir": f"{SYSTEM_PROFILE}/bin/mkdir",
 }
 
+# The first installer vertical slice supports ext4 only. Btrfs/XFS must not be
+# exposed until the filesystem choice is part of the typed install plan/digest
+# and the Guix operating-system renderer emits the same root filesystem type.
 FILESYSTEMS = {
     "ext4": {"mkfs": "mkfs.ext4", "args": ["-F"], "root": True},
-    "btrfs": {"mkfs": "mkfs.btrfs", "args": ["-f"], "root": True},
-    "xfs": {"mkfs": "mkfs.xfs", "args": ["-f"], "root": True},
 }
 
 
@@ -100,6 +99,13 @@ def _validate_layout_confirmation(layout: Layout) -> None:
         or layout.disk_size_bytes <= 0
     ):
         raise Refused("disk.size-unrecorded", "layout does not retain the observed disk size")
+    minimum_size = minimum_disk_size_bytes(layout.firmware)
+    if layout.disk_size_bytes < minimum_size:
+        raise Refused(
+            "disk.too-small",
+            f"layout records {layout.disk_size_bytes} bytes; "
+            f"the {layout.firmware} layout requires at least {minimum_size} bytes",
+        )
     if layout.acknowledgement != layout.disk:
         raise Refused(
             "disk.acknowledgement",
