@@ -10,6 +10,7 @@
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonParseError>
+#include <QJsonObject>
 #include <QTextStream>
 #include <QGuiApplication>
 #include <cstdlib>
@@ -67,12 +68,12 @@ int main(int argc, char *argv[])
             return 2;
         }
         const QByteArray canonical = WsmPlanJson::canonicalJson(document.object());
-        if (fwrite(canonical.constData(), 1, static_cast<size_t>(canonical.size()), stdout)
+        if (std::fwrite(canonical.constData(), 1, static_cast<size_t>(canonical.size()), stdout)
             != static_cast<size_t>(canonical.size())) {
             QTextStream(stderr) << "failed to write canonical JSON to stdout" << Qt::endl;
             return 2;
         }
-        fflush(stdout);
+        std::fflush(stdout);
         return 0;
     }
 
