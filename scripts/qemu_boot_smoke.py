@@ -80,11 +80,10 @@ def build_qemu_command(
     qemu: str,
     iso: Path,
     qcow2: Path,
-    serial_log: Path,
     memory_mib: int,
     cpus: int,
 ) -> list[str]:
-    """Build isolated QEMU arguments using JSON for paths parsed by QEMU."""
+    """Build isolated QEMU arguments using JSON blockdev nodes and stdio serial."""
     file_node = json.dumps({
         "driver": "file",
         "filename": str(qcow2),
@@ -94,11 +93,6 @@ def build_qemu_command(
         "driver": "qcow2",
         "file": "wsm-disk-file",
         "node-name": "wsm-disk",
-    }, separators=(",", ":"))
-    serial_backend = json.dumps({
-        "backend": "file",
-        "id": "wsm-serial",
-        "path": str(serial_log),
     }, separators=(",", ":"))
     return [
         qemu,
@@ -111,8 +105,7 @@ def build_qemu_command(
         "-device", "virtio-blk-pci,drive=wsm-disk",
         "-boot", "order=d",
         "-display", "none",
-        "-chardev", serial_backend,
-        "-serial", "chardev:wsm-serial",
+        "-serial", "stdio",
         "-monitor", "none",
         "-nic", "none",
         "-no-reboot",
@@ -157,7 +150,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         work = Path(temporary).resolve()
         qcow2 = work / "disposable.qcow2"
         serial_log = work / "serial.log"
-        command = build_qemu_command(qemu, iso, qcow2, serial_log, args.memory_mib, args.cpus)
+        command = build_qemu_command(qemu, iso, qcow2, args.memory_mib, args.cpus)
 
         if args.dry_run:
             print(json.dumps({
@@ -197,13 +190,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         timed_out = False
         qemu_error: str | None = None
         try:
-            completed = subprocess.run(
-                command,
-                check=False,
-                timeout=args.timeout_seconds,
-                capture_output=True,
-                text=True,
-            )
+            # QEMU's chardev option parser is key/value based, not JSON.
+            # Redirect the stdio serial backend from Python so filesystem paths
+            # never enter QEMU's chardev option string.
+            with serial_log.open("w", encoding="utf-8") as serial_stream:
+                completed = subprocess.run(
+                    command,
+                    check=False,
+                    timeout=args.timeout_seconds,
+                    stdout=serial_stream,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
             qemu_returncode = completed.returncode
             qemu_error = completed.stderr.strip() or None
         except subprocess.TimeoutExpired:
