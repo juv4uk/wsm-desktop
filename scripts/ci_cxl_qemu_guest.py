@@ -196,11 +196,13 @@ def run_bounded_file(
 
     selector = selectors.DefaultSelector()
     total = 0
+    created = False
     deadline = time.monotonic() + timeout_seconds
     try:
         os.set_blocking(process.stdout.fileno(), False)
         selector.register(process.stdout, selectors.EVENT_READ)
         with destination.open("xb") as output:
+            created = True
             while selector.get_map():
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
@@ -229,22 +231,24 @@ def run_bounded_file(
                 raise CxlGuestError("initramfs pipeline produced an empty archive")
             return total
     except BaseException:
-        if process.poll() is None:
+        try:
+            # Kill the whole process group: the shell pipeline may have left
+            # children holding stdout open even if the shell itself exited.
+            os.killpg(process.pid, signal.SIGKILL)
+        except OSError:
             try:
-                os.killpg(process.pid, signal.SIGKILL)
+                process.kill()
             except OSError:
-                try:
-                    process.kill()
-                except OSError:
-                    pass
+                pass
         try:
             process.wait(timeout=1)
         except (OSError, subprocess.TimeoutExpired):
             pass
-        try:
-            destination.unlink()
-        except FileNotFoundError:
-            pass
+        if created:
+            try:
+                destination.unlink()
+            except FileNotFoundError:
+                pass
         raise
     finally:
         selector.close()
