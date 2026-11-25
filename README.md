@@ -166,7 +166,7 @@ wsm/               майбутні модулі Guix-каналу проєкт�
 
 ## Ліцензування та ідентичність проєкту
 
-Оригінальний код у цьому репозиторії ліцензовано за **GPL-3.0-or-later**. Документація проєкту — за **CC-BY-SA-4.0**. Див. [LICENSE](LICENSE), [LICENSES/CC-BY-SA-4.0.txt](LICENSES/CC-BY-SA-4.0.txt) і [docs/LICENSING.md](docs/LICENSING.md).
+Правовласник оригінальних матеріалів — Volodymyr Sidii. Оригінальний код у цьому репозиторії ліцензовано за **GPL-3.0-or-later**. Документація проєкту — за **CC-BY-SA-4.0**. Див. [LICENSE](LICENSE), [LICENSES/CC-BY-SA-4.0.txt](LICENSES/CC-BY-SA-4.0.txt) і [docs/LICENSING.md](docs/LICENSING.md).
 
 GNU, GNU Guix, Nonguix і Calamares є незалежними проєктами. Їхні назви та позначки ідентифікують відповідні проєкти й не є заявою про афіліацію чи схвалення. WSM Desktop не є офіційним дистрибутивом GNU, Guix, Nonguix чи Calamares.
 
