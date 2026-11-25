@@ -82,8 +82,9 @@ def draft(
     model: str,
     slug: str,
     report_bytes: bytes,
+    profile_bytes: bytes,
 ) -> dict[str, Any]:
-    """Build a v2 skeleton tied to the exact source report bytes."""
+    """Build a v2 skeleton tied to the exact report and profile source bytes."""
     report_id = report.get("report_id")
     if not isinstance(report_id, str) or len(report_id) < 8:
         raise SystemExit("draft-profile-evidence: report has no valid report_id")
@@ -114,6 +115,10 @@ def draft(
         "profile": {"vendor": vendor, "model": model, "slug": slug},
         "report_id": report_id,
         "report_schema_version": report_schema_version,
+        "profile_source": {
+            "path": "profile.scm",
+            "sha256": hashlib.sha256(profile_bytes).hexdigest(),
+        },
         "isa_level": "unknown",
         "verified_on": collected_at[:10],
         "verified_by": "автори проєкту",
@@ -138,15 +143,26 @@ def draft(
     return bundle
 
 
-def write_bundle(out: Path, report_source: Path, report_bytes: bytes, bundle: dict[str, Any]) -> Path:
+def write_bundle(
+    out: Path,
+    report_source: Path,
+    report_bytes: bytes,
+    profile_bytes: bytes,
+    bundle: dict[str, Any],
+) -> Path:
     """Write evidence and its source report without overwriting existing files."""
     out = Path(out)
     if out.is_symlink() or out.exists():
         raise FileExistsError(f"refusing to overwrite existing evidence output: {out}")
     parent = out.parent
-    parent.mkdir(parents=True, exist_ok=True)
-    if parent.is_symlink():
-        raise OSError(f"evidence output directory must not be a symlink: {parent}")
+    if parent.is_symlink() or not parent.is_dir():
+        raise OSError(f"profile output directory must already exist and must not be a symlink: {parent}")
+    profile_source = parent / "profile.scm"
+    if profile_source.is_symlink() or not profile_source.is_file():
+        raise OSError(f"regular profile.scm is required before drafting evidence: {profile_source}")
+
+    if profile_source.read_bytes() != profile_bytes:
+        raise OSError("profile.scm changed after its evidence digest was calculated")
 
     artifact_dir = parent / "artifacts"
     if artifact_dir.is_symlink():
@@ -206,6 +222,12 @@ def main(argv: list[str] | None = None) -> int:
             raise OSError("source report must be a regular non-symlink file")
         report_bytes = args.report.read_bytes()
         report = json.loads(report_bytes)
+        profile_source = args.out.parent / "profile.scm"
+        if args.out.parent.is_symlink() or not args.out.parent.is_dir():
+            raise OSError("profile directory must already exist and must not be a symbolic link")
+        if profile_source.is_symlink() or not profile_source.is_file():
+            raise OSError("profile directory must contain a regular profile.scm before drafting")
+        profile_bytes = profile_source.read_bytes()
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         print(f"draft-profile-evidence: cannot read report: {exc}", file=sys.stderr)
         return 2
@@ -214,8 +236,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
-        bundle = draft(report, args.vendor, args.model, args.slug, report_bytes)
-        artifact = write_bundle(args.out, args.report, report_bytes, bundle)
+        bundle = draft(report, args.vendor, args.model, args.slug, report_bytes, profile_bytes)
+        artifact = write_bundle(args.out, args.report, report_bytes, profile_bytes, bundle)
     except (OSError, ValueError, SystemExit) as exc:
         print(f"draft-profile-evidence: cannot write evidence draft: {exc}", file=sys.stderr)
         return 2
