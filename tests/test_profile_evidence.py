@@ -1,9 +1,12 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""Rules for hardware profile evidence bundles."""
+"""Rules for hardware profile evidence and the files it references."""
 
 from __future__ import annotations
 
+import contextlib
 import copy
+import hashlib
+import io
 import json
 import sys
 import tempfile
@@ -12,12 +15,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-sys.path.insert(0, str(ROOT))
 
-from check_profile_evidence import validate  # noqa: E402
+from check_profile_evidence import main, validate, validate_directory  # noqa: E402
+from wsm_install.plan import build_plan  # noqa: E402
+
+ARTIFACT_BYTES = b"synthetic dmesg evidence\n"
+ARTIFACT_SHA256 = hashlib.sha256(ARTIFACT_BYTES).hexdigest()
 
 BASE = {
-    "schema": "wsm-profile-evidence/1",
+    "schema": "wsm-profile-evidence/2",
     "profile": {"vendor": "ASUS", "model": "H170-PRO", "slug": "asus/h170-pro"},
     "report_id": "0f3c9a1e-2b44-4c8d-9f10-77a1b2c3d4e5",
     "report_schema_version": "1.0.0",
@@ -25,11 +31,14 @@ BASE = {
     "verified_on": "2026-11-26",
     "verified_by": "автори проєкту",
     "verified_functions": [
-        {"name": "graphics", "status": "pass", "note": "i915, 1080p"},
-        {"name": "storage", "status": "pass"},
+        {"name": "graphics", "status": "pass", "note": "synthetic fixture only", "evidence": ["artifacts/dmesg.txt"]},
+        {"name": "storage", "status": "pass", "evidence": ["artifacts/dmesg.txt"]},
     ],
     "known_limitations": ["NVK reclocking unavailable on Pascal"],
     "not_assessed": ["suspend/resume", "audio over HDMI"],
+    "artifacts": [
+        {"kind": "dmesg", "path": "artifacts/dmesg.txt", "sha256": ARTIFACT_SHA256}
+    ],
 }
 
 
@@ -39,32 +48,104 @@ def bundle(**overrides) -> dict:
     return document
 
 
+def prepare_artifact_root(root: Path) -> None:
+    artifact = root / "artifacts" / "dmesg.txt"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_bytes(ARTIFACT_BYTES)
+
+
+def validate_fixture(document: dict | None = None) -> list[str]:
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        prepare_artifact_root(root)
+        return validate(bundle() if document is None else document, artifact_root=root)
+
+
 class ShapeTests(unittest.TestCase):
-    def test_minimal_bundle_is_accepted(self) -> None:
-        self.assertEqual(validate(bundle()), [])
+    def test_minimal_bundle_with_verified_artifact_is_accepted(self) -> None:
+        self.assertEqual(validate_fixture(), [])
+
+    def test_invalid_calendar_date_is_refused(self) -> None:
+        problems = validate_fixture(bundle(verified_on="2026-99-99"))
+        self.assertTrue(any("format" in item.lower() or "date" in item.lower() for item in problems))
+
+    def test_missing_isa_level_is_refused(self) -> None:
+        document = bundle()
+        del document["isa_level"]
+        self.assertTrue(validate_fixture(document))
+
+    def test_missing_artifacts_is_refused(self) -> None:
+        document = bundle()
+        del document["artifacts"]
+        self.assertTrue(validate_fixture(document))
+
+    def test_empty_artifacts_is_refused(self) -> None:
+        self.assertTrue(validate_fixture(bundle(artifacts=[])))
 
     def test_missing_not_assessed_is_refused(self) -> None:
         document = bundle()
         del document["not_assessed"]
-        self.assertTrue(validate(document))
+        self.assertTrue(validate_fixture(document))
 
     def test_empty_not_assessed_is_refused(self) -> None:
-        """No profile is fully verified; an empty list claims otherwise."""
-        self.assertTrue(validate(bundle(not_assessed=[])))
+        self.assertTrue(validate_fixture(bundle(not_assessed=[])))
 
     def test_unknown_status_is_refused(self) -> None:
         document = bundle(
             verified_functions=[{"name": "graphics", "status": "probably"}]
         )
-        self.assertTrue(validate(document))
+        self.assertTrue(validate_fixture(document))
 
-    def test_artifact_needs_a_hash(self) -> None:
-        document = bundle(artifacts=[{"kind": "dmesg"}])
-        self.assertTrue(validate(document))
 
-    def test_artifact_with_hash_is_accepted(self) -> None:
-        document = bundle(artifacts=[{"kind": "dmesg", "sha256": "a" * 64}])
-        self.assertEqual(validate(document), [])
+class ArtifactTests(unittest.TestCase):
+    def test_artifact_sha256_is_checked_against_real_bytes(self) -> None:
+        self.assertEqual(validate_fixture(), [])
+        document = bundle(
+            artifacts=[
+                {"kind": "dmesg", "path": "artifacts/dmesg.txt", "sha256": "0" * 64}
+            ]
+        )
+        problems = validate_fixture(document)
+        self.assertTrue(any("does not match the bytes" in item for item in problems))
+
+    def test_missing_artifact_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            problems = validate(bundle(), artifact_root=root)
+        self.assertTrue(any("is missing or escapes the evidence directory" in item for item in problems))
+
+    def test_artifact_path_cannot_escape_bundle_directory(self) -> None:
+        document = bundle(
+            artifacts=[
+                {"kind": "dmesg", "path": "../outside.txt", "sha256": ARTIFACT_SHA256}
+            ]
+        )
+        problems = validate_fixture(document)
+        self.assertTrue(any("safe relative path" in item for item in problems))
+
+    def test_absolute_artifact_path_is_rejected(self) -> None:
+        document = bundle(
+            artifacts=[
+                {"kind": "dmesg", "path": "/etc/passwd", "sha256": ARTIFACT_SHA256}
+            ]
+        )
+        problems = validate_fixture(document)
+        self.assertTrue(any("safe relative path" in item for item in problems))
+
+    def test_artifact_requires_an_evidence_root(self) -> None:
+        problems = validate(bundle())
+        self.assertTrue(any("without an evidence directory" in item for item in problems))
+
+    def test_artifact_symlink_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            prepare_artifact_root(root)
+            target = root / "artifacts" / "dmesg.txt"
+            real_file = root / "artifacts" / "real-dmesg.txt"
+            target.rename(real_file)
+            target.symlink_to(real_file)
+            problems = validate(bundle(), artifact_root=root)
+        self.assertTrue(any("symbolic link" in item for item in problems))
 
 
 class RuleTests(unittest.TestCase):
@@ -72,80 +153,200 @@ class RuleTests(unittest.TestCase):
         document = bundle(
             verified_functions=[{"name": "graphics", "status": "not-assessed"}]
         )
-        problems = validate(document)
+        problems = validate_fixture(document)
         self.assertTrue(any("hypothesis" in problem for problem in problems))
 
     def test_failure_must_appear_in_known_limitations(self) -> None:
         document = bundle(
             verified_functions=[
-                {"name": "graphics", "status": "pass"},
-                {"name": "wifi", "status": "fail"},
+                {"name": "graphics", "status": "pass", "evidence": ["artifacts/dmesg.txt"]},
+                {"name": "wifi", "status": "fail", "evidence": ["artifacts/dmesg.txt"]},
             ]
         )
-        problems = validate(document)
+        problems = validate_fixture(document)
         self.assertTrue(any("wifi" in problem for problem in problems))
+
+    def test_pass_requires_a_functional_evidence_reference(self) -> None:
+        document = bundle()
+        document["verified_functions"][0].pop("evidence")
+        problems = validate_fixture(document)
+        self.assertTrue(any("cites no functional evidence artifact" in item for item in problems))
+
+    def test_function_evidence_reference_must_exist(self) -> None:
+        document = bundle()
+        document["verified_functions"][0]["evidence"] = ["artifacts/missing.log"]
+        problems = validate_fixture(document)
+        self.assertTrue(any("references missing artifact" in item for item in problems))
+
+    def test_source_report_is_not_functional_test_evidence(self) -> None:
+        document = bundle(
+            artifacts=[{
+                "kind": "wsm-hwcheck-report",
+                "path": "artifacts/dmesg.txt",
+                "sha256": ARTIFACT_SHA256,
+            }]
+        )
+        problems = validate_fixture(document)
+        self.assertTrue(any("source hardware report as functional proof" in item for item in problems))
 
     def test_failure_listed_in_limitations_is_accepted(self) -> None:
         document = bundle(
             verified_functions=[
-                {"name": "graphics", "status": "pass"},
-                {"name": "wifi", "status": "fail"},
+                {"name": "graphics", "status": "pass", "evidence": ["artifacts/dmesg.txt"]},
+                {"name": "wifi", "status": "fail", "evidence": ["artifacts/dmesg.txt"]},
             ],
             known_limitations=["wifi does not associate on 5 GHz"],
         )
-        self.assertEqual(validate(document), [])
+        self.assertEqual(validate_fixture(document), [])
 
-    def test_email_in_verified_by_is_refused(self) -> None:
-        problems = validate(bundle(verified_by="someone@example.com"))
-        self.assertTrue(any("e-mail" in problem for problem in problems))
+    def test_only_repository_verifier_roles_are_allowed(self) -> None:
+        for verifier in ("автори проєкту", "local agent", "web agent"):
+            with self.subTest(verifier=verifier):
+                self.assertEqual(validate_fixture(bundle(verified_by=verifier)), [])
 
-    def test_personal_name_is_allowed_but_discouraged(self) -> None:
-        """The rule bans e-mail, not names; docs tell contributors what to use."""
-        self.assertEqual(validate(bundle(verified_by="local agent")), [])
+    def test_personal_name_is_rejected(self) -> None:
+        problems = validate_fixture(bundle(verified_by="Example Person"))
+        self.assertTrue(any("verified_by" in problem for problem in problems))
+
+    def test_email_is_rejected(self) -> None:
+        problems = validate_fixture(bundle(verified_by="someone@example.com"))
+        self.assertTrue(any("verified_by" in problem for problem in problems))
 
 
-class InstallerGateTests(unittest.TestCase):
-    """The documented rule must hold in code, not only in prose."""
+class InstallerPlanGateTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        report_path = ROOT / "tests" / "fixtures" / "hardware" / "desktop-observed.json"
+        cls.report_bytes = report_path.read_bytes()
+        cls.report = json.loads(cls.report_bytes)
 
-    def plan(self, evidence=None):
-        sys.path.insert(0, str(ROOT))
-        from wsm_install.plan import build_plan
+    def matching_bundle(self) -> dict:
+        return bundle(
+            report_id=self.report["report_id"],
+            report_schema_version=self.report["schema_version"],
+        )
 
-        report = {
-            "schema_version": "1.0.0",
-            "report_id": "0f3c9a1e-2b44-4c8d-9f10-77a1b2c3d4e5",
-            "collected_at": "2026-11-26T00:00:00Z",
-            "collectors": [],
-            "environment": {
-                "architecture": "x86_64",
-                "kernel_release": "6.17.0",
-                "boot_mode": "uefi",
-                "virtualization": "none",
-            },
-            "limitations": [],
-            "privacy": {"personal_data_collected": False},
-            "devices": [],
-            "warnings": [],
-        }
-        import json as _json
-        payload = _json.dumps(report).encode("utf-8")
-        return build_plan(report, payload, "guix", profile_evidence=evidence)
+    def build(self, evidence: dict, root: Path | None):
+        return build_plan(
+            self.report,
+            self.report_bytes,
+            "guix",
+            profile_evidence=evidence,
+            profile_evidence_root=root,
+        )
 
-    def test_absent_evidence_is_a_warning_not_a_blocker(self) -> None:
-        """Most machines are untested; that must not look like a broken profile."""
-        _, blockers, warnings = self.plan(None)
-        self.assertEqual(blockers, [])
-        self.assertTrue(any("no verified hardware profile" in w for w in warnings))
+    def test_build_plan_accepts_only_matching_report_and_verified_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            prepare_artifact_root(root)
+            plan, blockers, _warnings = self.build(self.matching_bundle(), root)
+        self.assertFalse(any("hardware profile evidence is not valid" in item for item in blockers))
+        self.assertIsNotNone(plan["profile_evidence"])
+        self.assertEqual(plan["profile_evidence"]["report_id"], self.report["report_id"])
 
-    def test_broken_evidence_blocks_the_plan(self) -> None:
-        broken = bundle(verified_functions=[{"name": "graphics", "status": "not-assessed"}])
-        _, blockers, _ = self.plan(broken)
-        self.assertTrue(any("hardware profile evidence is not valid" in b for b in blockers))
+    def test_build_plan_rejects_artifact_bytes_changed_after_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            prepare_artifact_root(root)
+            (root / "artifacts" / "dmesg.txt").write_bytes(b"tampered after manifest creation")
+            _plan, blockers, _warnings = self.build(self.matching_bundle(), root)
+        self.assertTrue(any("does not match the bytes" in item for item in blockers))
 
-    def test_valid_evidence_produces_no_evidence_blocker(self) -> None:
-        _, blockers, warnings = self.plan(bundle())
-        self.assertFalse(any("hardware profile evidence" in b for b in blockers))
-        self.assertFalse(any("no verified hardware profile" in w for w in warnings))
+    def test_build_plan_rejects_profile_evidence_from_another_report(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            prepare_artifact_root(root)
+            evidence = self.matching_bundle()
+            evidence["report_id"] = "another-report-id"
+            _plan, blockers, _warnings = self.build(evidence, root)
+        self.assertTrue(any("report_id does not match" in item for item in blockers))
+
+    def test_build_plan_rejects_profile_evidence_from_another_schema_version(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            prepare_artifact_root(root)
+            evidence = self.matching_bundle()
+            evidence["report_schema_version"] = "9.9.9"
+            _plan, blockers, _warnings = self.build(evidence, root)
+        self.assertTrue(any("report_schema_version does not match" in item for item in blockers))
+
+    def test_build_plan_fails_closed_when_artifact_root_is_missing(self) -> None:
+        _plan, blockers, _warnings = self.build(self.matching_bundle(), None)
+        self.assertTrue(any("without an evidence directory" in item for item in blockers))
+
+
+class DirectoryTests(unittest.TestCase):
+    def test_model_directory_without_evidence_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "gigabyte" / "h170-gaming-3").mkdir(parents=True)
+            stdout, stderr = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                result = main(["--dir", str(root)])
+        self.assertEqual(result, 1)
+        self.assertIn("missing mandatory evidence.json", stderr.getvalue())
+
+    def test_empty_profiles_root_is_not_a_fake_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                result = main(["--dir", temporary])
+        self.assertEqual(result, 0)
+        self.assertIn("no hardware profile directories yet", stdout.getvalue())
+
+    def test_evidence_without_profile_configuration_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            model = root / "gigabyte" / "h170-gaming-3"
+            prepare_artifact_root(model)
+            evidence = bundle(profile={
+                "vendor": "GIGABYTE",
+                "model": "H170 Gaming 3",
+                "slug": "gigabyte/h170-gaming-3",
+            })
+            (model / "evidence.json").write_text(json.dumps(evidence), encoding="utf-8")
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                result = main(["--dir", str(root)])
+        self.assertEqual(result, 1)
+        self.assertIn("missing mandatory profile.scm", stderr.getvalue())
+
+
+    def test_directory_slug_must_match_vendor_and_model(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            model = root / "gigabyte" / "h170-gaming-3"
+            prepare_artifact_root(model)
+            (model / "profile.scm").write_text(";; Synthetic test profile\n", encoding="utf-8")
+            evidence = model / "evidence.json"
+            document = bundle(
+                profile={
+                    "vendor": "GIGABYTE",
+                    "model": "H170 Gaming 3",
+                    "slug": "gigabyte/h170-pro",
+                }
+            )
+            evidence.write_text(json.dumps(document), encoding="utf-8")
+            problems = validate_directory(evidence, root)
+        self.assertTrue(any("does not match the directory" in item for item in problems))
+
+    def test_valid_directory_and_artifact_are_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            model = root / "gigabyte" / "h170-gaming-3"
+            prepare_artifact_root(model)
+            (model / "profile.scm").write_text(";; synthetic fixture\n", encoding="utf-8")
+            evidence = model / "evidence.json"
+            document = bundle(
+                profile={
+                    "vendor": "GIGABYTE",
+                    "model": "H170 Gaming 3",
+                    "slug": "gigabyte/h170-gaming-3",
+                }
+            )
+            evidence.write_text(json.dumps(document), encoding="utf-8")
+            problems = validate_directory(evidence, root)
+        self.assertEqual(problems, [])
 
 
 class RepositoryTests(unittest.TestCase):
@@ -154,9 +355,11 @@ class RepositoryTests(unittest.TestCase):
             (ROOT / "schemas" / "profile-evidence.schema.json").read_text(encoding="utf-8")
         )
         self.assertEqual(schema["title"], "WSM hardware profile evidence")
+        self.assertEqual(schema["properties"]["schema"]["const"], "wsm-profile-evidence/2")
+        self.assertIn("isa_level", schema["required"])
+        self.assertIn("artifacts", schema["required"])
 
     def test_no_bundle_lives_outside_the_profiles_tree(self) -> None:
-        """A bundle next to the code would be a claim nobody can find."""
         strays = [
             path for path in ROOT.rglob("evidence.json")
             if "profiles/hardware" not in path.as_posix()
