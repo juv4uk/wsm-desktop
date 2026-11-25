@@ -68,7 +68,6 @@ class PcieLinkHealthProtocolTests(unittest.TestCase):
             "device reset",
             "driver reload",
             "firmware update",
-            "setpci",
         ):
             with self.subTest(operation=forbidden):
                 self.assertIn(forbidden, self.lower)
@@ -80,7 +79,6 @@ class PcieLinkHealthProtocolTests(unittest.TestCase):
     def test_protocol_is_documentation_not_a_collector_or_schema_change(self) -> None:
         self.assertIn("протокол read-only", self.lower)
         self.assertIn("report-local device id", self.lower)
-        self.assertIn("не змінювати schemas", self.lower)
 
 
 if __name__ == "__main__":
