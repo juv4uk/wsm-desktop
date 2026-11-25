@@ -9,16 +9,20 @@ incomplete UEFI invocation instead of silently booting BIOS.
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import qemu_boot_smoke  # noqa: E402
 from qemu_boot_smoke import (  # noqa: E402
     build_qemu_command,
     copy_ovmf_vars_template,
@@ -116,6 +120,49 @@ class HarnessCliTests(unittest.TestCase):
             destination.parent.mkdir()
             with self.assertRaises(ValueError):
                 copy_ovmf_vars_template(template, destination)
+
+    def test_actual_cli_copy_reads_vars_template_not_code(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            iso = root / "live.iso"
+            code = root / "OVMF_CODE.fd"
+            vars_template = root / "OVMF_VARS.fd"
+            iso.write_bytes(b"non-empty test ISO")
+            code.write_bytes(b"READ ONLY FIRMWARE CODE")
+            vars_template.write_bytes(b"UEFI VARIABLE STORE TEMPLATE")
+            copied = {}
+            original_copyfile = qemu_boot_smoke.shutil.copyfile
+
+            def capture_copy(source, destination):
+                result = original_copyfile(source, destination)
+                copied["source"] = Path(source).read_bytes()
+                copied["destination"] = Path(destination).read_bytes()
+                return result
+
+            output = io.StringIO()
+            with mock.patch.object(
+                qemu_boot_smoke.shutil, "copyfile", side_effect=capture_copy
+            ):
+                with contextlib.redirect_stdout(output):
+                    status = qemu_boot_smoke.main([
+                        "--iso", str(iso), "--firmware", "uefi",
+                        "--ovmf-code", str(code), "--ovmf-vars", str(vars_template),
+                        "--dry-run",
+                    ])
+
+            self.assertEqual(status, 0)
+            self.assertEqual(copied["source"], vars_template.read_bytes())
+            self.assertEqual(copied["destination"], vars_template.read_bytes())
+            self.assertNotEqual(copied["destination"], code.read_bytes())
+            payload = json.loads(output.getvalue())
+            command = " ".join(payload["qemu_command"])
+            self.assertIn("unit=0,readonly=on", command)
+            self.assertIn("unit=1", command)
+            self.assertFalse(payload["host_efi_variables_modified"])
+            self.assertTrue(payload["guest_uefi_vars_writable"])
+            self.assertEqual(payload["guest_uefi_vars_source"], "private-copy-of-vars-template")
+            self.assertEqual(code.read_bytes(), b"READ ONLY FIRMWARE CODE")
+            self.assertEqual(vars_template.read_bytes(), b"UEFI VARIABLE STORE TEMPLATE")
 
     def test_uefi_cli_uses_code_and_private_copy_of_distinct_vars_template(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
