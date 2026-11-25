@@ -2,18 +2,29 @@
 ;;
 ;; WSM Desktop — live-профіль для завантажувального ISO.
 ;;
-;; СТАТУС: не зібрано й не перевірено (у середовищі написання немає Guix і
-;; QEMU). Збирати на машині з Guix:
+;; СТАТУС: не зібрано й не перевірено на фізичному чи QEMU обладнанні
+;; в середовищі написання. Збирати на машині з Guix:
 ;;
-;;     guix system image --image-type=iso9660 systems/live.scm
+;;     make image-live
 ;;
-;; Що це дає: завантажувальний ISO з KDE Plasma і нашими інструментами
-;; (wsm-hwcheck, wsm-install, wsm-guix-deploy) усередині.
+;; або явно:
 ;;
-;; Чого це НЕ дає: автоматичного встановлення. Установлення на диск — окремий
-;; крок, який користувач виконує свідомо: wsm-guix-deploy готує конфігурацію,
-;; далі guix system init. Автоматизувати цей крок означає реалізувати APPLY з
-;; docs/INSTALLER-HANDOFF.md, і цього поки немає.
+;;     guix time-machine -C channels.lock.scm -- \
+;;       system image --image-type=iso9660 systems/live.scm
+;;
+;; Що це дає: завантажувальний ISO з KDE Plasma (через
+;; plasma-desktop-service-type з Guix 1.5+) і нашими інструментами
+;; (wsm-hwcheck, wsm-install) усередині.
+;;
+;; Чого це НЕ дає: автоматичного встановлення. Установлення на диск —
+;; окремий крок: wsm-guix-deploy готує конфігурацію, далі guix system init.
+;; Автоматизувати цей крок = реалізувати APPLY з docs/INSTALLER-HANDOFF.md.
+;;
+;; Acceptance markers (serial console):
+;;   WSM_LIVE_READY          — Shepherd + user-processes підняті
+;;                             (цей файл пише саме його).
+;;   WSM_PLASMA_SESSION_READY — графічна сесія Plasma реально стартувала
+;;                             (ще не реалізовано; окремий acceptance для #170).
 ;;
 ;; ПЕРЕД ЗБИРКОЮ: задайте пароль для користувача wsm. У профілі його немає
 ;; навмисно — порожній пароль у живому образі це відкриті двері, а
