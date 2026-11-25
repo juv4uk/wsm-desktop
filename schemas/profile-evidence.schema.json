@@ -16,6 +16,7 @@
     "verified_functions",
     "known_limitations",
     "not_assessed",
+    "profile_source",
     "artifacts"
   ],
   "properties": {
@@ -190,6 +191,24 @@
         },
         "notes": {
           "type": "string"
+        }
+      }
+    },
+    "profile_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "description": "The exact profile.scm bytes tested by this evidence bundle.",
+      "properties": {
+        "path": {
+          "const": "profile.scm"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
         }
       }
     }
