@@ -1,0 +1,52 @@
+name: QEMU hardware collector guest validation
+
+on:
+  push:
+    paths:
+      - ".github/workflows/qemu-hwcheck-guest.yml"
+      - "scripts/ci_qemu_hwcheck_guest.py"
+      - "wsm_hwcheck/**"
+      - "schemas/hardware-report.schema.json"
+      - "requirements-dev.txt"
+      - "tests/test_qemu_hwcheck_guest.py"
+      - "Makefile"
+  pull_request:
+    paths:
+      - ".github/workflows/qemu-hwcheck-guest.yml"
+      - "scripts/ci_qemu_hwcheck_guest.py"
+      - "wsm_hwcheck/**"
+      - "schemas/hardware-report.schema.json"
+      - "requirements-dev.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  wsm-hwcheck-guest:
+    name: Run wsm-hwcheck inside isolated QEMU guest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up host Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install QEMU guest-build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            qemu-system-x86 busybox-static cpio gzip
+
+      - name: Install host-side report validator
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Test guest report parser and init template before QEMU
+        run: python tests/test_qemu_hwcheck_guest.py
+
+      - name: Build guest initramfs and execute the real collector
+        run: python scripts/ci_qemu_hwcheck_guest.py
