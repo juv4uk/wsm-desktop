@@ -8,7 +8,9 @@ import json
 import os
 import re
 import shutil
+import selectors
 import subprocess
+import time
 import sys
 import tempfile
 from pathlib import Path
@@ -114,22 +116,100 @@ def resolve_module_order(kernel_release: str, modprobe: str = "modprobe") -> lis
     return ordered
 
 
+def run_limited_stdout(
+    command: list[str],
+    *,
+    max_bytes: int,
+    timeout_seconds: float = 15,
+    popen_factory=None,
+) -> bytes:
+    """Stream child stdout and terminate as soon as max_bytes + 1 is observed."""
+    if max_bytes < 0 or timeout_seconds <= 0:
+        raise ValueError("output limit and timeout must be non-negative/positive")
+    factory = popen_factory or subprocess.Popen
+    process = factory(
+        command,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        bufsize=0,
+        close_fds=True,
+    )
+    if process.stdout is None:
+        process.kill()
+        process.wait()
+        raise CxlGuestError("decompressor stdout pipe was not created")
+
+    selector = selectors.DefaultSelector()
+    output = bytearray()
+    deadline = time.monotonic() + timeout_seconds
+    try:
+        os.set_blocking(process.stdout.fileno(), False)
+        selector.register(process.stdout, selectors.EVENT_READ)
+        eof = False
+        while not eof:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                process.kill()
+                process.wait()
+                raise CxlGuestError("module decompression timed out")
+            events = selector.select(min(0.1, remaining))
+            if not events:
+                if process.poll() is not None:
+                    # Drain any bytes already queued, then observe EOF.
+                    continue
+                continue
+            try:
+                chunk = os.read(process.stdout.fileno(), min(64 * 1024, max_bytes + 1 - len(output)))
+            except BlockingIOError:
+                continue
+            if not chunk:
+                selector.unregister(process.stdout)
+                eof = True
+                continue
+            output.extend(chunk)
+            if len(output) > max_bytes:
+                process.kill()
+                process.wait()
+                raise CxlGuestError("decompressed module exceeds its byte budget")
+        returncode = process.wait(timeout=1)
+        if returncode != 0:
+            raise CxlGuestError("module decompression failed")
+        return bytes(output)
+    except subprocess.TimeoutExpired as exc:
+        try:
+            process.kill()
+        except OSError:
+            pass
+        process.wait()
+        raise CxlGuestError("module decompression timed out") from exc
+    finally:
+        selector.close()
+        process.stdout.close()
+
+
 def decompress_module(source: Path, total_remaining: int) -> bytes:
     size = source.stat().st_size
     if size > MAX_MODULE_ARCHIVE_BYTES:
         raise CxlGuestError(f"module archive exceeds {MAX_MODULE_ARCHIVE_BYTES} bytes: {source.name}")
+    output_limit = min(MAX_MODULE_ARCHIVE_BYTES * 4, total_remaining)
+    if output_limit < 0:
+        raise CxlGuestError("no decompressed module budget remains")
     if source.name.endswith(".ko.zst"):
         command = ["zstd", "-q", "-d", "-c", str(source)]
-    elif source.name.endswith(".ko.xz"):
+        return run_limited_stdout(command, max_bytes=output_limit)
+    if source.name.endswith(".ko.xz"):
         command = ["xz", "-d", "-c", str(source)]
-    else:
-        return source.read_bytes()
-    result = subprocess.run(command, capture_output=True, timeout=15, check=False)
-    if result.returncode != 0:
-        raise CxlGuestError(f"module decompression failed for {source.name}")
-    payload = result.stdout
-    if len(payload) > min(MAX_MODULE_ARCHIVE_BYTES * 4, total_remaining):
-        raise CxlGuestError(f"decompressed module exceeds budget: {source.name}")
+        return run_limited_stdout(command, max_bytes=output_limit)
+
+    # Raw .ko files receive the same pre-read and post-read ceiling. Read at
+    # most limit + 1 so a changing file cannot bypass the memory budget.
+    if size > output_limit:
+        raise CxlGuestError(f"module exceeds remaining byte budget: {source.name}")
+    with source.open("rb") as stream:
+        payload = stream.read(output_limit + 1)
+    if len(payload) > output_limit:
+        raise CxlGuestError(f"module exceeds remaining byte budget: {source.name}")
     return payload
 
 
