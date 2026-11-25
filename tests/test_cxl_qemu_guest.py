@@ -51,7 +51,7 @@ class GuestModuleCopyTests(unittest.TestCase):
                     [
                         sys.executable,
                         "-c",
-                        "import sys;\\nwhile True:\\n sys.stdout.buffer.write(b'x' * 65536); sys.stdout.buffer.flush()",
+                        "import sys;\nwhile True:\n sys.stdout.buffer.write(b'x' * 65536); sys.stdout.buffer.flush()",
                     ],
                     **kwargs,
                 )
