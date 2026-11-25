@@ -1,8 +1,8 @@
 # WSM Desktop
 
-> Independent desktop Linux distribution built on GNU Guix System.
+> Independent desktop Linux project exploring Nix and GNU Guix as declarative system foundations.
 
-**WSM Desktop** is an independent project to build a comfortable, reproducible desktop Linux system with a graphical installer based on Calamares and a declarative system configuration based on GNU Guix.
+**WSM Desktop** is an independent project to build a comfortable, reproducible desktop Linux system with a graphical installer based on Calamares. Its architecture is now evaluating Nix and GNU Guix as separate native system backends; no decision has been made to merge their package stores or system managers.
 
 The project is in **pre-alpha**. There is no supported installation image yet. The repository currently defines the project architecture and development foundations; it must not be used to install or modify a real system.
 
@@ -10,23 +10,24 @@ The project is in **pre-alpha**. There is no supported installation image yet. T
 
 - [x] Project identity and scope
 - [x] Initial architecture and licensing policy
-- [ ] Reproducible Guix channel snapshot
-- [ ] Minimal target system validated in a virtual machine
+- [ ] Comparative Nix and Guix backend evaluation
+- [ ] Select and validate the first WSM system backend
 - [ ] Calamares packaging and live-environment feasibility check
 - [ ] Guix deployment backend prototype
 - [ ] End-to-end installation in QEMU
 - [ ] Hardware compatibility testing
 - [ ] First public preview image
 
-See [the roadmap](docs/ROADMAP.md) for milestones and acceptance criteria. The current Calamares 3.4.2 assessment is in [docs/CALAMARES-FEASIBILITY.md](docs/CALAMARES-FEASIBILITY.md).
+See [the roadmap](docs/ROADMAP.md) for milestones and acceptance criteria. The proposed dual-backend direction is recorded in [ADR 0004](docs/decisions/0004-nix-guix-backend-strategy.md) and is not yet ratified. The current Calamares 3.4.2 assessment is in [docs/CALAMARES-FEASIBILITY.md](docs/CALAMARES-FEASIBILITY.md).
 
 ## Technology
 
 | Component | Responsibility |
 | --- | --- |
-| GNU Guix System | Declarative operating-system configuration, package management, services, generations, and system deployment |
-| Calamares | Graphical installation workflow and user-facing installer |
-| WSM Guix deployment adapter | Project-owned integration between Calamares and Guix System |
+| Nix / NixOS | Candidate native backend for declarative system configuration, package builds, and activation |
+| GNU Guix System | Candidate native backend for declarative operating-system configuration and package management |
+| Calamares | Intended graphical installation workflow and user-facing installer |
+| WSM backend adapter | Project-owned integration between Calamares and one selected system backend |
 | Nonguix (optional) | Separately selected nonfree firmware, drivers, or other packages when required |
 | QEMU | Safe virtual-machine testing before physical hardware installation |
 
@@ -69,7 +70,7 @@ Calamares user interface
        installed WSM Desktop system
 ```
 
-This is a design target, not a working installer yet.
+This is a design target, not a working installer yet. Nix and Guix deployment must remain separate backend implementations until comparative tests justify a supported release model.
 
 ### Important integration boundary
 
@@ -107,6 +108,10 @@ See [docs/UPSTREAMS.md](docs/UPSTREAMS.md) for the official Guix, Calamares, and
 
 Start with [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). The initial workflow is to inspect and validate the Guix configuration in a virtual machine. Do not test an unfinished installer against a disk containing data you need.
 
+## Current architecture status
+
+The initial Guix configuration remains a useful prototype. A Nix-based experiment is also underway. Issue [#2](https://github.com/juv4uk/wsm-desktop/issues/2) tracks the comparison. Each installed system must have one authoritative backend; the project does not combine Nix and Guix stores or activation systems.
+
 ## Licensing and project identity
 
 Original source code in this repository is licensed under **GPL-3.0-or-later**. Project documentation is licensed under **CC-BY-SA-4.0**. See [LICENSE](LICENSE), [LICENSES/CC-BY-SA-4.0.txt](LICENSES/CC-BY-SA-4.0.txt), and [docs/LICENSING.md](docs/LICENSING.md).
@@ -115,5 +120,5 @@ GNU, GNU Guix, Nonguix, and Calamares are independent projects. Their names and 
 
 ---
 
-**Project stage:** pre-alpha / architecture and bring-up.  
+**Project stage:** pre-alpha / backend architecture evaluation.  
 **Current guarantee:** no production installation support; no supported ISO; no validated hardware support list.
