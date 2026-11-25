@@ -200,3 +200,9 @@ done
 Позитивний acceptance вимагає не лише QEMU qdev, а фактичного guest-side CXL module load і хоча б одного `mem*` object у `/sys/bus/cxl/devices`; окремо перевіряються доступні `uport`/`dport` symlink-и. Відсутність endpoint↔memdev relationship лишається `unknown`, якщо kernel не експонує прямий edge. Успіх означає лише synthetic QEMU Type 3 enumeration у точному runner kernel/QEMU build.
 
 Поточний QEMU пакунок GitHub runner — 8.2.2, а не upstream stable 11.1.3. Тому для кожного запуску потрібно записувати exact runner image, `uname -r`, QEMU version, module dependency set і workflow head SHA; не переносити цей evidence на іншу комбінацію kernel/QEMU без повторного прогону.
+
+### Read-only `devtype` evidence and sanitized qdev diagnostics
+
+The guest runner reads `devtype` only when the sysfs attribute is present and readable. It accepts only the kernel-defined CXL port values `root`, `switch-upstream`, `switch-downstream`, and `endpoint`; unknown values are omitted rather than copied verbatim. The host output preserves only synthetic node names paired with these allow-listed values. This is an additional observation, not a relationship edge or compatibility verdict.
+
+The host qdev probe uses QEMU `info qtree` only. It does not request `info pci`, and it suppresses raw monitor output from both success and failure diagnostics. Its result contains the expected synthetic qdev IDs and an allow-listed status string; PCI BDFs, resource windows and other raw monitor details are not exported.
