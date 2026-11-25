@@ -39,9 +39,20 @@ class SpreadTests(unittest.TestCase):
         self.assertTrue(result["noisy"])
         self.assertGreater(result["relative_spread"], NOISE_THRESHOLD)
 
-    def test_p90_uses_nearest_rank_for_nondefault_repetitions(self) -> None:
-        self.assertEqual(median_and_spread([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])["p90"], 6.0)
-        self.assertEqual(median_and_spread([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0])["p90"], 7.0)
+    def test_p90_uses_nearest_rank_for_default_and_other_repetitions(self) -> None:
+        five = median_and_spread([1.0, 2.0, 3.0, 4.0, 5.0])
+        self.assertEqual(five["p90"], 5.0)
+        self.assertEqual(five["p90_method"], "nearest-rank")
+        self.assertEqual(five["p90_rank"], 5)
+        ten = median_and_spread([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0])
+        self.assertEqual(ten["p90"], 9.0)
+        self.assertEqual(ten["p90_rank"], 9)
+        six = median_and_spread([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+        self.assertEqual(six["p90"], 6.0)
+        self.assertEqual(six["p90_rank"], 6)
+        seven = median_and_spread([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0])
+        self.assertEqual(seven["p90"], 7.0)
+        self.assertEqual(seven["p90_rank"], 7)
 
     def test_p90_is_within_range(self) -> None:
         samples = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
