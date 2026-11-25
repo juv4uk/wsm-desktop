@@ -87,6 +87,6 @@ WSM варто будувати не навколо одного «детект�
 
 ## Висновок
 
-Першими для реального WSM експерименту варто оцінити `libdisplay-info 0.4.0`, `drm_info 2.10.0`, `hwloc 2.16.0` (тільки в ізольованому експерименті до фінального релізу) та read-only PCIe AER counters. `devlink health show` — optional support for selected NIC/accelerator drivers. VKMS/IGT — тільки CI/VM. fwupd HSI — окремий security pane.
+Першими для реального WSM експерименту варто оцінити `libdisplay-info 0.4.0`, `drm_info 2.10.0`, `hwloc 2.16.0` (стабільний upstream-реліз від 2026-11-19; доцільно почати з ізольованого provider-прототипу) та read-only PCIe AER counters. Наявність hwloc 2.16.0 у точному Guix/Nix closure WSM ще не доведена; її треба перевірити після автентифікованого `channels.lock.scm` у #39. `devlink health show` — optional support for selected NIC/accelerator drivers. VKMS/IGT — тільки CI/VM. fwupd HSI — окремий security pane.
 
 Ні один із цих інструментів не повинен самостійно виставляти загальний verdict сумісності. WSM має зберігати первинний факт, джерело, час, обмеження та невідомі стани окремо від policy decision.
