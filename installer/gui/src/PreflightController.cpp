@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <QFile>
 #include <QJsonArray>
+#include <QCryptographicHash>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
@@ -664,6 +665,28 @@ void PreflightController::handlePlanResult(int exitCode, bool crashed)
 bool PreflightController::validateDiagnosticPlan(const QJsonObject &plan,
                                                   QString *error) const
 {
+    const QJsonValue version = plan.value(QStringLiteral("plan_version"));
+    if (!version.isString() || version.toString() != QStringLiteral("0.1.0")) {
+        *error = QStringLiteral("План відхилено: невідома або відсутня plan_version.");
+        return false;
+    }
+
+    const QJsonValue mode = plan.value(QStringLiteral("plan_mode"));
+    if (!mode.isString() || mode.toString() != QStringLiteral("dry-run")) {
+        *error = QStringLiteral("План відхилено: plan_mode має бути dry-run.");
+        return false;
+    }
+
+    const QJsonObject sourceReport = plan.value(QStringLiteral("source_report")).toObject();
+    const QJsonValue sourceReportDigest = sourceReport.value(QStringLiteral("sha256"));
+    const QByteArray expectedReportDigest =
+        QCryptographicHash::hash(m_reportBytes, QCryptographicHash::Sha256).toHex();
+    if (!sourceReportDigest.isString()
+        || sourceReportDigest.toString().toLatin1() != expectedReportDigest) {
+        *error = QStringLiteral("План відхилено: source_report.sha256 не відповідає точним байтам звіту.");
+        return false;
+    }
+
     const QJsonValue status = plan.value(QStringLiteral("plan_status"));
     if (!status.isString() || status.toString() != QStringLiteral("diagnostic-only")) {
         *error = QStringLiteral("План відхилено: plan_status відсутній або не diagnostic-only.");
@@ -714,6 +737,17 @@ bool PreflightController::validateDiagnosticPlan(const QJsonObject &plan,
     static const QRegularExpression digestPattern(QStringLiteral("^[0-9a-f]{64}$"));
     if (!digestPattern.match(digest).hasMatch()) {
         *error = QStringLiteral("План відхилено: plan_sha256 відсутній або має некоректний формат.");
+        return false;
+    }
+
+    QJsonObject unhashedPlan = plan;
+    unhashedPlan.remove(QStringLiteral("plan_sha256"));
+    const QByteArray canonicalPlan =
+        QJsonDocument(unhashedPlan).toJson(QJsonDocument::Compact);
+    const QByteArray expectedPlanDigest =
+        QCryptographicHash::hash(canonicalPlan, QCryptographicHash::Sha256).toHex();
+    if (digest.toLatin1() != expectedPlanDigest) {
+        *error = QStringLiteral("План відхилено: plan_sha256 не відповідає canonical JSON.");
         return false;
     }
     return true;
