@@ -192,8 +192,8 @@ class RuleTests(unittest.TestCase):
     def test_failure_listed_in_limitations_is_accepted(self) -> None:
         document = bundle(
             verified_functions=[
-                {"name": "graphics", "status": "pass"},
-                {"name": "wifi", "status": "fail"},
+                {"name": "graphics", "status": "pass", "evidence": ["artifacts/dmesg.txt"]},
+                {"name": "wifi", "status": "fail", "evidence": ["artifacts/dmesg.txt"]},
             ],
             known_limitations=["wifi does not associate on 5 GHz"],
         )
