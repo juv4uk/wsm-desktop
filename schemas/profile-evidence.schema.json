@@ -146,7 +146,11 @@
         "properties": {
           "kind": {
             "type": "string",
-            "minLength": 1
+            "enum": [
+              "wsm-hwcheck-report",
+              "functional-test-log"
+            ],
+            "description": "Closed allowlist. The hwcheck report is provenance only; functional claims require a distinct functional-test-log."
           },
           "sha256": {
             "type": "string",
