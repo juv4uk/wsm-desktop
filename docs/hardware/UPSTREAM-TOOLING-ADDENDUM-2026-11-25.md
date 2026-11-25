@@ -133,38 +133,6 @@ Linux CXL sysfs надає кілька потенційних read-only спо�
 - [Linux EDAC scrub control](https://docs.kernel.org/edac/scrub.html) — CXL patrol scrub/ECS та інші scrub capabilities; частина operations змінює scrub policy або запускає роботу.
 - [PCI CMA/SPDM sysfs RFC history](https://lkml.iu.edu/hypermail/linux/kernel/2602.1/03817.html) — authentication state та повторна автентифікація через write; WSM preflight не повинен запускати reauthentication.
 
-## FWCTL — device firmware RPC, не інвентаризація сумісності
-
-Linux **FWCTL (Firmware Control)** — upstream userspace API для обмежених RPC до firmware конкретної device function. Це спільний механізм транспорту й enforcement scope; payload та операції залишаються device- і driver-specific. FWCTL орієнтований на debugging, management і provisioning, а не лише на пасивний hardware inventory.
-
-### Виявлення та прив'язка до пристрою
-
-- Kernel експонує клас \`/sys/class/fwctl/fwctlNN/\` і character device \`/dev/fwctl/fwctlNN\`.
-- \`FWCTL_INFO\` повертає device type та driver-defined metadata/capabilities. Це опис FW interface, а не verdict «пристрій сумісний» чи «працює».
-- FWCTL instance можна пов'язати з іншим subsystem object через sysfs ancestry/links (наприклад, PCI function або InfiniBand device). WSM має створювати report relationship лише за реальною sysfs relation, а не за номером \`fwctlNN\`, назвою інтерфейсу чи порядком enumeration.
-- Не кожна платформа або device function має FWCTL driver. Відсутність \`/sys/class/fwctl\` або node означає \`not-collected/not-supported-by-current-kernel\`, а не несумісність пристрою.
-
-### Kernel-enforced RPC scopes
-
-| Scope | Семантика upstream | WSM policy |
-| --- | --- | --- |
-| \`FWCTL_RPC_CONFIGURATION\` | Read/write device configuration; область може включати persistent/flash configuration, окремі зміни застосовуються після reset | Не запускати в preflight; будь-який write/configuration — тільки окрема сервісна процедура із consent |
-| \`FWCTL_RPC_DEBUG_READ_ONLY\` | Read-only debug information; сумісний із kernel lockdown, без розкриття секретів за контрактом FWCTL | Кандидат лише для окремого reviewed allowlist. Scope сам по собі не встановлює, що конкретна відповідь корисна, стабільна чи придатна до публікації |
-| \`FWCTL_RPC_DEBUG_WRITE\` | Write до debug data; може вивести пристрій із fully-supported state та taint-ить kernel | Заборонити в автоматичному preflight |
-| \`FWCTL_RPC_DEBUG_WRITE_FULL\` | Full debug access; потребує \`CAP_SYS_RAWIO\` і taint-ить kernel | Заборонити в автоматичному preflight і не обходити lockdown |
-
-### Практичне значення для WSM
-
-- **Не відкривати \`/dev/fwctl/*\` і не надсилати RPC у звичайному hardware preflight.** Навіть якщо API спільний, формат і семантика команд визначаються конкретним driver/device type; FWCTL дозволяє не лише читання, а й configuration, flash, debugging та provisioning.
-- Якщо в майбутньому буде потрібен opt-in support mode, він повинен мати versioned allowlist за driver/device type, RPC opcode та scope; описувати точний effect кожної операції; мати верхні межі request/response bytes і timeout; вимагати явної згоди до відкриття device node; записувати provider/kernel/firmware version і provenance, але не зберігати raw RPC payload без окремої потреби.
-- Не приймати довільні RPC id/payload із CLI, report або зовнішнього profile. Не використовувати \`DEBUG_WRITE\`, \`DEBUG_WRITE_FULL\`, \`CONFIGURATION\` у preflight. Навіть read-only RPC не є функціональним тестом і не дає загального health verdict.
-- Не підміняти FWCTL інструментами прямого доступу до PCI config space, \`/dev/mem\`, raw CR-space або старими privileged helper-модулями. Мета FWCTL — обмежений, kernel-mediated device RPC, не ще один raw hardware interface.
-- FWCTL не є заміною \`fwupd\`/LVFS: він забезпечує device-native RPC transport, тоді як fwupd/LVFS — окрема система firmware update metadata/distribution.
-
-NVIDIA MFT 4.38.0 документує fwctl transport для підтримуваних mlx5 NIC functions через \`/dev/fwctl/*\`; для деяких команд read і write використовують різні scope. Наприклад, register GET позначений як \`DEBUG_READ_ONLY\`, register SET — як \`DEBUG_WRITE_FULL\`, а HCA capability query/set — як \`CONFIGURATION\`. Тому **не можна вважати весь MFT CLI read-only** лише тому, що він використовує FWCTL. Це приклад одного vendor provider-а, не гарантія підтримки всіх NVIDIA пристроїв чи WSM kernels.
-
-**Рекомендована роль:** optional expert/service integration після окремого threat model та package/kernel compatibility review; не core preflight dependency і не джерело загального compatibility verdict.
-
 ## Правила інтеграції
 
 ### PCIe AER
@@ -201,8 +169,6 @@ EDID/DisplayID надходить від зовнішнього пристрою
 - Для CVE-2026-112272 Red Hat окремо вказує, що RHEL releases не уражені, оскільки shipped packages не містять vulnerable DisplayID parser logic: [Red Hat advisory](https://access.redhat.com/security/cve/cve-2026-112272).
 
 Ці vendor statuses не суперечать upstream affected range: вони описують конкретні downstream package contents/patches. WSM має оцінювати саме джерельну ревізію та наявність vulnerable parser logic, а не переносити статус одного дистрибутива на інший.
-
-На дату цього research snapshot (2026-11-25) не підтверджено upstream release після 0.4.0 або конкретний upstream commit, який виправляє обидва дефекти. Отже, не позначати parser як fixed лише за припущенням про новішу package revision: перед допуском потрібні точний source commit/package revision та перевірка відповідних DisplayID v1 і v2 bounds checks. Вразливість стосується parser-а, а не самого EDID transport; downstream status треба встановлювати за реальним вмістом пакета. Red Hat вказує відсутність придатної mitigation для CVE-2026-112271; для CVE-2026-112272 RHEL packages не містять vulnerable DisplayID parser logic. AWS ALAS також має різні стани для двох CVE навіть на тих самих Amazon Linux release.
 
 **Правило для WSM:** не додавати `libdisplay-info 0.4.0` як обов'язковий parser до privileged/live preflight. EDID/DisplayID parsing лишається optional і не запускається з підвищеними привілеями; перед його використанням перевіряти точну upstream/downstream revision на наявність відповідних виправлень. За відсутності такої перевірки використовувати read-only DRM/KMS properties, а parser-specific fields залишати `unknown/not-collected`. Спеціально сформований EDID слід вважати untrusted input.
 
@@ -259,10 +225,6 @@ Upstream: [QEMU downloads and releases](https://www.qemu.org/download/), [QEMU 1
 - [Linux PCIe AER sysfs ABI](https://github.com/torvalds/linux/blob/master/Documentation/ABI/testing/sysfs-bus-pci-devices-aer) та [AER implementation](https://github.com/torvalds/linux/blob/master/drivers/pci/pcie/aer.c).
 - [Linux devlink health](https://docs.kernel.org/6.19/networking/devlink/devlink-health.html), [netlink specification](https://docs.kernel.org/netlink/specs/devlink.html), [devlink-health(8)](https://manpages.debian.org/unstable/iproute2/devlink-health.8.en.html).
 - [Linux VKMS](https://docs.kernel.org/gpu/vkms.html) — software-only KMS testing in isolated VM/CI.
-- [Linux FWCTL userspace API](https://docs.kernel.org/userspace-api/fwctl/index.html) and [fwctl subsystem/scopes](https://docs.kernel.org/userspace-api/fwctl/fwctl.html) — sysfs/character-device discovery, FWCTL_INFO, device-specific RPCs, and CONFIGURATION/DEBUG_READ_ONLY/DEBUG_WRITE/DEBUG_WRITE_FULL security scopes.
-- [NVIDIA MFT 4.38.0 over FWCTL](https://networking-docs.nvidia.com/mftswum/4.38.0/mft-over-fwctl) — supported mlx5 operations and per-command scope differences; do not infer that all MFT commands are read-only.
-- [CVE-2026-112271](https://access.redhat.com/security/cve/cve-2026-112271) / [AWS ALAS status](https://explore.alas.aws.amazon.com/CVE-2026-112271.html) — DisplayID v1 out-of-bounds read and downstream package status.
-- [CVE-2026-112272](https://access.redhat.com/security/cve/cve-2026-112272) / [AWS ALAS status](https://explore.alas.aws.amazon.com/CVE-2026-112272.html) — DisplayID v2 out-of-bounds read and different downstream package status.
 - [fwupd HSI](https://fwupd.github.io/hsi.html) — platform security posture, a separate evidence category.
 
 ## Додаткові спостереження щодо Guix packaging
