@@ -9,6 +9,8 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+import subprocess
 
 from scripts.qemu_boot_smoke import build_qemu_command, main, validate_iso
 
@@ -78,6 +80,34 @@ class QemuBootSmokeTests(unittest.TestCase):
             self.assertEqual(result, 2)
             self.assertIn("positive size", stderr.getvalue())
 
+    def test_runtime_confirms_only_explicit_serial_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            iso = Path(directory) / "live.iso"
+            iso.write_bytes(b"synthetic ISO placeholder")
+            calls = []
+
+            def fake_run(command, **kwargs):
+                calls.append(command)
+                if command[0] == "qemu-img":
+                    Path(command[4]).touch()
+                    return subprocess.CompletedProcess(command, 0, "", "")
+                serial_arg = next(item for item in command if item.startswith("file:"))
+                Path(serial_arg[5:]).write_text("booting\\nWSM-LIVE-READY\\n", encoding="utf-8")
+                raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+            stdout = io.StringIO()
+            with patch("scripts.qemu_boot_smoke.shutil.which", side_effect=lambda name: name), patch(
+                "scripts.qemu_boot_smoke.subprocess.run", side_effect=fake_run
+            ), contextlib.redirect_stdout(stdout):
+                result = main(["--iso", str(iso), "--boot-marker", "WSM-LIVE-READY"])
+            self.assertEqual(result, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertTrue(payload["boot_confirmed"])
+            self.assertTrue(payload["qemu_timed_out"])
+            self.assertEqual(len(calls), 2)
+            self.assertEqual(calls[0][1:4], ["create", "-f", "qcow2"])
+            self.assertIn("-nic", calls[1])
+            self.assertIn("none", calls[1])
 
 if __name__ == "__main__":
     unittest.main()
