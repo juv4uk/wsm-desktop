@@ -40,7 +40,8 @@ class OptionalHardwareProviderTests(unittest.TestCase):
         self.assertIn(
             "перевіряти точну upstream/downstream revision на наявність відповідних виправлень",
             self.lower,
-        )        self.assertIn("не включати до стандартного live image", self.lower)
+        )
+        self.assertIn("не включати до стандартного live image", self.lower)
         self.assertIn("не запускати автоматично на отриманому edid/displayid", self.lower)
         self.assertIn("ані без підвищених привілеїв", self.lower)
         self.assertIn("provider позначається `not-used/not-collected`", self.lower)
