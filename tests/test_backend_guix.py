@@ -265,10 +265,35 @@ class HandoffRefusalTests(unittest.TestCase):
             )
         self.assertEqual(caught.exception.code, "handoff.target_changed")
 
-    def test_relative_configuration_path_is_refused(self) -> None:
-        with self.assertRaises(HandoffError) as caught:
-            handoff(confirmed_plan(), selection(), configuration_path="system.scm")
-        self.assertEqual(caught.exception.code, "argv.config_path")
+    def test_device_path_rejects_dot_segments_and_trailing_newline(self) -> None:
+        for disk in ("/dev/.", "/dev/..", "/dev/vda\\n", "/dev/vda/../../etc/passwd"):
+            with self.subTest(disk=disk):
+                self.assert_refused("selection.disk", confirmed_plan(), selection(disk=disk))
+
+    def test_full_name_rejects_control_and_format_characters(self) -> None:
+        for full_name in ("Ada\\rLovelace", "Ada\\tLovelace", "Ada\\x00Lovelace", "Ada\\u2028Lovelace", "Ada\\u202eLovelace"):
+            with self.subTest(full_name=repr(full_name)):
+                self.assert_refused("selection.full_name", confirmed_plan(), selection(full_name=full_name))
+
+    def test_target_selection_digest_is_unambiguous(self) -> None:
+        left = selection(full_name="Ada|Lovelace", root_label="wsm-root")
+        right = selection(full_name="Ada", root_label="Lovelace|wsm-root")
+        self.assertNotEqual(left.digest(), right.digest())
+
+    def test_configuration_path_must_be_installer_owned(self) -> None:
+        for path in ("system.scm", "/etc/passwd", "/run/wsm/../../etc/passwd"):
+            with self.subTest(path=path):
+                with self.assertRaises(HandoffError) as caught:
+                    handoff(confirmed_plan(), selection(), configuration_path=path)
+                self.assertEqual(caught.exception.code, "argv.config_path")
+
+    def test_target_mountpoint_must_be_installer_owned(self) -> None:
+        for mountpoint in ("/", "/tmp/target", "/mnt/../", "/mnt/wsm"):
+            with self.subTest(mountpoint=mountpoint):
+                with self.assertRaises(HandoffError) as caught:
+                    handoff(confirmed_plan(), selection(), target_mountpoint=mountpoint)
+                self.assertEqual(caught.exception.code, "argv.mountpoint")
+
 
 
 if __name__ == "__main__":
