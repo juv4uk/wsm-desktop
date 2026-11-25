@@ -101,7 +101,7 @@ def profile(name: str) -> str:
 
 class SchemeReadabilityTests(unittest.TestCase):
     def test_every_profile_is_a_sequence_of_complete_forms(self) -> None:
-        files = sorted(SYSTEMS.glob("*.scm")) + sorted((ROOT / "wsm").rglob("*.scm"))
+        files = sorted(SYSTEMS.glob("*.scm")) + sorted((ROOT / "wsm").rglob("*.scm")) + [ROOT / "channels.compatibility.lock.scm"]
         self.assertTrue(files, "no scheme files found")
         for path in files:
             with self.subTest(path=str(path.relative_to(ROOT))):
@@ -234,6 +234,36 @@ class CompatibilityProfileTests(unittest.TestCase):
     def test_compatibility_profile_is_not_reachable_from_the_live_image(self) -> None:
         """The live image stays Free; Compatibility is a deliberate separate build."""
         self.assertNotIn("compatibility.scm", profile("live.scm"))
+
+    def test_compatibility_pin_does_not_overclaim_authentication(self) -> None:
+        """Authorized key presence is not proof that this exact commit is signed."""
+        lock = (ROOT / "channels.compatibility.lock.scm").read_text(encoding="utf-8")
+        profiles = (ROOT / "docs" / "PROFILES.md").read_text(encoding="utf-8")
+        desktop = (ROOT / "docs" / "DESKTOP-PROFILE.md").read_text(encoding="utf-8")
+
+        self.assertIn("Unverified", lock)
+        self.assertIn("підпису самого commit", lock)
+        self.assertIn("ще потребують exact evidence", profiles)
+        self.assertNotIn("перевіреним підписом commit", profiles)
+        self.assertIn("підпис commit та Guix channel authentication ще не підтверджені", desktop)
+
+    def test_compatibility_profile_uses_its_separate_channel_lock(self) -> None:
+        """Nonguix must be available to Compatibility without entering the Free lock."""
+        text = profile("compatibility.scm")
+        self.assertIn("channels.compatibility.lock.scm", text)
+
+        compatibility_lock = (ROOT / "channels.compatibility.lock.scm").read_text(encoding="utf-8")
+        free_lock = (ROOT / "channels.lock.scm").read_text(encoding="utf-8")
+        channel_names = re.findall(r"\(name '([a-z0-9-]+)\)", compatibility_lock)
+        self.assertEqual(channel_names, ["guix", "nonguix"])
+        self.assertIn('(commit "4e5195be20d9b124df8a8bb69213412236e4668e")', compatibility_lock)
+        self.assertIn('(url "https://gitlab.com/nonguix/nonguix")', compatibility_lock)
+        self.assertIn('(commit "6b8897cd6f3223b158c070cdc9cc638279f8c337")', compatibility_lock)
+        self.assertIn('"897c1a470da759236cc11798f4e0a5f7d4d59fbc"', compatibility_lock)
+        self.assertIn('"2A39 3FFF 68F4 EF7A 3D29 12AF 6F51 20A0 22FB B2D5"', compatibility_lock)
+        free_channel_names = re.findall(r"\(name '([a-z0-9-]+)\)", free_lock)
+        self.assertEqual(free_channel_names, ["guix"])
+        self.assertNotIn("channels.compatibility.lock.scm", profile("live.scm"))
 
 
 class IsoScriptTests(unittest.TestCase):

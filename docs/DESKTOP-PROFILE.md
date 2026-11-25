@@ -12,6 +12,8 @@
 | --- | --- |
 | `systems/desktop.scm` | цільова система: KDE Plasma, SDDM, NetworkManager, звук, шрифти з кирилицею, українська локаль |
 | `systems/live.scm` | live-профіль для завантажувального ISO: те саме плюс пакет `wsm-tools` |
+| `systems/compatibility.scm` | окрема opt-in збірка з пропрієтарним NVIDIA stack; використовує `channels.compatibility.lock.scm` |
+| `channels.compatibility.lock.scm` | GNU Guix + окремий Nonguix pin для Compatibility; підпис commit та Guix channel authentication ще не підтверджені |
 | `wsm/packages/wsm.scm` | пакетне визначення наших інструментів для Guix |
 | `scripts/build_iso.sh` | збірка ISO з `systems/live.scm` |
 | `tests/test_system_profiles.py` | структурні перевірки профілів без Guix |
@@ -22,7 +24,7 @@
 
 **Немає автоматичного встановлення.** `systems/live.scm` дає завантажувальний ISO з інструментами всередині, але встановлення на диск лишається свідомою дією користувача: `wsm-guix-deploy` готує конфігурацію, далі `guix system init`. Автоматизувати це означає реалізувати крок `APPLY` з [INSTALLER-HANDOFF.md](INSTALLER-HANDOFF.md) — його поки немає.
 
-**Немає nonfree firmware і драйверів.** Free-профіль не повинен залежати від Nonguix ([ADR 0003](decisions/0003-free-by-default.md)). Wi-Fi, відеокарти й частина периферії на вільних драйверах працюють не завжди; для них потрібен окремий профіль WSM Compatibility з рішенням по кожному компоненту за [ETHICS.md](ETHICS.md). Це не зроблено.
+**Free і live не включають nonfree firmware та драйвери.** Вони використовують тільки `channels.lock.scm` і не залежать від Nonguix ([ADR 0003](decisions/0003-free-by-default.md)). Окремий `systems/compatibility.scm` є opt-in конфігурацією, але не входить до live ISO. Для нього використовується власний `channels.compatibility.lock.scm`; build, runtime і ліцензійне acceptance залишаються окремими невиконаними перевірками.
 
 **Немає власного інсталятора з графічним інтерфейсом.** Вибір frontend-а — у [ADR 0006](decisions/0006-hardware-first-installer-frontend.md), реалізації немає.
 
