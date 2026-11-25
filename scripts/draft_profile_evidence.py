@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+from datetime import date
 import sys
 from pathlib import Path
 from typing import Any
@@ -116,13 +117,19 @@ def draft(
     if not report_id:
         raise SystemExit("draft-profile-evidence: report has no report_id")
 
+    collected_on = (report.get("collected_at") or "")[:10]
+    try:
+        date.fromisoformat(collected_on)
+    except ValueError as exc:
+        raise SystemExit("draft-profile-evidence: report has no valid collected_at date") from exc
+
     bundle: dict[str, Any] = {
         "schema": SCHEMA,
         "profile": {"vendor": vendor, "model": model, "slug": slug},
         "report_id": report_id,
         "report_schema_version": report.get("schema_version", "1.0.0"),
         "isa_level": "unknown",
-        "verified_on": (report.get("collected_at") or "")[:10] or "1970-01-01",
+        "verified_on": collected_on,
         "verified_by": "автори проєкту",
         "verified_functions": functions,
         "known_limitations": problems_from(report) or [],
