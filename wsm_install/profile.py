@@ -135,8 +135,26 @@ def problems(
         )
 
     limitations = " ".join(document["known_limitations"]).lower()
+    artifact_by_path = {artifact["path"]: artifact for artifact in document["artifacts"]}
     for item in functions:
-        if item["status"] == "fail" and item["name"].lower() not in limitations:
+        status = item["status"]
+        if status in {"pass", "fail"}:
+            references = item.get("evidence", [])
+            if not references:
+                found.append(
+                    f"function {item['name']!r} has status {status!r} but cites no functional evidence artifact"
+                )
+            for reference in references:
+                artifact = artifact_by_path.get(reference)
+                if artifact is None:
+                    found.append(
+                        f"function {item['name']!r} references missing artifact {reference!r}"
+                    )
+                elif artifact["kind"] == "wsm-hwcheck-report":
+                    found.append(
+                        f"function {item['name']!r} cites the source hardware report as functional proof; add a test artifact"
+                    )
+        if status == "fail" and item["name"].lower() not in limitations:
             found.append(
                 f"function {item['name']!r} failed but is not listed in known_limitations"
             )
