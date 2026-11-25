@@ -343,3 +343,12 @@ Frontend реалізація може змінюватися (Calamares, інш
 **Не реалізовано** — кроки `REALIZE` та `APPLY`: адаптер не виконує `guix system init`, не монтує цільовий диск і не перевіряє його ідентичність перед записом. Це наступний крок і він потребує середовища з Guix.
 
 Тести: `tests/test_backend_guix.py` (20 тестів) покривають відмови з розділу 8 і не потребують Guix.
+
+
+## Standalone Guix handoff CLI та backend provenance
+
+Команда `python3 -m wsm_install.guix_deploy` має два кроки: `--show-confirmation` друкує SHA-256 плану та digest вибору; повторний запуск вимагає обидва точні підтвердження й створює новий конфігураційний файл із правами `0600`. Backend допускає тільки installer-owned шляхи `/run/wsm/system.scm` і `/mnt`; довільні output/mountpoint не приймаються. Output не може бути всередині target mountpoint, а наявний файл не перезаписується. CLI повертає allow-listed argv, але ніколи не запускає `guix system init` і не виконує mount/partition/format/disk operations.
+
+На самій backend boundary поле `source_report.report_id` перевіряється як 16–80 ASCII `[A-Za-z0-9_-]`, а `source_report.sha256` — як рівно 64 lowercase hex. Це необхідно, оскільки обидва значення потрапляють у Scheme-коментар згенерованого файлу; whitespace, newline, Scheme payload або неправильний тип відхиляються навіть якщо caller перерахував `plan_sha256`. Перевірка не покладається на попередню JSON Schema чи CLI.
+
+`tests/test_backend_guix.py` перевіряє provenance injection та installer-owned paths; `tests/test_guix_deploy_cli.py` перевіряє двофазне підтвердження, приватний файл, output isolation, symlink/duplicate-key refusal і те, що команда не виконується. Поточний `wsm_install/cli.py` усе ще генерує diagnostic-only `confirmable=false`; синтетичний confirmed fixture у тестах не є доказом готовності фізичного диска чи installer frontend.
