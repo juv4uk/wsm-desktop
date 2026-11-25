@@ -25,7 +25,7 @@ ctest --test-dir build/wsm-installer --output-on-failure
 cmake --install build/wsm-installer --prefix /usr/local
 ```
 
-У dev runtime PATH мають бути `python3`, `lsblk`, а активне Python-середовище має бачити пакети `wsm_hwcheck`, `wsm_install` і залежність `jsonschema[format]`. У Guix package ці шляхи задаються через `WSM_PYTHON_EXECUTABLE`, `GUIX_PYTHONPATH` і точний `WSM_LSBLK_EXECUTABLE` з store; перевірка цього closure залишається обов’язковим exact-lock build.
+У dev runtime PATH мають бути `python3`, `lsblk`, а активне Python-середовище має бачити пакети `wsm_hwcheck`, `wsm_install` і залежність `jsonschema[format]`. У Guix package `WSM_PYTHON_EXECUTABLE`, `WSM_GUIX_PYTHONPATH` (точний `site-packages` output `wsm-tools`) і `WSM_LSBLK_EXECUTABLE` прив’язуються до store paths; перевірка цього closure залишається обов’язковим exact-lock build.
 
 ## Межі інтеграції
 
