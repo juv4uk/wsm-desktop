@@ -167,6 +167,15 @@ class SourceResolutionTests(unittest.TestCase):
         self.assertNotIn('(include "desktop.scm")', text)
         self.assertIn("current-filename", text)
 
+    def test_package_source_selector_imports_its_srfi_procedures(self) -> None:
+        """The local-file select? callback uses any and string-contains."""
+        text = (ROOT / "wsm" / "packages" / "wsm.scm").read_text(encoding="utf-8")
+        self.assertIn("#:use-module (srfi srfi-1)", text)
+        self.assertIn("#:use-module (srfi srfi-13)", text)
+        selector = text.split("#:select?", 1)[1].split("(build-system", 1)[0]
+        self.assertRegex(selector, r"\bany\b")
+        self.assertRegex(selector, r"\bstring-contains\b")
+
     def test_package_source_excludes_vcs_metadata(self) -> None:
         """Without select? the store copy would embed .git and vary per clone."""
         text = (ROOT / "wsm" / "packages" / "wsm.scm").read_text(encoding="utf-8")
