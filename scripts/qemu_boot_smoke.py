@@ -19,7 +19,46 @@ from pathlib import Path
 from typing import Sequence
 
 
-DISK_SIZE_RE = re.compile(r"^[1-9][0-9]*(?:M|G|T)$", re.IGNORECASE)
+DISK_SIZE_RE = re.compile(r"^([1-9][0-9]*)(M|G|T)$", re.IGNORECASE)
+MIN_DISK_MIB = 256
+MAX_DISK_MIB = 64 * 1024
+MIN_MEMORY_MIB = 256
+MAX_MEMORY_MIB = 16 * 1024
+MIN_CPUS = 1
+MAX_CPUS = 16
+MIN_TIMEOUT_SECONDS = 1
+MAX_TIMEOUT_SECONDS = 30 * 60
+
+
+def parse_disk_size_mib(value: str) -> int:
+    """Parse a QEMU disk-size value and return its size in MiB."""
+    match = DISK_SIZE_RE.fullmatch(value)
+    if not match:
+        raise ValueError("disk size must be an integer followed by M, G, or T")
+    amount = int(match.group(1))
+    unit = match.group(2).upper()
+    multiplier = {"M": 1, "G": 1024, "T": 1024 * 1024}[unit]
+    size_mib = amount * multiplier
+    if not MIN_DISK_MIB <= size_mib <= MAX_DISK_MIB:
+        raise ValueError(
+            f"disk size must be between {MIN_DISK_MIB}M and {MAX_DISK_MIB // 1024}G"
+        )
+    return size_mib
+
+
+def validate_limits(timeout_seconds: int, memory_mib: int, cpus: int, disk_size: str) -> None:
+    """Reject resource requests outside the harness's explicit safety policy."""
+    if not MIN_TIMEOUT_SECONDS <= timeout_seconds <= MAX_TIMEOUT_SECONDS:
+        raise ValueError(
+            f"timeout must be between {MIN_TIMEOUT_SECONDS} and {MAX_TIMEOUT_SECONDS} seconds"
+        )
+    if not MIN_MEMORY_MIB <= memory_mib <= MAX_MEMORY_MIB:
+        raise ValueError(
+            f"memory must be between {MIN_MEMORY_MIB} and {MAX_MEMORY_MIB} MiB"
+        )
+    if not MIN_CPUS <= cpus <= MAX_CPUS:
+        raise ValueError(f"CPU count must be between {MIN_CPUS} and {MAX_CPUS}")
+    parse_disk_size_mib(disk_size)
 
 
 def validate_iso(path: Path) -> Path:
@@ -45,17 +84,35 @@ def build_qemu_command(
     memory_mib: int,
     cpus: int,
 ) -> list[str]:
-    """Build a deliberately isolated QEMU command with no host device passthrough."""
+    """Build isolated QEMU arguments using JSON for paths parsed by QEMU."""
+    file_node = json.dumps({
+        "driver": "file",
+        "filename": str(qcow2),
+        "node-name": "wsm-disk-file",
+    }, separators=(",", ":"))
+    qcow2_node = json.dumps({
+        "driver": "qcow2",
+        "file": "wsm-disk-file",
+        "node-name": "wsm-disk",
+    }, separators=(",", ":"))
+    serial_backend = json.dumps({
+        "backend": "file",
+        "id": "wsm-serial",
+        "path": str(serial_log),
+    }, separators=(",", ":"))
     return [
         qemu,
         "-machine", "q35,accel=tcg",
         "-m", str(memory_mib),
         "-smp", str(cpus),
         "-cdrom", str(iso),
-        "-drive", f"file={qcow2},if=virtio,format=qcow2",
+        "-blockdev", file_node,
+        "-blockdev", qcow2_node,
+        "-device", "virtio-blk-pci,drive=wsm-disk",
         "-boot", "order=d",
         "-display", "none",
-        "-serial", f"file:{serial_log}",
+        "-chardev", serial_backend,
+        "-serial", "chardev:wsm-serial",
         "-monitor", "none",
         "-nic", "none",
         "-no-reboot",
@@ -82,11 +139,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if args.timeout_seconds < 1 or args.memory_mib < 256 or args.cpus < 1:
-        print("qemu-boot-smoke: timeout, memory or CPU count is outside safe bounds", file=sys.stderr)
-        return 2
-    if not DISK_SIZE_RE.fullmatch(args.disk_size):
-        print("qemu-boot-smoke: --disk-size must be a positive size such as 4G or 2048M", file=sys.stderr)
+    try:
+        validate_limits(args.timeout_seconds, args.memory_mib, args.cpus, args.disk_size)
+    except ValueError as exc:
+        print(f"qemu-boot-smoke: {exc}", file=sys.stderr)
         return 2
     try:
         iso = validate_iso(args.iso)
@@ -110,6 +166,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "temporary_directory": str(work),
                 "qcow2_path": str(qcow2),
                 "qemu_command": command,
+                "resource_limits": {
+                    "disk_size_mib": parse_disk_size_mib(args.disk_size),
+                    "memory_mib": args.memory_mib,
+                    "cpus": args.cpus,
+                    "timeout_seconds": args.timeout_seconds,
+                },
                 "host_device_passthrough": False,
                 "network_enabled": False,
                 "efi_variable_store": False,
