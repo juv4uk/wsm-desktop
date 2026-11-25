@@ -13,7 +13,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts import ci_qemu_cxl_guest as guest
-from scripts.ci_qemu_cxl_guest import build_qemu_command, parse_insmod_plan, summarize_guest_serial
+from scripts.ci_qemu_cxl_guest import build_qemu_command, extract_port_devtypes, parse_insmod_plan, summarize_guest_serial
 
 
 class QemuCxlGuestTests(unittest.TestCase):
@@ -88,6 +88,27 @@ class QemuCxlGuestTests(unittest.TestCase):
         self.assertNotIn("0000:00:1f.0", untrusted)
         self.assertNotIn("secret", untrusted)
 
+    def test_port_devtype_parser_accepts_only_kernel_allowlisted_values(self) -> None:
+        serial = (
+            "WSM_CXL_DEVTYPE=port1=endpoint\\n"
+            "WSM_CXL_DEVTYPE=port2=switch-downstream\\n"
+            "WSM_CXL_DEVTYPE=port3=arbitrary\\n"
+            "WSM_CXL_DEVTYPE=0000:00:01.0=endpoint\\n"
+            "WSM_CXL_DEVTYPE=port4=endpoint\\x1b[31m"
+        )
+        self.assertEqual(
+            extract_port_devtypes(serial),
+            ["port1=endpoint", "port2=switch-downstream"],
+        )
+
+    def test_guest_init_reads_devtype_only_when_present(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            guest.write_guest_init(root, [])
+            init = (root / "init").read_text(encoding="utf-8")
+        self.assertIn('if [ -r "$entry/devtype" ]; then', init)
+        self.assertIn('cat "$entry/devtype"', init)
+        self.assertIn("switch-downstream", init)
     def test_sysfs_report_uses_synthetic_names_not_host_addresses(self) -> None:
         source = (ROOT / "scripts" / "ci_qemu_cxl_guest.py").read_text(encoding="utf-8")
         self.assertIn("device_pattern.fullmatch", source)
