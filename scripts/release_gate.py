@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 import subprocess
 import sys
@@ -35,6 +36,14 @@ CHANNEL_LOCKS = {
 
 SCHEMA = "wsm-release-gate/1"
 VERSION = "0.1.0"
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def run(command: list[str], timeout: int = 900) -> tuple[int, str]:
@@ -162,6 +171,16 @@ def check_image(iso: Path | None, boot: bool) -> dict[str, str]:
         return criterion("image", "fail", "live image verifier returned an unknown or missing schema")
     if payload.get("artifact") != iso.name:
         return criterion("image", "fail", "live image verifier verdict names a different ISO artifact")
+    try:
+        actual_sha256 = sha256_file(iso)
+    except OSError as exc:
+        return criterion("image", "fail", f"cannot hash selected ISO: {exc}")
+    if payload.get("artifact_sha256") != actual_sha256:
+        return criterion(
+            "image",
+            "fail",
+            "live image verifier SHA-256 does not match the selected ISO bytes",
+        )
 
     expected_ids = {"checksum", "manifest", "iso-structure", "boot-bios", "boot-uefi"}
     criteria = payload.get("criteria")
