@@ -23,6 +23,37 @@ WSM варто будувати не навколо одного «детект�
 | [VKMS](https://docs.kernel.org/gpu/vkms.html) + [IGT GPU Tools](https://gitlab.freedesktop.org/drm/igt-gpu-tools) | Віртуальний DRM/KMS display для headless CI/VM перевірок | Для VKMS потрібно завантажити модуль/налаштувати configfs; IGT може вимагати окремої сесії без compositor-а. Це змінює стан тестового kernel і не є live preflight | Ізольована CI/VM lane, не probe на фізичному ПК |
 | [fwupd HSI](https://fwupd.github.io/hsi.html) | Окремі показники firmware/platform security posture | Security posture не доводить наявність runtime firmware blob, успішне виконання `request_firmware()` чи ініціалізацію пристрою | Окремий security report; не змішувати з #16 compatibility evidence |
 
+## Додаткові hardware providers: AMD SMI та CXL sysfs
+
+### AMD SMI — окремий accelerator provider
+
+AMD SMI є наступником ROCm SMI та надає API для GPU/device management, telemetry і topology. Офіційна документація 27.2.0 підтверджує підтримку Linux bare metal та Linux VM guests; WSL2 позначено як experimental. Для побудови WSM adapter-а:
+
+- Віддати перевагу Python або C++ API. AMD прямо позначає CLI як приклад для розробки telemetry tools і рекомендує бібліотечний API як надійніше джерело даних.
+- За наявності AMD GPU та завантаженого `amdgpu` драйвера optional topology provider може повідомляти GPU↔GPU access, abstracted hop/weight, link type, NUMA bandwidth та P2P capabilities (coherency, atomics, DMA, bidirectional).
+- JSON output CLI може бути зручним для експериментів, але не є стабільним WSM report schema. Adapter має бути version-pinned і тримати окремо vendor-native observations та report-local device IDs.
+- AMD SMI — telemetry/topology evidence, не доказ сумісності для boot або display path. Відсутність AMD SMI/ROCm не означає несумісність AMD GPU; цей provider не повинен бути обов'язковим preflight dependency.
+- Не викликати mutating CLI commands на етапі inventory: документація CLI також містить `set` та `reset`. Використовувати тільки окремо reviewed read-only queries; telemetry values можуть змінюватися в часі й не є статичними hardware identity.
+- У ROCm 10.2.0 (2026-11-18) AMD SMI 27.2.0 додав єдиний `amdsmi_get_link_topology()` API для bare metal: link weight/status/type, hop count і framebuffer-sharing data; він має Python та Rust bindings. У тій самій версії опубліковано Python library `amdsmi` 27.2.0 на PyPI без вимоги встановлювати весь ROCm SDK, але залишаються вимоги Linux x86_64, glibc ≥ 2.27, драйвера `amdgpu` та `libdrm`. Це потенційний спосіб окремо пакувати optional provider, а не підстава для `pip install` або мережевого встановлення під час preflight.
+
+Джерела: [AMD SMI 27.2.0, документація ROCm 10.2.0](https://rocm.docs.amd.com/projects/amdsmi/en/docs-10.2.0/), [AMD SMI CLI guidance 27.2.0](https://rocm.docs.amd.com/projects/amdsmi/en/docs-10.2.0/how-to/amdsmi-cli-tool.html), [AMD SMI topology output 27.2.0](https://rocm.docs.amd.com/projects/amdsmi/en/docs-10.2.0/how-to/amdsmi-cli-tool.html#amd-smi-topology).
+
+### CXL sysfs — типізована fabric topology та memory locality
+
+Linux kernel експонує CXL fabric у `/sys/bus/cxl/devices/`: root/port/endpoint objects, decoders, memory devices (`memX`), regions і DAX regions. Це важливий майбутній source для workstation/server-class memory topology, яку плоский PCI inventory не описує.
+
+Корисні read-only observations, якщо CXL subsystem присутній:
+- `devtype`, `uport`, `parent_dport`, downstream port links і декодери для відтворення root→host bridge/switch→endpoint path;
+- decoder `start`, `size`, `target_list`, `interleave_ways`, `interleave_granularity`, `mode` (лише читання значення; не писати в атрибут);
+- `memX/numa_node`, `ram/size`, `pmem/size`, `firmware_version`, `security/state` там, де вони наявні;
+- endpoint `CDAT` як read-only capability/latency-bandwidth metadata source, якщо DOE mailbox та CDAT read доступні.
+
+**Критична межа relationship inference:** kernel CXL driver documentation прямо зазначає, що endpoint є логічним port object і один physical memory device може представляти кілька endpoints; відповідність endpoint↔memdev не гарантується окремим sysfs relationship. Якщо немає прямого kernel-provided link, WSM має лишати ребро unknown, не з'єднувати за близькістю, однаковою назвою чи порядком enumeration.
+
+Не торкатися writable/side-effecting CXL controls під час preflight: зокрема `/sys/bus/cxl/flush`, decoder mode/target configuration, unbind/reset, `cxl create`, `cxl set` або подібних операцій. Для v1 це read-only snapshot із provenance, не memory reconfiguration чи security attestation.
+
+Джерела: [Linux CXL Driver Operation](https://www.kernel.org/doc/html/latest/driver-api/cxl/linux/cxl-driver.html), [Linux CXL Driver Theory of Operation](https://origin.kernel.org/doc/html/latest/driver-api/cxl/theory-of-operation.html), [Linux 6.19 CXL sysfs ABI](https://www.kernel.org/doc/html/v6.19/admin-guide/abi-testing.html).
+
 ## Детальні межі hwloc I/O locality
 
 Офіційна документація hwloc 2.16.0 уточнює кілька важливих умов, які мають бути явними в WSM adapter-і:
