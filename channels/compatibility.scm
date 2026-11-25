@@ -1,4 +1,4 @@
-;; SPDX-License-Identifier: GPL-3.0-or-later
+;; SPDX-License-Identifier: LicenseRef-Volnist
 ;;
 ;; Optional WSM Compatibility channel set.
 ;; Nonguix is an independent community channel, not an official Guix channel.

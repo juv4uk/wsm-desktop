@@ -1,6 +1,6 @@
 # WSM Desktop Hardware Preview RC1
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 - Версія: `0.1.0-rc1` (`RELEASE-INFO.json`)
 - Дата: 2026-11-25

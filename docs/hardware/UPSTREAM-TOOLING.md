@@ -1,6 +1,6 @@
 # Hardware preflight: upstream tooling assessment
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 - Research snapshot: **2026-11-25**
 - Scope: pre-install discovery and evidence collection for WSM Desktop

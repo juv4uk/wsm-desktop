@@ -1,4 +1,4 @@
-;; SPDX-License-Identifier: GPL-3.0-or-later
+;; SPDX-License-Identifier: LicenseRef-Volnist
 ;;
 ;; WSM Free channel set.
 ;; This expression retains the official default Guix channels only.

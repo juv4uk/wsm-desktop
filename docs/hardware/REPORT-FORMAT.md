@@ -1,6 +1,6 @@
 # WSM Hardware Evidence Report v1
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 - Status: **initial schema proposal**
 - Critical path: **yes** — preflight and the installer plan both consume this schema

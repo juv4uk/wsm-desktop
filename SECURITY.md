@@ -1,6 +1,6 @@
 # Повідомлення про вразливості
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 WSM Desktop перебуває на стадії pre-alpha. Інсталятор ще не призначений для використання на реальних системах.
 

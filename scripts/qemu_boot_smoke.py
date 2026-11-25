@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Run a disposable, offline QEMU boot smoke test for a supplied live ISO.
 
 This is a boot smoke test only. It does not claim that wsm-install ran inside

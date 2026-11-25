@@ -3,7 +3,7 @@
 > English translation. The canonical document is
 > [CONTRIBUTING.md](CONTRIBUTING.md); in any disagreement the Ukrainian text wins.
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 Thank you for your interest in WSM Desktop. The project is at an early stage; the
 most valuable contribution right now is verifiable technical research, small

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Host-side safety tests for the disposable CXL QEMU guest probe."""
 
 from __future__ import annotations

@@ -5,23 +5,23 @@ SPDX-PackageSupplier = "Volodymyr Sidii <sdvova@gmail.com>"
 [[annotations]]
 path = ["README.md", "README.en.md", "CONTRIBUTING.md", "CONTRIBUTING.en.md", "SECURITY.md", "SECURITY.en.md", "docs/**", "systems/README.md", "installer/**/README.md", "wsm/README.md"]
 precedence = "aggregate"
-SPDX-License-Identifier = "CC-BY-SA-4.0"
+SPDX-License-Identifier = "LicenseRef-Volnist"
 SPDX-FileCopyrightText = "2026 Volodymyr Sidii <sdvova@gmail.com>"
 
 [[annotations]]
 path = ["*.scm", "**/*.scm", "*.py", "**/*.py", "Makefile", ".github/workflows/**"]
 precedence = "aggregate"
-SPDX-License-Identifier = "GPL-3.0-or-later"
+SPDX-License-Identifier = "LicenseRef-Volnist"
 SPDX-FileCopyrightText = "2026 Volodymyr Sidii <sdvova@gmail.com>"
 
 [[annotations]]
 path = ["schemas/**", "requirements-dev.txt"]
 precedence = "aggregate"
-SPDX-License-Identifier = "GPL-3.0-or-later"
+SPDX-License-Identifier = "LicenseRef-Volnist"
 SPDX-FileCopyrightText = "2026 Volodymyr Sidii <sdvova@gmail.com>"
 
 [[annotations]]
 path = ["tests/fixtures/**"]
 precedence = "aggregate"
-SPDX-License-Identifier = "CC-BY-SA-4.0"
+SPDX-License-Identifier = "LicenseRef-Volnist"
 SPDX-FileCopyrightText = "2026 Volodymyr Sidii <sdvova@gmail.com>"

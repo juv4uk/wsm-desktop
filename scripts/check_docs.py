@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Check local Markdown links, status headers and documentation languages."""
 
 from __future__ import annotations

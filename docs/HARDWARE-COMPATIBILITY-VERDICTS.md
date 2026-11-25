@@ -1,6 +1,6 @@
 # Політика оцінювання апаратної сумісності
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 - Статус: **proposed / review draft**
 - Власник семантики: [#22 — evidence-based compatibility verdicts](https://github.com/juv4uk/wsm-desktop/issues/22)

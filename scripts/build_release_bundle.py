@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Build a deterministic source bundle from a Git commit plus checksums."""
 
 from __future__ import annotations

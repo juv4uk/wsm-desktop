@@ -1,8 +1,7 @@
 # WSM Desktop
 
 [![Перевірки репозиторію](https://github.com/juv4uk/wsm-desktop/actions/workflows/checks.yml/badge.svg)](https://github.com/juv4uk/wsm-desktop/actions/workflows/checks.yml)
-[![Ліцензія коду: GPL-3.0-or-later](https://img.shields.io/badge/%D0%BA%D0%BE%D0%B4-GPL--3.0--or--later-blue.svg)](LICENSE)
-[![Ліцензія документації: CC-BY-SA-4.0](https://img.shields.io/badge/%D0%B4%D0%BE%D0%BA%D1%83%D0%BC%D0%B5%D0%BD%D1%82%D0%B0%D1%86%D1%96%D1%8F-CC--BY--SA--4.0-lightgrey.svg)](LICENSES/CC-BY-SA-4.0.txt)
+[![Ліцензія: ВОЛЬНІСТЬ](https://img.shields.io/badge/%D0%BB%D1%96%D1%86%D0%B5%D0%BD%D0%B7%D1%96%D1%8F-%D0%92%D0%9E%D0%9B%D0%AC%D0%9D%D0%86%D0%A1%D0%A2%D0%AC-blue.svg)](LICENSE)
 
 > Апаратно-орієнтований десктопний Linux на основі GNU Guix System; Nix/NixOS збережено як відкладений дослідницький напрям.
 
@@ -166,9 +165,9 @@ wsm/               майбутні модулі Guix-каналу проєкт�
 
 ## Ліцензування та ідентичність проєкту
 
-Правовласник оригінальних матеріалів — Volodymyr Sidii. Оригінальний код у цьому репозиторії ліцензовано за **GPL-3.0-or-later**. Документація проєкту — за **CC-BY-SA-4.0**. Див. [LICENSE](LICENSE), [LICENSES/CC-BY-SA-4.0.txt](LICENSES/CC-BY-SA-4.0.txt) і [docs/LICENSING.md](docs/LICENSING.md).
+Правовласник оригінальних матеріалів — Volodymyr Sidii. Уся робота, створена для WSM Desktop у цьому репозиторії (код, конфігурації, тести й документація), поширюється під ліцензією **ВОЛЬНІСТЬ**. Див. [LICENSE](LICENSE) і [docs/LICENSING.md](docs/LICENSING.md).
 
-GNU, GNU Guix, Nonguix і Calamares є незалежними проєктами. Їхні назви та позначки ідентифікують відповідні проєкти й не є заявою про афіліацію чи схвалення. WSM Desktop не є офіційним дистрибутивом GNU, Guix, Nonguix чи Calamares.
+Сторонні компоненти — GNU Guix, Calamares, Nonguix, Linux, драйвери, firmware — зберігають власні ліцензії. Ця ліцензія їх не змінює і не переліцензовує.
 
 ---
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Fail fast when a tracked Python file does not parse.
 
 Four pull requests in one day arrived with a file that had been written only

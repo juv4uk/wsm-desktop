@@ -1,6 +1,6 @@
 # WSM Guix channel modules
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 This directory is reserved for WSM-owned Guix channel modules, including packages, services, operating-system helpers, and profile transformations.
 

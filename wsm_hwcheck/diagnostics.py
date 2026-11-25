@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Read-only driver and runtime-firmware evidence for WSM hardware preflight.
 
 This module reports observations, not inferred device support:

@@ -1,6 +1,6 @@
 # Installer report freshness and revalidation contract
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 - Status: **consumer-side proposal; producer/schema approval required**
 - Related: #12 (handoff contract), #17 (canonical handoff documentation), #23 (freshness contract), #5/#6 (schema and collector owners), #14 (QEMU integration)

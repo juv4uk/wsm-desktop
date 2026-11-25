@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Run the actual WSM hardware collector inside a disposable no-disk QEMU guest."""
 
 from __future__ import annotations

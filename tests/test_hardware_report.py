@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Validation tests for the WSM hardware evidence report contract."""
 
 from __future__ import annotations

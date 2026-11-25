@@ -1,6 +1,6 @@
 # Calamares integration
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 This directory is reserved for WSM's Calamares configuration, branding, module configuration, and translations.
 

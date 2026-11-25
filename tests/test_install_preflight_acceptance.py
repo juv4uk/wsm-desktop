@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Black-box acceptance tests for the read-only wsm-install CLI contract."""
 
 from __future__ import annotations

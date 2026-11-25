@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Read-only Linux hardware inventory for WSM's pre-install preflight.
 
 This first collector reads sysfs and procfs only. It does not execute external

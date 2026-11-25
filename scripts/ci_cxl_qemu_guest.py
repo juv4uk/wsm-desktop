@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Read-only CXL sysfs enumeration inside a disposable QEMU Linux guest.
 
 The host only resolves and copies the selected kernel's CXL module dependency

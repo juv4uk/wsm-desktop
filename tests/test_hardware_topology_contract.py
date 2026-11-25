@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Structural guardrails for the proposed topology relationship contract."""
 
 from pathlib import Path

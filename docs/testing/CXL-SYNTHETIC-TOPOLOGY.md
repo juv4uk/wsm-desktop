@@ -1,6 +1,6 @@
 # Синтетичне тестування CXL: QEMU, cxl_test і sysfs-фікстури
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 - Дата перевірки джерел: 25 листопада 2026 року
 - Статус: feasibility note; експеримент на реальному QEMU guest ще не виконано

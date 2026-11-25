@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Pure functions for evidence interpretation and deterministic plan generation."""
 
 from __future__ import annotations

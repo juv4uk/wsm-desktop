@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Tests for the plan-only Guix deployment handoff CLI."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Guix deployment adapter: turn a confirmed install plan into a typed handoff.
 
 This module implements the backend side of docs/INSTALLER-HANDOFF.md for the

@@ -1,6 +1,6 @@
 # Матриця сценаріїв інсталяції та достатності апаратних доказів
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 - Статус: **proposed / policy draft**
 - Пов'язано: [#3 — hardware preflight](https://github.com/juv4uk/wsm-desktop/issues/3), [#5 — report schema](https://github.com/juv4uk/wsm-desktop/issues/5), [#6 — collector](https://github.com/juv4uk/wsm-desktop/issues/6), [#12 — handoff contract](https://github.com/juv4uk/wsm-desktop/issues/12), [#13 — read-only installer prototype](https://github.com/juv4uk/wsm-desktop/issues/13), [#14 — QEMU harness](https://github.com/juv4uk/wsm-desktop/issues/14), [#16 — driver/runtime firmware evidence](https://github.com/juv4uk/wsm-desktop/issues/16), [#18 — topology](https://github.com/juv4uk/wsm-desktop/issues/18), [#24 — this task](https://github.com/juv4uk/wsm-desktop/issues/24)

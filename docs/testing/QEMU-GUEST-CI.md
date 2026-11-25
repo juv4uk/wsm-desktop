@@ -1,6 +1,6 @@
 # Real QEMU guest boot in GitHub Actions
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 **Status:** CI experiment. This is a generic Linux guest boot smoke test, not a WSM installer image test.
 
