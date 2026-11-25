@@ -118,9 +118,17 @@ class HardwareCollectorTests(unittest.TestCase):
         self.assertEqual(gpu["firmware"]["runtime_status"], "unknown")
         self.assertEqual(gpu["functional_tests"], [])
 
+    def test_usb_composite_parent_does_not_claim_interface_driver(self) -> None:
+        report = collect_report(self.sysfs, self.proc)
+        usb = next(device for device in report["devices"] if device["device_id"] == "usb-1-1")
+        self.assertEqual(usb["category"], "other")
+        self.assertEqual(usb["driver"]["status"], "unknown")
+        self.assertEqual(usb["functional_tests"], [])
+
     def test_display_and_storage_are_inventoried(self) -> None:
         report = collect_report(self.sysfs, self.proc)
         display = next(device for device in report["devices"] if device["category"] == "display")
+        self.assertEqual(display["functional_tests"], [])
         self.assertEqual(display["display"]["connector"], "card0-DP-1")
         self.assertTrue(display["display"]["connected"])
         self.assertIn("2560x1440", display["display"]["advertised_modes"])

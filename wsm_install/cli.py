@@ -5,7 +5,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import stat
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +28,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version="wsm-install 0.1.0")
     parser.add_argument("--preflight", action="store_true", help="run report preflight")
     parser.add_argument("--report", required=True, metavar="PATH", help="hardware report JSON")
-    parser.add_argument("--backend", required=True, choices=("guix", "nix"))
+    parser.add_argument(
+        "--backend", required=True, choices=("guix", "nix"),
+        help="backend alias: guix -> guix-system; nix -> nixos",
+    )
     parser.add_argument("--dry-run", action="store_true", help="required; never deploys or writes disks")
     parser.add_argument("--schema", type=Path, default=DEFAULT_SCHEMA, help=argparse.SUPPRESS)
     parser.add_argument("--plan-output", metavar="PATH", help="write draft plan; stdout is used otherwise")
@@ -45,6 +51,77 @@ def _load_json(path: Path) -> tuple[dict[str, Any] | None, bytes | None, str | N
     if not isinstance(value, dict):
         return None, raw, "invalid report JSON: top-level value must be an object"
     return value, raw, None
+
+
+
+
+def _safe_plan_output_path(
+    output_value: str,
+    report_path: Path,
+    schema_path: Path,
+) -> tuple[Path | None, str | None]:
+    """Resolve a regular-file destination without aliasing inputs or device nodes."""
+    requested = Path(output_value)
+    try:
+        parent = requested.parent.resolve(strict=True)
+    except OSError as exc:
+        return None, f"plan output parent is unavailable: {exc}"
+    if not parent.is_dir():
+        return None, "plan output parent is not a directory"
+
+    destination = parent / requested.name
+    for source in (report_path, schema_path):
+        try:
+            source_resolved = source.resolve(strict=True)
+        except OSError as exc:
+            return None, f"cannot resolve protected input path {source}: {exc}"
+        if destination == source_resolved:
+            return None, "plan output must not overwrite the report or schema input"
+        if destination.exists():
+            try:
+                if os.path.samefile(destination, source):
+                    return None, "plan output must not alias the report or schema input"
+            except OSError as exc:
+                return None, f"cannot verify plan output identity: {exc}"
+
+    try:
+        destination_mode = destination.lstat().st_mode
+    except FileNotFoundError:
+        destination_mode = None
+    except OSError as exc:
+        return None, f"cannot inspect plan output destination: {exc}"
+
+    if destination_mode is not None and not stat.S_ISREG(destination_mode):
+        return None, "plan output must be a regular file; symlinks and device nodes are refused"
+
+    for special_root in (Path("/dev"), Path("/proc"), Path("/sys")):
+        try:
+            special = special_root.resolve(strict=True)
+        except OSError:
+            continue
+        if destination == special or special in destination.parents:
+            return None, f"plan output is not allowed under {special}"
+
+    return destination, None
+
+
+def _write_plan_atomically(destination: Path, rendered: str) -> None:
+    """Write a same-directory temporary file and atomically replace the destination."""
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{destination.name}.", suffix=".tmp", dir=str(destination.parent)
+    )
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            stream.write(rendered)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary_name, destination)
+    except Exception:
+        try:
+            os.unlink(temporary_name)
+        except OSError:
+            pass
+        raise
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -92,8 +169,15 @@ def main(argv: list[str] | None = None) -> int:
 
     rendered = canonical_json(plan) + "\n"
     if args.plan_output:
+        destination, path_error = _safe_plan_output_path(
+            args.plan_output, Path(args.report), args.schema
+        )
+        if path_error:
+            print(f"wsm-install: unsafe plan output: {path_error}", file=sys.stderr)
+            return 2
+        assert destination is not None
         try:
-            Path(args.plan_output).write_text(rendered, encoding="utf-8")
+            _write_plan_atomically(destination, rendered)
         except OSError as exc:
             print(f"wsm-install: cannot write plan: {exc}", file=sys.stderr)
             return 2

@@ -1,0 +1,33 @@
+name: Installer capability policy
+
+on:
+  push:
+    branches:
+      - work/install-capability-matrix-ci
+    paths:
+      - "docs/INSTALL-CAPABILITY-MATRIX.md"
+      - "tests/test_install_capability_matrix.py"
+      - ".github/workflows/installer-capability-policy.yml"
+  pull_request:
+    paths:
+      - "docs/INSTALL-CAPABILITY-MATRIX.md"
+      - "tests/test_install_capability_matrix.py"
+      - ".github/workflows/installer-capability-policy.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  policy-invariants:
+    name: Documentation policy invariants
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run standard-library policy tests
+        run: python -m unittest discover -s tests -p "test_install_capability_matrix.py" -v
