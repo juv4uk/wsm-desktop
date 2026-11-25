@@ -53,10 +53,14 @@ sha256sum "$(readlink result)"
 - **Цей SHA відповідає попередній тестовій конфігурації, не оновленому security fix.**
   Під час тієї перевірки в образі був статичний пароль `wsm`, користувач входив
   до `wheel`, а root увійшов через serial із порожнім паролем. Такий образ не
-  можна розповсюджувати. Поточний source lock-ить пароль `wsm`, прибирає
+  можна розповсюджувати. Поточний source задає `(password #f)`, прибирає
   `wheel` і явно забороняє порожні паролі в Guix `login-service-type`.
   Ці зміни ще потребують нового exact-lock build та QEMU перевірки; старий SHA
   не слід приписувати новому source.
+- SDDM autologin для locked account `wsm` у поточному QEMU ще не
+  повторно перевірений після security patch. Перед merge/release окремо
+  підтвердити: Plasma session стартує як `wsm`, root на `ttyS0` з порожнім
+  паролем отримує відмову, а `sudo -n true` від `wsm` не має привілеїв.
 - Channel authentication для попередньої локальної збірки була вимкнена, попри
   наявність `channels.lock.scm`; точна збірка з authenticated lock лишається
   окремим gate за #39.
