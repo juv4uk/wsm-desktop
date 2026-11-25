@@ -1,0 +1,117 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Tests for the read-only WSM installer preflight prototype."""
+
+from __future__ import annotations
+
+import contextlib
+import hashlib
+import io
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+from wsm_install.cli import main
+from wsm_install.plan import build_plan, canonical_json
+
+ROOT = Path(__file__).resolve().parents[1]
+FIXTURES = ROOT / "tests" / "fixtures" / "hardware"
+
+
+def load_fixture(name: str) -> tuple[dict, bytes]:
+    raw = (FIXTURES / name).read_bytes()
+    return json.loads(raw), raw
+
+
+class InstallerPlanTests(unittest.TestCase):
+    def test_observed_report_emits_deterministic_guix_plan(self) -> None:
+        report, raw = load_fixture("desktop-observed.json")
+        first, blockers, _ = build_plan(report, raw, "guix")
+        second, _, _ = build_plan(report, raw, "guix")
+        self.assertEqual(blockers, [])
+        self.assertEqual(first, second)
+        self.assertEqual(first["backend"]["id"], "guix-system")
+        self.assertEqual(first["source_report"]["sha256"], hashlib.sha256(raw).hexdigest())
+        digest = first.pop("plan_sha256")
+        self.assertEqual(digest, hashlib.sha256(canonical_json(first).encode()).hexdigest())
+        self.assertFalse(first["execution"]["mutations_authorized"])
+        self.assertFalse(first["execution"]["backend_invoked"])
+        self.assertFalse(first["execution"]["disk_access_performed"])
+
+    def test_unknown_critical_display_refuses_to_emit_plan(self) -> None:
+        report, raw = load_fixture("unknown-incomplete.json")
+        plan, blockers, _ = build_plan(report, raw, "nix")
+        self.assertTrue(blockers)
+        self.assertEqual(plan["backend"]["id"], "nixos")
+        self.assertFalse(plan["execution"]["mutations_authorized"])
+
+    def test_required_firmware_error_on_critical_device_is_blocking(self) -> None:
+        report, raw = load_fixture("missing-firmware.json")
+        _, blockers, warnings = build_plan(report, raw, "guix")
+        self.assertTrue(any("required runtime firmware" in item for item in blockers))
+        self.assertFalse(warnings)
+
+    def test_cli_requires_explicit_dry_run_and_preflight(self) -> None:
+        with self.assertRaises(SystemExit) as caught:
+            main(["--report", str(FIXTURES / "desktop-observed.json"), "--backend", "guix"])
+        self.assertEqual(caught.exception.code, 2)
+
+    def test_cli_validates_report_and_writes_only_draft_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report_path = Path(directory) / "report.json"
+            plan_path = Path(directory) / "plan.json"
+            report_path.write_bytes((FIXTURES / "desktop-observed.json").read_bytes())
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                result = main([
+                    "--preflight", "--report", str(report_path), "--backend", "nix",
+                    "--dry-run", "--plan-output", str(plan_path),
+                ])
+            self.assertEqual(result, 0, stderr.getvalue())
+            plan = json.loads(plan_path.read_text(encoding="utf-8"))
+            self.assertEqual(plan["backend"]["id"], "nixos")
+            self.assertFalse(plan["execution"]["backend_invoked"])
+            self.assertFalse(plan["execution"]["disk_access_performed"])
+
+    def test_cli_rejects_malformed_json_without_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report_path = Path(directory) / "bad.json"
+            plan_path = Path(directory) / "plan.json"
+            report_path.write_text("{broken", encoding="utf-8")
+            with contextlib.redirect_stderr(io.StringIO()):
+                result = main([
+                    "--preflight", "--report", str(report_path), "--backend", "guix",
+                    "--dry-run", "--plan-output", str(plan_path),
+                ])
+            self.assertEqual(result, 2)
+            self.assertFalse(plan_path.exists())
+
+    def test_cli_rejects_unknown_or_invalid_schema_report(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report_path = Path(directory) / "bad-schema.json"
+            report = json.loads((FIXTURES / "desktop-observed.json").read_text())
+            report["schema_version"] = "9.0.0"
+            report_path.write_text(json.dumps(report), encoding="utf-8")
+            with contextlib.redirect_stderr(io.StringIO()):
+                result = main([
+                    "--preflight", "--report", str(report_path), "--backend", "guix",
+                    "--dry-run",
+                ])
+            self.assertEqual(result, 2)
+
+    def test_offline_mode_is_enforced_by_report_contract(self) -> None:
+        report, _ = load_fixture("desktop-observed.json")
+        report["privacy"]["network_requests_performed"] = True
+        with tempfile.TemporaryDirectory() as directory:
+            report_path = Path(directory) / "network.json"
+            report_path.write_text(json.dumps(report), encoding="utf-8")
+            with contextlib.redirect_stderr(io.StringIO()):
+                result = main([
+                    "--preflight", "--report", str(report_path), "--backend", "guix",
+                    "--dry-run",
+                ])
+            self.assertEqual(result, 2)
+
+
+if __name__ == "__main__":
+    unittest.main()
