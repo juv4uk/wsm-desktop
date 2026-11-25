@@ -1,41 +1,46 @@
-# wsm-guix-deploy module
+# Модуль wsm-guix-deploy
 
 <!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 
-This is the design location for the future Calamares Python job module. It intentionally contains no module.desc or executable entry point yet, so Calamares cannot accidentally load an incomplete installer backend.
+Це місце для майбутнього Python job module Calamares. Файлу `module.desc` та Calamares entry point тут навмисно немає, тому frontend не може випадково завантажити незавершений installer backend.
 
-## Required contract
+## Поточна реалізація
 
-The implementation must use the Python job-module API of the exact Calamares release selected by WSM. The module entry point is run(); successful execution returns None and failure returns a pair of human-readable strings.
+Backend-незалежний адаптер розміщено в `wsm_install/backend_guix.py`; standalone CLI — у `wsm_install/guix_deploy.py`. Імпорт Calamares не потрібен.
 
-Before deployment, it must validate:
-- a single unambiguous target root;
-- the expected EFI mount when UEFI installation is selected;
-- all filesystem types and identifiers;
-- mount state and available capacity;
-- selected Free or Compatibility profile;
-- the generated operating-system declaration;
-- the intended bootloader target;
-- the exact command and target path to be used.
+Спочатку можна отримати точні digest-и для review:
 
-## Safe execution rules
+```sh
+python3 -m wsm_install.guix_deploy \
+  --plan /path/to/confirmed-plan.json \
+  --selection /path/to/target-selection.json \
+  --show-confirmation
+```
 
-- Use Calamares' documented job command APIs; do not use os.system or shell=True.
-- Never interpolate UI strings into shell commands.
-- Never infer a disk from its position in a list.
-- Never write before the summary and explicit confirmation.
-- Do not log plaintext passwords, password hashes, tokens, or private data.
-- Do not run both the Calamares bootloader job and Guix bootloader installation.
-- On any failed precondition, stop before calling guix system init.
+Після окремого підтвердження незмінного плану й вибору цілі CLI створює новий `.scm` файл у `/run/wsm/system.scm` і повертає структурований argv:
 
-## Test strategy
+```sh
+python3 -m wsm_install.guix_deploy \
+  --plan /path/to/confirmed-plan.json \
+  --selection /path/to/target-selection.json \
+  --confirm-plan-sha256 <plan-sha256> \
+  --confirm-target-digest <target-digest>
+```
 
-Unit tests must mock the Calamares runtime and command executor. Integration tests must use disposable QEMU disks. Failure-path tests must prove that invalid or incomplete plans result in zero deployment commands.
+Шляхи не вибираються користувачем: backend дозволяє лише `/run/wsm/system.scm` і `/mnt`. CLI відхиляє path overrides, symlink-компоненти target mountpoint, output усередині target filesystem, перезапис наявного файлу, duplicate JSON keys, malformed або diagnostic-only plans, blockers і неправильні digest-и. Файл створюється атомарно з правами `0600`.
 
-## Implementation status
+Поле `source_report.report_id` перевіряється на 16–80 ASCII символів `[A-Za-z0-9_-]`, а `source_report.sha256` — на рівно 64 lowercase hex. Перевірка виконується на backend boundary, бо ці значення потрапляють у Scheme-коментар; caller не може обійти її лише повторним обчисленням `plan_sha256`.
 
-The backend half of this module now exists as `wsm_install/backend_guix.py` and
-does not depend on Calamares. It validates a confirmed plan, renders the Guix
-`operating-system` declaration and returns an allow-listed argv tuple. Running
-that argv is still unimplemented, so no deployment happens from this repository
-yet.
+CLI повертає JSON із argv на кшталт `guix system init ...`, але **ніколи не запускає цю команду**, не монтує, не форматує та не змінює диск.
+
+Поточний `wsm-install` CLI усе ще генерує `confirmable=false`; повноцінний frontend, який збирає всі обов'язкові selections і видає confirmed plan, ще не реалізовано. Тому handoff CLI наразі тестується на синтетичному confirmed fixture.
+
+## Контракт майбутнього Calamares job module
+
+Реальний модуль повинен використовувати Python job-module API саме тієї версії Calamares, яку WSM обере й зафіксує. До виклику backend він зобов'язаний перевірити одну однозначну ціль, EFI mount для UEFI, типи файлових систем, доступний обсяг, вибраний profile та ownership bootloader.
+
+## Межі й перевірки
+
+`tests/test_backend_guix.py` перевіряє provenance injection, installer-owned paths і allowlists; `tests/test_guix_deploy_cli.py` — двофазне підтвердження, приватний файл, output isolation, symlink/duplicate-key refusal. Тести не потребують Guix і не торкаються дисків.
+
+Фактичний `guix system init`, mount/partition/filesystem operations, повторна перевірка identity цілі та QEMU installed-system boot залишаються окремими наступними кроками з власним execution contract, автентифікованим Guix channel snapshot і disposable disk image.
