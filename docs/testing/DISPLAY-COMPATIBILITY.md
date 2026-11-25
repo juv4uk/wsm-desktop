@@ -81,6 +81,20 @@ edid-decode --hide-serial-numbers --skip-hex-dump /sys/class/drm/cardX-CONNECTOR
 
 **Не використовувати `--replace-unique-ids` для перевірки цілісності оригіналу:** ця опція замінює унікальні ідентифікатори та перераховує EDID checksums, тому може приховати checksum-помилки, які були в початкових байтах. Її можна застосувати лише в окремому другому проході для формування санітизованого текстового представлення; результат такого проходу не є доказом checksum-цілісності оригінального EDID. Якщо потрібен локальний діагностичний файл, він залишається приватним і видаляється після перевірки за правилами власника системи.
 
+### 3.4.1 Структурований DRM/DisplayID inventory (опційно)
+
+Якщо у live image вже є відповідні інструменти, можна зібрати локальний структурований snapshot через:
+
+~~~sh
+drm_info -j
+~~~
+
+drm_info -j повертає JSON-представлення DRM devices/properties. Розбирати його лише адаптером, прив'язаним до перевіреної версії; не вважати його форматом WSM report і не переносити поля напряму в schema без узгодження з #5/#6. Вивід може містити ідентифікаційні дані GPU/монітора — обробляти його локально, редагувати до експорту та **не запускати upload у DRM database**.
+
+libdisplay-info 0.4.0 (реліз 23.07.2026) підтримує DisplayID v1 Type IV timings та DisplayID v2 CTA-861 data blocks. Це перспективний parser для додаткової інтерпретації EDID/DisplayID, але не заміна kernel-exposed KMS properties, не доказ активного режиму й не functional pass. Перевагу віддавати high-level API; low-level API має breaking changes у 0.4.0.
+
+Джерела: [drm_info upstream](https://gitlab.freedesktop.org/emersion/drm_info), [libdisplay-info 0.4.0 release notes](https://mail-archive.com/wayland-devel%40lists.freedesktop.org/msg44365.html).
+
 **Важливо:** kernel DRM/KMS документація рекомендує userspace брати режими з KMS properties, а не повторно обчислювати їх із EDID: ядро може застосовувати quirks, limits та fixups. Тому EDID decoder — допоміжне джерело ідентифікації/діагностики, а не авторитетний список режимів для рішення інсталятора.
 
 ### 3.5 Активний режим
