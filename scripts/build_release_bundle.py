@@ -65,8 +65,17 @@ def build(version: str, output: Path) -> dict[str, Any]:
     ).stdout
 
     output.parent.mkdir(parents=True, exist_ok=True)
-    with gzip.open(output, "wb", compresslevel=9, mtime=0) as stream:
-        stream.write(archive)
+    # gzip.open() only accepts mtime on newer Pythons; GzipFile keeps the
+    # release reproducible on the documented Python >= 3.10 baseline.
+    with output.open("wb") as raw:
+        with gzip.GzipFile(
+            filename="",
+            mode="wb",
+            compresslevel=9,
+            fileobj=raw,
+            mtime=0,
+        ) as stream:
+            stream.write(archive)
 
     tarball_digest = sha256_file(output)
     sums = output.with_name("SHA256SUMS")
