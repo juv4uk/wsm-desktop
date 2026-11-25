@@ -453,6 +453,10 @@ class RepositoryTests(unittest.TestCase):
         )
         self.assertEqual(schema["title"], "WSM hardware profile evidence")
         self.assertEqual(schema["properties"]["schema"]["const"], "wsm-profile-evidence/2")
+        self.assertEqual(
+            schema["properties"]["artifacts"]["items"]["properties"]["kind"]["enum"],
+            ["wsm-hwcheck-report", "functional-test-log"],
+        )
         self.assertIn("isa_level", schema["required"])
         self.assertIn("artifacts", schema["required"])
         self.assertIn("profile_source", schema["required"])
