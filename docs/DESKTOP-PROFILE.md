@@ -47,6 +47,26 @@ guix build -f wsm/packages/wsm.scm
 ./scripts/build_iso.sh
 ```
 
+Скрипт вимагає чистого Git worktree та використовує `channels.lock.scm` через
+`guix time-machine`; WSM Guix-модулі підключаються через locked `-L` path.
+Він не передає `--disable-authentication` і зупиняється, якщо у виводі
+channel resolution/build явно з'являється `channel authentication disabled`.
+Попередження `channel is not trusted` не приховується: воно фіксується
+в `manifest.json` для окремої перевірки.
+
+Результати за замовчуванням з'являються в `build/`:
+- `wsm-desktop-live.iso` — посилання на точний Guix store image;
+- `manifest.json` і `SHA256SUMS` — commit/lock/profile provenance, розмір та SHA-256;
+- `channels.resolved.scm`, `channel-resolution.log` і `build.log` — channel/build evidence.
+
+Для іншого каталогу можна задати `WSM_ISO_DIR=/absolute/path`.
+Для наступної спроби використовуйте новий порожній каталог: скрипт не перезаписує
+попередні артефакти та журнали.
+
+Цей script/test contract **не є доказом реального ISO build або boot**.
+Потрібні Guix build на точному lock і окремий QEMU/OVMF test, який завантажує
+цей самий ISO до робочої Plasma session.
+
 Кожен крок має завершитися перед наступним. Успішна побудова **не** доводить, що система завантажується: саме на цьому проєкт уже спіткнувся — `guix system build` давав `exit=0`, а `--full-boot` через GRUB до ядра не дійшов.
 
 ## Припущення, які треба перевірити першими
