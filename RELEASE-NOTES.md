@@ -14,7 +14,7 @@
 1. `wsm-hwcheck` 0.2.0 читає локальні `/sys` і `/proc`; стандартно додає runtime-діагностику з `/lib/modules/<kernel>/modules.*` і фіксованих команд лише для читання `journalctl -k -b --no-pager --output=cat --lines=4096` / `dmesg --color=never`. Якщо дані недоступні без прав, поле лишається `unknown` і з'являється warning.
 2. `wsm-install --preflight --dry-run` валідує цей звіт і видає **diagnostic-only** план для ратифікованого backend-а `guix-system`; план `nixos` лишається лише дослідницьким.
 3. `scripts/wsm_hardware_check.py` перевіряє `plan_status`, `plan_mode`, `plan_readiness.confirmable=false`, збіг `backend.id`, digest-и, а також що `dry_run=true`, `mutations_authorized=false`, `backend_invoked=false`, `disk_access_performed=false`, після чого пише manifest і `SHA256SUMS`. Команди в manifest зберігаються як argv-масиви з `<out>` замість абсолютних шляхів.
-4. `channels.lock.scm` фіксує автентифікований вільний канал Guix, з якого відтворюється мінімальний VM-приклад.
+4. `channels.lock.scm` фіксує автентифікований вільний канал Guix. Для цього RC підтверджено автентифікований pull і resolution через `time-machine describe`; збірка системи та VM boot саме з цього lock ще не зараховані як release evidence.
 
 Покрокова інструкція для реального заліза — у [docs/RELEASE-TESTING.md](docs/RELEASE-TESTING.md).
 
@@ -34,7 +34,7 @@
 - немає викликів Guix/Nix backend-у з метою розгортання;
 - немає мережевих запитів чи завантаження драйверів/firmware;
 - немає Nonguix або nonfree firmware у `channels.lock.scm`;
-- немає другого підтримуваного backend-а: [ADR 0004](docs/decisions/0004-nix-guix-backend-strategy.md) ратифіковано 26.11.2026 для GNU Guix, а Nix/NixOS лишається дослідженням у [#55](https://github.com/juv4uk/wsm-desktop/issues/55).
+- немає другого підтримуваного backend-а: [ADR 0004](docs/decisions/0004-nix-guix-backend-strategy.md) ратифіковано 25.11.2026 для GNU Guix, а Nix/NixOS лишається дослідженням у [#55](https://github.com/juv4uk/wsm-desktop/issues/55).
 
 ## Channel lock
 
@@ -44,17 +44,17 @@
 
 ```sh
 guix time-machine -C channels.lock.scm -- describe -f channels
-guix time-machine -C channels.lock.scm -- system build systems/minimal.scm
-guix time-machine -C channels.lock.scm -- system vm --no-graphic systems/minimal.scm
 ```
 
-Раніший знімок у [systems/README.md](systems/README.md) справді було отримано з вимкненою автентифікацією як дослідницький checkout. Цей lock — окремий автентифікований pull того самого коміту в ізольованому профілі. `guix time-machine` може попереджати «channel is not trusted», бо локальний channels-файл не внесено до `trusted-channels.scm`; це не повідомлення про failing signature. `--disable-authentication` не використовувався, `time_machine_exit=0`.
+Команди `system build` і `system vm` можна виконати як наступний окремий тест, але їхній результат не є підтвердженням цього RC, доки він не зафіксований для точного `channels.lock.scm`.
+
+Раніший знімок у [systems/README.md](systems/README.md) було отримано з вимкненою автентифікацією як дослідницький checkout. Для цього lock окремо виконано автентифікований pull того самого коміту в ізольованому профілі; `--disable-authentication` не використовувався, а `time_machine_exit=0` для resolution. Попередження `channel is not trusted` стосується локальної політики довіри до channel file (його ідентичність не додана до `trusted-channels.scm`). Саме по собі це попередження не доводить невдалу перевірку підпису, але й не слід його бездумно ігнорувати: автентифікація комітів через channel introduction та довіра локальної конфігурації користувача — окремі перевірки.
 
 Lock є pinned fact, але сам по собі не є гарантією релізу: вона з'являється лише разом із build/boot-доказом, наведеним нижче.
 
 ## Підтверджені межі
 
-Реальний boot доведено лише для мінімального Guix System у disposable QEMU/TCG: `guix system build` → `exit=0`, `guix system vm` → `exit=0`, guest дійшов до `wsm-desktop login:`, QEMU завершився `vm_exit=0`. Деталі — у [systems/README.md](systems/README.md). Повний GRUB `--full-boot` до ядра не доведено, тому це **не** доказ завантаження з реального USB.
+Реальний boot доведено лише для мінімального Guix System у disposable QEMU/TCG у попередньому дослідницькому експерименті: `guix system build` → `exit=0`, `guix system vm` → `exit=0`, guest дійшов до `wsm-desktop login:`, QEMU завершився `vm_exit=0`. Цей доказ належить попередньому checkout і **не підтверджує** build/boot саме через `channels.lock.scm` з цього RC. Деталі — у [systems/README.md](systems/README.md). Повний GRUB `--full-boot` до ядра не доведено, тому це **не** доказ завантаження з реального USB.
 
 NixOS-експеримент для #55 має `nix_build_exit=0`. Окремий boot у QEMU/TCG дійшов до systemd-маркерів `Reached target Login Prompts` і `Reached target Multi-User System`, але завершився `vm_exit=124` за timeout 420 і не видав маркера `login:`. Логи й точні exit codes публікуються окремо в [#55](https://github.com/juv4uk/wsm-desktop/issues/55); це не є частиною обіцянки цього RC.
 
