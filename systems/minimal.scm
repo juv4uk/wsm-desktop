@@ -1,11 +1,14 @@
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 ;;
-;; Minimal Guix System bring-up example for a disposable VM.
+;; Minimal Guix System bring-up example for a disposable QEMU VM.
 ;; This is not the finished WSM Desktop configuration and is not an
 ;; installer-generated configuration.
 ;;
-;; For a real target, replace the filesystem labels with verified target
-;; identifiers and review the bootloader target before any deployment.
+;; `guix system vm' builds an MBR disk image, so this VM-facing example uses
+;; BIOS Grub on /dev/vda.  For a UEFI target, replace the bootloader with
+;; `grub-efi-bootloader', mount an EFI System Partition at /boot/efi and
+;; verify the target identifiers and bootloader target before deployment.
+;; See systems/README.md.
 
 (use-modules (gnu))
 
@@ -17,8 +20,8 @@
 
   (bootloader
    (bootloader-configuration
-    (bootloader grub-efi-bootloader)
-    (targets '("/boot/efi"))))
+    (bootloader grub-bootloader)
+    (targets '("/dev/vda"))))
 
   (file-systems
    (cons*
@@ -26,8 +29,4 @@
       (mount-point "/")
       (device (file-system-label "wsm-root"))
       (type "ext4"))
-    (file-system
-      (mount-point "/boot/efi")
-      (device (file-system-label "wsm-efi"))
-      (type "vfat"))
     %base-file-systems)))

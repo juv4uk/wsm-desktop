@@ -3,9 +3,9 @@
 PYTHON ?= python3
 GUIX ?= guix
 
-.PHONY: check check-docs check-hardware-schema check-hwcheck check-installer check-qemu-harness check-validation-protocols check-system vm-system
+.PHONY: check check-docs check-hardware-schema check-hwcheck check-installer check-qemu-harness check-validation-protocols check-minimal-system check-system vm-system
 
-check: check-docs check-hardware-schema check-hwcheck check-installer check-qemu-harness check-validation-protocols
+check: check-docs check-hardware-schema check-hwcheck check-installer check-qemu-harness check-validation-protocols check-minimal-system
 
 check-docs:
 	$(PYTHON) scripts/check_docs.py
@@ -31,3 +31,6 @@ check-qemu-harness:
 
 check-validation-protocols:
 	$(PYTHON) tests/test_validation_protocol_privacy.py
+
+check-minimal-system:
+	$(PYTHON) tests/test_minimal_system.py
