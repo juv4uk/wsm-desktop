@@ -259,6 +259,20 @@ def validate_iso(path: Path) -> Path:
         raise ValueError("ISO file is empty")
     return resolved
 
+def validate_ovmf_image(path: Path, label: str) -> Path:
+    """Accept a non-empty regular OVMF image, never a symlink or device."""
+    if path.is_symlink():
+        raise ValueError(f"{label} must not be a symlink")
+    try:
+        resolved = path.resolve(strict=True)
+    except OSError as exc:
+        raise ValueError(f"cannot resolve {label}: {exc}") from exc
+    if not resolved.is_file():
+        raise ValueError(f"{label} must be a regular file")
+    if resolved.stat().st_size == 0:
+        raise ValueError(f"{label} is empty")
+    return resolved
+
 
 def build_qemu_command(
     qemu: str,
@@ -373,6 +387,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     qemu_img = shutil.which("qemu-img") or "qemu-img"
 
     ovmf_vars: Path | None = None
+    ovmf_code_path: Path | None = None
+    ovmf_vars_template: Path | None = None
     if args.firmware == "uefi":
         if args.ovmf_code is None or args.ovmf_vars is None:
             print(
@@ -381,19 +397,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 2
-        if not args.ovmf_code.is_file():
-            print(
-                f"qemu-boot-smoke: OVMF CODE image not found: {args.ovmf_code}",
-                file=sys.stderr,
-            )
+        try:
+            ovmf_code_path = validate_ovmf_image(args.ovmf_code, "OVMF CODE image")
+            ovmf_vars_template = validate_ovmf_image(args.ovmf_vars, "OVMF VARS template")
+        except ValueError as exc:
+            print(f"qemu-boot-smoke: {exc}", file=sys.stderr)
             return 2
-        if not args.ovmf_vars.is_file():
-            print(
-                f"qemu-boot-smoke: OVMF VARS template not found: {args.ovmf_vars}",
-                file=sys.stderr,
-            )
-            return 2
-        if args.ovmf_code.resolve() == args.ovmf_vars.resolve():
+        if ovmf_code_path == ovmf_vars_template:
             print("qemu-boot-smoke: OVMF CODE and VARS must be separate files", file=sys.stderr)
             return 2
 
@@ -405,11 +415,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             # variable store, and a fresh store keeps runs independent.
             ovmf_vars = work / "OVMF_VARS.fd"
             # Clone the VARS template for this run; never expose the host template writable.
-            shutil.copyfile(args.ovmf_vars, ovmf_vars)
+            shutil.copyfile(ovmf_vars_template, ovmf_vars)
         command = build_qemu_command(
             qemu, iso, qcow2, args.memory_mib, args.cpus,
             firmware=args.firmware,
-            ovmf_code=args.ovmf_code,
+            ovmf_code=ovmf_code_path,
             ovmf_vars=ovmf_vars,
         )
 
@@ -429,7 +439,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 },
                 "host_device_passthrough": False,
                 "network_enabled": False,
-                "efi_variable_store": False,
+                "host_efi_variables_modified": False,
+                "guest_uefi_vars_writable": args.firmware == "uefi",
                 "guest_installer_execution": False,
             }, sort_keys=True, indent=2))
             return 0
@@ -479,7 +490,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "qemu_error": qemu_error,
             "host_device_passthrough": False,
             "network_enabled": False,
-            "efi_variable_store": False,
+            "host_efi_variables_modified": False,
+            "guest_uefi_vars_writable": args.firmware == "uefi",
             "guest_installer_execution": False,
         }
         print(json.dumps(result, sort_keys=True, indent=2))
