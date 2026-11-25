@@ -30,7 +30,7 @@
 | N5 — DNS | Успішне розв'язання конкретного allowlisted hostname | Resolver повернув адресу для цього hostname | Що TCP/TLS або сервіс доступний |
 | N6 — endpoint | Явно погоджена перевірка конкретного pinned source/cache endpoint | Цей endpoint відповів у момент перевірки | Що інші дзеркала, всі пакети або весь Інтернет доступні |
 
-Якщо дані відсутні, результат — unknown або not-collected. Не вигадувати «працює» з одного індикатора.
+Відсутність даних у звіті не можна трактувати як негативний або позитивний факт. `not-collected` — це **маркер покриття collector-а**, який пояснює, чому спостереження немає; це не verdict capability. Похідний verdict для такого рівня має бути `unknown` із збереженням причини `not-collected`, coverage boundary та provenance. Не змішувати його з `not-tested` (перевірку не запускали) або `not-detected` (повний релевантний enumeration pass не знайшов об'єкт). `not-collected` ніколи не задовольняє installation-/first-boot-critical evidence gate.
 
 ## 3. Read-only інвентаризація
 
@@ -81,6 +81,8 @@ N6 не є частиною безумовного inventory. Перед пер�
 - який pinned source, substitute або metadata endpoint буде перевірено;
 - навіщо цей endpoint потрібен;
 - що саме буде відправлено (hostname lookup або короткий HTTPS request);
+- які мережеві метадані стануть видимими: DNS resolver може бачити запитаний hostname та адресу джерела запиту; HTTPS endpoint бачить адресу peer, з якої прийшло з'єднання (зазвичай NAT/proxy egress address, а не обов'язково публічна адреса самого ПК), а також hostname/протокол запиту;
+- що відповідний resolver або endpoint може логувати ці дані; preflight не повинен збирати чи публікувати цю адресу у hardware report;
 - що перевірка не завантажує пакети, не додає ключі й не змінює систему.
 
 Перевіряти тільки endpoints, які походять із зафіксованої конфігурації обраного профілю. Не використовувати загальні «speed test», випадкові URL, порт-сканування або довільний список дзеркал.
@@ -137,8 +139,8 @@ HTTP HEAD не є універсальним тестом: деякі серве
 - driver-binding source;
 - link/address/route/DNS рівні з окремими результатами;
 - required endpoint allowlist з джерелом у pinned configuration;
-- чи дав користувач згоду на N6;
-- endpoint result, timestamp і метод, якщо перевірку виконано;
+- чи дав користувач згоду на N6 після disclosure hostname, endpoint та source/egress-IP visibility;
+- endpoint result, timestamp і метод, якщо перевірку виконано; source/egress IP не зберігається в публічному profile record;
 - local input/closure availability evidence;
 - offline alternative та підстави її доступності;
 - redacted provenance: tool/version/command.
