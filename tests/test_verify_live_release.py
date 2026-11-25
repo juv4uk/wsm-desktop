@@ -10,12 +10,14 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from verify_live_release import (  # noqa: E402
     ISO_MAGIC_OFFSET,
+    check_boot,
     check_checksum,
     check_iso_structure,
     check_manifest,
@@ -24,10 +26,18 @@ from verify_live_release import (  # noqa: E402
 )
 
 
-def make_iso(directory: Path, name: str = "wsm-desktop.iso", magic: bytes = b"CD001") -> Path:
+def make_iso(
+    directory: Path,
+    name: str = "wsm-desktop.iso",
+    magic: bytes = b"CD001",
+    descriptor_type: int = 1,
+    version: int = 1,
+) -> Path:
     path = directory / name
-    payload = bytearray(ISO_MAGIC_OFFSET + 16)
+    payload = bytearray(ISO_MAGIC_OFFSET + len(magic) + 1)
+    payload[ISO_MAGIC_OFFSET - 1] = descriptor_type
     payload[ISO_MAGIC_OFFSET:ISO_MAGIC_OFFSET + len(magic)] = magic
+    payload[ISO_MAGIC_OFFSET + len(magic)] = version
     path.write_bytes(bytes(payload))
     return path
 
@@ -82,6 +92,18 @@ class StructureTests(unittest.TestCase):
             result = check_iso_structure(path)
         self.assertEqual(result["status"], "fail")
 
+    def test_wrong_descriptor_type_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            result = check_iso_structure(make_iso(Path(temporary), descriptor_type=0))
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("type 1", result["detail"])
+
+    def test_wrong_descriptor_version_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            result = check_iso_structure(make_iso(Path(temporary), version=2))
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("version 1", result["detail"])
+
 
 class ManifestTests(unittest.TestCase):
     def test_manifest_must_describe_the_file(self) -> None:
@@ -103,6 +125,14 @@ class ManifestTests(unittest.TestCase):
             manifest = {"files": [{"name": iso.name, "sha256": digest(iso)}]}
             result = check_manifest(iso, manifest, {iso.name: digest(iso)})
         self.assertEqual(result["status"], "pass")
+
+    def test_missing_manifest_sha256_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            iso = make_iso(Path(temporary))
+            manifest = {"files": [{"name": iso.name}]}
+            result = check_manifest(iso, manifest, {iso.name: digest(iso)})
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("SHA-256", result["detail"])
 
 
 class VerdictTests(unittest.TestCase):
@@ -152,11 +182,50 @@ class CliTests(unittest.TestCase):
             )
             result = self.run_cli("--iso", str(iso), "--compact")
         payload = json.loads(result.stdout)
-        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.returncode, 2)
         self.assertEqual(payload["overall"], "incomplete")
         statuses = {item["id"]: item["status"] for item in payload["criteria"]}
         self.assertEqual(statuses["boot-bios"], "not-run")
         self.assertEqual(statuses["checksum"], "pass")
+
+    def test_uefi_boot_requires_both_ovmf_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            iso = make_iso(root)
+            code = root / "OVMF_CODE.fd"
+            code.write_bytes(b"code")
+            with patch("verify_live_release.shutil.which", return_value="/usr/bin/qemu-system-x86_64"):
+                result = check_boot(iso, "uefi", 30, code, None)
+        self.assertEqual(result["status"], "not-run")
+        self.assertIn("--ovmf-code and --ovmf-vars", result["detail"])
+
+    def test_uefi_boot_passes_separate_code_and_vars_to_harness(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            iso = make_iso(root)
+            code = root / "OVMF_CODE.fd"
+            vars_template = root / "OVMF_VARS.fd"
+            code.write_bytes(b"code")
+            vars_template.write_bytes(b"vars")
+            captured: dict[str, list[str]] = {}
+            class Completed:
+                returncode = 0
+                stdout = '{"serial_output_tail": "WSM_LIVE_READY"}'
+                stderr = ""
+
+            def fake_run(command, **kwargs):
+                captured["command"] = command
+                return Completed()
+
+            with patch("verify_live_release.shutil.which", return_value="/usr/bin/qemu-system-x86_64"), patch(
+                "verify_live_release.subprocess.run", side_effect=fake_run
+            ):
+                result = check_boot(iso, "uefi", 30, code, vars_template)
+        self.assertEqual(result["status"], "pass")
+        self.assertIn("--ovmf-code", captured["command"])
+        self.assertIn(str(code), captured["command"])
+        self.assertIn("--ovmf-vars", captured["command"])
+        self.assertIn(str(vars_template), captured["command"])
 
 
 if __name__ == "__main__":
