@@ -10,13 +10,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import selectors
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Callable, Sequence
 
 
 DISK_SIZE_RE = re.compile(r"^([1-9][0-9]*)(M|G|T)$", re.IGNORECASE)
@@ -28,6 +32,186 @@ MIN_CPUS = 1
 MAX_CPUS = 16
 MIN_TIMEOUT_SECONDS = 1
 MAX_TIMEOUT_SECONDS = 30 * 60
+
+# Keep capture bounded independently of the JSON presentation tail.
+MAX_SERIAL_CAPTURE_BYTES = 1024 * 1024
+MAX_STDERR_CAPTURE_BYTES = 256 * 1024
+MAX_SERIAL_OUTPUT_TAIL_CHARS = 4000
+MAX_BOOT_MARKER_BYTES = 1024
+PROCESS_READ_CHUNK_BYTES = 64 * 1024
+POST_KILL_DRAIN_SECONDS = 0.5
+
+
+@dataclass(frozen=True)
+class BoundedProcessResult:
+    returncode: int | None
+    timed_out: bool
+    stdout_tail: bytes
+    stderr_tail: bytes
+    stdout_bytes_seen: int
+    stderr_bytes_seen: int
+    stdout_truncated: bool
+    stderr_truncated: bool
+    marker_seen: bool
+
+
+def _append_bounded_tail(target: bytearray, chunk: bytes, limit: int) -> None:
+    """Append bytes while retaining no more than limit bytes."""
+    if len(chunk) >= limit:
+        target[:] = chunk[-limit:]
+        return
+    overflow = len(target) + len(chunk) - limit
+    if overflow > 0:
+        del target[:overflow]
+    target.extend(chunk)
+
+
+def run_bounded_process(
+    command: list[str],
+    *,
+    timeout_seconds: float,
+    marker: str | None,
+    popen_factory: Callable[..., Any] | None = None,
+    max_stdout_bytes: int = MAX_SERIAL_CAPTURE_BYTES,
+    max_stderr_bytes: int = MAX_STDERR_CAPTURE_BYTES,
+    read_chunk_bytes: int = PROCESS_READ_CHUNK_BYTES,
+) -> BoundedProcessResult:
+    """Run a child while streaming stdout/stderr into fixed-size tail buffers.
+
+    Marker detection scans the complete serial byte stream, independently of
+    the retained tail. A short overlap preserves markers split across reads.
+    """
+    if timeout_seconds <= 0:
+        raise ValueError("timeout_seconds must be positive")
+    if max_stdout_bytes < 1 or max_stderr_bytes < 1 or read_chunk_bytes < 1:
+        raise ValueError("capture limits and read chunk size must be positive")
+
+    marker_bytes = marker.encode("utf-8") if marker else b""
+    if len(marker_bytes) > MAX_BOOT_MARKER_BYTES:
+        raise ValueError(
+            f"boot marker must be no more than {MAX_BOOT_MARKER_BYTES} UTF-8 bytes"
+        )
+
+    factory = popen_factory or subprocess.Popen
+    process = factory(
+        command,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        bufsize=0,
+        close_fds=True,
+    )
+    if process.stdout is None or process.stderr is None:
+        try:
+            process.kill()
+        finally:
+            process.wait()
+        raise OSError("child process pipes were not created")
+
+    selector = selectors.DefaultSelector()
+    stdout_tail = bytearray()
+    stderr_tail = bytearray()
+    stdout_bytes_seen = 0
+    stderr_bytes_seen = 0
+    marker_seen = False
+    marker_overlap = b""
+    timed_out = False
+    kill_drain_deadline: float | None = None
+    streams = (process.stdout, process.stderr)
+
+    try:
+        for stream, label in ((process.stdout, "stdout"), (process.stderr, "stderr")):
+            os.set_blocking(stream.fileno(), False)
+            selector.register(stream, selectors.EVENT_READ, label)
+
+        deadline = time.monotonic() + timeout_seconds
+        while selector.get_map() or process.poll() is None:
+            now = time.monotonic()
+            if not timed_out and now >= deadline:
+                timed_out = True
+                kill_drain_deadline = now + POST_KILL_DRAIN_SECONDS
+                try:
+                    process.kill()
+                except OSError:
+                    pass
+
+            if timed_out and kill_drain_deadline is not None and now >= kill_drain_deadline:
+                for key in list(selector.get_map().values()):
+                    stream = key.fileobj
+                    selector.unregister(stream)
+                    stream.close()
+                break
+
+            if selector.get_map():
+                wait_for = 0.1
+                if not timed_out:
+                    wait_for = min(wait_for, max(0.0, deadline - now))
+                elif kill_drain_deadline is not None:
+                    wait_for = min(wait_for, max(0.0, kill_drain_deadline - now))
+                events = selector.select(wait_for)
+            else:
+                time.sleep(0.02)
+                events = ()
+
+            for key, _ in events:
+                stream = key.fileobj
+                try:
+                    chunk = os.read(key.fd, read_chunk_bytes)
+                except BlockingIOError:
+                    continue
+
+                if not chunk:
+                    selector.unregister(stream)
+                    stream.close()
+                    continue
+
+                if key.data == "stdout":
+                    stdout_bytes_seen += len(chunk)
+                    _append_bounded_tail(stdout_tail, chunk, max_stdout_bytes)
+                    if marker_bytes and not marker_seen:
+                        candidate = marker_overlap + chunk
+                        marker_seen = marker_bytes in candidate
+                        overlap_size = max(0, len(marker_bytes) - 1)
+                        marker_overlap = candidate[-overlap_size:] if overlap_size else b""
+                else:
+                    stderr_bytes_seen += len(chunk)
+                    _append_bounded_tail(stderr_tail, chunk, max_stderr_bytes)
+
+        try:
+            returncode = process.wait(timeout=1.0)
+        except subprocess.TimeoutExpired:
+            try:
+                process.kill()
+            except OSError:
+                pass
+            returncode = process.wait(timeout=1.0)
+
+        return BoundedProcessResult(
+            returncode=returncode,
+            timed_out=timed_out,
+            stdout_tail=bytes(stdout_tail),
+            stderr_tail=bytes(stderr_tail),
+            stdout_bytes_seen=stdout_bytes_seen,
+            stderr_bytes_seen=stderr_bytes_seen,
+            stdout_truncated=stdout_bytes_seen > max_stdout_bytes,
+            stderr_truncated=stderr_bytes_seen > max_stderr_bytes,
+            marker_seen=marker_seen,
+        )
+    except BaseException:
+        try:
+            process.kill()
+        except OSError:
+            pass
+        try:
+            process.wait(timeout=1.0)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        raise
+    finally:
+        selector.close()
+        for stream in streams:
+            if stream is not None and not stream.closed:
+                stream.close()
 
 
 def parse_disk_size_mib(value: str) -> int:
@@ -134,7 +318,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         validate_limits(args.timeout_seconds, args.memory_mib, args.cpus, args.disk_size)
-    except ValueError as exc:
+        if args.boot_marker and len(args.boot_marker.encode("utf-8")) > MAX_BOOT_MARKER_BYTES:
+            raise ValueError(
+                f"boot marker must be no more than {MAX_BOOT_MARKER_BYTES} UTF-8 bytes"
+            )
+    except (ValueError, UnicodeError) as exc:
         print(f"qemu-boot-smoke: {exc}", file=sys.stderr)
         return 2
     try:
@@ -149,7 +337,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     with tempfile.TemporaryDirectory(prefix="wsm-qemu-smoke-") as temporary:
         work = Path(temporary).resolve()
         qcow2 = work / "disposable.qcow2"
-        serial_log = work / "serial.log"
         command = build_qemu_command(qemu, iso, qcow2, args.memory_mib, args.cpus)
 
         if args.dry_run:
@@ -187,40 +374,33 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"qemu-boot-smoke: cannot create disposable qcow2 image: {exc}", file=sys.stderr)
             return 3
 
-        timed_out = False
-        qemu_error: str | None = None
         try:
             # QEMU's chardev option parser is key/value based, not JSON.
-            # Redirect the stdio serial backend from Python so filesystem paths
-            # never enter QEMU's chardev option string.
-            with serial_log.open("w", encoding="utf-8") as serial_stream:
-                completed = subprocess.run(
-                    command,
-                    check=False,
-                    timeout=args.timeout_seconds,
-                    stdout=serial_stream,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                )
-            qemu_returncode = completed.returncode
-            qemu_error = completed.stderr.strip() or None
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            qemu_returncode = None
-        except OSError as exc:
-            print(f"qemu-boot-smoke: cannot start QEMU: {exc}", file=sys.stderr)
+            # Its stdio serial backend is captured via a pipe, never a temp file.
+            captured = run_bounded_process(
+                command,
+                timeout_seconds=args.timeout_seconds,
+                marker=args.boot_marker,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            print(f"qemu-boot-smoke: cannot start or capture QEMU: {exc}", file=sys.stderr)
             return 3
 
-        serial = serial_log.read_text(encoding="utf-8", errors="replace") if serial_log.exists() else ""
-        marker_seen = bool(args.boot_marker and args.boot_marker in serial)
+        serial = captured.stdout_tail.decode("utf-8", errors="replace")
+        qemu_error = captured.stderr_tail.decode("utf-8", errors="replace").strip() or None
+        marker_seen = captured.marker_seen
         result = {
             "mode": "qemu-boot-smoke",
             "iso": str(iso),
             "boot_confirmed": marker_seen,
             "boot_marker_configured": bool(args.boot_marker),
-            "qemu_timed_out": timed_out,
-            "qemu_returncode": qemu_returncode,
-            "serial_output_tail": serial[-4000:],
+            "qemu_timed_out": captured.timed_out,
+            "qemu_returncode": captured.returncode,
+            "serial_output_tail": serial[-MAX_SERIAL_OUTPUT_TAIL_CHARS:],
+            "serial_truncated": captured.stdout_truncated,
+            "stderr_truncated": captured.stderr_truncated,
+            "serial_bytes_seen": captured.stdout_bytes_seen,
+            "stderr_bytes_seen": captured.stderr_bytes_seen,
             "qemu_error": qemu_error,
             "host_device_passthrough": False,
             "network_enabled": False,
