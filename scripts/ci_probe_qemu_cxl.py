@@ -99,6 +99,7 @@ def build_qemu_command(qemu: str) -> list[str]:
     return [
         qemu,
         "-S",
+        "-no-user-config",
         "-nodefaults",
         "-display", "none",
         "-machine", "q35,cxl=on",
@@ -110,6 +111,8 @@ def build_qemu_command(qemu: str) -> list[str]:
         "-device", "cxl-rp,port=0,bus=cxl.1,id=root_port0,chassis=0,slot=0",
         "-device", "cxl-type3,bus=root_port0,volatile-memdev=vmem0,id=cxl-vmem0",
         "-machine", "cxl-fmw.0.targets.0=cxl.1,cxl-fmw.0.size=4G",
+        "-nic", "none",
+        "-serial", "none",
         "-monitor", "stdio",
     ]
 
@@ -119,7 +122,7 @@ def run_qemu_topology_probe(qemu: str) -> dict[str, object]:
     try:
         completed = subprocess.run(
             command,
-            input="info qtree\ninfo pci\nquit\n",
+            input="info qtree\nquit\n",
             capture_output=True,
             text=True,
             errors="replace",
@@ -138,7 +141,7 @@ def run_qemu_topology_probe(qemu: str) -> dict[str, object]:
             "status": "launch-error",
             "exit_code": None,
             "devices_seen": [],
-            "diagnostic": f"{type(exc).__name__}: {exc}",
+            "diagnostic": "QEMU could not be launched with the selected runner binary.",
         }
 
     output = (completed.stdout + "\n" + completed.stderr)
@@ -169,7 +172,7 @@ def run_qemu_topology_probe(qemu: str) -> dict[str, object]:
         "status": status,
         "exit_code": completed.returncode,
         "devices_seen": devices_seen,
-        "diagnostic": output[-6000:],
+        "diagnostic": (\n            "QEMU instantiated the expected synthetic CXL qdev objects."\n            if status == "type3-topology-instantiated"\n            else "QEMU did not instantiate the complete synthetic CXL qdev set; raw monitor output is suppressed."\n        ),
     }
 
 
