@@ -39,7 +39,7 @@ MAX_PYTHON_ARCHIVE_BYTES = 40 * 1024 * 1024
 MAX_TAR_MEMBERS = 50_000
 MAX_TAR_EXPANDED_BYTES = 256 * 1024 * 1024
 MAX_INITRAMFS_BYTES = 256 * 1024 * 1024
-MAX_REPORT_BYTES = 8 * 1024 * 1024
+MAX_REPORT_BYTES = 512 * 1024
 BUSYBOX_APPLETS = ("sh", "mount", "mkdir", "poweroff", "sleep", "sync")
 QEMU_TIMEOUT_SECONDS = 90
 GUEST_MEMORY_MIB = 2048
@@ -328,6 +328,14 @@ def _build_initramfs(work: Path) -> tuple[Path, int]:
     init_path.write_text(init_script, encoding="utf-8")
     init_path.chmod(0o755)
 
+    rootfs_bytes = sum(
+        item.stat().st_size
+        for item in rootfs.rglob("*")
+        if item.is_file() and not item.is_symlink()
+    )
+    if rootfs_bytes > MAX_INITRAMFS_BYTES:
+        raise RuntimeError("guest rootfs exceeds the 256 MiB initramfs size ceiling")
+
     initramfs = work / "initramfs.cpio.gz"
     with initramfs.open("wb") as output:
         subprocess.run(
@@ -357,6 +365,8 @@ def _find_runner_kernel() -> Path:
 
 
 def _decode_guest_report(serial: str) -> dict:
+    """Decode one CRLF-tolerant gzip/base64 report with a strict expansion bound."""
+    serial = serial.replace("\\r\\n", "\\n").replace("\\r", "\\n")
     if REPORT_BEGIN not in serial or REPORT_END not in serial:
         raise RuntimeError("guest report boundary markers were not fully captured")
     matches = re.findall(
@@ -366,10 +376,16 @@ def _decode_guest_report(serial: str) -> dict:
     )
     if len(matches) != 1:
         raise RuntimeError(f"expected one compressed guest report, found {len(matches)}")
+    if len(matches[0]) > 800_000:
+        raise RuntimeError("compressed guest report exceeds the serial payload ceiling")
     try:
-        payload = gzip.decompress(base64.b64decode(matches[0], validate=True))
+        compressed = base64.b64decode(matches[0], validate=True)
+        with gzip.GzipFile(fileobj=BytesIO(compressed), mode="rb") as stream:
+            payload = stream.read(MAX_REPORT_BYTES + 1)
+            if len(payload) > MAX_REPORT_BYTES or stream.read(1):
+                raise RuntimeError("decompressed guest report exceeds the 512 KiB ceiling")
         return json.loads(payload.decode("utf-8"))
-    except (ValueError, OSError, UnicodeError, json.JSONDecodeError) as exc:
+    except (ValueError, OSError, EOFError, UnicodeError, json.JSONDecodeError) as exc:
         raise RuntimeError(f"cannot decode guest hardware report: {exc}") from exc
 
 
@@ -395,6 +411,25 @@ def _validate_report(report: dict) -> tuple[int, int]:
         raise RuntimeError("guest report network_requests_performed is not false")
     if privacy.get("network_upload_performed") is not False:
         raise RuntimeError("guest report network_upload_performed is not false")
+    if privacy.get("sensitive_identifiers_included") is not False:
+        raise RuntimeError("guest report sensitive_identifiers_included is not false")
+
+    forbidden_keys = {
+        "serial", "serial_number", "mac", "mac_address", "uuid",
+        "hostname", "username", "ip_address", "wwn",
+    }
+
+    def reject_sensitive_fields(value: Any) -> None:
+        if isinstance(value, dict):
+            for key, child in value.items():
+                if str(key).casefold() in forbidden_keys:
+                    raise RuntimeError(f"guest report contains forbidden identifier key: {key}")
+                reject_sensitive_fields(child)
+        elif isinstance(value, list):
+            for child in value:
+                reject_sensitive_fields(child)
+
+    reject_sensitive_fields(report)
 
     devices = report.get("devices", [])
     functional_tests = [
@@ -405,6 +440,13 @@ def _validate_report(report: dict) -> tuple[int, int]:
         raise RuntimeError(
             "inventory-only guest unexpectedly reported a passed functional test"
         )
+    categories = {
+        device.get("category")
+        for device in devices
+        if isinstance(device, dict)
+    }
+    if "cpu" not in categories:
+        raise RuntimeError("guest report did not inventory the virtual CPU")
     return len(devices), len(functional_tests)
 
 
@@ -460,6 +502,8 @@ def main() -> int:
             command,
             timeout_seconds=QEMU_TIMEOUT_SECONDS,
             marker=REPORT_END,
+            max_stdout_bytes=2 * 1024 * 1024,
+            max_stderr_bytes=256 * 1024,
         )
         serial = result.stdout_tail.decode("utf-8", errors="replace")
         stderr = result.stderr_tail.decode("utf-8", errors="replace")
@@ -479,8 +523,8 @@ def main() -> int:
             serial_last = serial[-6000:]
             raise RuntimeError(
                 f"guest did not emit {REPORT_END}; serial_bytes={result.stdout_bytes_seen}; "
-                f"stdout_truncated={result.stdout_truncated}; stderr: {stderr[-1200:]}\\n"
-                f"serial first bytes:\\n{serial_first}\\nserial tail:\\n{serial_last}"
+                f"stdout_truncated={result.stdout_truncated}; stderr: {stderr[-1200:]}\n"
+                f"serial first bytes:\n{serial_first}\nserial tail:\n{serial_last}"
             )
 
         report = _decode_guest_report(serial)
