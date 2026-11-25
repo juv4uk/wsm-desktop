@@ -135,7 +135,7 @@ class PolicyTests(unittest.TestCase):
     def test_branch_must_be_literal_false(self) -> None:
         branch = NONGUIX.replace("(branch #f)", '(branch "main")')
         problems = check(with_channel(branch), "compatibility")
-        self.assertTrue(any("branch #f" in item for item in problems))
+        self.assertTrue(any("branch must be the Scheme symbol #f" in item for item in problems))
 
     def test_duplicate_channel_names_are_refused(self) -> None:
         problems = check(with_channel(NONGUIX + NONGUIX), "compatibility")
