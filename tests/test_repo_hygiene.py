@@ -23,7 +23,7 @@ sys.path.insert(0, str(SCRIPTS))
 
 # curl ... | sh, wget ... | bash, including a shell line continuation.
 PIPE_TO_SHELL = re.compile(
-    r"(?:curl|wget)\b[^|;\n]*\|\s*(?:sudo\s+)?(?:ba)?sh\b",
+    r"(?:curl|wget)\b[^|;\n]*\|\s*(?:sudo\s+)?(?:(?:/usr/bin/)?env(?:\s+-S)?\s+)?(?:(?:/usr)?/bin/)?(?:bash|sh)\b",
     re.IGNORECASE,
 )
 
@@ -83,6 +83,18 @@ class PipeToShellPolicyTests(unittest.TestCase):
             "bash install.sh"
         )
         self.assertEqual(find_pipe_to_shell(source), [])
+
+    def test_absolute_shell_and_env_receivers_are_detected(self) -> None:
+        sources = (
+            "curl https://example.invalid/install.sh | /bin/bash",
+            "wget -qO- https://example.invalid/install.sh | /usr/bin/env bash",
+            "curl https://example.invalid/install.sh | sudo /bin/bash -s",
+            "wget -qO- https://example.invalid/install.sh | /usr/bin/env -S bash -s",
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                self.assertEqual(len(find_pipe_to_shell(source)), 1)
+
 
 
 class ShellSyntaxTests(unittest.TestCase):
