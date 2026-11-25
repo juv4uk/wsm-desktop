@@ -14,8 +14,18 @@ import secrets
 from pathlib import Path
 from typing import Any
 
+from .diagnostics import (
+    KernelLogSnapshot,
+    ModuleInventory,
+    enrich_device_diagnostics,
+    loaded_module_names,
+    read_current_kernel_log,
+    read_module_aliases,
+    read_module_inventory,
+)
 
-VERSION = "0.1.0"
+
+VERSION = "0.2.0"
 
 
 def _read(path: Path) -> str | None:
@@ -426,6 +436,10 @@ def _display_devices(sysfs_root: Path, observed_at: str) -> list[dict[str, Any]]
 def collect_report(
     sysfs_root: str | Path = "/sys",
     proc_root: str | Path = "/proc",
+    *,
+    include_runtime_diagnostics: bool = False,
+    modules_root: str | Path = "/lib/modules",
+    kernel_log_snapshot: KernelLogSnapshot | None = None,
 ) -> dict[str, Any]:
     """Collect a local-only report from read-only Linux pseudo-filesystems."""
     sysfs = Path(sysfs_root)
@@ -457,23 +471,104 @@ def collect_report(
     devices.extend(_block_devices(sysfs, observed_at))
     devices.extend(_display_devices(sysfs, observed_at))
 
+    collectors = [{
+        "name": "wsm-hwcheck-sysfs",
+        "version": VERSION,
+        "available": True,
+        "scope": "unprivileged-read-only",
+        "notes": "Reads sysfs/procfs only. No network requests or system mutations.",
+    }]
+    warnings: list[str] = []
+
+    if include_runtime_diagnostics:
+        release = str(environment.get("kernel_release") or "")
+        aliases_text: str | None = None
+        module_root: Path | None = None
+        if release and Path(release).name == release and release not in {".", ".."}:
+            module_root = Path(modules_root) / release
+            aliases_text = read_module_aliases(module_root / "modules.alias")
+        module_inventory: ModuleInventory | None = (
+            read_module_inventory(module_root) if module_root is not None else None
+        )
+        log_snapshot = (
+            kernel_log_snapshot
+            if kernel_log_snapshot is not None
+            else read_current_kernel_log()
+        )
+        loaded_modules = loaded_module_names(sysfs / "module")
+
+        for device in devices:
+            if device.get("bus") not in {"pci", "usb"}:
+                continue
+            enrich_device_diagnostics(
+                device,
+                aliases_text=aliases_text,
+                loaded_modules=loaded_modules,
+                module_inventory=module_inventory,
+                kernel_log=log_snapshot,
+                observed_at=observed_at,
+            )
+
+        collectors.extend([
+            {
+                "name": "wsm-module-alias-database",
+                "available": aliases_text is not None,
+                "scope": "offline-database",
+                "notes": (
+                    "Reads the local modules.alias file for the running kernel; "
+                    "matches are driver candidates, not proof of binding or functionality."
+                ),
+            },
+            {
+                "name": "wsm-current-boot-kernel-log",
+                "available": log_snapshot.available,
+                "scope": "unprivileged-read-only",
+                "notes": (
+                    "Streams the current-boot log with a 2 MiB tail cap and timeout; "
+                    "raw log lines are not included in the report, and truncation is reported."
+                ),
+            },
+            {
+                "name": "wsm-installed-module-index",
+                "available": module_inventory.available if module_inventory is not None else False,
+                "scope": "offline-database",
+                "notes": (
+                    "Checks modules.dep paths against files on disk and records modules.builtin; "
+                    f"modules.dep available={module_inventory.modules_dep_available if module_inventory is not None else False}, "
+                    f"modules.builtin available={module_inventory.modules_builtin_available if module_inventory is not None else False}, "
+                    f"complete={module_inventory.complete if module_inventory is not None else False}."
+                ),
+            },
+        ])
+        if aliases_text is None:
+            warnings.append(
+                "The current kernel module alias database is unavailable; unbound driver candidates remain unknown."
+            )
+        if not log_snapshot.available:
+            warnings.append(
+                "The current-boot kernel log is unavailable; runtime firmware state remains unknown."
+            )
+        if log_snapshot.truncated:
+            warnings.append(
+                "The current-boot kernel log exceeded the 2 MiB collector limit; only the bounded tail was analyzed."
+            )
+        if module_inventory is None or not module_inventory.complete:
+            warnings.append(
+                "The current kernel module indexes are incomplete; driver availability remains uncertain unless an existing sysfs binding or loaded module provides direct evidence."
+            )
+
     return {
         "schema_version": "1.0.0",
         "report_id": "wsm-" + secrets.token_hex(12),
         "collected_at": observed_at,
         "environment": environment,
-        "collectors": [{
-            "name": "wsm-hwcheck-sysfs",
-            "version": VERSION,
-            "available": True,
-            "scope": "unprivileged-read-only",
-            "notes": "Reads sysfs/procfs only. No subprocesses, network requests, or system mutations.",
-        }],
+        "collectors": collectors,
         "devices": devices,
-        "warnings": [],
+        "warnings": warnings,
         "limitations": [
-            "v0.1.0 performs inventory only; it does not prove end-to-end device functionality.",
-            "Firmware requirements and runtime firmware load status remain unknown until a dedicated kernel-log and firmware-path collector is reviewed.",
+            "Inventory and driver evidence do not prove end-to-end device functionality.",
+            "Runtime firmware status remains unknown when the current-boot kernel log is unavailable or contains no device-attributable firmware event.",
+            "A modules.alias match is a candidate only; it does not prove that a driver is bound or that a device function works.",
             "USB v0.1 records parent-device identity only; composite interface classes, per-interface driver bindings, and parent/interface relationships are not collected.",
             "Display v0.1 records DRM connector state and modes only; it does not decode EDID or establish a connector-to-GPU relationship.",
             "No remote hardware database lookup or probe upload is performed.",
