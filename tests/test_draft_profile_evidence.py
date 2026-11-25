@@ -59,11 +59,11 @@ class DraftTests(unittest.TestCase):
         bundle = draft(report(), "ASUS", "H170-PRO", "asus/h170-pro")
         self.assertTrue(validate(bundle))
 
-    def test_marking_one_function_pass_makes_it_valid(self) -> None:
+    def test_marking_one_function_pass_still_requires_real_artifacts(self) -> None:
         bundle = draft(report(), "ASUS", "H170-PRO", "asus/h170-pro")
         bundle["verified_functions"][0]["status"] = "pass"
-        # The report's own problems must still be listed as limitations.
-        self.assertEqual(validate(bundle), [])
+        # A draft cannot manufacture artifact bytes or hashes.
+        self.assertTrue(any("artifacts" in problem for problem in validate(bundle)))
 
     def test_known_problems_become_limitations(self) -> None:
         bundle = draft(report(), "ASUS", "H170-PRO", "asus/h170-pro")
@@ -114,7 +114,7 @@ class CliTests(unittest.TestCase):
             self.assertEqual(completed.returncode, 0, completed.stderr)
             self.assertIn("not-assessed", completed.stderr)
             written = json.loads(out.read_text(encoding="utf-8"))
-            self.assertEqual(written["schema"], "wsm-profile-evidence/1")
+            self.assertEqual(written["schema"], "wsm-profile-evidence/2")
 
 
 if __name__ == "__main__":
