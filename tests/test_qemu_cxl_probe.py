@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.qemu_boot_smoke import BoundedProcessResult
+from scripts.qemu_boot_smoke import BoundedProcessResult, MAX_PROCESS_INPUT_BYTES
 from scripts.ci_probe_qemu_cxl import (
     build_qemu_command,
     parse_kernel_config,
@@ -76,8 +76,10 @@ class QemuCxlProbeTests(unittest.TestCase):
                 "returncode": 0,
             },
         )()
-        with patch("scripts.ci_probe_qemu_cxl.run_bounded_process", return_value=bounded_result(completed.stdout, completed.stderr)):
+        with patch("scripts.ci_probe_qemu_cxl.run_bounded_process", return_value=bounded_result(completed.stdout, completed.stderr)) as reader:
             result = run_qemu_topology_probe("qemu")
+        self.assertEqual(reader.call_args.kwargs["stdin_bytes"], b"info qtree\\ninfo pci\\nquit\\n")
+        self.assertEqual(reader.call_args.kwargs["max_stdout_bytes"] + reader.call_args.kwargs["max_stderr_bytes"], MAX_CAPTURE_BYTES)
         self.assertEqual(result["status"], "type3-topology-instantiated")
         self.assertEqual(result["devices_seen"], ["cxl.1", "root_port0", "cxl-vmem0"])
 
