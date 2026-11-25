@@ -245,6 +245,7 @@ class InstallerPlanGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             evidence_path, document = self.make_current_evidence(Path(temporary))
             document["report_id"] = "another-report"
+            evidence_path.write_text(json.dumps(document), encoding="utf-8")
             _plan, blockers, _warnings = build_plan(
                 self.report, self.report_bytes, "guix",
                 profile_evidence=document,
@@ -256,12 +257,24 @@ class InstallerPlanGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             evidence_path, document = self.make_current_evidence(Path(temporary))
             document["report_schema_version"] = "9.9.9"
+            evidence_path.write_text(json.dumps(document), encoding="utf-8")
             _plan, blockers, _warnings = build_plan(
                 self.report, self.report_bytes, "guix",
                 profile_evidence=document,
                 profile_evidence_root=evidence_path.parent,
             )
         self.assertTrue(any("report_schema_version does not match" in item for item in blockers))
+
+    def test_build_plan_rejects_in_memory_bundle_different_from_evidence_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence_path, document = self.make_current_evidence(Path(temporary))
+            document["verified_by"] = "A different maintainer"
+            _plan, blockers, _warnings = build_plan(
+                self.report, self.report_bytes, "guix",
+                profile_evidence=document,
+                profile_evidence_root=evidence_path.parent,
+            )
+        self.assertTrue(any("does not match the profile's evidence.json bytes" in item for item in blockers))
 
     def test_build_plan_requires_profile_artifact_root(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -276,6 +289,7 @@ class InstallerPlanGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             evidence_path, document = self.make_current_evidence(Path(temporary))
             document["hardware_signature"] = {"pci_ids": ["ffff:ffff"], "match": "all"}
+            evidence_path.write_text(json.dumps(document), encoding="utf-8")
             _plan, blockers, _warnings = build_plan(
                 self.report, self.report_bytes, "guix",
                 profile_evidence=document,
@@ -290,6 +304,7 @@ class InstallerPlanGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             evidence_path, document = self.make_current_evidence(Path(temporary))
             document["hardware_signature"] = {"pci_ids": ["10de:1c82"], "match": "all"}
+            evidence_path.write_text(json.dumps(document), encoding="utf-8")
             plan, blockers, _warnings = build_plan(
                 report, report_bytes, "guix",
                 profile_evidence=document,
