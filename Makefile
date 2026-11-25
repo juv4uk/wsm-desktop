@@ -29,6 +29,7 @@ check-installer:
 
 check-qemu-harness:
 	$(PYTHON) tests/test_qemu_boot_smoke.py
+	$(PYTHON) -m unittest discover -s tests -p 'test_qemu_hwcheck_guest.py' -v
 
 check-validation-protocols:
 	$(PYTHON) tests/test_validation_protocol_privacy.py
