@@ -114,9 +114,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.file:
         target = args.file
-        problems = validate(load(target), artifact_root=target.parent) if target.is_file() else [
-            f"evidence file not found or not a regular file: {target}"
-        ]
+        try:
+            document = load(target)
+            problems = validate(document, artifact_root=target.parent)
+        except EvidenceUnavailable as exc:
+            problems = [str(exc)]
         if problems:
             print(f"{target}:", file=sys.stderr)
             for problem in problems:
