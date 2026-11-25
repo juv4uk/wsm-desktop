@@ -1,4 +1,4 @@
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 # Життєвий цикл WSM installer та системного provisioning
 
@@ -20,6 +20,10 @@ GNU Guix System — єдиний system/package backend першого WSM previ
 ## Перший підтримуваний вертикальний зріз
 
 Поки issue #112/#169 не розширені окремим прийнятим рішенням, тримайте перший install acceptance вузьким: x86_64, UEFI, один disposable disk, ext4 root, один користувач, без encryption та dual boot. Реальний фізичний ПК не є тестовою ціллю для APPLY.
+
+
+
+**Межа реалізації:** ця послідовність є цільовим lifecycle-контрактом, а не твердженням, що всі фази вже реалізовані. Поточні `wsm_install` partition/layout/backend модулі повертають діагностичні дані та argv; вони не виконують `APPLY`, `mkfs`, mount або `guix system init`. Absolute tool paths не доводять, що потрібні executables присутні в live image: до locked Guix package-closure/build + QEMU перевірки вони мають статус `not-assessed`. Див. #170 та #251.
 
 ## Обов'язкова послідовність
 
