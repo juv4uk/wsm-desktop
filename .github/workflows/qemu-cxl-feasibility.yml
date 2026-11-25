@@ -7,8 +7,10 @@ on:
     paths:
       - "scripts/ci_probe_qemu_cxl.py"
       - "scripts/ci_qemu_cxl_guest.py"
+      - "scripts/qemu_boot_smoke.py"
       - "tests/test_qemu_cxl_probe.py"
       - "tests/test_qemu_cxl_guest.py"
+      - "tests/test_qemu_boot_smoke.py"
       - "docs/testing/CXL-SYNTHETIC-TOPOLOGY.md"
       - ".github/workflows/qemu-cxl-feasibility.yml"
   pull_request:
