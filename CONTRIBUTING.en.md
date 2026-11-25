@@ -52,6 +52,35 @@ When `systems/minimal.scm` changes and Guix is available:
 Do not run `guix system init` against a physical disk to test a change. Integration
 testing happens on a disposable virtual machine.
 
+
+## Test quality and agent workflow
+
+Tests should protect behavior, not confirm that an agent wrote an expected line. Before adding a test, name the concrete regression it is meant to catch.
+
+- A new test must be **red without the fix and green with it**. Exercise the real function, CLI, contract, or security boundary—not just grep a file or assert a value that the test itself created.
+- Do not add tests for exact large generated-file contents, global record counts, or a declarative config line. Evaluate Scheme with Guix; test the real invariant a configuration is meant to provide.
+- Do not test a stub's behavior instead of the real component. When the real environment is unavailable, label structural checks as limited evidence.
+- Extend the existing test file for the relevant subsystem. A separate test file is justified only for a new independent contract or runner.
+- Start with the narrowest relevant tests, then run the full `make check` once before finishing the change. Do not rerun a suite just to get different output or in the hope that a random failure disappears.
+- Preserve complete test output in a log; do not pipe a test process through `grep`, `head`, or `tail` when that could hide the failure.
+- If a test in an untouched subsystem fails, run it once against the base commit. If it fails there too, record the pre-existing defect separately instead of masking it in the current PR.
+
+### Agent coordination and merging
+
+- Before starting, inspect the current issues, open pull requests, and latest `main`; do not create a parallel implementation of an existing solution.
+- Each PR has one coherent purpose. Do not edit the same file concurrently across branches without explicit coordination; make ownership clear and integrate finished changes sequentially.
+- Synchronize the branch with the latest `main` before review. After new commits land, re-check the current HEAD—not a previously green SHA.
+- `queued`, `pending`, `cancelled`, missing, or stale CI is not a successful check. Merge only after required checks complete on the exact HEAD, with no conflicts and a reviewed diff.
+- Report the exact commit, commands, results, and remaining limits. Never present a synthetic fixture as hardware evidence or attribute QEMU results to physical hardware.
+
+### Evidence levels and safety
+
+- Distinguish static/unit checks, Guix evaluation/build, QEMU with TCG, QEMU with KVM, and physical hardware. Each level proves only what was actually run there.
+- Use disposable `qcow2` disks for installer integration tests. Before starting, verify that the VM is not attached to host disks; never experiment on disks containing valuable data.
+- Until a separately reviewed and authorized APPLY path exists, the installer only emits a plan. Do not run `mkfs`, `mount`, `guix system init`, or other disk-changing operations on a developer machine.
+- Pin upstream sources to immutable revisions and retain checksum/signature evidence. Do not import foreign build recipes without review or execute downloaded upstream scripts simply because an updater found them.
+- If state updates or migrations are added later, they need explicit ownership, idempotency, user/system scope separation, and defined partial-failure behavior. Do not run silent background migrations that bypass visible user confirmation.
+
 ## Pull request
 
 Describe:
