@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Check local Markdown links and research-document status headers."""
+"""Check local Markdown links, status headers and documentation languages."""
 
 from __future__ import annotations
 
@@ -12,6 +12,18 @@ ROOT = Path(__file__).resolve().parents[1]
 LINK_PATTERN = re.compile(r"(?<!!)\[[^\]]*\]\(([^)]+)\)")
 STATUS_PATTERN = re.compile(r"(?m)^-?\s*(?:Статус|Status):")
 STATUS_HEADER_LINES = 20
+
+# Documents a first-time visitor reads. They are canonical in English; every
+# other tracked document under docs/ is canonical in Ukrainian.
+ENTRY_POINT_DOCUMENTS = (
+    "README.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+)
+TRANSLATION_SUFFIXES = (".uk.md", ".en.md")
+CYRILLIC_PATTERN = re.compile(r"[\u0400-\u04ff]")
+LATIN_PATTERN = re.compile(r"[A-Za-z]")
+CYRILLIC_TOLERANCE = 0.02
 
 
 def markdown_files() -> list[Path]:
@@ -79,8 +91,48 @@ def check_research_status() -> list[str]:
     return errors
 
 
+def is_english(text: str) -> bool:
+    """Return True when the text is Latin-script with no meaningful Cyrillic."""
+    latin = len(LATIN_PATTERN.findall(text))
+    cyrillic = len(CYRILLIC_PATTERN.findall(text))
+    return latin > 0 and cyrillic <= latin * CYRILLIC_TOLERANCE
+
+
+def canonical_of(path: Path) -> Path | None:
+    """Return the canonical document for a translation file, or None."""
+    name = path.name
+    for suffix in TRANSLATION_SUFFIXES:
+        if name.endswith(suffix):
+            return path.with_name(name[: -len(suffix)] + ".md")
+    return None
+
+
+def check_document_language() -> list[str]:
+    """Entry points must be English; translations must have an original."""
+    errors: list[str] = []
+    for relative in ENTRY_POINT_DOCUMENTS:
+        source = ROOT / relative
+        if not source.exists():
+            errors.append(f"{relative}: entry-point document is missing")
+            continue
+        if not is_english(source.read_text(encoding="utf-8")):
+            errors.append(
+                f"{relative}: entry-point documents are canonical in English "
+                f"(see CONTRIBUTING.md, documentation language policy)"
+            )
+
+    for source in markdown_files():
+        canonical = canonical_of(source)
+        if canonical is not None and not canonical.exists():
+            errors.append(
+                f"{source.relative_to(ROOT)}: translation without a canonical "
+                f"original at {canonical.relative_to(ROOT)}"
+            )
+    return errors
+
+
 def main() -> int:
-    errors = check_links() + check_research_status()
+    errors = check_links() + check_research_status() + check_document_language()
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1

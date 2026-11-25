@@ -1,21 +1,30 @@
-# Повідомлення про вразливості
+# Reporting vulnerabilities
 
 <!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 
-WSM Desktop перебуває на стадії pre-alpha. Інсталятор ще не призначений для використання на реальних системах.
+WSM Desktop is pre-alpha. The installer is not yet intended for use on real systems.
 
-## Як повідомити
+## How to report
 
-Не публікуйте експлойт, приватні дані або повний технічний опис невиправленої вразливості у відкритому issue.
+Do not publish an exploit, private data or a full technical description of an
+unfixed vulnerability in a public issue.
 
-Якщо в репозиторії GitHub доступна функція **Report a vulnerability** у вкладці Security, скористайтеся GitHub Private Vulnerability Reporting. Якщо вона недоступна, спочатку відкрийте непублічний канал зв'язку з власником репозиторію через GitHub, не розкриваючи технічних деталей публічно.
+If the repository offers **Report a vulnerability** under the Security tab, use
+GitHub Private Vulnerability Reporting. If it is unavailable, open a non-public
+channel to the repository owner through GitHub first, without disclosing technical
+details publicly.
 
-## Межі відповідальності
+## Scope
 
-- Вразливості upstream GNU Guix, Calamares, Nonguix та інших залежностей слід повідомляти відповідним upstream-проєктам.
-- Не надсилайте приватні ключі підпису, токени або образи з персональними даними.
-- До появи формального процесу security response не обіцяється конкретний строк виправлення.
+- Vulnerabilities in upstream GNU Guix, Calamares, Nonguix and other dependencies
+  belong with the respective upstream projects.
+- Do not send signing private keys, tokens or images containing personal data.
+- Until a formal security response process exists, no specific fix timeline is
+  promised.
 
-## Модель загроз
+## Threat model
 
-Особливо важливі для цього проєкту: підміна каналів і джерел пакетів, недовірені substitute servers, некоректна перевірка підписів, підвищення привілеїв інсталятора, помилковий вибір диска та втрата даних через некоректний план розмітки.
+Especially important for this project: substitution of channels and package
+sources, untrusted substitute servers, incorrect signature verification, installer
+privilege escalation, wrong disk selection, and data loss through an incorrect
+partitioning plan.
