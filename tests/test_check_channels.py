@@ -3,8 +3,8 @@
 
 from __future__ import annotations
 
-import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -187,9 +187,14 @@ class RepositoryTests(unittest.TestCase):
         else:
             self.assertEqual(main(["--policy", "compatibility"]), 0)
 
-    def test_explicit_compatibility_lock_is_checked_as_compatibility(self) -> None:
-        with self.subTest("free lock is never enough for Compatibility"):
-            self.assertTrue(check(GOOD, "compatibility"))
+    def test_explicit_compatibility_lock_argument_is_checked(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            lock = Path(temporary) / "channels.compatibility.lock.scm"
+            lock.write_text(with_channel(NONGUIX), encoding="utf-8")
+            self.assertEqual(
+                main(["--policy", "compatibility", "--lock", str(lock)]),
+                0,
+            )
 
 
 if __name__ == "__main__":
