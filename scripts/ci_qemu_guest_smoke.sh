@@ -35,7 +35,7 @@ KERNEL="${KERNEL_IMAGES[-1]}"
 GUEST_KERNEL="$WORK_DIR/guest-kernel"
 sudo cp "$KERNEL" "$GUEST_KERNEL"
 sudo chmod 0644 "$GUEST_KERNEL"
-printf "QEMU guest smoke: selected guest kernel %s\\n" "$(basename "$KERNEL")"
+printf "QEMU guest smoke: selected guest kernel %s\n" "$(basename "$KERNEL")"
 
 mkdir -p "$ROOTFS/bin" "$ROOTFS/dev" "$ROOTFS/proc" "$ROOTFS/sys"
 cp "$(command -v busybox)" "$ROOTFS/bin/busybox"
@@ -69,7 +69,7 @@ timeout --signal=TERM --kill-after=5s "$TIMEOUT_SECONDS" \
     -cpu max \
     -m 512 \
     -smp 1 \
-    -kernel "$KERNEL" \
+    -kernel "$GUEST_KERNEL" \
     -initrd "$INITRD" \
     -append "console=ttyS0,115200 rdinit=/init panic=-1" \
     -display none \
