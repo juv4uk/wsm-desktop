@@ -81,7 +81,6 @@ private:
                                int exitCode,
                                bool crashed);
     void handleProcessStartFailure(QProcess *process);
-    bool validateDiagnosticPlan(const QJsonObject &plan, QString *error) const;
     void handleHardwareResult(int exitCode, bool crashed);
     void handlePlanResult(int exitCode, bool crashed);
     void handleDiskResult(int exitCode, bool crashed);
