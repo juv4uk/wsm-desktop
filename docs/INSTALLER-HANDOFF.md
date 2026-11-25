@@ -362,7 +362,7 @@ Frontend реалізація може змінюватися (Calamares, інш
 
 **Не реалізовано** — кроки `REALIZE` та `APPLY`: адаптер не виконує `guix system init`, не монтує цільовий диск і не перевіряє його ідентичність перед записом. Це наступний крок і він потребує середовища з Guix.
 
-Тести: `tests/test_backend_guix.py` (20 тестів) перевіряють backend guardrails; `tests/test_guix_deploy_cli.py` (13 тестів) — standalone CLI, файлову безпеку та двофазне підтвердження. Вони не потребують Guix і не торкаються дисків.
+Тести: `tests/test_backend_guix.py` (32 тести) перевіряють backend guardrails; `tests/test_guix_deploy_cli.py` (17 тестів) — standalone CLI, файлову безпеку та двофазне підтвердження. Вони не потребують Guix і не торкаються дисків.
 
 
 ## Захист оглядової копії від bind-mount alias
