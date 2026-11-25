@@ -52,3 +52,13 @@ channels/free.scm описує вільний набір каналів. channel
 Для інтеграційних тестів створюйте окремий одноразовий qcow2 диск у QEMU. Перед запуском перевіряйте, що віртуальна машина не має підключення до реальних дисків хоста.
 
 Не виконуйте guix system init з /mnt або іншою ціллю на реальній машині, доки не буде завершено code review та інтеграційні тести WSM adapter.
+
+
+## Hardware report schema tests
+
+Install the pinned development validation dependency and run the full checks:
+
+    python3 -m pip install -r requirements-dev.txt
+    make check
+
+The hardware report contract uses JSON Schema Draft 2020-12. The test suite validates the schema, all synthetic fixtures, the local-only privacy invariants, and the rule that unknown observations are not treated as failures.
