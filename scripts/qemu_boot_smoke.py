@@ -84,16 +84,14 @@ def build_qemu_command(
     cpus: int,
 ) -> list[str]:
     """Build isolated QEMU arguments using JSON blockdev nodes and stdio serial."""
-    file_node = json.dumps({
-        "driver": "file",
-        "filename": str(qcow2),
-        "node-name": "wsm-disk-file",
-    }, separators=(",", ":"))
-    qcow2_node = json.dumps({
-        "driver": "qcow2",
-        "file": "wsm-disk-file",
-        "node-name": "wsm-disk",
-    }, separators=(",", ":"))
+    # QEMU -blockdev uses key/value syntax. Commas inside values must be
+    # doubled per QEMU's command-line option parsing rules.
+    qcow2_path = str(qcow2).replace(",", ",,")
+    file_node = (
+        "driver=file,node-name=wsm-disk-file,"
+        f"filename={qcow2_path}"
+    )
+    qcow2_node = "driver=qcow2,node-name=wsm-disk,file=wsm-disk-file"
     return [
         qemu,
         "-machine", "q35,accel=tcg",
