@@ -2,15 +2,17 @@
 
 <!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 
+> Цей документ описує початковий Guix-oriented deployment design. Nix/NixOS backend потребуватиме окремого adapter design; Guix-specific кроки не можна переносити до нього.
+
 ## Обрана версія для прототипу
 
 Початковий кандидат — **Calamares 3.4.2** (tag `v3.4.2`). До завершення feasibility/build перевірок це кандидат, а не підтримувана чи зафіксована релізна залежність. Деталі — у [оцінці можливості інтеграції](CALAMARES-FEASIBILITY.md).
 
 ## Ролі
 
-Calamares — це UI та workflow engine. Він не замінює штатний механізм розгортання Guix System.
+Calamares — це спільний UI та workflow engine. Він не замінює системний deployment engine обраного backend-а.
 
-WSM додає власну інтеграцію між даними, які зібрав Calamares, та Guix System configuration.
+Для Guix System WSM додає інтеграцію між даними Calamares та Guix System configuration. Nix/NixOS deployment має бути окремим backend adapter із власним порядком build та activation.
 
 ## Модульна модель Calamares
 
