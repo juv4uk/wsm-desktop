@@ -1,8 +1,8 @@
 # WSM Desktop
 
-> Independent desktop Linux project exploring Nix and GNU Guix as declarative system foundations.
+> Hardware-oriented desktop Linux project exploring Nix and GNU Guix as declarative system foundations.
 
-**WSM Desktop** is an independent project to build a comfortable, reproducible desktop Linux system with a graphical installer based on Calamares. Its architecture is now evaluating Nix and GNU Guix as separate native system backends; no decision has been made to merge their package stores or system managers.
+**WSM Desktop** is an independent, hardware-oriented project to build a comfortable, reproducible desktop Linux system with a graphical installer. Its central purpose is to select and integrate proven upstream kernels, drivers, firmware and hardware tools for concrete hardware configurations, while making compatibility evidence understandable before installation. Its architecture is evaluating Nix and GNU Guix as separate native system backends; no decision has been made to merge their package stores or system managers.
 
 The project is in **pre-alpha**. There is no supported installation image yet. The repository currently defines the project architecture and development foundations; it must not be used to install or modify a real system.
 
@@ -18,7 +18,7 @@ The project is in **pre-alpha**. There is no supported installation image yet. T
 - [ ] Hardware compatibility testing
 - [ ] First public preview image
 
-See [the roadmap](docs/ROADMAP.md) for milestones and acceptance criteria. The proposed dual-backend direction is recorded in [ADR 0004](docs/decisions/0004-nix-guix-backend-strategy.md) and is not yet ratified. The current Calamares 3.4.2 assessment is in [docs/CALAMARES-FEASIBILITY.md](docs/CALAMARES-FEASIBILITY.md).
+See [the roadmap](docs/ROADMAP.md) for milestones and acceptance criteria. The hardware-first/upstream-first direction is explored through [the hardware preflight](docs/hardware/HWCHECK.md) and the [upstream tooling assessment](docs/hardware/UPSTREAM-TOOLING.md). The proposed dual-backend direction is recorded in [ADR 0004](docs/decisions/0004-nix-guix-backend-strategy.md) and is not yet ratified. The current Calamares 3.4.2 assessment is in [docs/CALAMARES-FEASIBILITY.md](docs/CALAMARES-FEASIBILITY.md).
 
 ## Technology
 
@@ -36,12 +36,14 @@ WSM Desktop is not a fork of GNU Guix, Nonguix, or Calamares. We aim to reuse up
 ## Principles
 
 1. **Usable by default.** The goal is a comfortable desktop operating system, not a command-line-only demonstration.
-2. **Reproducible by design.** Pin channel revisions for release builds, record build inputs, and make system configuration reviewable.
-3. **Free software first.** The default profile must not require Nonguix or nonfree components.
-4. **Explicit compatibility choices.** Optional nonfree components must be clearly identified, justified by hardware needs, and selected knowingly.
-5. **No hidden trust.** Verify channel introductions, substitute signing keys, source revisions, and licenses. Never silently add a binary cache or signing key.
-6. **Fail safely.** The installer must validate the target plan before writing to disks. Incomplete or ambiguous plans must stop without making changes.
-7. **Upstream respect.** Preserve upstream notices, licenses, trademarks, and community policies.
+2. **Hardware-first.** Compatibility is a first-class system concern. WSM inventories concrete hardware and combinations, records evidence per device and function, and reports unknowns honestly instead of advertising unsupported compatibility.
+3. **Upstream-first reuse.** Prefer maintained upstream kernels, drivers, firmware, tools, packages and trusted build artifacts. Do not rebuild or reimplement what already works well. Build, patch or fork only when a measured compatibility or integration need justifies it; prefer contributing general fixes upstream.
+4. **Reproducible by design.** Pin channel and source revisions for release builds, record build inputs, and make system configuration reviewable.
+5. **Free software first.** The default profile must not require Nonguix or nonfree components.
+6. **Explicit compatibility choices.** Optional nonfree components must be clearly identified, justified by hardware needs, and selected knowingly.
+7. **No hidden trust.** Verify source provenance, licenses, signatures and substitute trust. Never silently add a binary cache or signing key.
+8. **Fail safely.** The installer must validate the hardware report and target plan before writing to disks. Unknown results must be explained; unsafe or impossible installation paths must stop before disk changes.
+9. **Upstream respect.** Preserve upstream notices, licenses, trademarks, security processes and community policies.
 
 ## Installation concept
 
