@@ -138,6 +138,13 @@ class FilesystemChoiceTests(unittest.TestCase):
         self.assertEqual(proposed.disk_size_bytes, 256 * GIB)
         self.assertEqual(proposed.acknowledgement, "/dev/nvme0n1")
 
+    def test_mutated_partition_plan_is_refused(self) -> None:
+        proposed = layout()
+        proposed.partitions[0]["name"] = "wsm-other"
+        with self.assertRaises(Refused) as caught:
+            plan_steps(proposed)
+        self.assertEqual(caught.exception.code, "layout.partition-plan")
+
     def test_missing_disk_size_is_refused(self) -> None:
         proposed = layout()
         proposed.disk_size_bytes = None
