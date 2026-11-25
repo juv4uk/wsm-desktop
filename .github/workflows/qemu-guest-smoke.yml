@@ -1,0 +1,91 @@
+name: QEMU guest initramfs smoke
+
+on:
+  push:
+    branches:
+      - work/qemu-guest-initramfs-smoke
+  pull_request:
+    paths:
+      - .github/workflows/qemu-guest-smoke.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  guest-boot:
+    name: Boot a minimal Linux guest under QEMU TCG
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Install isolated QEMU smoke-test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            qemu-system-x86 busybox-static cpio gzip
+
+      - name: Build initramfs and prove guest init execution
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          kernel_image="/boot/vmlinuz-$(uname -r)"
+          if [[ ! -r "$kernel_image" ]]; then
+            echo "Runner kernel image is unavailable: $kernel_image" >&2
+            ls -la /boot
+            exit 1
+          fi
+
+          workdir="$(mktemp -d)"
+          trap 'rm -rf "$workdir"' EXIT
+          rootfs="$workdir/root"
+          mkdir -p "$rootfs/bin" "$rootfs/dev"
+
+          cp "$(command -v busybox)" "$rootfs/bin/busybox"
+          ln -s busybox "$rootfs/bin/sh"
+
+          cat > "$rootfs/init" <<'INIT'
+          #!/bin/sh
+          /bin/busybox mount -t devtmpfs devtmpfs /dev
+          /bin/busybox echo WSM_QEMU_GUEST_INIT_OK > /dev/console
+          /bin/busybox poweroff -f
+          INIT
+          chmod 0755 "$rootfs/init"
+
+          (
+            cd "$rootfs"
+            find . -print0 | cpio --null --create --format=newc 2>/dev/null | gzip -9
+          ) > "$workdir/initramfs.cpio.gz"
+
+          serial_log="$workdir/serial.log"
+          set +e
+          timeout --signal=TERM --kill-after=5s 60s \
+            qemu-system-x86_64 \
+              -machine q35,accel=tcg \
+              -m 512M \
+              -smp 1 \
+              -kernel "$kernel_image" \
+              -initrd "$workdir/initramfs.cpio.gz" \
+              -append "console=ttyS0,115200 rdinit=/init loglevel=7 panic=-1" \
+              -display none \
+              -serial "file:$serial_log" \
+              -monitor none \
+              -nic none \
+              -no-reboot
+          qemu_status=$?
+          set -e
+
+          if [[ -f "$serial_log" ]]; then
+            cat "$serial_log"
+          fi
+
+          if [[ "$qemu_status" -ne 0 ]]; then
+            echo "QEMU did not exit successfully (status $qemu_status)." >&2
+            exit 1
+          fi
+          if [[ ! -f "$serial_log" ]] || ! grep --fixed-strings --quiet "WSM_QEMU_GUEST_INIT_OK" "$serial_log"; then
+            echo "Guest init marker was not observed on the serial console." >&2
+            exit 1
+          fi
+
+          echo "Confirmed: guest kernel booted and executed /init under QEMU TCG."
