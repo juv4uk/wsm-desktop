@@ -21,9 +21,10 @@ from check_profile_evidence import (  # noqa: E402
     validate_directory,
     read_document,
 )
+from wsm_install.plan import build_plan  # noqa: E402
 
 BASE = {
-    "schema": "wsm-profile-evidence/1",
+    "schema": "wsm-profile-evidence/2",
     "profile": {"vendor": "ASUS", "model": "H170-PRO", "slug": "asus/h170-pro"},
     "report_id": "0f3c9a1e-2b44-4c8d-9f10-77a1b2c3d4e5",
     "report_schema_version": "1.0.0",
@@ -198,6 +199,104 @@ class RuleTests(unittest.TestCase):
         self.assertEqual(validate(bundle(verified_by="web agent")), [])
         self.assertTrue(validate(bundle(verified_by="John Smith")))
         self.assertTrue(validate(bundle(verified_by="someone@example.com")))
+
+
+class InstallerPlanGateTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        report_path = ROOT / "tests" / "fixtures" / "hardware" / "desktop-observed.json"
+        cls.report_bytes = report_path.read_bytes()
+        cls.report = json.loads(cls.report_bytes)
+
+    def make_current_evidence(self, root: Path) -> tuple[Path, dict]:
+        evidence_path = write_profile(root)
+        document = json.loads(evidence_path.read_text(encoding="utf-8"))
+        document["report_id"] = self.report["report_id"]
+        document["report_schema_version"] = self.report["schema_version"]
+        evidence_path.write_text(json.dumps(document), encoding="utf-8")
+        return evidence_path, document
+
+    def test_build_plan_accepts_report_bound_evidence_and_exposes_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            evidence_path, document = self.make_current_evidence(root)
+            plan, blockers, _warnings = build_plan(
+                self.report, self.report_bytes, "guix",
+                profile_evidence=document,
+                profile_evidence_root=evidence_path.parent,
+            )
+        self.assertFalse(any("hardware profile evidence" in item for item in blockers))
+        self.assertEqual(plan["profile_evidence"]["report_id"], self.report["report_id"])
+        self.assertEqual(plan["profile_evidence"]["hardware_match"], "manual-review-required")
+
+    def test_build_plan_rejects_artifact_bytes_changed_after_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            evidence_path, document = self.make_current_evidence(root)
+            (evidence_path.parent / "artifacts" / "dmesg.txt").write_bytes(b"tampered after manifest")
+            _plan, blockers, _warnings = build_plan(
+                self.report, self.report_bytes, "guix",
+                profile_evidence=document,
+                profile_evidence_root=evidence_path.parent,
+            )
+        self.assertTrue(any("sha256 mismatch" in item for item in blockers))
+
+    def test_build_plan_rejects_evidence_from_another_report(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence_path, document = self.make_current_evidence(Path(temporary))
+            document["report_id"] = "another-report"
+            _plan, blockers, _warnings = build_plan(
+                self.report, self.report_bytes, "guix",
+                profile_evidence=document,
+                profile_evidence_root=evidence_path.parent,
+            )
+        self.assertTrue(any("report_id does not match" in item for item in blockers))
+
+    def test_build_plan_rejects_evidence_from_another_report_schema(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence_path, document = self.make_current_evidence(Path(temporary))
+            document["report_schema_version"] = "9.9.9"
+            _plan, blockers, _warnings = build_plan(
+                self.report, self.report_bytes, "guix",
+                profile_evidence=document,
+                profile_evidence_root=evidence_path.parent,
+            )
+        self.assertTrue(any("report_schema_version does not match" in item for item in blockers))
+
+    def test_build_plan_requires_profile_artifact_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            _evidence_path, document = self.make_current_evidence(Path(temporary))
+            _plan, blockers, _warnings = build_plan(
+                self.report, self.report_bytes, "guix",
+                profile_evidence=document,
+            )
+        self.assertTrue(any("without an evidence directory" in item for item in blockers))
+
+    def test_build_plan_rejects_hardware_signature_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence_path, document = self.make_current_evidence(Path(temporary))
+            document["hardware_signature"] = {"pci_ids": ["ffff:ffff"], "match": "all"}
+            _plan, blockers, _warnings = build_plan(
+                self.report, self.report_bytes, "guix",
+                profile_evidence=document,
+                profile_evidence_root=evidence_path.parent,
+            )
+        self.assertTrue(any("hardware_signature does not match" in item for item in blockers))
+
+    def test_build_plan_reports_a_matching_hardware_signature(self) -> None:
+        report = copy.deepcopy(self.report)
+        report["devices"][0].setdefault("identity", {})["pci_id"] = "10de:1c82"
+        report_bytes = json.dumps(report, ensure_ascii=False).encode("utf-8")
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence_path, document = self.make_current_evidence(Path(temporary))
+            document["hardware_signature"] = {"pci_ids": ["10de:1c82"], "match": "all"}
+            plan, blockers, _warnings = build_plan(
+                report, report_bytes, "guix",
+                profile_evidence=document,
+                profile_evidence_root=evidence_path.parent,
+            )
+        self.assertFalse(any("hardware profile evidence" in item for item in blockers))
+        self.assertEqual(plan["profile_evidence"]["hardware_match"], "matched")
 
 
 class DirectoryTests(unittest.TestCase):
