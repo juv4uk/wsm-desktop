@@ -179,7 +179,7 @@ class SourceResolutionTests(unittest.TestCase):
 class LiveProfileTests(unittest.TestCase):
     def test_live_profile_inherits_the_desktop_profile(self) -> None:
         text = profile("live.scm")
-        self.assertIn('(include "desktop.scm")', text)
+        self.assertIn('"/desktop.scm"', text)
         self.assertIn("(inherit base-os)", text)
 
     def test_live_profile_installs_the_wsm_tools(self) -> None:
