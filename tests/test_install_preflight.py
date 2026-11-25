@@ -60,7 +60,7 @@ def make_profile_evidence(report: dict, root: Path, report_bytes: bytes) -> dict
         "not_assessed": ["physical-device-functionality"],
         "artifacts": [
             {
-                "kind": "test-log",
+                "kind": "functional-test-log",
                 "path": "artifacts/dmesg.txt",
                 "sha256": hashlib.sha256(payload).hexdigest(),
             },
