@@ -6,13 +6,17 @@ on:
       - research/qemu-cxl-feasibility
     paths:
       - "scripts/ci_probe_qemu_cxl.py"
+      - "scripts/ci_qemu_cxl_guest.py"
       - "tests/test_qemu_cxl_probe.py"
+      - "tests/test_qemu_cxl_guest.py"
       - "docs/testing/QEMU-CXL-FEASIBILITY.md"
       - ".github/workflows/qemu-cxl-feasibility.yml"
   pull_request:
     paths:
       - "scripts/ci_probe_qemu_cxl.py"
+      - "scripts/ci_qemu_cxl_guest.py"
       - "tests/test_qemu_cxl_probe.py"
+      - "tests/test_qemu_cxl_guest.py"
       - "docs/testing/QEMU-CXL-FEASIBILITY.md"
       - ".github/workflows/qemu-cxl-feasibility.yml"
   workflow_dispatch:
@@ -28,7 +32,7 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
-      - name: Install QEMU emulator
+      - name: Install QEMU emulator and read-only module tooling
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends qemu-system-x86 kmod
@@ -36,3 +40,20 @@ jobs:
         run: python scripts/ci_probe_qemu_cxl.py
       - name: Run probe unit tests
         run: python -m unittest discover -s tests -p "test_qemu_cxl_probe.py" -v
+
+  qemu-cxl-guest:
+    name: Discover emulated CXL Type 3 in an isolated Linux guest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Install QEMU, module, and initramfs tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            qemu-system-x86 kmod zstd cpio gzip busybox-static
+      - name: Run host-side CXL guest safety tests
+        run: python -m unittest discover -s tests -p "test_qemu_cxl_guest.py" -v
+      - name: Boot guest, load CXL modules inside guest, and inspect read-only sysfs
+        run: python scripts/ci_qemu_cxl_guest.py
