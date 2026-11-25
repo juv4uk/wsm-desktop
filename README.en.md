@@ -2,9 +2,6 @@
 
 > English translation. The canonical document is [README.md](README.md); in any disagreement, the Ukrainian text wins.
 
-> English translation. The canonical document is [README.md](README.md);
-> in any disagreement the Ukrainian text wins.
-
 > Hardware-oriented desktop Linux based on GNU Guix System.
 
 **WSM Desktop** is an independent, hardware-oriented project to build a comfortable, reproducible desktop Linux system with a graphical installer. Its central purpose is to select and integrate proven upstream kernels, drivers, firmware and hardware tools for concrete hardware configurations, while making compatibility evidence understandable before installation. GNU Guix System is the selected system backend for the first release; Nix/NixOS is deferred, not rejected. The project does not merge their package stores or system managers.
@@ -87,19 +84,19 @@ Selected WSM installer frontend (not selected yet)
               v
        WSM backend adapter
               |
-              +--> Nix/NixOS deployment path
+              +--> GNU Guix deployment path (selected, ADR 0004)
               |
-              +--> GNU Guix deployment path
+              +--> Nix/NixOS path (deferred, not implemented)
               |
               v
        installed WSM Desktop system
 ```
 
-This is a design target, not a working installer yet. Nix and Guix deployment must remain separate backend implementations until comparative tests justify a supported release model.
+This is a design target, not a working installer yet. The Guix adapter renders an `operating-system` declaration from a confirmed plan and returns allow-listed argv; it does not execute the command, mount filesystems or write to a disk. Nix/NixOS remains deferred and is not part of the first installation path.
 
 ### Backend ownership
 
-Each installed WSM system must have exactly one backend responsible for system configuration and activation. The Nix/NixOS and Guix deployment paths are separate and must not both attempt to manage the same root filesystem, bootloader, or service manager.
+Each installed WSM system must have exactly one backend responsible for system configuration and activation. The first release supports only GNU Guix System; Nix/NixOS remains deferred. The project will not let two backends manage the same root filesystem, bootloader, or service manager.
 
 For the **Guix backend**, the generated Guix configuration owns the target file systems, user accounts, services, and bootloader. We must not let a stock Calamares bootloader job and `guix system init` both attempt to install or configure the bootloader. If Calamares is selected, its generic user-creation step must not be assumed to create a correct declarative Guix `user-account`.
 
