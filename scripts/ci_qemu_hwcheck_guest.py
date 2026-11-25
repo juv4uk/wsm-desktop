@@ -16,6 +16,7 @@ import sys
 import tarfile
 import tempfile
 import urllib.request
+from io import BytesIO
 from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -34,7 +35,9 @@ PYTHON_URL = (
 PYTHON_SHA256 = "75b92c55bc6a5f58fe4d08fc5261c983b2b17930192d62946fe7c9cf6fd66316"
 REPORT_BEGIN = "WSM_HWCHECK_REPORT_BEGIN"
 REPORT_END = "WSM_HWCHECK_REPORT_END"
-REPORT_PREFIX = "WSM_HWCHECK_REPORT_Z64:"
+REPORT_CHUNK_PREFIX = "WSM_HWCHECK_REPORT_CHUNK:"
+REPORT_CHUNK_CHARS = 32
+MAX_REPORT_ENCODED_CHARS = 800_000
 MAX_PYTHON_ARCHIVE_BYTES = 40 * 1024 * 1024
 MAX_TAR_MEMBERS = 50_000
 MAX_TAR_EXPANDED_BYTES = 256 * 1024 * 1024
@@ -88,7 +91,9 @@ if report_path.stat().st_size > {max_report_bytes}:
     raise SystemExit("guest report exceeds the 512 KiB report ceiling")
 raw = report_path.read_bytes()
 encoded = base64.b64encode(gzip.compress(raw, mtime=0)).decode("ascii")
-print("{report_prefix}" + encoded)
+for sequence, offset in enumerate(range(0, len(encoded), {report_chunk_chars})):
+    chunk = encoded[offset:offset + {report_chunk_chars}]
+    print("{report_chunk_prefix}" + f"{{sequence:06d}}:" + chunk)
 PYREPORT
 then
     guest_fail "report-encoding"
@@ -206,7 +211,9 @@ def render_guest_init(library_path: str) -> str:
     return GUEST_INIT.format(
         ld_library_path=library_path,
         report_begin=REPORT_BEGIN,
-        report_prefix=REPORT_PREFIX,
+        report_chunk_prefix=REPORT_CHUNK_PREFIX,
+        report_chunk_chars=REPORT_CHUNK_CHARS,
+        report_begin=REPORT_BEGIN,
         report_end=REPORT_END,
         max_report_bytes=MAX_REPORT_BYTES,
     )
@@ -365,28 +372,53 @@ def _find_runner_kernel() -> Path:
 
 
 def _decode_guest_report(serial: str) -> dict:
-    """Decode one CRLF-tolerant gzip/base64 report with a strict expansion bound."""
-    serial = serial.replace("\\r\\n", "\\n").replace("\\r", "\\n")
+    """Reassemble short serial chunks and decode a size-bounded gzip/base64 report."""
+    # QEMU serial console commonly emits CRLF even when the guest writes LF.
+    serial = serial.replace("\r\n", "\n").replace("\r", "\n")
     if REPORT_BEGIN not in serial or REPORT_END not in serial:
         raise RuntimeError("guest report boundary markers were not fully captured")
-    matches = re.findall(
-        rf"^{re.escape(REPORT_PREFIX)}([A-Za-z0-9+/=]+)$",
-        serial,
+
+    pattern = re.compile(
+        rf"^{re.escape(REPORT_CHUNK_PREFIX)}(?P<sequence>\d{{6}}):"
+        rf"(?P<data>[A-Za-z0-9+/=]+)$",
         flags=re.MULTILINE,
     )
-    if len(matches) != 1:
-        raise RuntimeError(f"expected one compressed guest report, found {len(matches)}")
-    if len(matches[0]) > 800_000:
-        raise RuntimeError("compressed guest report exceeds the serial payload ceiling")
+    chunks: dict[int, str] = {}
+    encoded_size = 0
+    for match in pattern.finditer(serial):
+        sequence = int(match.group("sequence"))
+        data = match.group("data")
+        if sequence in chunks:
+            raise RuntimeError(f"duplicate guest report chunk sequence: {sequence}")
+        if len(data) > REPORT_CHUNK_CHARS:
+            raise RuntimeError(f"guest report chunk {sequence} exceeds the line-size limit")
+        chunks[sequence] = data
+        encoded_size += len(data)
+        if encoded_size > MAX_REPORT_ENCODED_CHARS:
+            raise RuntimeError("compressed guest report exceeds the serial payload ceiling")
+
+    if not chunks:
+        raise RuntimeError("no guest report chunks were observed")
+    expected_sequences = list(range(len(chunks)))
+    if sorted(chunks) != expected_sequences:
+        raise RuntimeError("guest report chunks are missing or out of sequence")
+    for sequence in expected_sequences[:-1]:
+        if len(chunks[sequence]) != REPORT_CHUNK_CHARS:
+            raise RuntimeError(f"guest report chunk {sequence} is unexpectedly short")
+    encoded = "".join(chunks[sequence] for sequence in expected_sequences)
+
     try:
-        compressed = base64.b64decode(matches[0], validate=True)
+        compressed = base64.b64decode(encoded, validate=True)
         with gzip.GzipFile(fileobj=BytesIO(compressed), mode="rb") as stream:
             payload = stream.read(MAX_REPORT_BYTES + 1)
             if len(payload) > MAX_REPORT_BYTES or stream.read(1):
                 raise RuntimeError("decompressed guest report exceeds the 512 KiB ceiling")
-        return json.loads(payload.decode("utf-8"))
+        report = json.loads(payload.decode("utf-8"))
     except (ValueError, OSError, EOFError, UnicodeError, json.JSONDecodeError) as exc:
         raise RuntimeError(f"cannot decode guest hardware report: {exc}") from exc
+    if not isinstance(report, dict):
+        raise RuntimeError("guest report root must be a JSON object")
+    return report
 
 
 def _validate_report(report: dict) -> tuple[int, int]:
