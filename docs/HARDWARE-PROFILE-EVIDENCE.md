@@ -51,11 +51,11 @@ JSON Schema перевіряє форму. Скрипт перевіряє те,
 ## Створення чернетки з реального звіту
 
 ```sh
-python3 scripts/draft_profile_evidence.py \\
-  --report hwcheck-report.json \\
-  --vendor GIGABYTE \\
-  --model "H170 Gaming 3" \\
-  --slug gigabyte/h170-gaming-3 \\
+python3 scripts/draft_profile_evidence.py \
+  --report hwcheck-report.json \
+  --vendor GIGABYTE \
+  --model "H170 Gaming 3" \
+  --slug gigabyte/h170-gaming-3 \
   --out profiles/hardware/gigabyte/h170-gaming-3/evidence.json
 ```
 
@@ -97,7 +97,7 @@ python3 scripts/draft_profile_evidence.py \\
 CLI приймає явний параметр `--profile-evidence PATH`. Шлях має вказувати на `evidence.json`; локальні artifact paths рахуються від його батьківської теки. Planner перевіряє збіг `report_id` і `report_schema_version`, точний SHA-256 source-report bytes, і хеш `profile.scm` з його поточними байтами; крім того, перераховує SHA-256 кожного artifact. Цей аргумент не запускає Guix, не змінює диски та не виконує мережевих запитів.
 
 ```sh
-wsm-install --preflight --report report.json --backend guix --dry-run \\
+wsm-install --preflight --report report.json --backend guix --dry-run \
   --profile-evidence profiles/hardware/vendor/model/evidence.json
 ```
 
