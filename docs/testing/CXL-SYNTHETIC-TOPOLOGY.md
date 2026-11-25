@@ -183,3 +183,20 @@ done
 7. [ndctl-test-runner: QEMU-based CXL test harness](https://github.com/pmem/ndctl-test-runner/tree/7d5619a59f9fe27be38a8c8d643124c00968dab2)
 8. [GitHub Actions Ubuntu 24.04 runner image release 20261122.23](https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261122.23)
 9. [QEMU RFC: initialize Type 3 regions at guest boot](https://lore-kernel.gnuweeb.org/qemu-devel/0b67947b-e4ee-4e47-b61f-c6ae06501298%40gmail.com/T/) — RFC only, not baseline behavior.
+
+## Реалізація CXL guest regression runner
+
+Для повторюваного end-to-end smoke у цьому окремому дослідницькому CI додано runner:
+
+- `scripts/ci_probe_qemu_cxl.py` — host-side snapshot kernel config/module artifacts і QEMU qdev topology; не завантажує host modules.
+- `scripts/ci_qemu_cxl_guest.py` — копіює лише dependency closure модулів, яку повернув `modprobe --show-depends` для exact `uname -r`, у тимчасовий initramfs; запускає те саме ядро в QEMU TCG із volatile Type 3 device.
+- `tests/test_qemu_cxl_probe.py` та `tests/test_qemu_cxl_guest.py` — unit/safety tests; `make check-cxl-guest` запускає ці тести окремо; обидві групи тестів також входять до `make check`.
+- `.github/workflows/qemu-cxl-feasibility.yml` — окрема workflow lane для qdev та guest-stage; не додається до обов'язкового hardware preflight. QEMU guest lane запускається лише в CI, а не в live інсталяторі.
+
+У guest CXL modules завантажуються лише в його disposable kernel. `/proc` і `/sys` монтуються read-only. Runner не створює disk, NIC, CXL region чи namespace; не записує decoder configuration і не запускає poison/scrub/ECS/sanitize/repair/erase/firmware actions. Host dependency resolver використовує лише `modprobe --show-depends`; host modules не завантажуються. Serial/stderr обмежені спільним QEMU reader.
+
+На failure path дозволені лише короткі stage/status codes та агреговані counts. Raw `dmesg`, повний sysfs listing, BDF, serial numbers, HPA/DPA coordinates і poison data не виводяться. QEMU запускається з `-no-user-config`, `-nodefaults`, `-nic none` та без дисків/host passthrough.
+
+Позитивний acceptance вимагає не лише QEMU qdev, а фактичного guest-side CXL module load і хоча б одного `mem*` object у `/sys/bus/cxl/devices`; окремо перевіряються доступні `uport`/`dport` symlink-и. Відсутність endpoint↔memdev relationship лишається `unknown`, якщо kernel не експонує прямий edge. Успіх означає лише synthetic QEMU Type 3 enumeration у точному runner kernel/QEMU build.
+
+Поточний QEMU пакунок GitHub runner — 8.2.2, а не upstream stable 11.1.3. Тому для кожного запуску потрібно записувати exact runner image, `uname -r`, QEMU version, module dependency set і workflow head SHA; не переносити цей evidence на іншу комбінацію kernel/QEMU без повторного прогону.
