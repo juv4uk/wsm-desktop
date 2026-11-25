@@ -15,6 +15,7 @@ from typing import Any
 from jsonschema import Draft202012Validator, FormatChecker
 
 from .plan import build_plan, canonical_json, summarize_report
+from .profile import EvidenceUnavailable, load as load_profile_evidence
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SCHEMA = ROOT / "schemas" / "hardware-report.schema.json"
@@ -34,6 +35,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--dry-run", action="store_true", help="required; never deploys or writes disks")
     parser.add_argument("--schema", type=Path, default=DEFAULT_SCHEMA, help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--profile-evidence",
+        type=Path,
+        metavar="PATH",
+        help="optional evidence.json for a hardware profile; its artifact files are checked read-only",
+    )
     parser.add_argument("--plan-output", metavar="PATH", help="write draft plan; stdout is used otherwise")
     parser.add_argument("--quiet", action="store_true", help="suppress human summary")
     return parser
@@ -59,6 +66,7 @@ def _safe_plan_output_path(
     output_value: str,
     report_path: Path,
     schema_path: Path,
+    extra_protected_paths: tuple[Path, ...] = (),
 ) -> tuple[Path | None, str | None]:
     """Resolve a regular-file destination without aliasing inputs or device nodes."""
     requested = Path(output_value)
@@ -70,7 +78,7 @@ def _safe_plan_output_path(
         return None, "plan output parent is not a directory"
 
     destination = parent / requested.name
-    for source in (report_path, schema_path):
+    for source in (report_path, schema_path, *extra_protected_paths):
         try:
             source_resolved = source.resolve(strict=True)
         except OSError as exc:
@@ -155,7 +163,23 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     assert raw is not None
-    plan, blockers, warnings = build_plan(report, raw, args.backend)
+    profile_evidence = None
+    profile_evidence_root = None
+    if args.profile_evidence is not None:
+        try:
+            profile_evidence = load_profile_evidence(args.profile_evidence)
+        except EvidenceUnavailable as exc:
+            print(f"wsm-install: invalid profile evidence: {exc}", file=sys.stderr)
+            return 2
+        profile_evidence_root = args.profile_evidence.parent
+
+    plan, blockers, warnings = build_plan(
+        report,
+        raw,
+        args.backend,
+        profile_evidence,
+        profile_evidence_root,
+    )
     if not args.quiet:
         print(summarize_report(report), file=sys.stderr)
         for warning in warnings:
@@ -170,7 +194,10 @@ def main(argv: list[str] | None = None) -> int:
     rendered = canonical_json(plan) + "\n"
     if args.plan_output:
         destination, path_error = _safe_plan_output_path(
-            args.plan_output, Path(args.report), args.schema
+            args.plan_output,
+            Path(args.report),
+            args.schema,
+            (args.profile_evidence,) if args.profile_evidence is not None else (),
         )
         if path_error:
             print(f"wsm-install: unsafe plan output: {path_error}", file=sys.stderr)
