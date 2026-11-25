@@ -83,19 +83,22 @@ channel resolution/build явно з'являється `channel authentication 
 
 ```sh
 # BIOS
-python3 scripts/qemu_boot_smoke.py --iso build/wsm-desktop.iso \
+python3 scripts/qemu_boot_smoke.py --iso build/wsm-desktop-live.iso \
     --boot-marker WSM_LIVE_READY --timeout-seconds 300
 
 # UEFI (потрібен OVMF)
-python3 scripts/qemu_boot_smoke.py --iso build/wsm-desktop.iso \
+python3 scripts/qemu_boot_smoke.py --iso build/wsm-desktop-live.iso \
     --firmware uefi --ovmf-code /usr/share/OVMF/OVMF_CODE.fd \
+    --ovmf-vars /usr/share/OVMF/OVMF_VARS.fd \
     --boot-marker WSM_LIVE_READY --timeout-seconds 300
 ```
 
-Для UEFI harness робить **копію** змінного сховища OVMF у тимчасовому каталозі:
-гість не повинен писати у змінні хост-машини, і кожен прогін має бути
-незалежним. Без `--ovmf-code` запуск відмовляє з кодом 2, а не тихо
-перемикається на BIOS.
+Для UEFI використовуйте пару сумісних split-образів `OVMF_CODE.fd` і
+`OVMF_VARS.fd`. Harness підключає CODE read-only як pflash unit 0, а з
+VARS-template створює **приватну копію** в тимчасовому каталозі та підключає
+її writable як unit 1. Host templates не змінюються. Без будь-якого з двох
+параметрів (`--ovmf-code` або `--ovmf-vars`) запуск відмовляє з кодом 2,
+а не тихо перемикається на BIOS.
 
 Критерій NO-GO: збірка успішна, але маркера немає в жодному або в одному з
 режимів.

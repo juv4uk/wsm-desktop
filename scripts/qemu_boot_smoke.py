@@ -272,9 +272,10 @@ def build_qemu_command(
 ) -> list[str]:
     """Build isolated QEMU arguments using JSON blockdev nodes and stdio serial.
 
-    ``firmware="uefi"`` adds a read-only OVMF code pflash plus a writable copy of
-    the variable store, so the guest can set its own boot entries without
-    touching the host's. The acceptance for the live image requires both modes:
+    ``firmware="uefi"`` maps OVMF_CODE read-only at pflash unit 0 and a
+    private copy of the separate OVMF_VARS template writable at unit 1. The
+    host templates are never mapped writable or modified. The acceptance for
+    the live image requires both modes:
     a BIOS-only boot proves nothing about UEFI machines.
     """
     file_node = json.dumps({
@@ -290,10 +291,12 @@ def build_qemu_command(
     firmware_args: list[str] = []
     if firmware == "uefi":
         if ovmf_code is None or ovmf_vars is None:
-            raise ValueError("uefi boot needs both an OVMF code image and a variables file")
+            raise ValueError("uefi boot needs separate OVMF CODE and VARS images")
+        if ovmf_code.resolve() == ovmf_vars.resolve():
+            raise ValueError("OVMF CODE and VARS must be two different images")
         firmware_args = [
-            "-drive", f"if=pflash,format=raw,readonly=on,file={ovmf_code}",
-            "-drive", f"if=pflash,format=raw,file={ovmf_vars}",
+            "-drive", f"if=pflash,format=raw,unit=0,readonly=on,file={ovmf_code}",
+            "-drive", f"if=pflash,format=raw,unit=1,file={ovmf_vars}",
         ]
 
     return [
@@ -333,12 +336,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--firmware",
         choices=("bios", "uefi"),
         default="bios",
-        help="boot firmware; uefi needs --ovmf-code (acceptance requires both modes)",
+        help="boot firmware; uefi needs --ovmf-code and --ovmf-vars (acceptance requires both modes)",
     )
     parser.add_argument(
         "--ovmf-code",
         type=Path,
-        help="OVMF code image (e.g. /usr/share/OVMF/OVMF_CODE.fd) for --firmware uefi",
+        help="read-only OVMF code image (e.g. /usr/share/OVMF/OVMF_CODE.fd)",
+    )
+    parser.add_argument(
+        "--ovmf-vars",
+        type=Path,
+        help="separate OVMF variable-store template (e.g. /usr/share/OVMF/OVMF_VARS.fd)",
     )
     parser.add_argument("--dry-run", action="store_true", help="print the isolated QEMU command only")
     return parser
@@ -366,18 +374,27 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     ovmf_vars: Path | None = None
     if args.firmware == "uefi":
-        if args.ovmf_code is None:
+        if args.ovmf_code is None or args.ovmf_vars is None:
             print(
-                "qemu-boot-smoke: --firmware uefi requires --ovmf-code; "
+                "qemu-boot-smoke: --firmware uefi requires both --ovmf-code and --ovmf-vars; "
                 "a BIOS-only boot does not prove the UEFI path",
                 file=sys.stderr,
             )
             return 2
         if not args.ovmf_code.is_file():
             print(
-                f"qemu-boot-smoke: OVMF code image not found: {args.ovmf_code}",
+                f"qemu-boot-smoke: OVMF CODE image not found: {args.ovmf_code}",
                 file=sys.stderr,
             )
+            return 2
+        if not args.ovmf_vars.is_file():
+            print(
+                f"qemu-boot-smoke: OVMF VARS template not found: {args.ovmf_vars}",
+                file=sys.stderr,
+            )
+            return 2
+        if args.ovmf_code.resolve() == args.ovmf_vars.resolve():
+            print("qemu-boot-smoke: OVMF CODE and VARS must be separate files", file=sys.stderr)
             return 2
 
     with tempfile.TemporaryDirectory(prefix="wsm-qemu-smoke-") as temporary:
@@ -387,7 +404,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             # A writable copy per run: the guest must never write to the host's
             # variable store, and a fresh store keeps runs independent.
             ovmf_vars = work / "OVMF_VARS.fd"
-            shutil.copyfile(args.ovmf_code, ovmf_vars)
+            # Clone the VARS template for this run; never expose the host template writable.
+            shutil.copyfile(args.ovmf_vars, ovmf_vars)
         command = build_qemu_command(
             qemu, iso, qcow2, args.memory_mib, args.cpus,
             firmware=args.firmware,

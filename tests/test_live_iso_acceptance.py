@@ -9,15 +9,20 @@ incomplete UEFI invocation instead of silently booting BIOS.
 
 from __future__ import annotations
 
+import contextlib
+import io
+import json
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import qemu_boot_smoke  # noqa: E402
 from qemu_boot_smoke import build_qemu_command  # noqa: E402
 
 MARKER = "WSM_LIVE_READY"
@@ -59,13 +64,19 @@ class FirmwareSelectionTests(unittest.TestCase):
             ovmf_vars=Path("/tmp/OVMF_VARS.fd"),
         )
         joined = " ".join(command)
-        self.assertIn("readonly=on", joined)
+        self.assertIn("unit=0,readonly=on", joined)
         self.assertIn("OVMF_CODE.fd", joined)
+        self.assertIn("unit=1", joined)
         self.assertIn("OVMF_VARS.fd", joined)
 
     def test_uefi_without_vars_is_refused(self) -> None:
         with self.assertRaises(ValueError):
             self.command(firmware="uefi", ovmf_code=Path("/tmp/OVMF_CODE.fd"))
+
+    def test_uefi_code_and_vars_must_be_separate_images(self) -> None:
+        image = Path("/tmp/OVMF.fd")
+        with self.assertRaises(ValueError):
+            self.command(firmware="uefi", ovmf_code=image, ovmf_vars=image)
 
 
 class HarnessCliTests(unittest.TestCase):
@@ -84,6 +95,54 @@ class HarnessCliTests(unittest.TestCase):
             result = self.run_harness("--iso", iso.name, "--firmware", "uefi", "--dry-run")
         self.assertEqual(result.returncode, 2)
         self.assertIn("--ovmf-code", result.stderr)
+        self.assertIn("--ovmf-vars", result.stderr)
+
+    def test_uefi_requires_a_separate_vars_template(self) -> None:
+        with tempfile.NamedTemporaryFile(suffix=".iso") as iso, tempfile.NamedTemporaryFile(suffix=".fd") as code:
+            iso.write(b"not really an iso, but not empty")
+            iso.flush()
+            code.write(b"OVMF CODE")
+            code.flush()
+            result = self.run_harness(
+                "--iso", iso.name, "--firmware", "uefi", "--ovmf-code", code.name, "--dry-run"
+            )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--ovmf-vars", result.stderr)
+
+    def test_writable_copy_comes_from_vars_template_not_code(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            iso = root / "live.iso"
+            code = root / "OVMF_CODE.fd"
+            vars_template = root / "OVMF_VARS.fd"
+            iso.write_bytes(b"non-empty test ISO")
+            code.write_bytes(b"READ ONLY FIRMWARE CODE")
+            vars_template.write_bytes(b"UEFI VARIABLE STORE TEMPLATE")
+            copied = {}
+            original_copyfile = qemu_boot_smoke.shutil.copyfile
+
+            def capture_copy(source, destination):
+                result = original_copyfile(source, destination)
+                copied["source"] = Path(source).read_bytes()
+                copied["destination"] = Path(destination).read_bytes()
+                return result
+
+            output = io.StringIO()
+            with mock.patch.object(qemu_boot_smoke.shutil, "copyfile", side_effect=capture_copy):
+                with contextlib.redirect_stdout(output):
+                    status = qemu_boot_smoke.main([
+                        "--iso", str(iso), "--firmware", "uefi",
+                        "--ovmf-code", str(code), "--ovmf-vars", str(vars_template), "--dry-run"
+                    ])
+            self.assertEqual(status, 0)
+            self.assertEqual(copied["source"], vars_template.read_bytes())
+            self.assertEqual(copied["destination"], vars_template.read_bytes())
+            self.assertNotEqual(copied["destination"], code.read_bytes())
+            payload = json.loads(output.getvalue())
+            self.assertIn("unit=0,readonly=on", " ".join(payload["qemu_command"]))
+            self.assertIn("unit=1", " ".join(payload["qemu_command"]))
+            self.assertEqual(code.read_bytes(), b"READ ONLY FIRMWARE CODE")
+            self.assertEqual(vars_template.read_bytes(), b"UEFI VARIABLE STORE TEMPLATE")
 
     def test_dry_run_reports_the_firmware(self) -> None:
         with tempfile.NamedTemporaryFile(suffix=".iso") as iso:
