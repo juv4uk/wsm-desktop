@@ -54,10 +54,23 @@ channel resolution/build явно з'являється `channel authentication 
 Попередження `channel is not trusted` не приховується: воно фіксується
 в `manifest.json` для окремої перевірки.
 
+Збірка запускається однією командою:
+
+```sh
+make image-live
+```
+
 Результати за замовчуванням з'являються в `build/`:
-- `wsm-desktop-live.iso` — посилання на точний Guix store image;
-- `manifest.json` і `SHA256SUMS` — commit/lock/profile provenance, розмір та SHA-256;
+- `wsm-desktop-live.iso` — звичайний переносний ISO-файл; саме його передають QEMU harness і release uploader;
+- `.wsm-desktop-live.iso-root` — окреме GC-root посилання на незмінний Guix store object;
+- `manifest.json` і `SHA256SUMS` — source/lock/profile provenance, розмір та SHA-256 саме regular ISO;
 - `channels.resolved.scm`, `channel-resolution.log` і `build.log` — channel/build evidence.
+
+Перед публікацією builder перевіряє ISO9660 Primary Volume Descriptor
+(`CD001`, сектор 16), байтову відповідність матеріалізованого ISO store object
+та збіг resolved Guix channel commit із `channels.lock.scm`. Команда збірки
+використовує `--save-provenance`, щоб додати походження системної конфігурації
+до образу.
 
 Для іншого каталогу можна задати `WSM_ISO_DIR=/absolute/path`.
 Для наступної спроби використовуйте новий порожній каталог: скрипт не перезаписує
