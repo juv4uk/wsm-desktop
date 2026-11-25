@@ -23,7 +23,7 @@ class ValidationProtocolPrivacyTests(unittest.TestCase):
         self.assertIn("allowlisted parser", self.display)
 
     def test_display_identity_is_opaque_by_default(self) -> None:
-        self.assertIn("Opaque report-local ID та санітизовані capability facts", self.display)
+        self.assertIn("opaque report-local display ID із санітизованими capability facts", self.display)
         self.assertIn("manufacturer/model/name strings з EDID за замовчуванням", self.display)
         self.assertIn("явної згоди", self.display)
 
