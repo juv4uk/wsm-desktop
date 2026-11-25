@@ -23,6 +23,14 @@ def targets(text: str) -> set[str]:
     }
 
 
+def phony_targets(text: str) -> set[str]:
+    return {
+        target
+        for line in text.splitlines()
+        if line.startswith(".PHONY:")
+        for target in line.split(":", 1)[1].split()
+    }
+
 def aggregate(text: str) -> set[str]:
     for line in text.splitlines():
         if line.startswith("check:"):
@@ -46,6 +54,9 @@ class MakefileCoverageTests(unittest.TestCase):
         }
         self.python_targets = self.all_targets - self.guix_targets
 
+    def test_every_check_target_is_phony(self) -> None:
+        missing = sorted(self.all_targets - phony_targets(self.text))
+        self.assertEqual(missing, [], f"check targets missing from .PHONY: {missing}")
     def test_every_python_target_is_in_the_aggregate(self) -> None:
         missing = sorted(self.python_targets - aggregate(self.text))
         self.assertEqual(missing, [], f"not run by `make check`: {missing}")
