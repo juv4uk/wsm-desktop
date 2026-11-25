@@ -26,11 +26,12 @@ GNU/Linux build не називається static. Runner перевіряє EL
 
 ## Межі ізоляції
 
-- QEMU TCG, 512 MiB guest RAM, 1 vCPU, обмежений wall-clock timeout.
+- QEMU TCG, 2 GiB guest RAM, 1 vCPU, обмежений wall-clock timeout.
 - Гість завантажується з -kernel та initramfs; віртуального диска або CD-ROM немає.
 - -nic none; немає host block device, USB/GPU passthrough, shared folders або EFI variable store.
 - Python archive завантажується host runner до створення guest; гість не має мережевого інтерфейсу.
-- Serial і stderr читаються через злитий bounded QEMU reader; зберігаються обмежені хвости, а не необмежені логи.
+- Завантаження CPython обмежено 40 MiB; tar — 50 000 записів і 256 MiB розпакованих файлів; initramfs — 256 MiB; звіт — 512 KiB до gzip/base64.
+- Serial і stderr читаються через злитий bounded QEMU reader; зберігаються обмежені хвости, а не необмежені логи. Переповнення serial capture — hard failure, частковий звіт не приймається.
 - JSON Schema перевіряється на host. У гості немає jsonschema, pip чи package manager.
 
 ## Acceptance та інтерпретація
