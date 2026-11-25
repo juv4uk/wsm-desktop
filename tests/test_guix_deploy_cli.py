@@ -236,6 +236,40 @@ class GuixDeployCliTests(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("cannot open plan", stderr.getvalue())
 
+    def test_root_mountpoint_is_refused(self) -> None:
+        code, _stdout, stderr = self.run_cli(
+            "--output", str(self.output_path),
+            "--mountpoint", "/",
+            "--confirm-plan-sha256", self.plan["plan_sha256"],
+            "--confirm-target-digest", self.selection.digest(),
+        )
+        self.assertEqual(code, 2)
+        self.assertIn("must be /mnt", stderr)
+        self.assertFalse(self.output_path.exists())
+
+    def test_mountpoint_outside_mnt_is_refused(self) -> None:
+        code, _stdout, stderr = self.run_cli(
+            "--output", str(self.output_path),
+            "--mountpoint", "/tmp/wsm-target",
+            "--confirm-plan-sha256", self.plan["plan_sha256"],
+            "--confirm-target-digest", self.selection.digest(),
+        )
+        self.assertEqual(code, 2)
+        self.assertIn("must be /mnt", stderr)
+        self.assertFalse(self.output_path.exists())
+
+    def test_configuration_output_inside_target_mountpoint_is_refused(self) -> None:
+        target_output = Path("/mnt/wsm-cli-target-test.scm")
+        code, _stdout, stderr = self.run_cli(
+            "--output", str(target_output),
+            "--mountpoint", "/mnt",
+            "--confirm-plan-sha256", self.plan["plan_sha256"],
+            "--confirm-target-digest", self.selection.digest(),
+        )
+        self.assertEqual(code, 2)
+        self.assertIn("outside the target mountpoint", stderr)
+        self.assertFalse(target_output.exists())
+
     def test_malformed_mountpoint_refuses_without_file(self) -> None:
         code, _stdout, stderr = self.run_cli(
             "--output", str(self.output_path),
