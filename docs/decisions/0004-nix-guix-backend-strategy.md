@@ -1,9 +1,9 @@
-# ADR 0004: Nix і GNU Guix як окремі кандидати на системну основу WSM
+# ADR 0004: GNU Guix System — перший backend WSM; Nix/NixOS відкладено
 
 <!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 
 - Статус: **прийнято — перший backend GNU Guix, Nix відкладено**
-- Дата: 2026-11-25 (запропоновано), 2026-11-26 (прийнято)
+- Дата: 2026-11-25 (запропоновано та прийнято)
 - Пов'язане завдання: [#2](https://github.com/juv4uk/wsm-desktop/issues/2)
 - Уточнює: [ADR 0001 — GNU Guix System як системна основа](0001-guix-as-system-foundation.md)
 
@@ -114,8 +114,8 @@ Calamares більше не базовий кандидат на frontend: на�
 ### Статус доказової бази (2026-11-25)
 
 - Gate [#55](https://github.com/juv4uk/wsm-desktop/issues/55) вимагає реального boot-доказу, а не лише успішної збірки. Пакет доказів для Guix-шляху опубліковано в [#1](https://github.com/juv4uk/wsm-desktop/issues/1#issuecomment-7172142987): точний SHA, версії, exit codes, реальну ревізію каналу, `guix system build`, `guix system vm`, serial-маркер `wsm-desktop login:` з `vm_exit=0`, розкриття TCG і disposable-образи.
-- Окремого еквівалентного real-boot пакета для Nix/NixOS поки немає; тому цей ADR лишається `proposed`, а вибір primary backend-а в #2 не ратифіковано.
-- `--full-boot` через GRUB у TCG до ядра не дійшов і як успішний boot не заявляється.
+- Еквівалентного real-boot пакета для Nix/NixOS немає. Це не доказ порівняльної переваги Guix; це причина не затримувати перший WSM-реліз другим неперевіреним backend-ом. Перший реліз обмежується вже підтвердженим Guix-шляхом, а Nix залишається окремою дослідницькою гілкою. Gate #55 може продовжувати порівняльну оцінку, але більше не блокує реалізацію першого Guix-релізу.
+- `--full-boot` через GRUB у TCG до ядра не дійшов і як успішний boot не заявляється; підтверджений доказ стосується `guix system vm` із direct-kernel boot до login prompt.
 
 ## Експериментальний план
 
