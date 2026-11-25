@@ -127,10 +127,27 @@ class InstallerGuiContractTests(unittest.TestCase):
         self.assertIn("--smoke-test", workflow)
         self.assertNotIn("timeout --kill-after", workflow)
 
+    def test_disk_inventory_state_is_explicit_and_gates_review(self) -> None:
+        header = (GUI / "src" / "PreflightController.h").read_text(encoding="utf-8")
+        source = (GUI / "src" / "PreflightController.cpp").read_text(encoding="utf-8")
+        qml = (GUI / "qml" / "Main.qml").read_text(encoding="utf-8")
+        self.assertIn("diskInventoryState", header)
+        for state in ('"not-run"', '"loading"', '"loaded"', '"unavailable"'):
+            self.assertIn(state, source)
+            self.assertIn(state, qml)
+        self.assertIn('wsmController.diskInventoryState === "loaded"', qml)
+        self.assertIn('wsmController.diskInventoryState === "unavailable"', qml)
+        self.assertIn("Цей перегляд не дозволяє інсталяцію", qml)
+        tests = GUI / "tests" / "tst_installerflow.qml"
+        self.assertTrue(tests.is_file())
+        self.assertTrue((GUI / "qml" / "InstallerFlow.js").is_file())
+
     def test_qml_navigation_requires_a_validated_preflight(self) -> None:
         qml = (GUI / "qml" / "Main.qml").read_text(encoding="utf-8")
         self.assertIn("function canOpenStep(step)", qml)
         self.assertIn('wsmController.planStatus === "blocked"', qml)
+        self.assertIn('wsmController.diskInventoryState === "loaded"', qml)
+        self.assertIn('wsmController.diskInventoryState === "unavailable"', qml)
         self.assertIn("enabled: root.canOpenStep(index)", qml)
         self.assertIn("root.canOpenStep(root.currentStep + 1)", qml)
         self.assertIn("Qt.quit()", qml)
