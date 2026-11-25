@@ -366,13 +366,14 @@ def _find_runner_kernel() -> Path:
 
 def _decode_guest_report(serial: str) -> dict:
     """Decode one CRLF-tolerant gzip/base64 report with a strict expansion bound."""
-    serial = serial.replace("\\r\\n", "\\n").replace("\\r", "\\n")
+    serial = serial.replace(chr(13) + chr(10), chr(10)).replace(chr(13), chr(10))
     if REPORT_BEGIN not in serial or REPORT_END not in serial:
         raise RuntimeError("guest report boundary markers were not fully captured")
+    # Match the prefix anywhere in a line: TTY/UART implementations may
+    # prepend control characters. Only the base64 payload is retained.
     matches = re.findall(
-        rf"^{re.escape(REPORT_PREFIX)}([A-Za-z0-9+/=]+)$",
+        rf"{re.escape(REPORT_PREFIX)}([A-Za-z0-9+/=]+)",
         serial,
-        flags=re.MULTILINE,
     )
     if len(matches) != 1:
         raise RuntimeError(f"expected one compressed guest report, found {len(matches)}")
@@ -527,7 +528,24 @@ def main() -> int:
                 f"serial first bytes:\n{serial_first}\nserial tail:\n{serial_last}"
             )
 
-        report = _decode_guest_report(serial)
+        try:
+            report = _decode_guest_report(serial)
+        except RuntimeError as exc:
+            lines = serial.replace(chr(13), chr(10)).splitlines()
+            diagnostic_lines = []
+            for line in lines[-60:]:
+                if REPORT_PREFIX in line:
+                    payload_part = line.split(REPORT_PREFIX, 1)[1]
+                    diagnostic_lines.append(
+                        f"{REPORT_PREFIX}[payload redacted; chars={len(payload_part)}]"
+                    )
+                else:
+                    diagnostic_lines.append(line[:500])
+            raise RuntimeError(
+                f"{exc}; guest serial diagnostics (report payload redacted):\\n"
+                + "\\n".join(diagnostic_lines)
+                + f"\\nQEMU stderr tail: {stderr[-1200:]}"
+            ) from exc
         device_count, functional_test_count = _validate_report(report)
         print(
             "PASS: actual wsm_hwcheck ran inside a QEMU TCG guest and its report "
