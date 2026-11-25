@@ -1,0 +1,90 @@
+{
+  "schema": "wsm-profiles/1",
+  "status": "proposal — not built, not measured",
+  "note": "Компоненти названо так, як вони звуться в Guix. Наявність у списку не означає, що пакет є в зафіксованій ревізії каналу: це перевіряється окремо на authenticated lock (#39).",
+  "ownership": {
+    "system": "пакети й служби, які ставить operating-system; користувач не може їх прибрати без нової декларації",
+    "user": "manifest, який користувач додає сам; не входить у базовий образ і не збільшує його closure"
+  },
+  "profiles": {
+    "desktop": {
+      "summary": "Базовий щоденний графічний сценарій",
+      "extends": [],
+      "license": "free",
+      "hardware": "x86_64-v1; будь-який GPU, який тягне Mesa або NVK",
+      "system_packages": [
+        "plasma-desktop",
+        "sddm",
+        "network-manager",
+        "pulseaudio",
+        "font-dejavu",
+        "font-liberation",
+        "font-noto",
+        "font-noto-cjk"
+      ],
+      "user_packages": []
+    },
+    "developer": {
+      "summary": "Компілятори, налагодження, SDK, ізольовані середовища",
+      "extends": [
+        "desktop"
+      ],
+      "license": "free",
+      "hardware": "та сама база, що й desktop",
+      "system_packages": [],
+      "user_packages": [
+        "gcc-toolchain",
+        "clang-toolchain",
+        "gdb",
+        "strace",
+        "git",
+        "python",
+        "guix"
+      ]
+    },
+    "creator": {
+      "summary": "Мультимедіа, графіка, творчі інструменти",
+      "extends": [
+        "desktop"
+      ],
+      "license": "free",
+      "hardware": "потребує перевіреного GPU-прискорення; без нього лишається software rendering",
+      "system_packages": [],
+      "user_packages": [
+        "gimp",
+        "inkscape",
+        "blender",
+        "ffmpeg",
+        "obs"
+      ]
+    },
+    "compatibility": {
+      "summary": "Явна опція для драйверів і firmware поза вільною політикою",
+      "extends": [],
+      "license": "nonfree",
+      "hardware": "залежить від конкретного пристрою; кожен компонент обирається окремо",
+      "system_packages": [],
+      "user_packages": [],
+      "components": [
+        {
+          "name": "nvidia-driver",
+          "licence": "proprietary, NVIDIA EULA",
+          "redistribution": "перевірити перед включенням в ISO",
+          "reason": "Pascal і новіші GPU без вільного прискорення"
+        },
+        {
+          "name": "linux-firmware",
+          "licence": "кілька nonfree, залежить від файлу",
+          "redistribution": "перевірити по кожному файлу окремо",
+          "reason": "Wi-Fi, Bluetooth і частина периферії"
+        }
+      ]
+    }
+  },
+  "rules": [
+    "desktop не повинен містити жодного компонента developer або creator",
+    "compatibility не входить до жодного вільного профілю і не вмикається за замовчуванням",
+    "кожен nonfree компонент має названу ліцензію і статус права на розповсюдження",
+    "профіль, який неможливо зібрати на зафіксованій ревізії каналу, не вважається існуючим"
+  ]
+}
