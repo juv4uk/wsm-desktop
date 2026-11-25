@@ -166,6 +166,33 @@ class LiveProfileTests(unittest.TestCase):
         self.assertIn("wsm-tools", (ROOT / "wsm" / "packages" / "wsm.scm").read_text(encoding="utf-8"))
 
 
+class LiveIsoSecurityTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.text = profile("live-iso.scm")
+        match = re.search(r"\(users\s+\(cons\s+\(user-account([\s\S]*?)%base-user-accounts", cls.text)
+        if match is None:
+            raise AssertionError("live ISO must declare its dedicated unprivileged live account")
+        cls.user = match.group(1)
+
+    def test_live_account_has_no_reusable_or_empty_password(self) -> None:
+        self.assertIn("(password #f)", self.user)
+        self.assertNotIn('(password "wsm")', self.user)
+        self.assertNotIn('"wheel"', self.user)
+        self.assertIn('(auto-login-user "wsm")', self.text)
+        self.assertIn('(auto-login-session "plasma")', self.text)
+
+    def test_console_login_rejects_empty_passwords(self) -> None:
+        self.assertIn("(use-service-modules base ", self.text)
+        self.assertIn("(login-service-type config =>", self.text)
+        self.assertIn("(allow-empty-passwords? #f)", self.text)
+
+    def test_live_image_does_not_enable_passwordless_sudo(self) -> None:
+        self.assertNotIn("NOPASSWD", self.text)
+        self.assertNotIn("sudoers", self.text.lower())
+        self.assertNotIn('(supplementary-groups '("wheel"', self.text)
+
+
 class IsoScriptTests(unittest.TestCase):
     def test_script_refuses_to_run_without_guix(self) -> None:
         text = (ROOT / "scripts" / "build_iso.sh").read_text(encoding="utf-8")
