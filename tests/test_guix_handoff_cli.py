@@ -8,16 +8,19 @@ from contextlib import redirect_stderr, redirect_stdout
 import hashlib
 import io
 import json
-import os
 from pathlib import Path
+import sys
 import tempfile
 import unittest
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from wsm_install.backend_guix import TargetSelection
 from wsm_install.guix_handoff import main
 from wsm_install.plan import build_plan, canonical_json
 
-ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests" / "fixtures" / "hardware" / "desktop-observed.json"
 
 
