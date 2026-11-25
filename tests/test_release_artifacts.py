@@ -5,11 +5,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import tarfile
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 from pathlib import Path
 
@@ -138,6 +140,18 @@ class HardwareCheckScriptTests(unittest.TestCase):
                     prepare_output(str(output))
             self.assertTrue(output.is_dir())
 
+    def test_output_mode_mismatch_fails_closed(self) -> None:
+        from scripts.wsm_hardware_check import prepare_output
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "existing"
+            output.mkdir()
+            os.chmod(output, 0o755)
+            with patch("scripts.wsm_hardware_check.os.chmod", return_value=None):
+                with self.assertRaisesRegex(SystemExit, "output directory mode is"):
+                    prepare_output(str(output))
+            self.assertEqual(list(output.iterdir()), [])
+
     def test_report_must_be_a_regular_file(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             result = subprocess.run(
@@ -201,6 +215,108 @@ class ReleaseBundleTests(unittest.TestCase):
             self.assertIn(f"wsm-desktop-{release['version']}/RELEASE-INFO.json", names)
             self.assertIn(f"wsm-desktop-{release['version']}/scripts/wsm_hardware_check.py", names)
 
+
+    def test_bundle_uses_the_exact_commit_recorded_in_manifest(self) -> None:
+        from scripts.build_release_bundle import build, load_release
+
+        pinned_commit = "1" * 40
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / f"wsm-desktop-{load_release()['version']}-source.tar.gz"
+            with (
+                patch(
+                    "scripts.build_release_bundle.git_output",
+                    side_effect=[pinned_commit, ""],
+                ),
+                patch(
+                    "scripts.build_release_bundle.subprocess.run",
+                    return_value=SimpleNamespace(stdout=b"synthetic tar archive"),
+                ) as archive_run,
+            ):
+                manifest = build(load_release()["version"], output)
+
+            archive_argv = archive_run.call_args.args[0]
+            self.assertEqual(archive_argv[-1], pinned_commit)
+            self.assertEqual(manifest["source_commit"], pinned_commit)
+            self.assertIn(pinned_commit, manifest["build"]["command"])
+
+    def test_bundle_rolls_back_when_sha256s_fsync_fails(self) -> None:
+        from scripts.build_release_bundle import build, load_release
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / f"wsm-desktop-{load_release()['version']}-source.tar.gz"
+            with (
+                patch(
+                    "scripts.build_release_bundle.git_output",
+                    side_effect=["2" * 40, ""],
+                ),
+                patch(
+                    "scripts.build_release_bundle.subprocess.run",
+                    return_value=SimpleNamespace(stdout=b"synthetic tar archive"),
+                ),
+                patch(
+                    "scripts.build_release_bundle.os.fsync",
+                    side_effect=[None, OSError("injected SHA256SUMS fsync failure")],
+                ),
+            ):
+                with self.assertRaisesRegex(OSError, "SHA256SUMS fsync failure"):
+                    build(load_release()["version"], output)
+
+            self.assertEqual(list(Path(directory).iterdir()), [])
+
+    def test_bundle_rolls_back_when_manifest_fsync_fails(self) -> None:
+        from scripts.build_release_bundle import build, load_release
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / f"wsm-desktop-{load_release()['version']}-source.tar.gz"
+            with (
+                patch(
+                    "scripts.build_release_bundle.git_output",
+                    side_effect=["3" * 40, ""],
+                ),
+                patch(
+                    "scripts.build_release_bundle.subprocess.run",
+                    return_value=SimpleNamespace(stdout=b"synthetic tar archive"),
+                ),
+                patch(
+                    "scripts.build_release_bundle.os.fsync",
+                    side_effect=[
+                        None,
+                        None,
+                        OSError("injected manifest fsync failure"),
+                    ],
+                ),
+            ):
+                with self.assertRaisesRegex(OSError, "manifest fsync failure"):
+                    build(load_release()["version"], output)
+
+            self.assertEqual(list(Path(directory).iterdir()), [])
+
+    def test_bundle_refuses_special_filesystem_output_locations(self) -> None:
+        from scripts.build_release_bundle import _prepare_artifact_paths, load_release
+
+        version = load_release()["version"]
+        filename = f"wsm-desktop-{version}-source.tar.gz"
+        for special in (Path("/dev"), Path("/proc"), Path("/sys")):
+            with self.subTest(special=str(special)):
+                with self.assertRaisesRegex(SystemExit, "output directory must not be under"):
+                    _prepare_artifact_paths(version, special / filename)
+
+    def test_bundle_refuses_existing_manifest_before_creating_tarball(self) -> None:
+        from scripts.build_release_bundle import build, load_release
+
+        release = load_release()
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            output = parent / f"wsm-desktop-{release['version']}-source.tar.gz"
+            manifest = parent / "release-manifest.json"
+            manifest.write_text("preserve existing manifest", encoding="utf-8")
+            with self.assertRaisesRegex(SystemExit, "refusing to overwrite existing artifact"):
+                build(release["version"], output)
+            self.assertFalse(output.exists())
+            self.assertEqual(
+                manifest.read_text(encoding="utf-8"),
+                "preserve existing manifest",
+            )
 
     def test_bundle_refuses_existing_tarball_without_overwriting(self) -> None:
         from scripts.build_release_bundle import build, load_release
