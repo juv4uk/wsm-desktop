@@ -179,7 +179,12 @@ def validate_plan(plan: dict[str, Any]) -> None:
     )
 
 
-def _matches(pattern: re.Pattern[str], value: object) -> bool:,    """Use full-string matching; `re.match` plus `$` accepts a final newline.""",    return isinstance(value, str) and pattern.fullmatch(value) is not None,,def validate_selection(selection: TargetSelection) -> None:
+def _matches(pattern: re.Pattern[str], value: object) -> bool:
+    """Use full-string matching; `re.match` plus `$` accepts a final newline."""
+    return isinstance(value, str) and pattern.fullmatch(value) is not None
+
+
+def validate_selection(selection: TargetSelection) -> None:
     """Refuse any selection value that is not in its allow-list."""
     _require(
         _matches(DEVICE_PATTERN, selection.disk),
@@ -213,7 +218,8 @@ def _matches(pattern: re.Pattern[str], value: object) -> bool:,    """Use full-s
         f"locale {selection.locale!r} is not a valid locale name",
     )
     _require(
-        _matches(TIMEZONE_PATTERN, selection.timezone),
+        _matches(TIMEZONE_PATTERN, selection.timezone)
+        and all(part not in {".", ".."} for part in selection.timezone.split("/")),
         "selection.timezone",
         f"timezone {selection.timezone!r} is not a valid timezone name",
     )
