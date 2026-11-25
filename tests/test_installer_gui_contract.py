@@ -30,6 +30,7 @@ class InstallerGuiContractTests(unittest.TestCase):
         source = (GUI / "src" / "PreflightController.cpp").read_text(encoding="utf-8")
         self.assertIn("process->start(program, arguments);", source)
         self.assertIn('QStringLiteral("wsm_hwcheck")', source)
+        self.assertIn('QStringLiteral("--compact")', source)
         self.assertIn('QStringLiteral("wsm_install")', source)
         self.assertIn('QStringLiteral("--preflight")', source)
         self.assertIn('QStringLiteral("--backend")', source)
