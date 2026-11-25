@@ -125,6 +125,18 @@ class QemuHwcheckGuestSafetyTests(unittest.TestCase):
             guest._validate_installer_plan_result(
                 serial.replace("backend_invoked=false", "backend_invoked=true")
             )
+        with self.assertRaisesRegex(RuntimeError, "missing or unexpected fields"):
+            guest._validate_installer_plan_result(
+                serial.replace(";plan_sha256=" + "a" * 64, "")
+            )
+        with self.assertRaisesRegex(RuntimeError, "missing or unexpected fields"):
+            guest._validate_installer_plan_result(
+                serial.replace(";plan_sha256=" + "a" * 64, ";extra=unexpected;plan_sha256=" + "a" * 64)
+            )
+        with self.assertRaisesRegex(RuntimeError, "valid canonical plan digest"):
+            guest._validate_installer_plan_result(
+                serial.replace("plan_sha256=" + "a" * 64, "plan_sha256=not-a-digest")
+            )
 
     def test_guest_installer_plan_marker_rejects_missing_or_duplicate_markers(self) -> None:
         marker = (
