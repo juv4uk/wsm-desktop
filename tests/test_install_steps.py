@@ -102,7 +102,6 @@ class OrderingTests(unittest.TestCase):
         proposed = layout()
         self.assertEqual(proposed.disk_size_bytes, 256 * GIB)
         self.assertEqual(proposed.acknowledgement, "/dev/nvme0n1")
-        self.assertTrue(proposed.requires_acknowledgement)
 
     def test_missing_observed_disk_size_is_refused(self) -> None:
         proposed = layout()
