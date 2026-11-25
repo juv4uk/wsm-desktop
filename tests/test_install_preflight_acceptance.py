@@ -10,12 +10,15 @@ import io
 import json
 import socket
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 FIXTURES = ROOT / "tests" / "fixtures" / "hardware"
 
 from wsm_install.cli import main
@@ -131,9 +134,10 @@ class InstallerCliAcceptanceTests(unittest.TestCase):
         digest = plan.pop("plan_sha256")
         calculated = hashlib.sha256(canonical_json(plan).encode("utf-8")).hexdigest()
         self.assertEqual(digest, calculated)
-        self.assertEqual(plan["source_report"]["sha256"], hashlib.sha256(
-            (FIXTURES / "desktop-observed.json").read_bytes()
-        ).hexdigest())
+        self.assertEqual(
+            plan["source_report"]["sha256"],
+            hashlib.sha256((FIXTURES / "desktop-observed.json").read_bytes()).hexdigest(),
+        )
 
     def test_optional_unknown_device_remains_in_plan_without_blocking(self) -> None:
         report = json.loads((FIXTURES / "desktop-observed.json").read_text(encoding="utf-8"))
