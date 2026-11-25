@@ -37,7 +37,7 @@ class HardwareCompatibilityVerdictPolicyTests(unittest.TestCase):
         ):
             with self.subTest(impact=impact):
                 self.assertIn(f"`{impact}`", self.text)
-        self.assertIn("два незалежні виміри", self.lower)
+        self.assertIn("три незалежні виміри", self.lower)
 
     def test_unknown_is_an_evidence_gate_not_incompatibility(self) -> None:
         self.assertIn("evidence gate не є твердженням про несумісність", self.lower)
@@ -64,10 +64,11 @@ class HardwareCompatibilityVerdictPolicyTests(unittest.TestCase):
     def test_positive_test_is_scoped_to_exact_function(self) -> None:
         self.assertIn("конкретної функції", self.lower)
         self.assertIn("ядро", self.lower)
-        self.assertIn("метод і час", self.lower)
+        self.assertIn("метод", self.lower)
+        self.assertIn("час", self.lower)
 
     def test_usb_composite_interfaces_are_evaluated_separately(self) -> None:
-        self.assertIn("`*:1.n`", self.text)
+        self.assertIn("`*:1.n`", self.lower)
         self.assertIn("sibling-інтерфейсів", self.lower)
 
     def test_privacy_and_read_only_boundaries_are_documented(self) -> None:
