@@ -1,9 +1,19 @@
 name: Repository checks
 
 on:
+  # Not on every push to every branch: pull_request already covers branches that
+  # matter, and a push trigger on all refs produced ~1800 runs in eight hours.
   push:
+    branches:
+      - main
   pull_request:
   workflow_dispatch:
+
+# One run per ref: a newer push cancels the run it supersedes instead of
+# queueing behind it.
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

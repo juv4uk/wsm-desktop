@@ -12,6 +12,10 @@ on:
       - ".github/workflows/qemu-harness-iso-integration.yml"
   workflow_dispatch:
 
+concurrency:
+  group: qemu-harness-iso-integration-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

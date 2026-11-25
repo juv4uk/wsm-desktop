@@ -16,6 +16,10 @@ on:
       - "tests/test_qemu_hwcheck_guest.py"
   workflow_dispatch:
 
+concurrency:
+  group: hwcheck-qemu-guest-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
