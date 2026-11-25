@@ -98,6 +98,12 @@ class PathHijackTests(unittest.TestCase):
     Every step here is meant to run as root, so no step may rely on PATH.
     """
 
+    def test_sgdisk_uses_absolute_guix_profile_path(self) -> None:
+        steps = plan_steps(layout())
+        first = next(step for step in steps if tool(step) == "sgdisk")
+        self.assertEqual(first.command[0], TRUSTED_TOOLS["sgdisk"])
+        self.assertEqual(first.command[0], "/run/current-system/profile/sbin/sgdisk")
+
     def test_every_command_starts_with_an_absolute_path(self) -> None:
         for firmware, disk in (("uefi", "/dev/nvme0n1"), ("bios", "/dev/sda")):
             steps = plan_steps(layout(firmware, disk))
