@@ -1,417 +1,528 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Read-only CXL sysfs enumeration inside a disposable QEMU Linux guest.
-
-The host only resolves and copies the selected kernel's CXL module dependency
-closure. No host modules are loaded and no host sysfs attributes are written.
-"""
+"""Boot a disposable QEMU CXL Type-3 guest and summarize its read-only sysfs topology."""
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
-from pathlib import Path
+import re
 import shutil
+import signal
+import selectors
 import subprocess
+import sys
 import tempfile
-from typing import Any
+import time
+from pathlib import Path
+from typing import Sequence
 
-MODULES = ("cxl_acpi", "cxl_pci", "cxl_mem", "cxl_port")
-MAX_MODULE_COUNT = 128
-MAX_EXPANDED_MODULE_BYTES = 128 * 1024 * 1024
+from scripts.qemu_boot_smoke import run_bounded_process
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.qemu_boot_smoke import run_bounded_process
+
+KERNEL_TIMEOUT_SECONDS = 90
+MAX_MODULE_ARCHIVE_BYTES = 32 * 1024 * 1024
+MAX_MODULE_TOTAL_BYTES = 96 * 1024 * 1024
+MAX_INITRAMFS_BYTES = 256 * 1024 * 1024
 MAX_SERIAL_BYTES = 64 * 1024
+MAX_STDERR_BYTES = 32 * 1024
+MAX_MODULE_COUNT = 128
+GUEST_DONE_MARKER = "WSM_CXL_GUEST_DONE"
+MODULE_REQUESTS = ("cxl_acpi", "cxl_pci", "cxl_mem", "cxl_port")
 
 
-class ProbeError(RuntimeError):
-    """Raised when the disposable guest cannot safely enumerate CXL."""
+class CxlGuestError(RuntimeError):
+    """The isolated CXL guest did not reach the expected evidence."""
 
 
-def run(command: list[str], timeout: int = 20) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        command,
-        check=True,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=timeout,
-    )
+SAFE_GUEST_STATUSES = {
+    "type3-memdev-discovered",
+    "cxl-sysfs-topology-incomplete",
+}
+SAFE_GUEST_STAGES = {
+    "WSM_CXL_STAGE_INIT",
+    "WSM_CXL_STAGE_MODULE_LOAD",
+}
+GUEST_COUNTS_PATTERN = re.compile(
+    r"^WSM_CXL_COUNTS devices=([0-9]{1,5}) ports=([0-9]{1,5}) "
+    r"memdevs=([0-9]{1,5}) edges=([0-9]{1,5})$"
+)
 
 
-def resolve_module_dependencies(kernel_release: str) -> list[Path]:
-    """Resolve the exact kernel module closure without loading any host module."""
-    modprobe = shutil.which("modprobe")
-    if not modprobe:
-        raise ProbeError("modprobe is required to resolve CXL module dependencies")
-    module_root = (Path("/lib/modules") / kernel_release).resolve()
-    paths: list[Path] = []
-    # modprobe accepts one target module per invocation. Resolve each driver
-    # separately and merge the ordered dependency closures.
-    for module in MODULES:
-        result = run(
-            [modprobe, "--show-depends", "--set-version", kernel_release, module],
-            timeout=20,
+def summarize_guest_serial(serial: str) -> str:
+    """Return only allow-listed guest markers; never echo raw console output."""
+    stages = [line for line in SAFE_GUEST_STAGES if line in serial.splitlines()]
+    status = "unknown"
+    counts = "not-reported"
+    for line in serial.splitlines():
+        if line.startswith("WSM_CXL_STATUS="):
+            candidate = line.split("=", 1)[1]
+            status = candidate if candidate in SAFE_GUEST_STATUSES else "unknown"
+        match = GUEST_COUNTS_PATTERN.fullmatch(line)
+        if match:
+            labels = ("devices", "ports", "memdevs", "edges")
+            counts = ",".join(
+                f"{label}={int(value)}"
+                for label, value in zip(labels, match.groups())
+            )
+    return f"stages={','.join(sorted(stages)) or 'none'};status={status};counts={counts}"
+
+
+def parse_insmod_plan(text: str, module_root: Path) -> list[Path]:
+    """Accept only resolved insmod paths contained in the current kernel module tree."""
+    root = module_root.resolve(strict=True)
+    ordered: list[Path] = []
+    seen: set[Path] = set()
+    for line in text.splitlines():
+        fields = line.split()
+        if len(fields) < 2 or fields[0] != "insmod":
+            continue
+        source = Path(fields[1]).resolve(strict=True)
+        if root not in source.parents:
+            raise CxlGuestError("module dependency escaped the selected kernel tree")
+        if not source.name.endswith((".ko", ".ko.zst", ".ko.xz")):
+            continue
+        if source not in seen:
+            ordered.append(source)
+            seen.add(source)
+    return ordered
+
+
+def resolve_module_order(kernel_release: str, modprobe: str = "modprobe") -> list[Path]:
+    """Read modprobe's dependency plan without loading or unloading host modules."""
+    root = Path("/lib/modules") / kernel_release
+    root.resolve(strict=True)
+    ordered: list[Path] = []
+    seen: set[Path] = set()
+    for module in MODULE_REQUESTS:
+        result = subprocess.run(
+            [modprobe, "--show-depends", module],
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=10,
+            check=False,
         )
-        for line in result.stdout.splitlines():
-            fields = line.split()
-            if len(fields) != 2 or fields[0] != "insmod":
-                continue
-            source = Path(fields[1]).resolve()
-            try:
-                source.relative_to(module_root)
-            except ValueError as exc:
-                raise ProbeError("modprobe returned a module outside the selected kernel tree") from exc
-            if source not in paths:
-                paths.append(source)
-    if not paths:
-        raise ProbeError("modprobe found no loadable CXL modules")
-    if len(paths) > MAX_MODULE_COUNT:
-        raise ProbeError("CXL dependency closure exceeds the module-count limit")
-    return paths
+        if result.returncode != 0:
+            raise CxlGuestError(
+                f"modprobe --show-depends {module} failed ({result.returncode}): "
+                f"{result.stderr[-1200:]}"
+            )
+        for source in parse_insmod_plan(result.stdout, root):
+            if source not in seen:
+                ordered.append(source)
+                seen.add(source)
+    if not ordered:
+        raise CxlGuestError("no loadable CXL modules were found")
+    if len(ordered) > MAX_MODULE_COUNT:
+        raise CxlGuestError(f"CXL dependency closure exceeds {MAX_MODULE_COUNT} modules")
+    return ordered
 
 
-def copy_module(source: Path, destination: Path) -> int:
-    """Copy one kernel module into initramfs, decompressing its package suffix."""
-    destination.parent.mkdir(parents=True, exist_ok=True)
+def decompress_module(source: Path, total_remaining: int) -> bytes:
+    """Decompress one module with a fixed memory ceiling and wall-clock timeout."""
+    size = source.stat().st_size
+    if size <= 0 or size > MAX_MODULE_ARCHIVE_BYTES:
+        raise CxlGuestError(
+            f"module archive size {size} is outside the allowed range: {source.name}"
+        )
+    if total_remaining <= 0:
+        raise CxlGuestError("CXL module dependency closure exhausted its aggregate byte budget")
+
     if source.name.endswith(".ko.zst"):
-        tool = shutil.which("zstd")
-        if not tool:
-            raise ProbeError("zstd is required to unpack the runner's CXL modules")
-        with destination.open("wb") as output:
-            subprocess.run(
-                [tool, "-d", "-q", "-c", str(source)],
-                check=True,
-                stdout=output,
-                stderr=subprocess.PIPE,
-                timeout=20,
-            )
+        command = ["zstd", "-q", "-d", "-c", str(source)]
     elif source.name.endswith(".ko.xz"):
-        tool = shutil.which("xz")
-        if not tool:
-            raise ProbeError("xz is required to unpack the selected kernel modules")
-        with destination.open("wb") as output:
-            subprocess.run(
-                [tool, "-d", "-c", str(source)],
-                check=True,
-                stdout=output,
-                stderr=subprocess.PIPE,
-                timeout=20,
-            )
+        command = ["xz", "-d", "-c", str(source)]
     elif source.name.endswith(".ko.gz"):
-        tool = shutil.which("gzip")
-        if not tool:
-            raise ProbeError("gzip is required to unpack the selected kernel modules")
-        with destination.open("wb") as output:
-            subprocess.run(
-                [tool, "-d", "-c", str(source)],
-                check=True,
-                stdout=output,
-                stderr=subprocess.PIPE,
-                timeout=20,
-            )
+        command = ["gzip", "-d", "-c", str(source)]
     else:
-        shutil.copy2(source, destination)
-    size = destination.stat().st_size
-    if size <= 0:
-        raise ProbeError("decompressed kernel module is empty")
-    return size
+        if size > total_remaining:
+            raise CxlGuestError(f"uncompressed module exceeds remaining budget: {source.name}")
+        payload = source.read_bytes()
+        if not payload or len(payload) > total_remaining:
+            raise CxlGuestError(f"uncompressed module exceeds remaining budget: {source.name}")
+        return payload
+
+    output_limit = min(MAX_MODULE_ARCHIVE_BYTES * 4, total_remaining)
+    result = run_bounded_process(
+        command,
+        timeout_seconds=15,
+        marker=None,
+        max_stdout_bytes=output_limit,
+        max_stderr_bytes=8 * 1024,
+    )
+    if result.timed_out:
+        raise CxlGuestError(f"module decompression timed out: {source.name}")
+    if result.stdout_truncated:
+        raise CxlGuestError(f"decompressed module exceeded {output_limit} bytes: {source.name}")
+    if result.returncode != 0:
+        raise CxlGuestError(f"module decompression failed for {source.name}")
+    payload = result.stdout_tail
+    if not payload or len(payload) > total_remaining:
+        raise CxlGuestError(f"decompressed module exceeds remaining budget: {source.name}")
+    return payload
 
 
-def render_init(load_paths: list[str]) -> str:
-    module_list = "\n".join(load_paths)
-    return """#!/bin/busybox sh
-exec >/dev/ttyS0 2>&1
-set -eu
+def run_bounded_file(
+    command: list[str],
+    *,
+    cwd: Path,
+    destination: Path,
+    timeout_seconds: float,
+    max_bytes: int,
+) -> int:
+    """Stream a child process to a new file with hard byte and time ceilings."""
+    if timeout_seconds <= 0 or max_bytes < 1:
+        raise ValueError("timeout_seconds and max_bytes must be positive")
+    process = subprocess.Popen(
+        command,
+        cwd=cwd,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        bufsize=0,
+        close_fds=True,
+        start_new_session=True,
+    )
+    if process.stdout is None:
+        process.kill()
+        process.wait()
+        raise CxlGuestError("child process stdout pipe was not created")
 
-/bin/busybox mount -t proc -o ro proc /proc
-/bin/busybox mount -t sysfs -o ro sysfs /sys
+    selector = selectors.DefaultSelector()
+    total = 0
+    deadline = time.monotonic() + timeout_seconds
+    try:
+        os.set_blocking(process.stdout.fileno(), False)
+        selector.register(process.stdout, selectors.EVENT_READ)
+        with destination.open("xb") as output:
+            while selector.get_map():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise CxlGuestError("initramfs pipeline exceeded its time limit")
+                events = selector.select(min(0.1, remaining))
+                for key, _ in events:
+                    chunk = os.read(key.fd, 64 * 1024)
+                    if not chunk:
+                        selector.unregister(key.fileobj)
+                        key.fileobj.close()
+                        continue
+                    total += len(chunk)
+                    if total > max_bytes:
+                        raise CxlGuestError(
+                            f"initramfs output exceeded the {max_bytes}-byte ceiling"
+                        )
+                    output.write(chunk)
 
-echo WSM_CXL_GUEST_BEGIN
-echo WSM_CXL_KERNEL=$(cat /proc/sys/kernel/osrelease)
+            try:
+                returncode = process.wait(timeout=max(0.1, deadline - time.monotonic()))
+            except subprocess.TimeoutExpired as exc:
+                raise CxlGuestError("initramfs pipeline exceeded its time limit") from exc
+            if returncode != 0:
+                raise CxlGuestError(f"initramfs pipeline failed with exit code {returncode}")
+            if total <= 0:
+                raise CxlGuestError("initramfs pipeline produced an empty archive")
+            return total
+    except BaseException:
+        if process.poll() is None:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except OSError:
+                try:
+                    process.kill()
+                except OSError:
+                    pass
+        try:
+            process.wait(timeout=1)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        try:
+            destination.unlink()
+        except FileNotFoundError:
+            pass
+        raise
+    finally:
+        selector.close()
+        if process.stdout is not None and not process.stdout.closed:
+            process.stdout.close()
 
-module_failed=0
-while IFS= read -r module; do
-    [ -n "$module" ] || continue
-    echo WSM_CXL_MODULE_ATTEMPT=$(/bin/busybox basename "$module")
-    if ! /bin/busybox insmod "$module"; then
-        echo WSM_CXL_MODULE_LOAD_ERROR
-        module_failed=1
-    fi
-done <<'WSM_MODULES'
-""" + module_list + """
-WSM_MODULES
-
-/bin/busybox sleep 2
-node_count=0
-memdev_count=0
-if [ -r /sys/firmware/acpi/tables/CEDT ]; then
-    value=$(/bin/busybox wc -c </sys/firmware/acpi/tables/CEDT)
-    echo WSM_CXL_CEDT_BYTES=$value
-else
-    echo WSM_CXL_CEDT_ABSENT
-fi
-acpi0017_count=0
-for node in /sys/bus/acpi/devices/ACPI0017:*; do
-    [ -e "$node" ] || [ -L "$node" ] || continue
-    acpi0017_count=$((acpi0017_count + 1))
-done
-echo WSM_CXL_ACPI0017_COUNT=$acpi0017_count
-for module in cxl_core cxl_acpi cxl_pci cxl_mem cxl_port; do
-    if [ -d "/sys/module/$module" ]; then
-        echo WSM_CXL_MODULE_LOADED=$module
-    else
-        echo WSM_CXL_MODULE_MISSING=$module
-        module_failed=1
-    fi
-done
-if [ -d /sys/bus/cxl/devices ]; then
-    for node in /sys/bus/cxl/devices/*; do
-        [ -e "$node" ] || [ -L "$node" ] || continue
-        name=$(/bin/busybox basename "$node")
-        node_count=$((node_count + 1))
-        echo WSM_CXL_NODE=$name
-        case "$name" in
-            mem[0-9]*) memdev_count=$((memdev_count + 1));;
-        esac
-        if [ -r "$node/devtype" ]; then
-            value=$(/bin/busybox cat "$node/devtype" 2>/dev/null || true)
-            echo WSM_CXL_DEVTYPE=$name:$value
-        fi
-    done
-else
-    echo WSM_CXL_BUS_ABSENT
-fi
-echo WSM_CXL_DMESG_BEGIN
-/bin/busybox dmesg | /bin/busybox grep -i cxl | /bin/busybox tail -n 80 || true
-echo WSM_CXL_DMESG_END
-echo WSM_CXL_NODE_COUNT=$node_count
-echo WSM_CXL_MEMDEV_COUNT=$memdev_count
-echo WSM_CXL_MODULE_FAILED=$module_failed
-echo WSM_CXL_GUEST_END
-/bin/busybox sync
-/bin/busybox poweroff -f
-"""
-
-
-def build_initramfs(kernel_release: str, modules: list[Path], work: Path) -> tuple[Path, int]:
-    root = work / "rootfs"
-    for name in ("bin", "dev", "proc", "sys", "tmp", "lib/modules"):
-        (root / name).mkdir(parents=True, exist_ok=True)
-
+def create_busybox_root(guest_root: Path) -> None:
     busybox = shutil.which("busybox")
     if not busybox:
-        raise ProbeError("busybox-static is required")
-    shutil.copy2(busybox, root / "bin/busybox")
-    for applet in ("sh", "mount", "insmod", "sleep", "cat", "basename", "sync", "poweroff", "dmesg", "grep", "tail", "wc"):
-        link = root / "bin" / applet
+        raise CxlGuestError("static BusyBox is unavailable")
+    applets = ("sh", "mount", "mkdir", "sleep", "poweroff", "insmod", "readlink")
+    available = set(subprocess.run(
+        [busybox, "--list"], capture_output=True, text=True, timeout=5, check=True
+    ).stdout.splitlines())
+    missing = [name for name in applets if name not in available]
+    if missing:
+        raise CxlGuestError(f"BusyBox is missing required applets: {', '.join(missing)}")
+
+    for directory in ("bin", "dev", "proc", "sys", "tmp", "lib/modules/cxl"):
+        (guest_root / directory).mkdir(parents=True, exist_ok=True)
+    shutil.copy2(busybox, guest_root / "bin/busybox")
+    for applet in applets:
+        link = guest_root / "bin" / applet
         if not link.exists():
             link.symlink_to("busybox")
-
-    for name, major, minor, mode in (
-        ("console", 5, 1, "600"),
-        ("ttyS0", 4, 64, "600"),
-        ("null", 1, 3, "666"),
+    for node, mode, major, minor in (
+        ("console", "600", 5, 1),
+        ("null", "666", 1, 3),
+        ("zero", "666", 1, 5),
+        ("ttyS0", "600", 4, 64),
     ):
         subprocess.run(
-            ["sudo", "mknod", "-m", mode, str(root / "dev" / name), "c", str(major), str(minor)],
+            ["sudo", "mknod", "-m", mode, str(guest_root / "dev" / node),
+             "c", str(major), str(minor)],
             check=True,
-            capture_output=True,
-            timeout=5,
+            timeout=10,
         )
 
-    source_root = (Path("/lib/modules") / kernel_release).resolve()
-    target_root = root / "lib" / "modules" / kernel_release
-    guest_load_paths: list[str] = []
-    expanded_bytes = 0
-    for source in modules:
-        relative = source.relative_to(source_root)
-        for suffix in (".zst", ".xz", ".gz"):
-            if relative.name.endswith(suffix):
-                relative = relative.with_suffix("")
+
+def install_guest_modules(guest_root: Path, kernel_release: str) -> list[str]:
+    sources = resolve_module_order(kernel_release)
+    guest_paths: list[str] = []
+    total = 0
+    for index, source in enumerate(sources):
+        payload = decompress_module(source, MAX_MODULE_TOTAL_BYTES - total)
+        total += len(payload)
+        filename = source.name
+        for suffix in (".ko.zst", ".ko.xz"):
+            if filename.endswith(suffix):
+                filename = filename[:-len(suffix)] + ".ko"
                 break
-        destination = target_root / relative
-        expanded_bytes += copy_module(source, destination)
-        if expanded_bytes > MAX_EXPANDED_MODULE_BYTES:
-            raise ProbeError("expanded CXL module dependency closure exceeds 128 MiB")
-        guest_load_paths.append("/lib/modules/" + kernel_release + "/" + relative.as_posix())
+        if not filename.endswith(".ko"):
+            raise CxlGuestError(f"unexpected module filename: {source.name}")
+        destination = guest_root / "lib/modules/cxl" / f"{index:02d}-{filename}"
+        destination.write_bytes(payload)
+        guest_paths.append("/lib/modules/cxl/" + destination.name)
+    if total > MAX_MODULE_TOTAL_BYTES:
+        raise CxlGuestError("CXL module payload exceeded aggregate size cap")
+    return guest_paths
 
-    init = root / "init"
-    init.write_text(render_init(guest_load_paths), encoding="utf-8")
-    init.chmod(0o755)
 
-    archive = work / "cxl-guest-initramfs.cpio.gz"
-    find = subprocess.Popen(
-        ["find", ".", "-print0"], cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+def write_guest_init(guest_root: Path, module_paths: list[str]) -> None:
+    module_lines = "\n".join(
+        f'insmod "{path}" || guest_fail "module-{index}"'
+        for index, path in enumerate(module_paths)
     )
-    assert find.stdout is not None
-    cpio = subprocess.Popen(
-        ["cpio", "--null", "-o", "-H", "newc"],
-        cwd=root,
-        stdin=find.stdout,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+    init = f"""#!/bin/sh
+set -eu
+
+guest_fail() {{
+    echo "WSM_CXL_GUEST_FAILURE:$1" > /dev/console
+    sleep 2
+    poweroff -f
+    exit 1
+}}
+
+echo WSM_CXL_STAGE_INIT > /dev/console
+mount -t proc -o ro,nosuid,nodev,noexec proc /proc || guest_fail proc-mount
+mount -t sysfs -o ro,nosuid,nodev,noexec sysfs /sys || guest_fail sysfs-mount
+mount -t devtmpfs devtmpfs /dev || true
+echo WSM_CXL_STAGE_MODULE_LOAD > /dev/console
+{module_lines}
+sleep 2
+
+devices=0
+ports=0
+memdevs=0
+edges=0
+for entry in /sys/bus/cxl/devices/*; do
+    [ -e "$entry" ] || continue
+    name=${{entry##*/}}
+    case "$name" in
+        root*|host*|port*|mem*|decoder*|endpoint*)
+            echo "WSM_CXL_DEVICE=$name"
+            devices=$((devices + 1))
+            case "$name" in
+                root*|host*|port*) ports=$((ports + 1)) ;;
+                mem*) memdevs=$((memdevs + 1)) ;;
+            esac
+            ;;
+    esac
+    for link in "$entry"/uport "$entry"/dport*; do
+        [ -L "$link" ] || continue
+        link_name=${{link##*/}}
+        target=$(readlink "$link" 2>/dev/null || true)
+        target=${{target##*/}}
+        case "$target" in
+            root*|host*|port*|mem*|decoder*|endpoint*)
+                echo "WSM_CXL_EDGE=$name.$link_name->$target"
+                edges=$((edges + 1))
+                ;;
+            *:*)
+                echo "WSM_CXL_EDGE=$name.$link_name->pci-function"
+                edges=$((edges + 1))
+                ;;
+        esac
+    done
+done
+
+echo "WSM_CXL_COUNTS devices=$devices ports=$ports memdevs=$memdevs edges=$edges"
+if [ "$memdevs" -gt 0 ] && [ "$ports" -gt 0 ]; then
+    echo "WSM_CXL_STATUS=type3-memdev-discovered"
+else
+    echo "WSM_CXL_STATUS=cxl-sysfs-topology-incomplete"
+    echo "WSM_CXL_SYSFS_INCOMPLETE=1"
+    echo "WSM_CXL_FAILURE_DIAGNOSTICS=redacted"
+fi
+echo "{GUEST_DONE_MARKER}" > /dev/console
+sleep 1
+poweroff -f
+"""
+    target = guest_root / "init"
+    target.write_text(init, encoding="utf-8")
+    target.chmod(0o755)
+
+
+def create_initramfs(guest_root: Path, destination: Path) -> None:
+    command = [
+        "bash",
+        "-c",
+        "set -euo pipefail; find . -print0 | sort -z | cpio --null --create --format=newc 2>/dev/null | gzip -9",
+    ]
+    run_bounded_file(
+        command,
+        cwd=guest_root,
+        destination=destination,
+        timeout_seconds=30,
+        max_bytes=MAX_INITRAMFS_BYTES,
     )
-    find.stdout.close()
-    assert cpio.stdout is not None
-    with archive.open("wb") as output:
-        gzip = shutil.which("gzip")
-        if not gzip:
-            raise ProbeError("gzip is required")
-        pack = subprocess.Popen([gzip, "-n"], stdin=cpio.stdout, stdout=output, stderr=subprocess.PIPE)
-        cpio.stdout.close()
-        _, pack_error = pack.communicate(timeout=20)
-    _, cpio_error = cpio.communicate(timeout=20)
-    _, find_error = find.communicate(timeout=20)
-    if pack.returncode != 0 or cpio.returncode != 0 or find.returncode != 0:
-        detail = (pack_error or b"") + (cpio_error or b"") + (find_error or b"")
-        raise ProbeError("initramfs packing failed: " + detail.decode("utf-8", errors="replace")[-2000:])
-    return archive, expanded_bytes
 
-
-def parse_guest_output(output: str) -> dict[str, Any]:
-    encoded_size = len(output.encode("utf-8", errors="replace"))
-    if encoded_size > MAX_SERIAL_BYTES:
-        raise ProbeError("guest serial output exceeded the 64 KiB limit")
-    if "WSM_CXL_GUEST_BEGIN" not in output or "WSM_CXL_GUEST_END" not in output:
-        raise ProbeError("guest did not complete the CXL sysfs enumeration markers")
-    if "WSM_CXL_MODULE_LOAD_ERROR" in output or "WSM_CXL_MODULE_FAILED=1" in output:
-        raise ProbeError("one or more required CXL kernel modules failed to load in the guest")
-
-    nodes = [
-        line.partition("=")[2]
-        for line in output.splitlines()
-        if line.startswith("WSM_CXL_NODE=")
+def build_qemu_command(qemu: str, kernel: Path, initramfs: Path) -> list[str]:
+    return [
+        qemu,
+        "-no-user-config",
+        "-nodefaults",
+        "-machine", "q35,cxl=on",
+        "-accel", "tcg",
+        "-m", "1G,maxmem=2G,slots=8",
+        "-smp", "1",
+        "-kernel", str(kernel),
+        "-initrd", str(initramfs),
+        "-append", "console=ttyS0,115200 rdinit=/init panic=-1 loglevel=4",
+        "-object", "memory-backend-ram,id=vmem0,size=256M,share=on",
+        "-device", "pxb-cxl,bus_nr=12,bus=pcie.0,id=cxl.1",
+        "-device", "cxl-rp,port=0,bus=cxl.1,id=root_port0,chassis=0,slot=0",
+        "-device", "cxl-type3,bus=root_port0,volatile-memdev=vmem0,id=cxl-vmem0",
+        "-machine", "cxl-fmw.0.targets.0=cxl.1,cxl-fmw.0.size=4G",
+        "-display", "none",
+        "-serial", "stdio",
+        "-monitor", "none",
+        "-nic", "none",
+        "-no-reboot",
     ]
-    devtypes = [
-        line.partition("=")[2]
-        for line in output.splitlines()
-        if line.startswith("WSM_CXL_DEVTYPE=")
-    ]
-    memdev_count = 0
-    for line in output.splitlines():
-        if line.startswith("WSM_CXL_MEMDEV_COUNT="):
-            try:
-                memdev_count = int(line.partition("=")[2])
-            except ValueError as exc:
-                raise ProbeError("guest returned an invalid CXL memdev count") from exc
-    if memdev_count < 1 or not any(name.startswith("mem") for name in nodes):
-        raise ProbeError(
-            "guest booted but did not enumerate a CXL memdev; "
-            "bounded guest diagnostics: " + repr(output[-6000:])
-        )
-    return {"nodes": nodes, "devtypes": devtypes, "memdev_count": memdev_count}
-
-
-def run_probe(timeout_seconds: int) -> dict[str, Any]:
-    kernel_release = os.uname().release
-    kernel = Path("/boot") / ("vmlinuz-" + kernel_release)
-    if not kernel.is_file():
-        raise ProbeError("matching runner kernel image is absent: " + str(kernel))
-    qemu = shutil.which("qemu-system-x86_64")
-    if not qemu:
-        raise ProbeError("qemu-system-x86_64 is required")
-    qemu_version = run([qemu, "--version"], timeout=5).stdout.splitlines()[0]
-    modules = resolve_module_dependencies(kernel_release)
-
-    with tempfile.TemporaryDirectory(prefix="wsm-cxl-guest-") as temporary:
-        work = Path(temporary)
-        archive, expanded_bytes = build_initramfs(kernel_release, modules, work)
-        # Runner kernel images in /boot may be root-readable only. Copy the
-        # exact image unchanged into the disposable workspace with read access
-        # for the unprivileged QEMU process; never chmod or rewrite /boot files.
-        guest_kernel = work / "vmlinuz"
-        subprocess.run(
-            ["sudo", "install", "-m", "0644", str(kernel), str(guest_kernel)],
-            check=True,
-            capture_output=True,
-            timeout=15,
-        )
-        command = [
-            qemu,
-            "-machine", "q35,cxl=on",
-            "-m", "4G,maxmem=8G,slots=8",
-            "-smp", "2",
-            "-accel", "tcg",
-            "-nodefaults",
-            "-display", "none",
-            "-monitor", "none",
-            "-serial", "stdio",
-            "-no-reboot",
-            "-kernel", str(guest_kernel),
-            "-initrd", str(archive),
-            "-append", "console=ttyS0 rdinit=/init panic=1 loglevel=4",
-            "-object", "memory-backend-ram,id=vmem0,share=on,size=256M",
-            "-device", "pxb-cxl,bus_nr=12,bus=pcie.0,id=cxl.1",
-            "-device", "cxl-rp,port=0,bus=cxl.1,id=root_port13,chassis=0,slot=2",
-            "-device", "cxl-type3,bus=root_port13,volatile-memdev=vmem0,id=cxl-vmem0",
-            "-M", "cxl-fmw.0.targets.0=cxl.1,cxl-fmw.0.size=4G",
-        ]
-        try:
-            result = subprocess.run(
-                command,
-                check=False,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=timeout_seconds,
-            )
-        except subprocess.TimeoutExpired as exc:
-            stdout = exc.stdout
-            if isinstance(stdout, bytes):
-                stdout = stdout.decode("utf-8", errors="replace")
-            raise ProbeError("QEMU CXL guest timed out; serial tail=" + repr(str(stdout)[-3000:])) from exc
-
-        output = result.stdout[-MAX_SERIAL_BYTES:]
-        if result.returncode != 0:
-            raise ProbeError(
-                "QEMU guest returned " + str(result.returncode)
-                + "; serial tail=" + repr(output[-3000:])
-                + "; stderr tail=" + repr(result.stderr[-1500:])
-            )
-        observed = parse_guest_output(output)
-
-    return {
-        "qemu_version": qemu_version,
-        "kernel_release": kernel_release,
-        "guest_sysfs_enumeration": "observed",
-        "cxl_nodes": observed["nodes"],
-        "cxl_devtypes": observed["devtypes"],
-        "cxl_memdev_count": observed["memdev_count"],
-        "decompressed_module_count": len(modules),
-        "decompressed_module_bytes": expanded_bytes,
-        "cxl_region_created": False,
-        "safety": {
-            "qemu_tcg": True,
-            "virtual_disk": False,
-            "network": False,
-            "host_passthrough": False,
-            "host_modules_loaded": False,
-            "host_sysfs_written": False,
-            "cxl_region_created": False,
-            "sysfs_mount_read_only": True,
-        },
-        "interpretation": (
-            "A disposable Linux guest enumerated a synthetic CXL Type 3 memory device. "
-            "No CXL region was created; this does not prove physical CXL compatibility, "
-            "cache coherency, functional memory use, or reliability operations."
-        ),
-    }
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--timeout", type=int, default=90)
-    args = parser.parse_args()
-    try:
-        report = run_probe(args.timeout)
-    except (OSError, subprocess.SubprocessError, ProbeError) as exc:
-        print(json.dumps({"status": "failed", "error": str(exc)}, ensure_ascii=False))
-        return 1
-    print(json.dumps({"status": "success", **report}, ensure_ascii=False, indent=2))
+    kernel_release = os.uname().release
+    kernel = Path("/boot") / f"vmlinuz-{kernel_release}"
+    qemu = shutil.which("qemu-system-x86_64")
+    if not kernel.is_file():
+        raise CxlGuestError(f"runner kernel image is unavailable: {kernel}")
+    if not qemu:
+        raise CxlGuestError("qemu-system-x86_64 is unavailable")
+    if not all(shutil.which(name) for name in ("modprobe", "zstd", "cpio", "gzip")):
+        raise CxlGuestError("modprobe, zstd, cpio, and gzip are required")
+
+    with tempfile.TemporaryDirectory(prefix="wsm-cxl-guest-") as directory:
+        work = Path(directory)
+        guest_root = work / "rootfs"
+        guest_root.mkdir()
+        create_busybox_root(guest_root)
+        module_paths = install_guest_modules(guest_root, kernel_release)
+        write_guest_init(guest_root, module_paths)
+        initramfs = work / "initramfs.cpio.gz"
+        create_initramfs(guest_root, initramfs)
+
+        if kernel.stat().st_size > 128 * 1024 * 1024:
+            raise CxlGuestError("runner kernel image exceeds the 128 MiB input cap")
+        kernel_copy = work / "vmlinuz"
+        with subprocess.Popen(["sudo", "cat", str(kernel)], stdout=subprocess.PIPE) as process:
+            if process.stdout is None:
+                raise CxlGuestError("could not read runner kernel image")
+            with kernel_copy.open("wb") as output:
+                shutil.copyfileobj(process.stdout, output, length=1024 * 1024)
+            if process.wait(timeout=10) != 0:
+                raise CxlGuestError("could not stage runner kernel image")
+
+        command = build_qemu_command(qemu, kernel_copy, initramfs)
+        result = run_bounded_process(
+            command,
+            timeout_seconds=KERNEL_TIMEOUT_SECONDS,
+            marker=GUEST_DONE_MARKER,
+            max_stdout_bytes=MAX_SERIAL_BYTES,
+            max_stderr_bytes=MAX_STDERR_BYTES,
+        )
+        serial = result.stdout_tail.decode("utf-8", errors="replace")
+        safe_summary = summarize_guest_serial(serial)
+        if result.timed_out:
+            raise CxlGuestError(f"QEMU CXL guest timed out; {safe_summary}")
+        if result.returncode != 0:
+            raise CxlGuestError(f"QEMU CXL guest exited {result.returncode}; {safe_summary}")
+        if result.stdout_truncated or result.stderr_truncated:
+            raise CxlGuestError("QEMU CXL guest exceeded bounded serial/stderr capture limits")
+        if not result.marker_seen:
+            raise CxlGuestError(f"QEMU CXL guest did not print completion marker; {safe_summary}")
+
+        summary_fields = dict(
+            field.split("=", 1) for field in safe_summary.split(";") if "=" in field
+        )
+        status_value = summary_fields.get("status", "unknown")
+        status = status_value if status_value in SAFE_GUEST_STATUSES else None
+        counts_value = summary_fields.get("counts", "not-reported")
+        counts = counts_value if counts_value != "not-reported" else None
+        devices: list[str] = []
+        edges: list[str] = []
+        for line in serial.splitlines():
+            if line.startswith("WSM_CXL_DEVICE="):
+                devices.append(line.split("=", 1)[1])
+            elif line.startswith("WSM_CXL_EDGE="):
+                edges.append(line.split("=", 1)[1])
+
+        # Emit only allow-listed synthetic names and report-local relationships.
+        import re
+        device_pattern = re.compile(r"^(?:root|host|port|mem|decoder|endpoint)[A-Za-z0-9._-]{0,40}$")
+        edge_pattern = re.compile(r"^[A-Za-z0-9._-]{1,40}\.[A-Za-z0-9._-]{1,40}->(?:[A-Za-z0-9._-]{1,40}|pci-function)$")
+        devices = sorted({name for name in devices if device_pattern.fullmatch(name)})
+        edges = sorted({edge for edge in edges if edge_pattern.fullmatch(edge)})
+        print(json.dumps({
+            "qemu_guest_status": status,
+            "synthetic_devices": devices,
+            "synthetic_edges": edges,
+            "counts": counts,
+            "kernel_release": kernel_release,
+            "qemu_acceleration": "tcg",
+            "host_disk_attached": False,
+            "network_attached": False,
+            "host_device_passthrough": False,
+            "host_modules_loaded_or_unloaded": False,
+            "host_sysfs_written": False,
+            "serial_bytes_seen": result.stdout_bytes_seen,
+            "stderr_bytes_seen": result.stderr_bytes_seen,
+            "serial_truncated": result.stdout_truncated,
+            "stderr_truncated": result.stderr_truncated,
+        }, indent=2, sort_keys=True))
+
+        if status != "type3-memdev-discovered":
+            raise CxlGuestError(
+                "Linux guest did not expose a Type-3 memdev and CXL port in sysfs; "
+                safe_summary
+            )
+        if not devices or not any(name.startswith("mem") for name in devices):
+            raise CxlGuestError("CXL guest reported Type-3 status without a memdev entry")
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except CxlGuestError as exc:
+        print(f"qemu-cxl-guest: {exc}", file=sys.stderr)
+        raise SystemExit(1)
