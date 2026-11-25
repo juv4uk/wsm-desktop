@@ -100,11 +100,11 @@ Installer формує похідну оцінку для кожного кри�
 
 Hard-stop має містити стабільний reason code, конкретний пристрій/факт, evidence reference та зрозуміле пояснення. Заборонено створювати один сумарний «compatibility score», який приховує причину рішення.
 
-## 4. План інсталяції: окремий об'єкт від hardware report
+## 4. План інсталяції: поточний CLI v0.1 та цільовий handoff-контракт
 
 Installer не змінює та не дописує hardware report. Він створює окремий reviewable install plan, який описує **намір користувача**, обраний backend і майбутні дії.
 
-Мінімальні логічні поля плану:
+**Важливо розрізняти реалізований JSON v0.1 та майбутню логічну модель.** Поточний CLI з #19 формує тільки diagnostic-only dry-run plan. Таблиця цільових полів нижче описує напрям подальшого контракту; вона **не** є JSON shape, який уже повертає CLI v0.1. Реалізована структура наведена окремо в §4.1.
 
 | Поле | Вимога |
 | --- | --- |
@@ -121,7 +121,43 @@ Installer не змінює та не дописує hardware report. Він с�
 | `execution.mode` | `dry-run` або `confirmed` |
 | `execution.mutations_authorized` | За замовчуванням `false`; стає `true` тільки після окремого підтвердження незмінного плану |
 
-### 4.1 Канонічні digest-и та точні байти
+### 4.1 Реалізований CLI/plan v0.1 (#19)
+
+Поточна read-only реалізація приймає вже створений hardware report і не запускає collector самостійно:
+
+```sh
+python3 -m wsm_install --preflight \
+  --report /path/to/report.json \
+  --backend guix --dry-run
+```
+
+CLI contract v0.1:
+
+- `--preflight` і `--dry-run` обов'язкові.
+- `--report PATH` обов'язковий; CLI не викликає `wsm_hwcheck` і не читає collector stdout напряму.
+- `--backend` приймає лише alias `guix` або `nix`; вони відображаються на plan IDs `guix-system` та `nixos`.
+- JSON plan надходить у stdout за замовчуванням; optional file output задається як `--plan-output PATH`. Опції `--output` немає.
+- `--quiet` приглушує human-readable summary у stderr і не змінює JSON plan.
+- `--version` виводить `wsm-install 0.1.0`.
+- Exit codes: `0` — звіт валідований і план видано; `2` — CLI/input/JSON/schema/output-path error; `3` — critical evidence unresolved, plan не видається.
+- CLI не має apply/confirm option. Кожен план v0.1 має `plan_status=diagnostic-only` та `plan_readiness.confirmable=false`; це не executable deployment plan.
+
+Реалізований JSON v0.1 містить:
+
+- `plan_version=0.1.0`, `plan_mode=dry-run`, `plan_status=diagnostic-only`;
+- `plan_readiness`, зокрема `confirmable=false`, `missing_required_roles`, `role_coverage` та `required_user_actions`;
+- `backend.id`;
+- `source_report` з schema version, report ID і SHA-256 точних raw bytes;
+- `environment`, `device_summary`, `warnings` та `blockers`;
+- `execution` booleans: `dry_run`, `plan_confirmable`, `mutations_authorized`, `backend_invoked`, `disk_access_performed`.
+
+Усі v0.1 плани залишаються diagnostic-only, навіть коли blocker list порожній: це не означає, що вже реалізовано user confirmation, storage/partition plan або backend apply. Поточний CLI не реалізує повний target model з §4: зокрема storage partition plan, selected/pinned backend revision, повний user intent, confirmation token і apply phases ще не існують у його JSON output.
+
+**Coverage marker і verdict — різні поняття.** Якщо report не містить запису потрібної capability, CLI може відобразити це в `plan_readiness.role_coverage` як `not-collected` і додати warning. Похідний compatibility verdict цієї capability має залишатися `unknown` із збереженням причини, coverage boundary та provenance; `not-collected` не є verdict, не означає `not-detected` або `not-tested` і не задовольняє critical evidence gate. Такий missing-role план залишається diagnostic-only.
+
+**Freshness у CLI v0.1 не реалізована.** CLI перевіряє schema і записує report timestamp/environment, але не доводить same-boot identity, monotonic collection age або незмінність topology у поточній boot-сесії. Тому збіг `collected_at`, architecture та kernel не можна називати перевіркою поточної сесії. PR #41 — окремий consumer-side freshness policy prototype; він не інтегрований у CLI та залишається pending producer/schema approval від #5/#6. До появи узгоджених versioned report fields same-session freshness для confirmation є `unverifiable`.
+
+### 4.2 Канонічні digest-и та точні байти
 
 Щоб незалежні frontend/backend реалізації обчислювали однакові значення:
 
@@ -133,7 +169,7 @@ Installer не змінює та не дописує hardware report. Він с�
 
 Ця таблиця визначає семантику, а не остаточний JSON Schema. Точний versioned plan schema має бути окремою реалізаційною зміною після затвердження контракту.
 
-### 4.2 Посилання на цільовий диск
+### 4.3 Посилання на цільовий диск
 
 Цільовий диск не можна обирати за індексом на кшталт «перший диск» або за раніше збереженим `/dev/sda` без повторної перевірки. UI повинен показати користувачеві модель, місткість, тип підключення та фактичний target path, доступні у поточній сесії.
 
@@ -143,7 +179,7 @@ Installer не змінює та не дописує hardware report. Він с�
 
 Raw serial, WWN, UUID та інші чутливі ідентифікатори не додаються до hardware report або загальних логів. Якщо системний backend технічно потребує такого ідентифікатора для локальної операції, він зберігається лише в мінімальному локальному контексті, не експортується й не потрапляє до звітів за замовчуванням.
 
-### 4.3 Незмінність після підтвердження
+### 4.4 Незмінність після підтвердження
 
 Після підтвердження плану будь-яка зміна backend, target disk, partition map, boot mode, profile, firmware choice або іншого параметра, який впливає на наслідки інсталяції, створює нову версію плану та вимагає нового підтвердження. Підтвердження старої версії не переноситься автоматично.
 
