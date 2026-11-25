@@ -23,6 +23,21 @@ WSM варто будувати не навколо одного «детект�
 | [VKMS](https://docs.kernel.org/gpu/vkms.html) + [IGT GPU Tools](https://gitlab.freedesktop.org/drm/igt-gpu-tools) | Віртуальний DRM/KMS display для headless CI/VM перевірок | Для VKMS потрібно завантажити модуль/налаштувати configfs; IGT може вимагати окремої сесії без compositor-а. Це змінює стан тестового kernel і не є live preflight | Ізольована CI/VM lane, не probe на фізичному ПК |
 | [fwupd HSI](https://fwupd.github.io/hsi.html) | Окремі показники firmware/platform security posture | Security posture не доводить наявність runtime firmware blob, успішне виконання `request_firmware()` чи ініціалізацію пристрою | Окремий security report; не змішувати з #16 compatibility evidence |
 
+## Детальні межі hwloc I/O locality
+
+Офіційна документація hwloc 2.16.0 уточнює кілька важливих умов, які мають бути явними в WSM adapter-і:
+
+- **I/O discovery не активується типовим API за замовчуванням.** Його потрібно явно вмикати до завантаження topology, наприклад через `HWLOC_TYPE_FILTER_KEEP_IMPORTANT` або точковий filter для потрібних типів. Не вмикати `KEEP_ALL` автоматично в preflight лише заради «повнішого» звіту.
+- **Фактична locality I/O зараз визначається тільки на Linux.** На інших ОС hwloc поміщає I/O devices під кореневий topology object, що не є реальною NUMA locality.
+- **Повніше PCI/bridge discovery залежить від libpciaccess.** Без нього Linux може побачити частину PCI topology, але втратити назви пристроїв/bridge-ів; частина платформ може вимагати привілеїв для певних probing-операцій. WSM не має підвищувати привілеї лише для hwloc.
+- **I/O object не несе власних CPU/node sets.** Їхні CPU/node sets є NULL; locality потрібно отримувати проходом до найближчого non-I/O ancestor у topology tree. Не трактувати CPU set самого PCI/OS node як відомий.
+- **PCI function і software handle не обов'язково відображаються 1:1.** Один PCI device може породити кілька OS-device handles (наприклад, HCA та кілька інтерфейсів), а PCI graphics device може не мати доступного software handle; DRM `card0`/ `renderD128` у Linux component за замовчуванням filtered out як non-important.
+- **Vendor accelerator backends — окремий optional layer.** NVML/RSMI/OpenCL/Level Zero можуть надати додаткові GPU/software device handles, але їхня доступність залежить від build flags і runtime libraries. Не запускати `lstopo` з широким default probing як безумовний preflight: документовані компоненти можуть пробуджувати GPU, ініціалізувати vendor runtime або виконувати додаткові звернення. Використовувати мінімальний explicit filter, фіксувати backend/version і пропускати provider, якщо його безпечність не підтверджена.
+
+Практичний висновок: WSM спершу збирає основні report-local identity/relationship факти через sysfs/DRM/udev; hwloc може доповнити тільки підтверджену CPU↔NUMA↔PCI locality. Його object tree не замінює schema #18 і не може самостійно встановити GPU→connector→display, USB composite interface binding або реальне фізичне підключення.
+
+Джерело: [hwloc 2.16.0 I/O Devices documentation](https://www.open-mpi.org/projects/hwloc/doc/v2.16.0/iodevices.html), зокрема розділи *Enabling and requirements*, *OS devices*, *Consulting I/O devices and binding*; [hwloc 2.16.0 FAQ](https://www.open-mpi.org/projects/hwloc/doc/v2.16.0/faq.html) — особливості lstopo та optional GPU runtimes.
+
 ## Правила інтеграції
 
 ### PCIe AER
@@ -48,6 +63,17 @@ WSM варто будувати не навколо одного «детект�
 - `drm_info -j` та libdisplay-info — додаткові provider-и, output яких треба прив'язувати до exact tool version.
 - Не з'єднувати GPU і connector за іменем/порядком. Потрібен явний report-local relationship з provenance від #18.
 - Не вважати EDID/DisplayID advertised timings функціонально перевіреними режимами.
+
+## Guix System VM: актуальні upstream зміни
+
+У Guix upstream 2026-11-14 були злиті дві зміни, які слід врахувати під час bring-up WSM:
+
+- Commit `42d2543dd2985a904ab5f16a1c8b2abb354aa923` змінює `guix system vm`, щоб launcher і disk image використовували ту саму OS derivation після трансформацій image (зокрема UUID assignment). Це усуває ситуацію, коли VM могла посилатися на відмінну derivation від тієї, що зареєстрована всередині образу.
+- Commit `528ba9a3069a8767506f1fe6b7badeeb57a02542` додає writable store у VM за замовчуванням; раніше VM із shared read-only store не дозволяла запускати `guix-daemon` і виконувати Guix build усередині guest.
+
+Ці зміни не є доказом, що їх містить поточний WSM Guix environment. Перевіряти їх на фактичному `guix describe`/автентифікованому channel snapshot після #39. Для базового boot smoke достатньо перевірити досягнення guest console; окремим наступним тестом можна перевірити writable store і запуск `guix-daemon` усередині VM.
+
+Джерела: [Guix VM: single operating-system derivation](https://www.mail-archive.com/guix-commits%40gnu.org/msg405644.html), [Guix VM: writable store by default](https://www.mail-archive.com/guix-commits%40gnu.org/msg405638.html).
 
 ## QEMU як окремий інструмент CI/VM-перевірок
 
