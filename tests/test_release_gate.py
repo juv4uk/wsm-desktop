@@ -1,0 +1,77 @@
+# SPDX-License-Identifier: LicenseRef-Volnist
+"""The gate must never call a skipped check a pass."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from release_gate import check_image, criterion, from_exit, verdict  # noqa: E402
+
+
+class VerdictTests(unittest.TestCase):
+    def test_all_pass_is_a_pass(self) -> None:
+        self.assertEqual(verdict([criterion("a", "pass", "")])["overall"], "pass")
+
+    def test_any_failure_fails(self) -> None:
+        self.assertEqual(
+            verdict([criterion("a", "pass", ""), criterion("b", "fail", "")])["overall"],
+            "fail",
+        )
+
+    def test_a_skipped_check_makes_it_incomplete(self) -> None:
+        """This is the whole point: silence is not success."""
+        result = verdict([criterion("a", "pass", ""), criterion("b", "not-run", "no qemu")])
+        self.assertEqual(result["overall"], "incomplete")
+
+    def test_failure_outranks_incomplete(self) -> None:
+        result = verdict([criterion("a", "not-run", ""), criterion("b", "fail", "")])
+        self.assertEqual(result["overall"], "fail")
+
+
+class ExitMappingTests(unittest.TestCase):
+    def test_missing_tool_is_not_run_not_fail(self) -> None:
+        self.assertEqual(from_exit("x", 127, "guix not found")["status"], "not-run")
+
+    def test_zero_is_pass(self) -> None:
+        self.assertEqual(from_exit("x", 0, "")["status"], "pass")
+
+    def test_nonzero_is_fail(self) -> None:
+        self.assertEqual(from_exit("x", 1, "")["status"], "fail")
+
+
+class ImageTests(unittest.TestCase):
+    def test_no_iso_is_recorded_as_not_run(self) -> None:
+        result = check_image(None, boot=False)
+        self.assertEqual(result["status"], "not-run")
+
+    def test_missing_iso_file_fails(self) -> None:
+        result = check_image(Path("/nonexistent/image.iso"), boot=False)
+        self.assertEqual(result["status"], "fail")
+
+
+class CliTests(unittest.TestCase):
+    def test_gate_emits_a_verdict_and_exits_zero_when_nothing_fails(self) -> None:
+        completed = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "release_gate.py"), "--skip-tests", "--compact"],
+            capture_output=True, text=True, check=False, cwd=ROOT,
+        )
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["schema"], "wsm-release-gate/1")
+        # Without an ISO the verdict is incomplete, and the exit code stays 0:
+        # only a real failure is fatal.
+        self.assertEqual(payload["overall"], "incomplete")
+        self.assertEqual(completed.returncode, 0)
+        ids = {item["id"] for item in payload["criteria"]}
+        self.assertIn("channels", ids)
+        self.assertIn("image", ids)
+
+
+if __name__ == "__main__":
+    unittest.main()
