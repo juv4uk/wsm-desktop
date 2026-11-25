@@ -15,7 +15,7 @@ GNU Guix System — єдиний system/package backend першого WSM previ
 3. **Hardware provisioning** — ідемпотентні системні налаштування/драйвери, які можуть виконуватися на першому boot цільової системи.
 4. **User provisioning** — per-user налаштування після створення облікового запису й, коли потрібно, після появи графічної сесії.
 
-Не змішуйте машинний state, user home, generated runtime state, cache/logs та секрети. Для цього використовуйте вже прийнятий ownership контракт у [ADR/State Ownership](../../docs/decisions/) та Guix generations; не створюйте дубль state manager.
+Не змішуйте машинний state, user home, generated runtime state, cache/logs та секрети. Канонічні ownership/retention правила визначає [STATELESS-CONFIGURATION.md](../../docs/STATELESS-CONFIGURATION.md); тут описано лише порядок робіт для installer/provisioning. Не створюйте дубль state manager.
 
 ## Перший підтримуваний вертикальний зріз
 
