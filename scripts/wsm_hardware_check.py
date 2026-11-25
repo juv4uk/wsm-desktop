@@ -152,8 +152,16 @@ def prepare_output(raw: str) -> Path:
 
     try:
         os.chmod(output, 0o700)
-    except OSError:
-        pass
+        actual_mode = stat.S_IMODE(output.stat().st_mode)
+    except OSError as exc:
+        raise SystemExit(
+            f"wsm-hardware-check: cannot secure output directory with mode 0700: {exc}"
+        )
+    if actual_mode != 0o700:
+        raise SystemExit(
+            "wsm-hardware-check: output directory permissions are not private "
+            f"(expected 0700, got {actual_mode:04o})"
+        )
     return output
 
 
