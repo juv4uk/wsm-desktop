@@ -374,8 +374,11 @@ def _decode_guest_report(serial: str) -> dict:
     """Reassemble short serial chunks and decode a size-bounded gzip/base64 report."""
     # QEMU serial console commonly emits CRLF even when the guest writes LF.
     serial = serial.replace("\r\n", "\n").replace("\r", "\n")
-    if REPORT_BEGIN not in serial or REPORT_END not in serial:
-        raise RuntimeError("guest report boundary markers were not fully captured")
+    if serial.count(REPORT_BEGIN) != 1 or serial.count(REPORT_END) != 1:
+        raise RuntimeError("guest report boundary markers were missing or duplicated")
+    begin = serial.index(REPORT_BEGIN) + len(REPORT_BEGIN)
+    end = serial.index(REPORT_END, begin)
+    framed_payload = serial[begin:end]
 
     pattern = re.compile(
         rf"^{re.escape(REPORT_CHUNK_PREFIX)}(?P<sequence>\d{{6}}):"
@@ -384,7 +387,7 @@ def _decode_guest_report(serial: str) -> dict:
     )
     chunks: dict[int, str] = {}
     encoded_size = 0
-    for match in pattern.finditer(serial):
+    for match in pattern.finditer(framed_payload):
         sequence = int(match.group("sequence"))
         data = match.group("data")
         if sequence in chunks:
