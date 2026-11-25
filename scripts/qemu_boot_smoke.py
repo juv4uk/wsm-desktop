@@ -129,6 +129,13 @@ def run_bounded_process(
         except BrokenPipeError:
             # The child may reject the command and exit before consuming stdin.
             pass
+        except BaseException:
+            try:
+                process.kill()
+                process.wait(timeout=1.0)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+            raise
         finally:
             try:
                 process.stdin.close()
