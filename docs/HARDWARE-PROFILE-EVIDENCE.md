@@ -21,6 +21,7 @@
 | Поле | Навіщо |
 | --- | --- |
 | `report_id`, `report_schema_version` | доказ посилається на звіт, з якого він узятий, а не на пам'ять автора |
+| `profile_source.path`, `profile_source.sha256` | точні байти `profile.scm`, які були перевірені; зміна декларації профілю анулює доказ |
 | `isa_level` | обов'язковий рівень з `wsm-cpu-isa/1` або явне `unknown` |
 | `verified_functions` | що саме перевірено: `pass`, `fail` або `not-assessed` |
 | `known_limitations` | усе, що не працює |
@@ -58,7 +59,7 @@ python3 scripts/draft_profile_evidence.py \\
   --out profiles/hardware/gigabyte/h170-gaming-3/evidence.json
 ```
 
-Генератор копіює **точні байти** source report у `artifacts/wsm-hwcheck-report.json` та додає його SHA-256. Він не створює `profile.scm`, не робить функціональних тестів і залишає всі функції `not-assessed`. Перед повторним запуском не перезаписує наявні файли: обери нову теку або свідомо прибери попередню чернетку після перевірки.
+Перед запуском у цільовій теці вже має існувати `profile.scm`. Генератор хешує його точні байти в `profile_source.sha256`, копіює **точні байти** source report у `artifacts/wsm-hwcheck-report.json` і додає його SHA-256. Він не створює `profile.scm`, не робить функціональних тестів і залишає всі функції `not-assessed`. Зміна `profile.scm` або source report після збору доказів анулює bundle. Перед повторним запуском не перезаписує наявні файли: обери нову теку або свідомо прибери попередню чернетку після перевірки.
 
 Щоб завершити профіль, потрібно додати `profile.scm`, виконати реальні перевірки, зберегти їхні логи/результати у `artifacts/`, додати кожен файл у `artifacts` із SHA-256 і вказати відповідні шляхи в `verified_functions[].evidence`. Лише після цього можна змінити відповідні статуси на `pass` або `fail`.
 
@@ -93,7 +94,7 @@ python3 scripts/draft_profile_evidence.py \\
 
 ### Передавання bundle до read-only preflight
 
-CLI приймає явний параметр `--profile-evidence PATH`. Шлях має вказувати на `evidence.json`; локальні artifact paths рахуються від його батьківської теки. Planner перевіряє збіг `report_id` і `report_schema_version` із поданим звітом та перераховує SHA-256 кожного artifact. Цей аргумент не запускає Guix, не змінює диски та не виконує мережевих запитів.
+CLI приймає явний параметр `--profile-evidence PATH`. Шлях має вказувати на `evidence.json`; локальні artifact paths рахуються від його батьківської теки. Planner перевіряє збіг `report_id` і `report_schema_version`, точний SHA-256 source-report bytes, і хеш `profile.scm` з його поточними байтами; крім того, перераховує SHA-256 кожного artifact. Цей аргумент не запускає Guix, не змінює диски та не виконує мережевих запитів.
 
 ```sh
 wsm-install --preflight --report report.json --backend guix --dry-run \\
