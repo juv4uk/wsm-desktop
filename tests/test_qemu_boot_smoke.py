@@ -158,7 +158,9 @@ class QemuBootSmokeTests(unittest.TestCase):
             self.assertEqual(payload["mode"], "dry-run")
             self.assertFalse(payload["host_device_passthrough"])
             self.assertFalse(payload["network_enabled"])
-            self.assertFalse(payload["efi_variable_store"])
+            self.assertFalse(payload["host_efi_variables_modified"])
+            self.assertFalse(payload["guest_uefi_vars_writable"])
+            self.assertEqual(payload["guest_uefi_vars_source"], "not-applicable")
             self.assertFalse(payload["guest_installer_execution"])
             self.assertIn("disposable.qcow2", payload["qcow2_path"])
 
