@@ -101,7 +101,7 @@ class GuestReportExtractionTests(unittest.TestCase):
             extract_report(serial)
 
     def test_rejects_payload_larger_than_the_report_limit(self) -> None:
-        oversized = b" " * (MAX_REPORT_BYTES + 1)
+        oversized = b"x" * (MAX_REPORT_BYTES + 1)
         serial = (
             b"WSM_HWCHECK_REPORT_BEGIN\n"
             + oversized
