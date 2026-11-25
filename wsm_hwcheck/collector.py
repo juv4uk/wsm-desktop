@@ -119,7 +119,6 @@ def _platform_facts(sysfs_root: Path) -> dict[str, str]:
         "board_version": "board_version",
         "bios_vendor": "bios_vendor",
         "bios_version": "bios_version",
-        "bios_date": "bios_date",
     }
     facts: dict[str, str] = {}
     for source_name, target_name in mapping.items():
