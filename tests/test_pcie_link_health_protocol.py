@@ -37,13 +37,14 @@ class PcieLinkHealthProtocolTests(unittest.TestCase):
         self.assertIn("не нуль", self.lower)
 
     def test_rootport_counters_are_not_endpoint_attribution(self) -> None:
-        self.assertIn("root-port totals агрегують", self.lower)
+        self.assertIn("root-port total counters доступні", self.lower)
+        self.assertIn("вони агрегують повідомлення в pcie hierarchy", self.lower)
         self.assertIn("endpoint attribution лишається unknown", self.lower)
         self.assertIn("не можна автоматично приписати одному endpoint", self.lower)
 
     def test_snapshots_and_deltas_require_same_boot_and_monotonic_time(self) -> None:
         self.assertIn("snapshot cumulative counter", self.lower)
-        self.assertIn("одна boot session", self.lower)
+        self.assertIn("тієї самої boot session", self.lower)
         self.assertIn("монотонний час строго зростає", self.lower)
         self.assertIn("counter зменшився", self.lower)
         self.assertIn("delta unknown", self.lower)
