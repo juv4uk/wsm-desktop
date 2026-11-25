@@ -151,10 +151,16 @@ python3 scripts/release_gate.py --iso build/wsm-desktop.iso --boot
 
 Запускає всі перевірки й пише `wsm-release-gate/1`:
 
+Free lock перевіряється завжди. Окремий Compatibility lock перевіряється,
+лише якщо `channels.compatibility.lock.scm` існує. Його відсутність явно
+позначається як `NOT_CONFIGURED` і не є ані помилкою Free baseline, ані
+доказом працездатності Compatibility-профілю. Наявний, але невалідний
+Compatibility lock дає `fail`.
+
 | Критерій | Що перевіряє |
 | --- | --- |
 | `docs` | посилання, наявність заголовків, заборонені шаблони |
-| `channels` | lock-файл за політиками `free` і `compatibility` |
+| `channels` | Free lock завжди; Compatibility lock — якщо він налаштований |
 | `tests` | усі набори тестів |
 | `profile-evidence` | валідність bundle-ів заліза |
 | `image` | хеш, маніфест, ISO9660, завантаження в BIOS і UEFI |
