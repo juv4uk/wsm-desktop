@@ -62,3 +62,5 @@ CLI:
 \`tests/test_backend_guix.py\` перевіряє adapter refusal paths, \`tests/test_guix_deploy_cli.py\` — standalone CLI, підтвердження digest-ів і безпечне створення файлу. Тести не потребують Guix і не змінюють диски.
 
 Фактичне виконання \`guix system init\`, mount/partition/filesystem operations, повторна перевірка identity цілі та QEMU installed-system boot залишаються наступними окремими кроками. Для них потрібні окремий execution contract, автентифікований Guix channel snapshot і disposable disk image.
+
+Коли target `/mnt` вже змонтований, CLI додатково порівнює `st_dev` його filesystem із filesystem директорії оглядової копії. Однаковий device ID означає відмову, навіть якщо output шлях лексично поза `/mnt` (bind mount або той самий filesystem/subvolume). Помилка перевірки завершується fail-closed.

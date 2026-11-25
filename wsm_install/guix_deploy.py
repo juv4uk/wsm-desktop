@@ -125,6 +125,35 @@ def _ensure_output_outside_target(destination: Path) -> None:
         )
 
 
+def _ensure_output_not_on_target_filesystem(destination: Path) -> None:
+    """Reject bind-mount aliases of an already mounted target filesystem.
+
+    A lexical path check is not sufficient when an output directory is a bind
+    mount of the target. Comparing st_dev is deliberately conservative: a
+    subvolume on the same filesystem is refused as well.
+    """
+    target = Path(GUIX_TARGET_MOUNTPOINT)
+    try:
+        target_is_mounted = os.path.ismount(target)
+    except OSError as exc:
+        raise DeployCliError(f"cannot verify target mount state: {exc}") from exc
+
+    if not target_is_mounted:
+        return
+
+    try:
+        target_device = target.stat().st_dev
+        output_device = destination.parent.stat().st_dev
+    except OSError as exc:
+        raise DeployCliError(f"cannot verify output filesystem identity: {exc}") from exc
+
+    if output_device == target_device:
+        raise DeployCliError(
+            "configuration output must not share the mounted target filesystem "
+            "(including bind-mount aliases)"
+        )
+
+
 def _resolve_output(
     output_value: str,
     protected_inputs: tuple[Path, ...],
@@ -286,6 +315,7 @@ def main(argv: list[str] | None = None) -> int:
             (plan_path, selection_path),
         )
         _ensure_output_outside_target(destination)
+        _ensure_output_not_on_target_filesystem(destination)
         handoff = prepare(
             plan,
             selection,
