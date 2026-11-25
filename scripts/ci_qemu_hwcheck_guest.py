@@ -68,6 +68,7 @@ echo WSM_HWCHECK_STAGE_INIT > /dev/console
 mount -t proc -o ro,nosuid,nodev,noexec proc /proc || guest_fail "proc-mount"
 mount -t sysfs -o ro,nosuid,nodev,noexec sysfs /sys || guest_fail "sysfs-mount"
 mkdir -p /tmp
+export WSM_HWCHECK_REPORT=/tmp/hardware-report.json
 
 export PATH=/opt/python/bin:/bin
 export PYTHONHOME=/opt/python
@@ -80,7 +81,7 @@ if ! "$PYTHON" -S -c 'import json, selectors, subprocess, pathlib, gzip, base64,
     guest_fail "python-import-smoke"
 fi
 echo WSM_HWCHECK_STAGE_COLLECTOR_START > /dev/console
-if ! "$PYTHON" -S -m wsm_hwcheck --compact --output /tmp/hardware-report.json > /dev/console 2>&1; then
+if ! "$PYTHON" -S -m wsm_hwcheck --compact --output "$WSM_HWCHECK_REPORT" > /dev/console 2>&1; then
     guest_fail "wsm-hwcheck-execution"
 fi
 if [ ! -s /tmp/hardware-report.json ]; then
@@ -90,6 +91,7 @@ echo WSM_HWCHECK_STAGE_COLLECTOR_DONE > /dev/console
 
 echo WSM_INSTALL_STAGE_START > /dev/console
 if ! "$PYTHON" -S - <<'PYINSTALL' > /tmp/wsm-install-plan.json 2> /tmp/wsm-install.stderr
+import os
 import socket
 import subprocess
 
@@ -103,7 +105,7 @@ socket.create_connection = deny_host_io
 from wsm_install.cli import main
 raise SystemExit(main([
     "--preflight",
-    "--report", "/opt/wsm/fixtures/desktop-observed.json",
+    "--report", os.environ["WSM_HWCHECK_REPORT"],
     "--backend", "guix",
     "--dry-run",
     "--quiet",
@@ -115,9 +117,10 @@ fi
 if ! "$PYTHON" -S - <<'PYPLAN' > /dev/console
 import hashlib
 import json
+import os
 from pathlib import Path
 
-report_path = Path("/opt/wsm/fixtures/desktop-observed.json")
+report_path = Path(os.environ["WSM_HWCHECK_REPORT"])
 plan_path = Path("/tmp/wsm-install-plan.json")
 if plan_path.stat().st_size > {max_installer_plan_bytes}:
     raise SystemExit("installer plan exceeds the 64 KiB ceiling")
@@ -137,7 +140,7 @@ for field in ("plan_confirmable", "mutations_authorized", "backend_invoked", "di
         raise SystemExit("installer plan unexpectedly enabled " + field)
 expected_report_sha = hashlib.sha256(report_bytes).hexdigest()
 if plan.get("source_report", {{}}).get("sha256") != expected_report_sha:
-    raise SystemExit("installer plan is not bound to the exact synthetic report bytes")
+    raise SystemExit("installer plan is not bound to the exact guest report bytes")
 body = dict(plan)
 plan_digest = body.pop("plan_sha256", None)
 canonical = json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -158,9 +161,10 @@ echo {report_begin} > /dev/console
 if ! "$PYTHON" -S - <<'PYREPORT' > /dev/console 2>&1
 import base64
 import gzip
+import os
 from pathlib import Path
 
-report_path = Path("/tmp/hardware-report.json")
+report_path = Path(os.environ["WSM_HWCHECK_REPORT"])
 if report_path.stat().st_size > {max_report_bytes}:
     raise SystemExit("guest report exceeds the 512 KiB report ceiling")
 raw = report_path.read_bytes()
@@ -474,12 +478,6 @@ def _build_initramfs(work: Path) -> tuple[Path, int, tuple[str, ...]]:
     shutil.copytree(ROOT / "wsm_hwcheck", project_root / "wsm_hwcheck")
     shutil.copytree(ROOT / "wsm_install", project_root / "wsm_install")
     shutil.copytree(ROOT / "schemas", project_root / "schemas")
-    fixture_directory = project_root / "fixtures"
-    fixture_directory.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(
-        ROOT / "tests" / "fixtures" / "hardware" / "desktop-observed.json",
-        fixture_directory / "desktop-observed.json",
-    )
     init_script = render_guest_init(library_path)
     init_path = rootfs / "init"
     init_path.write_text(init_script, encoding="utf-8")
