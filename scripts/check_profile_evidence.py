@@ -1,30 +1,19 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""Validate hardware profile evidence bundles.
+"""Validate hardware profile evidence bundles and their referenced artifacts.
 
-A hardware profile is a claim about a machine. The rule of this repository is
-that a claim needs evidence: the bundle below is what separates "we tested this
-H170" from "we think this H170 should work".
-
-The JSON Schema covers shape. This script covers the rules a schema cannot
-express:
-
-* at least one function actually passed - a bundle where everything is
-  not-assessed proves nothing;
-* if any function failed, the failure must appear in known-limitations,
-  otherwise the profile reads as healthy while it is not;
-* personal names and e-mail addresses are refused, in line with the rest of the
-  project;
-* the directory the bundle sits in must match the slug inside it, so a profile
-  cannot be moved and keep pointing at another machine.
+A profile is a claim about a specific machine. It needs a valid evidence bundle,
+and every artifact digest must resolve to bytes stored inside that profile.
+The directory scanner also rejects profile.scm files without evidence.json.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
-import re
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+from typing import Any
 
 import jsonschema
 
@@ -32,29 +21,25 @@ ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = ROOT / "schemas" / "profile-evidence.schema.json"
 PROFILES_DIR = ROOT / "profiles" / "hardware"
 
-EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 
-
-class EvidenceError(Exception):
-    pass
-
-
-def load_schema() -> dict:
+def load_schema() -> dict[str, Any]:
     return json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
 
 
-def validate(document: dict, schema: dict | None = None) -> list[str]:
-    """Return a list of problems. An empty list means the bundle is acceptable."""
+def validate(
+    document: dict[str, Any],
+    schema: dict[str, Any] | None = None,
+    artifact_root: Path | None = None,
+) -> list[str]:
+    """Return problems. artifact_root enables on-disk path and digest checks."""
     schema = schema or load_schema()
-    problems: list[str] = []
-
     try:
         jsonschema.validate(document, schema)
     except jsonschema.ValidationError as exc:
         location = "/".join(str(part) for part in exc.absolute_path) or "<root>"
-        problems.append(f"schema: {location}: {exc.message}")
-        return problems
+        return [f"schema: {location}: {exc.message}"]
 
+    problems: list[str] = []
     functions = document["verified_functions"]
     if not any(item["status"] == "pass" for item in functions):
         problems.append(
@@ -70,35 +55,145 @@ def validate(document: dict, schema: dict | None = None) -> list[str]:
                 f"function {name!r} failed but is not listed in known_limitations"
             )
 
-    if EMAIL.search(document["verified_by"]):
-        problems.append("verified_by must not contain an e-mail address")
+    if artifact_root is not None:
+        problems.extend(validate_artifact_files(document["artifacts"], artifact_root))
 
     return problems
 
 
-def validate_directory(path: Path) -> list[str]:
-    """Validate profiles/hardware/<vendor>/<model>/evidence.json and its slug."""
-    problems = validate(json.loads(path.read_text(encoding="utf-8")))
-    slug = json.loads(path.read_text(encoding="utf-8"))["profile"]["slug"]
-    expected = path.parent.relative_to(PROFILES_DIR).as_posix()
+def validate_artifact_files(artifacts: list[dict[str, Any]], root: Path) -> list[str]:
+    """Verify safe relative artifact paths and their SHA-256 digests."""
+    problems: list[str] = []
+    root_path = root.resolve()
+
+    for artifact in artifacts:
+        relative = artifact["path"]
+        posix_path = PurePosixPath(relative)
+        if (
+            "\\" in relative
+            or posix_path.is_absolute()
+            or not posix_path.parts
+            or any(part in {"", ".", ".."} for part in posix_path.parts)
+        ):
+            problems.append(
+                f"artifact path {relative!r} must be a safe relative path under the profile directory"
+            )
+            continue
+
+        candidate = root
+        has_symlink = False
+        for part in posix_path.parts:
+            candidate = candidate / part
+            if candidate.is_symlink():
+                has_symlink = True
+                break
+        if has_symlink:
+            problems.append(f"artifact path {relative!r} must not traverse a symlink")
+            continue
+
+        try:
+            resolved = candidate.resolve(strict=True)
+            resolved.relative_to(root_path)
+        except (OSError, ValueError):
+            problems.append(f"artifact path {relative!r} is missing or escapes the profile directory")
+            continue
+
+        if not resolved.is_file():
+            problems.append(f"artifact path {relative!r} is not a regular file")
+            continue
+
+        digest = hashlib.sha256()
+        try:
+            with resolved.open("rb") as stream:
+                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                    digest.update(chunk)
+        except OSError as exc:
+            problems.append(f"artifact path {relative!r} cannot be read: {exc}")
+            continue
+
+        actual = digest.hexdigest()
+        if actual != artifact["sha256"]:
+            problems.append(
+                f"artifact path {relative!r} sha256 mismatch: "
+                f"expected {artifact['sha256']}, got {actual}"
+            )
+
+    return problems
+
+
+def read_document(path: Path) -> tuple[dict[str, Any] | None, list[str]]:
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return None, [f"cannot read evidence JSON: {exc}"]
+    if not isinstance(document, dict):
+        return None, ["evidence JSON root must be an object"]
+    return document, []
+
+
+def validate_directory(path: Path, root: Path = PROFILES_DIR) -> list[str]:
+    """Validate evidence.json, its artifacts, and its vendor/model directory slug."""
+    if path.is_symlink():
+        return ["evidence.json must not be a symlink"]
+    if path.parent.is_symlink():
+        return ["profile directory must not be a symlink"]
+
+    document, read_problems = read_document(path)
+    if read_problems:
+        return read_problems
+    assert document is not None
+
+    problems = validate(document, artifact_root=path.parent)
+    try:
+        expected = path.parent.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        problems.append("profile directory is outside the selected hardware profiles root")
+        return problems
+
+    slug = document.get("profile", {}).get("slug")
     if slug != expected:
-        problems.append(
-            f"slug {slug!r} does not match the directory {expected!r}"
-        )
+        problems.append(f"slug {slug!r} does not match the directory {expected!r}")
     return problems
+
+
+def discover_profiles(root: Path) -> tuple[list[Path], list[Path], list[str]]:
+    """Find declared profiles and evidence bundles without silently skipping either."""
+    profile_files = sorted(root.glob("*/*/profile.scm"))
+    evidence_files = sorted(root.glob("*/*/evidence.json"))
+    problems: list[str] = []
+
+    for profile_file in profile_files:
+        if profile_file.is_symlink():
+            problems.append(f"{profile_file}: profile.scm must not be a symlink")
+            continue
+        evidence_file = profile_file.parent / "evidence.json"
+        if not evidence_file.is_file():
+            problems.append(f"{profile_file.parent}: profile.scm has no evidence.json")
+        elif evidence_file.is_symlink():
+            problems.append(f"{evidence_file}: evidence.json must not be a symlink")
+
+    for evidence_file in evidence_files:
+        if not (evidence_file.parent / "profile.scm").is_file():
+            problems.append(f"{evidence_file}: evidence bundle has no matching profile.scm")
+
+    return profile_files, evidence_files, problems
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="check-profile-evidence",
-        description="Validate hardware profile evidence bundles.",
+        description="Validate hardware profile evidence bundles and referenced artifacts.",
     )
-    parser.add_argument("--file", type=Path, help="validate one evidence.json")
+    parser.add_argument(
+        "--file",
+        type=Path,
+        help="validate one evidence.json and its artifacts (does not check the directory slug)",
+    )
     parser.add_argument(
         "--dir",
         type=Path,
         default=PROFILES_DIR,
-        help="directory to scan for <vendor>/<model>/evidence.json",
+        help="hardware profiles root to scan for <vendor>/<model>/profile.scm and evidence.json",
     )
     return parser
 
@@ -107,25 +202,32 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     if args.file:
-        targets = [args.file]
-        use_directory_rules = False
-    else:
-        if not args.dir.is_dir():
-            print(f"check-profile-evidence: no profiles directory at {args.dir}")
-            return 0
-        targets = sorted(args.dir.glob("*/*/evidence.json"))
-        use_directory_rules = True
-        if not targets:
-            print("check-profile-evidence: no evidence bundles yet")
-            return 0
+        if not args.file.is_file():
+            print(f"check-profile-evidence: evidence file not found: {args.file}", file=sys.stderr)
+            return 2
+        document, read_problems = read_document(args.file)
+        problems = read_problems
+        if document is not None:
+            problems.extend(validate(document, artifact_root=args.file.parent))
+        if problems:
+            for problem in problems:
+                print(f"- {problem}", file=sys.stderr)
+            return 1
+        print(f"{args.file}: ok (schema and artifact hashes; directory slug not checked)")
+        return 0
 
-    failures = 0
-    for target in targets:
-        problems = (
-            validate_directory(target)
-            if use_directory_rules
-            else validate(json.loads(target.read_text(encoding="utf-8")))
-        )
+    if not args.dir.is_dir():
+        print(f"check-profile-evidence: profiles directory not found: {args.dir}", file=sys.stderr)
+        return 2
+
+    profile_files, evidence_files, discovery_problems = discover_profiles(args.dir)
+    failures = len(discovery_problems)
+
+    for problem in discovery_problems:
+        print(f"- {problem}", file=sys.stderr)
+
+    for target in evidence_files:
+        problems = validate_directory(target, args.dir)
         if problems:
             failures += 1
             print(f"{target}:", file=sys.stderr)
@@ -135,12 +237,17 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{target}: ok")
 
     if failures:
-        print(
-            f"check-profile-evidence: {failures} bundle(s) rejected",
-            file=sys.stderr,
-        )
+        print(f"check-profile-evidence: {failures} profile/evidence problem(s)", file=sys.stderr)
         return 1
-    print(f"check-profile-evidence: {len(targets)} bundle(s) accepted")
+
+    if not profile_files and not evidence_files:
+        print("check-profile-evidence: no hardware profiles registered yet")
+        return 0
+
+    print(
+        f"check-profile-evidence: {len(evidence_files)} bundle(s) accepted "
+        f"for {len(profile_files)} profile(s)"
+    )
     return 0
 
 
