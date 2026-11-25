@@ -13,8 +13,8 @@ LINK_PATTERN = re.compile(r"(?<!!)\[[^\]]*\]\(([^)]+)\)")
 STATUS_PATTERN = re.compile(r"(?m)^-?\s*(?:Статус|Status):")
 STATUS_HEADER_LINES = 20
 
-# Documents a first-time visitor reads. They are canonical in English; every
-# other tracked document under docs/ is canonical in Ukrainian.
+# Documents a first-time visitor reads. The repository is written in Ukrainian
+# first; English lives beside it as a translation with an .en.md suffix.
 ENTRY_POINT_DOCUMENTS = (
     "README.md",
     "CONTRIBUTING.md",
@@ -91,11 +91,11 @@ def check_research_status() -> list[str]:
     return errors
 
 
-def is_english(text: str) -> bool:
-    """Return True when the text is Latin-script with no meaningful Cyrillic."""
+def is_ukrainian(text: str) -> bool:
+    """Return True when Cyrillic is the dominant script of the text."""
     latin = len(LATIN_PATTERN.findall(text))
     cyrillic = len(CYRILLIC_PATTERN.findall(text))
-    return latin > 0 and cyrillic <= latin * CYRILLIC_TOLERANCE
+    return cyrillic > 0 and cyrillic >= latin * CYRILLIC_TOLERANCE
 
 
 def canonical_of(path: Path) -> Path | None:
@@ -108,17 +108,17 @@ def canonical_of(path: Path) -> Path | None:
 
 
 def check_document_language() -> list[str]:
-    """Entry points must be English; translations must have an original."""
+    """Entry points must be Ukrainian; translations must have an original."""
     errors: list[str] = []
     for relative in ENTRY_POINT_DOCUMENTS:
         source = ROOT / relative
         if not source.exists():
             errors.append(f"{relative}: entry-point document is missing")
             continue
-        if not is_english(source.read_text(encoding="utf-8")):
+        if not is_ukrainian(source.read_text(encoding="utf-8")):
             errors.append(
-                f"{relative}: entry-point documents are canonical in English "
-                f"(see CONTRIBUTING.md, documentation language policy)"
+                f"{relative}: documentation is canonical in Ukrainian; put the English "
+                f"text in a .en.md translation (see CONTRIBUTING.md, language policy)"
             )
 
     for source in markdown_files():

@@ -1,73 +1,57 @@
-# Contributing to WSM Desktop
+# Внесок у WSM Desktop
 
 <!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 
-Thank you for your interest in WSM Desktop. The project is at an early stage; the
-most valuable contribution right now is verifiable technical research, small
-changes and accurate documentation.
+Дякуємо за інтерес до WSM Desktop. Проєкт перебуває на ранній стадії; найцінніший внесок зараз — перевірювані технічні дослідження, невеликі зміни та точна документація.
 
-## Before you start
+## Перед початком
 
-1. Read the README and the relevant documents under `docs/`.
-2. Check whether an issue or pull request on the same topic already exists.
-3. For an architecture change, propose a short ADR under `docs/decisions/` first.
-4. Do not add binary firmware, drivers, images or other third-party files without
-   verifying origin, licence and redistribution rights.
+1. Прочитайте README та відповідні документи з каталогу docs.
+2. Перевірте, чи не існує вже issue або pull request на ту саму тему.
+3. Для зміни архітектури спочатку запропонуйте короткий ADR у docs/decisions.
+4. Не додавайте бінарні прошивки, драйвери, образи або інші сторонні файли без перевірки походження, ліцензії та права на розповсюдження.
 
-## Change rules
+## Правила змін
 
-- Keep changes narrow and reviewable.
-- Do not present unverified configuration as working.
-- Do not run installation commands against real disks during development.
-- Do not add third-party channels, signing keys or substitute servers without
-  separate justification.
-- For third-party code, preserve upstream copyright and licence notices.
-- Code and configuration must carry an `SPDX-License-Identifier` where appropriate.
-- Every document states its language and status at the top, as described below.
+- Зберігайте зміни вузькими та придатними до перевірки.
+- Не видавайте неперевірену конфігурацію за працездатну.
+- Не запускайте інсталяційні команди на реальних дисках під час розробки.
+- Не додавайте сторонні канали, підписні ключі чи сервери підстановок без окремого обґрунтування.
+- Для стороннього коду зберігайте upstream copyright та license notices.
+- Код і конфігурація мають містити SPDX-License-Identifier там, де це доречно.
+- Документація проєкту спершу ведеться українською; переклади не повинні суперечити українському першоджерелу.
 
-## Documentation language policy
+## Перевірки
 
-The repository previously mixed languages without a stated rule: the README was
-English while `CONTRIBUTING.md` and `SECURITY.md` were Ukrainian, and nothing said
-which file a translator should treat as the original. The rule is now explicit and
-is checked by `scripts/check_docs.py`.
-
-- **Entry points are canonical in English.** `README.md`, `CONTRIBUTING.md` and
-  `SECURITY.md` — the three files a first-time visitor reads.
-- **Design and research documents are canonical in Ukrainian.** Everything under
-  `docs/`, including the ADRs, the roadmap, and the hardware and testing notes.
-- **Subdirectory READMEs follow the language of the directory they document.**
-- **Translations sit beside the original and carry a language suffix.** A Ukrainian
-  translation of `CONTRIBUTING.md` is `CONTRIBUTING.uk.md`; an English translation of
-  `docs/ETHICS.md` is `docs/ETHICS.en.md`. A translation is never the only copy of a
-  document, and it must name the canonical file it follows.
-- Translations are optional and may lag. The canonical document is the source of
-  truth in any disagreement.
-
-If a document genuinely belongs in the other language, move the whole document
-rather than adding a second copy under a different name.
-
-## Checks
-
-Before a pull request, run:
+Перед pull request виконайте:
 
     make check
 
-When `systems/minimal.scm` changes and Guix is available:
+Коли змінюється systems/minimal.scm і доступний Guix:
 
     make check-system
 
-Do not run `guix system init` against a physical disk to test a change. Integration
-testing happens on a disposable virtual machine.
+Не запускайте guix system init на фізичному диску для перевірки. Інтеграційні випробування виконуються на одноразовому образі віртуальної машини.
 
 ## Pull request
 
-Describe:
+Опишіть:
 
-- the problem or the need;
-- why the proposed solution fits the architecture;
-- the components changed;
-- the checks performed and their results;
-- the limitations that remain.
+- проблему або потребу;
+- чому запропоноване рішення відповідає архітектурі;
+- змінені компоненти;
+- виконані перевірки та їхній результат;
+- обмеження, які залишаються.
 
-Never include secrets, private keys, passwords or personal data in commits or logs.
+Не включайте секрети, приватні ключі, паролі або персональні дані в коміти та журнали.
+
+## Мовна політика документації
+
+Раніше правило не було зафіксоване: README був англійською, а CONTRIBUTING.md і SECURITY.md — українською, і ніде не було сказано, яка копія є оригіналом. Тепер правило явне і його перевіряє `scripts/check_docs.py`.
+
+- **Канонічна мова всієї документації — українська.** `README.md`, `CONTRIBUTING.md`, `SECURITY.md` і всі документи в `docs/` ведуться українською.
+- **Англійські переклади лежать поруч і мають суфікс `.en.md`**: `README.en.md`, `CONTRIBUTING.en.md`, `docs/ETHICS.en.md`. Переклад ніколи не буває єдиною копією документа і має посилатися на канонічний файл.
+- Переклади опційні й можуть відставати. У разі розбіжності істинним є канонічний документ.
+- Код, повідомлення комітів і обговорення в issue можуть бути англійською, коли це полегшує роботу з upstream.
+
+Якщо документ справді належить іншою мовою, переносьте весь документ, а не тримайте другу копію під іншою назвою.

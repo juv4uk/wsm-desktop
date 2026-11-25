@@ -26,17 +26,17 @@ class DocumentationTests(unittest.TestCase):
 
 
 class DocumentationLanguageTests(unittest.TestCase):
-    def test_english_detection(self) -> None:
-        self.assertTrue(check_docs.is_english("Contributing to WSM Desktop"))
-        self.assertFalse(check_docs.is_english("Внесок у WSM Desktop"))
+    def test_ukrainian_detection(self) -> None:
+        self.assertTrue(check_docs.is_ukrainian("Внесок у WSM Desktop"))
+        self.assertFalse(check_docs.is_ukrainian("Contributing to WSM Desktop"))
 
-    def test_english_detection_tolerates_a_stray_word(self) -> None:
-        body = "Documentation is canonical in English. " * 40 + "Guix"
-        self.assertTrue(check_docs.is_english(body))
+    def test_ukrainian_detection_tolerates_technical_terms(self) -> None:
+        body = "Документація ведеться українською; терміни Guix, Nix і Calamares не перекладаємо. " * 10
+        self.assertTrue(check_docs.is_ukrainian(body))
 
     def test_translation_counterpart(self) -> None:
         self.assertEqual(
-            check_docs.canonical_of(Path("docs/ETHICS.uk.md")),
+            check_docs.canonical_of(Path("docs/ETHICS.en.md")),
             Path("docs/ETHICS.md"),
         )
         self.assertEqual(
