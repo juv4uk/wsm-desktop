@@ -29,7 +29,7 @@ SOURCE_REPORT_SHA256 = hashlib.sha256(SOURCE_REPORT_BYTES).hexdigest()
 
 BASE = {
     "schema": "wsm-profile-evidence/2",
-    "profile": {"vendor": "ASUS", "model": "H170-PRO", "slug": "asus/h170-pro"},
+    "profile": {"vendor": "Gigabyte", "model": "GA-H170-Gaming 3", "slug": "gigabyte/ga-h170-gaming3"},
     "report_id": SOURCE_REPORT["report_id"],
     "report_schema_version": SOURCE_REPORT["schema_version"],
     "profile_source": {"path": "profile.scm", "sha256": PROFILE_SOURCE_SHA256},
@@ -322,7 +322,7 @@ class InstallerPlanGateTests(unittest.TestCase):
 
     def test_build_plan_accepts_only_matching_report_and_verified_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary) / "asus" / "h170-pro"
+            root = Path(temporary) / "gigabyte" / "ga-h170-gaming3"
             prepare_artifact_root(root, self.report_bytes)
             plan, blockers, _warnings = self.build(self.matching_bundle(), root)
         self.assertFalse(any("hardware profile evidence is not valid" in item for item in blockers))
@@ -331,7 +331,7 @@ class InstallerPlanGateTests(unittest.TestCase):
 
     def test_build_plan_rejects_artifact_bytes_changed_after_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary) / "asus" / "h170-pro"
+            root = Path(temporary) / "gigabyte" / "ga-h170-gaming3"
             prepare_artifact_root(root, self.report_bytes)
             (root / "artifacts" / "functional-test.log").write_bytes(b"tampered after manifest creation")
             _plan, blockers, _warnings = self.build(self.matching_bundle(), root)
@@ -339,7 +339,7 @@ class InstallerPlanGateTests(unittest.TestCase):
 
     def test_build_plan_rejects_profile_evidence_from_another_report(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary) / "asus" / "h170-pro"
+            root = Path(temporary) / "gigabyte" / "ga-h170-gaming3"
             prepare_artifact_root(root, self.report_bytes)
             evidence = self.matching_bundle()
             evidence["report_id"] = "another-report-id"
@@ -348,7 +348,7 @@ class InstallerPlanGateTests(unittest.TestCase):
 
     def test_build_plan_rejects_profile_evidence_from_another_schema_version(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary) / "asus" / "h170-pro"
+            root = Path(temporary) / "gigabyte" / "ga-h170-gaming3"
             prepare_artifact_root(root, self.report_bytes)
             evidence = self.matching_bundle()
             evidence["report_schema_version"] = "9.9.9"
@@ -357,7 +357,7 @@ class InstallerPlanGateTests(unittest.TestCase):
 
     def test_build_plan_rejects_missing_profile_configuration(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary) / "asus" / "h170-pro"
+            root = Path(temporary) / "gigabyte" / "ga-h170-gaming3"
             prepare_artifact_root(root, self.report_bytes)
             (root / "profile.scm").unlink()
             _plan, blockers, _warnings = self.build(self.matching_bundle(), root)
@@ -365,14 +365,14 @@ class InstallerPlanGateTests(unittest.TestCase):
 
     def test_build_plan_rejects_profile_slug_for_another_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary) / "gigabyte" / "h170-gaming-3"
+            root = Path(temporary) / "gigabyte" / "ga-h170-gaming3"
             prepare_artifact_root(root, self.report_bytes)
             _plan, blockers, _warnings = self.build(self.matching_bundle(), root)
         self.assertTrue(any("does not match the directory" in item for item in blockers))
 
     def test_build_plan_rejects_profile_source_modified_after_verification(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary) / "asus" / "h170-pro"
+            root = Path(temporary) / "gigabyte" / "ga-h170-gaming3"
             prepare_artifact_root(root, self.report_bytes)
             (root / "profile.scm").write_bytes(b";; changed after verification\\n")
             _plan, blockers, _warnings = self.build(self.matching_bundle(), root)
@@ -380,7 +380,7 @@ class InstallerPlanGateTests(unittest.TestCase):
 
     def test_build_plan_rejects_source_report_bytes_with_same_report_id(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary) / "asus" / "h170-pro"
+            root = Path(temporary) / "gigabyte" / "ga-h170-gaming3"
             changed_report = self.report_bytes + b"\\n"
             prepare_artifact_root(root, changed_report)
             evidence = self.matching_bundle()
@@ -392,7 +392,7 @@ class InstallerPlanGateTests(unittest.TestCase):
     def test_build_plan_requires_exactly_one_source_report_artifact(self) -> None:
         for mode in ("missing", "duplicate"):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as temporary:
-                root = Path(temporary) / "asus" / "h170-pro"
+                root = Path(temporary) / "gigabyte" / "ga-h170-gaming3"
                 prepare_artifact_root(root, self.report_bytes)
                 evidence = self.matching_bundle()
                 source = next(item for item in evidence["artifacts"] if item["kind"] == "wsm-hwcheck-report")
@@ -412,7 +412,7 @@ class DirectoryTests(unittest.TestCase):
     def test_model_directory_without_evidence_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            model = root / "gigabyte" / "h170-gaming-3"
+            model = root / "gigabyte" / "ga-h170-gaming3"
             model.mkdir(parents=True)
             (model / "profile.scm").write_text(";; declared profile without evidence\\n", encoding="utf-8")
             stdout, stderr = io.StringIO(), io.StringIO()
@@ -444,13 +444,13 @@ class DirectoryTests(unittest.TestCase):
     def test_evidence_without_profile_configuration_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            model = root / "gigabyte" / "h170-gaming-3"
+            model = root / "gigabyte" / "ga-h170-gaming3"
             prepare_artifact_root(model)
             (model / "profile.scm").unlink()
             evidence = bundle(profile={
                 "vendor": "GIGABYTE",
-                "model": "H170 Gaming 3",
-                "slug": "gigabyte/h170-gaming-3",
+                "model": "GA-H170-Gaming 3",
+                "slug": "gigabyte/ga-h170-gaming3",
             })
             (model / "evidence.json").write_text(json.dumps(evidence), encoding="utf-8")
             stderr = io.StringIO()
@@ -463,7 +463,7 @@ class DirectoryTests(unittest.TestCase):
     def test_directory_slug_must_match_vendor_and_model(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            model = root / "gigabyte" / "h170-gaming-3"
+            model = root / "gigabyte" / "ga-h170-gaming3"
             prepare_artifact_root(model)
             profile_bytes = b";; Synthetic test profile\n"
             (model / "profile.scm").write_bytes(profile_bytes)
@@ -471,8 +471,8 @@ class DirectoryTests(unittest.TestCase):
             document = bundle(
                 profile={
                     "vendor": "GIGABYTE",
-                    "model": "H170 Gaming 3",
-                    "slug": "gigabyte/h170-pro",
+                    "model": "GA-H170-Gaming 3",
+                    "slug": "gigabyte/ga-h170-gaming3",
                 }
             )
             document["profile_source"]["sha256"] = hashlib.sha256(profile_bytes).hexdigest()
@@ -483,7 +483,7 @@ class DirectoryTests(unittest.TestCase):
     def test_valid_directory_and_artifact_are_accepted(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            model = root / "gigabyte" / "h170-gaming-3"
+            model = root / "gigabyte" / "ga-h170-gaming3"
             prepare_artifact_root(model)
             profile_bytes = b";; synthetic fixture\n"
             (model / "profile.scm").write_bytes(profile_bytes)
@@ -491,8 +491,8 @@ class DirectoryTests(unittest.TestCase):
             document = bundle(
                 profile={
                     "vendor": "GIGABYTE",
-                    "model": "H170 Gaming 3",
-                    "slug": "gigabyte/h170-gaming-3",
+                    "model": "GA-H170-Gaming 3",
+                    "slug": "gigabyte/ga-h170-gaming3",
                 }
             )
             document["profile_source"]["sha256"] = hashlib.sha256(profile_bytes).hexdigest()
