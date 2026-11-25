@@ -2,55 +2,46 @@
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-Кожен перевірений пристрій — це тека `profiles/hardware/<vendor>/<model>/` з
-двома файлами та вкладеним каталогом артефактів:
+Кожен повний профіль має теку `profiles/hardware/<vendor>/<model>/`:
 
 ```
-profiles/hardware/gigabyte/h170-gaming-3/
+profiles/hardware/vendor/model/
   profile.scm
   evidence.json
   artifacts/
     dmesg.txt
 ```
 
-**Профіль без `evidence.json` не вважається профілем.** Це гіпотеза, і в
-інсталяторі вона не бере участі. Загальний сканер відхиляє кожну модельну теку,
-у якій немає `evidence.json`.
+Обидва файли `profile.scm` та `evidence.json` обов'язкові. Перевірка дерева відхиляє неповну теку або evidence без відповідного профілю.
 
-## Чому так
+## Evidence v2
 
-Спокуса написати «має працювати» велика, і саме на ній спіткнувся не один
-дистрибутив. Різниця між «ми думаємо, що H170 заведеться» і «ми перевірили H170,
-ось звіт, ось що не працює» — це різниця між обіцянкою і фактом.
+Контракт описаний у [документі доказів](../../docs/HARDWARE-PROFILE-EVIDENCE.md). Bundle містить:
 
-`evidence.json` зобов'язаний містити:
+- `report_id` і `report_schema_version` джерельного звіту `wsm-hwcheck`;
+- `isa_level` із `wsm-cpu-isa/1` або `unknown`;
+- `verified_functions`, `known_limitations` та непорожній `not_assessed`;
+- непорожній список `artifacts` з `kind`, безпечним відносним `path` і SHA-256 фактичних байтів.
 
-- `report_id` зі звіту `wsm-hwcheck` — докази посилаються на джерело;
-- `isa_level` із контракту `wsm-cpu-isa/1` або явне `unknown`;
-- `verified_functions` — що саме перевірено, зі статусом `pass`, `fail` або
-  `not-assessed`;
-- `known_limitations` і непорожній `not_assessed`;
-- принаймні один артефакт із відносним шляхом і SHA-256 фактичних байтів.
+Артефакти зберігаються всередині теки профілю. Абсолютні шляхи, traversal-сегменти, symlink-и та mismatch hash заборонені. `verified_by` приймає лише неперсональні ролі: `автори проєкту`, `local agent`, `web agent`.
 
-Шаблон — [`template.json`](template.json). Скопіюй, заміни значення, але не
-залишай вигаданих.
+Шаблон — [`template.json`](template.json). Він містить placeholder-и й синтетичні значення; його не можна трактувати як реальний доказ або додавати до каталогу профілів без заміни всіх полів і справжніх артефактів.
 
 ## Перевірка
 
 ```sh
-python3 scripts/check_profile_evidence.py
+make check-profile-evidence
+python3 scripts/check_profile_evidence.py --dir /path/to/hardware-profiles
 ```
 
-Скрипт відхиляє bundle, якщо:
+Команда повного сканування:
+- вимагає `profile.scm` та `evidence.json` у кожній теці `<vendor>/<model>`;
+- перевіряє slug каталогу, schema, календарну дату, статуси й роль;
+- звіряє SHA-256 із байтами файлів;
+- відхиляє symlink, traversal і відсутні артефакти.
 
-- жодна функція не має статусу `pass`;
-- функція зі статусом `fail` не згадана в `known_limitations`;
-- `verified_by` не є одним із дозволених рольових значень;
-- шлях артефакту виходить за межі теки, перетинає symlink або файл має інший SHA-256;
-- `slug` не збігається з текою;
-- модельна тека не має `evidence.json`.
+Порожній корінь без зареєстрованих model directories — нормальний стан, код 0. Виявлена неповна або невалідна тека — код 1; відсутній корінь — код 2.
 
-## Що писати в `verified_by`
+## Межі
 
-Дозволені значення: `автори проєкту`, `local agent`, `web agent`.
-Особисті імена й електронні адреси в репозиторії не публікуються.
+Жодного реального hardware profile наразі не заведено. Синтетичні тести підтверджують роботу валідатора, а не сумісність ASUS/Gigabyte H170, Intel/NVIDIA GPU або будь-якої іншої фізичної машини. WSL/QEMU результати не прирівнюються до bare-metal Linux evidence.
