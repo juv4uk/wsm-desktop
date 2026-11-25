@@ -6,6 +6,8 @@ on:
       - ".github/workflows/cxl-qemu-guest.yml"
       - "scripts/ci_cxl_qemu_guest.py"
       - "tests/test_cxl_qemu_guest.py"
+      - "scripts/qemu_boot_smoke.py"
+      - "tests/test_qemu_boot_smoke.py"
   workflow_dispatch:
 
 permissions:
@@ -24,6 +26,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends qemu-system-x86 busybox-static cpio zstd kmod
+
+      - name: Run shared bounded process helper tests
+        run: python3 -m unittest discover -s tests -p "test_qemu_boot_smoke.py" -v
 
       - name: Run host-side parser and policy tests
         run: python3 -m unittest discover -s tests -p "test_cxl_qemu_guest.py" -v

@@ -12,14 +12,29 @@ import argparse
 import json
 import os
 from pathlib import Path
+import selectors
 import shutil
 import subprocess
+import sys
 import tempfile
+import time
 from typing import Any
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
+
+from scripts.qemu_boot_smoke import run_bounded_process
 
 MODULES = ("cxl_acpi", "cxl_pci", "cxl_mem", "cxl_port")
 MAX_MODULE_COUNT = 128
 MAX_EXPANDED_MODULE_BYTES = 128 * 1024 * 1024
+MAX_MODULE_ARCHIVE_BYTES = 128 * 1024 * 1024
+MODULE_DECOMPRESS_CHUNK_BYTES = 64 * 1024
+MODULE_DECOMPRESS_TIMEOUT_SECONDS = 20
+MAX_COMMAND_STDOUT_BYTES = 256 * 1024
+MAX_COMMAND_STDERR_BYTES = 16 * 1024
+MAX_QEMU_STDERR_BYTES = 16 * 1024
 MAX_SERIAL_BYTES = 64 * 1024
 
 
@@ -27,16 +42,40 @@ class ProbeError(RuntimeError):
     """Raised when the disposable guest cannot safely enumerate CXL."""
 
 
-def run(command: list[str], timeout: int = 20) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        command,
-        check=True,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=timeout,
-    )
+def run(
+    command: list[str],
+    timeout: int = 20,
+    *,
+    max_stdout_bytes: int = MAX_COMMAND_STDOUT_BYTES,
+    max_stderr_bytes: int = MAX_COMMAND_STDERR_BYTES,
+) -> subprocess.CompletedProcess[str]:
+    """Run a small host command with bounded stdout/stderr capture."""
+    try:
+        result = run_bounded_process(
+            command,
+            timeout_seconds=timeout,
+            marker=None,
+            max_stdout_bytes=max_stdout_bytes,
+            max_stderr_bytes=max_stderr_bytes,
+        )
+    except (OSError, ValueError) as exc:
+        raise ProbeError(f"cannot execute {command[0]!r}: {exc}") from exc
+
+    stdout = result.stdout_tail.decode("utf-8", errors="replace")
+    stderr = result.stderr_tail.decode("utf-8", errors="replace")
+    if result.timed_out:
+        raise ProbeError(f"command timed out after {timeout} seconds: {command[0]}")
+    if result.stdout_truncated or result.stderr_truncated:
+        raise ProbeError(
+            f"command output exceeded bounded capture: {command[0]} "
+            f"(stdout={result.stdout_bytes_seen}, stderr={result.stderr_bytes_seen})"
+        )
+    if result.returncode != 0:
+        raise ProbeError(
+            f"command failed ({result.returncode}): {command[0]}; "
+            f"stderr tail={stderr[-1000:]!r}"
+        )
+    return subprocess.CompletedProcess(command, result.returncode, stdout, stderr)
 
 
 def resolve_module_dependencies(kernel_release: str) -> list[Path]:
@@ -71,51 +110,191 @@ def resolve_module_dependencies(kernel_release: str) -> list[Path]:
     return paths
 
 
-def copy_module(source: Path, destination: Path) -> int:
-    """Copy one kernel module into initramfs, decompressing its package suffix."""
+def _stop_child(process: subprocess.Popen[bytes]) -> None:
+    """Terminate a decompressor promptly after a budget violation or timeout."""
+    if process.poll() is not None:
+        return
+    try:
+        process.terminate()
+    except OSError:
+        pass
+    try:
+        process.wait(timeout=1)
+    except subprocess.TimeoutExpired:
+        try:
+            process.kill()
+        except OSError:
+            pass
+        try:
+            process.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            pass
+
+
+def _copy_uncompressed_module(source: Path, destination: Path, limit: int) -> int:
+    """Copy an uncompressed module in chunks without crossing the byte budget."""
+    total = 0
+    with source.open("rb") as input_stream, destination.open("wb") as output_stream:
+        while True:
+            remaining = limit - total
+            chunk = input_stream.read(min(MODULE_DECOMPRESS_CHUNK_BYTES, remaining + 1))
+            if not chunk:
+                return total
+            if len(chunk) > remaining:
+                raise ProbeError(
+                    f"expanded CXL module exceeds remaining {limit}-byte budget: {source.name}"
+                )
+            output_stream.write(chunk)
+            total += len(chunk)
+
+
+def _decompress_module_to_file(command: list[str], source: Path, destination: Path, limit: int) -> int:
+    """Stream decompressor stdout directly to disk under a hard byte cap and timeout."""
+    if limit < 1:
+        raise ProbeError("expanded CXL module dependency budget is exhausted")
+
+    try:
+        process = subprocess.Popen(
+            command,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            bufsize=0,
+            close_fds=True,
+        )
+    except OSError as exc:
+        raise ProbeError(f"module decompressor is unavailable for {source.name}: {exc}") from exc
+
+    if process.stdout is None:
+        _stop_child(process)
+        raise ProbeError(f"module decompressor did not provide stdout: {source.name}")
+
+    stream = process.stdout
+    selector = selectors.DefaultSelector()
+    total = 0
+    deadline = time.monotonic() + MODULE_DECOMPRESS_TIMEOUT_SECONDS
+    try:
+        os.set_blocking(stream.fileno(), False)
+        selector.register(stream, selectors.EVENT_READ)
+        with destination.open("wb") as output_stream:
+            while selector.get_map() or process.poll() is None:
+                remaining_time = deadline - time.monotonic()
+                if remaining_time <= 0:
+                    _stop_child(process)
+                    raise ProbeError(f"module decompression timed out: {source.name}")
+
+                if selector.get_map():
+                    events = selector.select(min(0.1, remaining_time))
+                else:
+                    time.sleep(min(0.02, remaining_time))
+                    events = ()
+
+                for key, _ in events:
+                    remaining_bytes = limit - total
+                    try:
+                        chunk = os.read(
+                            key.fd,
+                            min(MODULE_DECOMPRESS_CHUNK_BYTES, remaining_bytes + 1),
+                        )
+                    except BlockingIOError:
+                        continue
+
+                    if not chunk:
+                        selector.unregister(key.fileobj)
+                        continue
+
+                    if len(chunk) > remaining_bytes:
+                        _stop_child(process)
+                        raise ProbeError(
+                            f"decompressed CXL module exceeds remaining {limit}-byte budget: {source.name}"
+                        )
+
+                    output_stream.write(chunk)
+                    total += len(chunk)
+
+                if process.poll() is not None and not selector.get_map():
+                    break
+
+            try:
+                returncode = process.wait(timeout=max(0.1, deadline - time.monotonic()))
+            except subprocess.TimeoutExpired as exc:
+                _stop_child(process)
+                raise ProbeError(f"module decompression timed out: {source.name}") from exc
+
+        if returncode != 0:
+            raise ProbeError(f"module decompression failed for {source.name}")
+        return total
+    except BaseException:
+        _stop_child(process)
+        try:
+            destination.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+    finally:
+        selector.close()
+        if not stream.closed:
+            stream.close()
+
+
+def copy_module(
+    source: Path,
+    destination: Path,
+    *,
+    max_output_bytes: int = MAX_EXPANDED_MODULE_BYTES,
+) -> int:
+    """Copy/decompress one module while enforcing compressed and expanded byte limits."""
     destination.parent.mkdir(parents=True, exist_ok=True)
-    if source.name.endswith(".ko.zst"):
-        tool = shutil.which("zstd")
-        if not tool:
-            raise ProbeError("zstd is required to unpack the runner's CXL modules")
-        with destination.open("wb") as output:
-            subprocess.run(
+    try:
+        if max_output_bytes < 1:
+            raise ProbeError("expanded CXL module dependency budget is exhausted")
+        if source.stat().st_size > MAX_MODULE_ARCHIVE_BYTES:
+            raise ProbeError(
+                f"compressed CXL module archive exceeds {MAX_MODULE_ARCHIVE_BYTES} bytes: {source.name}"
+            )
+
+        if source.name.endswith(".ko.zst"):
+            tool = shutil.which("zstd")
+            if not tool:
+                raise ProbeError("zstd is required to unpack the runner's CXL modules")
+            size = _decompress_module_to_file(
                 [tool, "-d", "-q", "-c", str(source)],
-                check=True,
-                stdout=output,
-                stderr=subprocess.PIPE,
-                timeout=20,
+                source,
+                destination,
+                max_output_bytes,
             )
-    elif source.name.endswith(".ko.xz"):
-        tool = shutil.which("xz")
-        if not tool:
-            raise ProbeError("xz is required to unpack the selected kernel modules")
-        with destination.open("wb") as output:
-            subprocess.run(
+        elif source.name.endswith(".ko.xz"):
+            tool = shutil.which("xz")
+            if not tool:
+                raise ProbeError("xz is required to unpack the selected kernel modules")
+            size = _decompress_module_to_file(
                 [tool, "-d", "-c", str(source)],
-                check=True,
-                stdout=output,
-                stderr=subprocess.PIPE,
-                timeout=20,
+                source,
+                destination,
+                max_output_bytes,
             )
-    elif source.name.endswith(".ko.gz"):
-        tool = shutil.which("gzip")
-        if not tool:
-            raise ProbeError("gzip is required to unpack the selected kernel modules")
-        with destination.open("wb") as output:
-            subprocess.run(
+        elif source.name.endswith(".ko.gz"):
+            tool = shutil.which("gzip")
+            if not tool:
+                raise ProbeError("gzip is required to unpack the selected kernel modules")
+            size = _decompress_module_to_file(
                 [tool, "-d", "-c", str(source)],
-                check=True,
-                stdout=output,
-                stderr=subprocess.PIPE,
-                timeout=20,
+                source,
+                destination,
+                max_output_bytes,
             )
-    else:
-        shutil.copy2(source, destination)
-    size = destination.stat().st_size
-    if size <= 0:
-        raise ProbeError("decompressed kernel module is empty")
-    return size
+        else:
+            size = _copy_uncompressed_module(source, destination, max_output_bytes)
+
+        if size <= 0:
+            raise ProbeError("decompressed kernel module is empty")
+        return size
+    except BaseException:
+        try:
+            destination.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
 
 
 def render_init(load_paths: list[str]) -> str:
@@ -213,10 +392,8 @@ def build_initramfs(kernel_release: str, modules: list[Path], work: Path) -> tup
         ("ttyS0", 4, 64, "600"),
         ("null", 1, 3, "666"),
     ):
-        subprocess.run(
+        run(
             ["sudo", "mknod", "-m", mode, str(root / "dev" / name), "c", str(major), str(minor)],
-            check=True,
-            capture_output=True,
             timeout=5,
         )
 
@@ -231,9 +408,14 @@ def build_initramfs(kernel_release: str, modules: list[Path], work: Path) -> tup
                 relative = relative.with_suffix("")
                 break
         destination = target_root / relative
-        expanded_bytes += copy_module(source, destination)
-        if expanded_bytes > MAX_EXPANDED_MODULE_BYTES:
+        remaining_bytes = MAX_EXPANDED_MODULE_BYTES - expanded_bytes
+        if remaining_bytes < 1:
             raise ProbeError("expanded CXL module dependency closure exceeds 128 MiB")
+        expanded_bytes += copy_module(
+            source,
+            destination,
+            max_output_bytes=remaining_bytes,
+        )
         guest_load_paths.append("/lib/modules/" + kernel_release + "/" + relative.as_posix())
 
     init = root / "init"
@@ -321,10 +503,8 @@ def run_probe(timeout_seconds: int) -> dict[str, Any]:
         # exact image unchanged into the disposable workspace with read access
         # for the unprivileged QEMU process; never chmod or rewrite /boot files.
         guest_kernel = work / "vmlinuz"
-        subprocess.run(
+        run(
             ["sudo", "install", "-m", "0644", str(kernel), str(guest_kernel)],
-            check=True,
-            capture_output=True,
             timeout=15,
         )
         command = [
@@ -348,27 +528,30 @@ def run_probe(timeout_seconds: int) -> dict[str, Any]:
             "-M", "cxl-fmw.0.targets.0=cxl.1,cxl-fmw.0.size=4G",
         ]
         try:
-            result = subprocess.run(
+            result = run_bounded_process(
                 command,
-                check=False,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=timeout_seconds,
+                timeout_seconds=timeout_seconds,
+                marker=None,
+                max_stdout_bytes=MAX_SERIAL_BYTES,
+                max_stderr_bytes=MAX_QEMU_STDERR_BYTES,
             )
-        except subprocess.TimeoutExpired as exc:
-            stdout = exc.stdout
-            if isinstance(stdout, bytes):
-                stdout = stdout.decode("utf-8", errors="replace")
-            raise ProbeError("QEMU CXL guest timed out; serial tail=" + repr(str(stdout)[-3000:])) from exc
+        except (OSError, ValueError) as exc:
+            raise ProbeError(f"cannot launch bounded QEMU guest process: {exc}") from exc
 
-        output = result.stdout[-MAX_SERIAL_BYTES:]
+        output = result.stdout_tail.decode("utf-8", errors="replace")
+        stderr = result.stderr_tail.decode("utf-8", errors="replace")
+        if result.timed_out:
+            raise ProbeError("QEMU CXL guest timed out; serial tail=" + repr(output[-3000:]))
+        if result.stdout_truncated or result.stderr_truncated:
+            raise ProbeError(
+                "QEMU CXL guest exceeded bounded output capture "
+                f"(serial={result.stdout_bytes_seen}, stderr={result.stderr_bytes_seen})"
+            )
         if result.returncode != 0:
             raise ProbeError(
                 "QEMU guest returned " + str(result.returncode)
                 + "; serial tail=" + repr(output[-3000:])
-                + "; stderr tail=" + repr(result.stderr[-1500:])
+                + "; stderr tail=" + repr(stderr[-1500:])
             )
         observed = parse_guest_output(output)
 

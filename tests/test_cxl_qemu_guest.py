@@ -5,8 +5,12 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+import subprocess
 import sys
+import tempfile
+import time
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location(
@@ -18,6 +22,81 @@ if SPEC is None or SPEC.loader is None:
 guest = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = guest
 SPEC.loader.exec_module(guest)
+
+
+class GuestModuleCopyTests(unittest.TestCase):
+    def test_uncompressed_module_stops_at_remaining_budget(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "cxl_core.ko"
+            destination = root / "out" / "cxl_core.ko"
+            source.write_bytes(b"x" * 1024)
+
+            with self.assertRaisesRegex(guest.ProbeError, "remaining 128-byte budget"):
+                guest.copy_module(source, destination, max_output_bytes=128)
+
+            self.assertFalse(destination.exists())
+
+    def test_compressed_module_stops_at_expanded_budget_without_buffering(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "cxl_core.ko.zst"
+            destination = root / "out" / "cxl_core.ko"
+            source.write_bytes(b"small compressed input")
+            real_popen = subprocess.Popen
+            processes: list[subprocess.Popen[bytes]] = []
+
+            def fake_popen(_command, **kwargs):
+                process = real_popen(
+                    [
+                        sys.executable,
+                        "-c",
+                        "import sys;\nwhile True:\n sys.stdout.buffer.write(b'x' * 65536); sys.stdout.buffer.flush()",
+                    ],
+                    **kwargs,
+                )
+                processes.append(process)
+                return process
+
+            with (
+                patch.object(guest.shutil, "which", return_value=sys.executable),
+                patch.object(guest.subprocess, "Popen", side_effect=fake_popen),
+            ):
+                with self.assertRaisesRegex(guest.ProbeError, "exceeds remaining 128-byte budget"):
+                    guest.copy_module(source, destination, max_output_bytes=128)
+
+            self.assertEqual(len(processes), 1)
+            self.assertIsNotNone(processes[0].poll())
+            self.assertFalse(destination.exists())
+
+    def test_compressed_module_timeout_terminates_child(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "cxl_core.ko.xz"
+            destination = root / "out" / "cxl_core.ko"
+            source.write_bytes(b"small compressed input")
+            real_popen = subprocess.Popen
+            processes: list[subprocess.Popen[bytes]] = []
+
+            def fake_popen(_command, **kwargs):
+                process = real_popen(
+                    [sys.executable, "-c", "import time; time.sleep(20)"],
+                    **kwargs,
+                )
+                processes.append(process)
+                return process
+
+            with (
+                patch.object(guest.shutil, "which", return_value=sys.executable),
+                patch.object(guest.subprocess, "Popen", side_effect=fake_popen),
+                patch.object(guest, "MODULE_DECOMPRESS_TIMEOUT_SECONDS", 0.1),
+            ):
+                with self.assertRaisesRegex(guest.ProbeError, "timed out"):
+                    guest.copy_module(source, destination, max_output_bytes=128)
+
+            self.assertEqual(len(processes), 1)
+            self.assertIsNotNone(processes[0].poll())
+            self.assertFalse(destination.exists())
 
 
 class GuestReportTests(unittest.TestCase):
