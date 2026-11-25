@@ -52,6 +52,17 @@ def build(version: str, output: Path) -> dict[str, Any]:
             f"build-release-bundle: requested {version}, RELEASE-INFO.json says {release['version']}"
         )
 
+    # SHA256SUMS names the file it checksums. If the builder is allowed to pick
+    # any name, the published checksum file refers to a path nobody downloads,
+    # and `sha256sum -c SHA256SUMS` fails silently for the user. Pin the name.
+    canonical_name = f"wsm-desktop-{version}-source.tar.gz"
+    if output.name != canonical_name:
+        raise SystemExit(
+            f"build-release-bundle: output must be named {canonical_name!r}; "
+            f"SHA256SUMS would otherwise name {output.name!r}, which is not the "
+            f"published asset and breaks `sha256sum -c SHA256SUMS`"
+        )
+
     commit = git_output(["rev-parse", "HEAD"])
     dirty = git_output(["status", "--porcelain"])
     if dirty:
