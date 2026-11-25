@@ -15,6 +15,7 @@ from wsm_install.partition import (  # noqa: E402
     ESP_MIB,
     Disk,
     Refused,
+    minimum_disk_size_bytes,
     plan,
     render,
 )
@@ -91,11 +92,49 @@ class RefusalTests(unittest.TestCase):
             firmware="uefi", acknowledgement="/dev/nvme0n1",
         )
 
-    def test_too_small_disk_is_refused(self) -> None:
-        self.assertRefused(
-            "disk.too-small", disk=disk(size_bytes=4 * GIB),
-            firmware="uefi", acknowledgement="/dev/nvme0n1",
+    def test_uefi_minimum_size_is_accepted(self) -> None:
+        size = minimum_disk_size_bytes("uefi")
+        layout = plan(
+            disk(size_bytes=size),
+            "uefi",
+            acknowledgement="/dev/nvme0n1",
         )
+        self.assertEqual(layout.firmware, "uefi")
+
+    def test_uefi_one_byte_below_minimum_is_refused(self) -> None:
+        self.assertRefused(
+            "disk.too-small",
+            disk=disk(size_bytes=minimum_disk_size_bytes("uefi") - 1),
+            firmware="uefi",
+            acknowledgement="/dev/nvme0n1",
+        )
+
+    def test_bios_minimum_size_is_accepted_without_esp_overhead(self) -> None:
+        size = minimum_disk_size_bytes("bios")
+        layout = plan(
+            disk(size_bytes=size),
+            "bios",
+            acknowledgement="/dev/nvme0n1",
+        )
+        self.assertEqual(layout.firmware, "bios")
+
+    def test_bios_one_byte_below_minimum_is_refused(self) -> None:
+        self.assertRefused(
+            "disk.too-small",
+            disk=disk(size_bytes=minimum_disk_size_bytes("bios") - 1),
+            firmware="bios",
+            acknowledgement="/dev/nvme0n1",
+        )
+
+    def test_four_gib_disk_is_refused_for_both_firmware_modes(self) -> None:
+        for firmware in ("uefi", "bios"):
+            with self.subTest(firmware=firmware):
+                self.assertRefused(
+                    "disk.too-small",
+                    disk=disk(size_bytes=4 * GIB),
+                    firmware=firmware,
+                    acknowledgement="/dev/nvme0n1",
+                )
 
     def test_wiping_without_acknowledgement_is_refused(self) -> None:
         self.assertRefused("disk.acknowledgement", disk=disk(), firmware="uefi")
