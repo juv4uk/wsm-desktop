@@ -14,7 +14,7 @@ evidence.
 Usage:
 
     python3 scripts/draft_profile_evidence.py --report hw.json \\
-        --vendor ASUS --model H170-PRO --slug asus/h170-pro --out evidence.json
+        --vendor VENDOR --model MODEL --slug vendor/model --out evidence.json
 """
 
 from __future__ import annotations
@@ -146,7 +146,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--report", required=True, type=Path)
     parser.add_argument("--vendor", required=True)
     parser.add_argument("--model", required=True)
-    parser.add_argument("--slug", required=True, help="lowercase vendor/model, e.g. asus/h170-pro")
+    parser.add_argument("--slug", required=True, help="lowercase vendor/model path, e.g. vendor/model")
     parser.add_argument("--out", type=Path, help="write here instead of stdout")
     parser.add_argument("--compact", action="store_true")
     return parser
