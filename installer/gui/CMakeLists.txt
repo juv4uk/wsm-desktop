@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
+option(WSM_BUILD_TESTS "Build WSM installer workflow tests" OFF)
+
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2)
 
 include(GNUInstallDirs)
@@ -14,6 +16,8 @@ qt_add_executable(wsm-installer
     src/main.cpp
     src/PreflightController.cpp
     src/PreflightController.h
+    src/InstallerWorkflowPolicy.cpp
+    src/InstallerWorkflowPolicy.h
 )
 
 set_source_files_properties(qml/Main.qml PROPERTIES QT_RESOURCE_ALIAS Main.qml)
@@ -53,3 +57,20 @@ install(FILES assets/wsm-installer.desktop
 install(FILES assets/wsm-installer.svg
     DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps
 )
+
+if(WSM_BUILD_TESTS)
+    enable_testing()
+    find_package(Qt6 6.4 REQUIRED COMPONENTS Test)
+
+    add_executable(tst-installer-workflow
+        tests/tst_installer_workflow_policy.cpp
+        src/InstallerWorkflowPolicy.cpp
+        src/InstallerWorkflowPolicy.h
+    )
+    target_link_libraries(tst-installer-workflow
+        PRIVATE
+            Qt6::Core
+            Qt6::Test
+    )
+    add_test(NAME installer-workflow-policy COMMAND tst-installer-workflow)
+endif()
