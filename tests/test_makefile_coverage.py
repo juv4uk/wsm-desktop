@@ -23,6 +23,14 @@ def targets(text: str) -> set[str]:
     }
 
 
+def phony_targets(text: str) -> set[str]:
+    return {
+        target
+        for line in text.splitlines()
+        if line.startswith(".PHONY:")
+        for target in line.split(":", 1)[1].split()
+    }
+
 def aggregate(text: str) -> set[str]:
     for line in text.splitlines():
         if line.startswith("check:"):
@@ -59,6 +67,9 @@ class MakefileCoverageTests(unittest.TestCase):
         pulled = sorted(aggregate(self.text) & self.guix_targets)
         self.assertEqual(pulled, [], f"`make check` requires Guix for: {pulled}")
 
+    def test_every_check_target_is_phony(self) -> None:
+        missing = sorted(self.all_targets - phony_targets(self.text))
+        self.assertEqual(missing, [], f"check targets missing from .PHONY: {missing}")
     def test_each_python_target_runs_at_least_one_command(self) -> None:
         for name in sorted(self.python_targets):
             with self.subTest(target=name):
