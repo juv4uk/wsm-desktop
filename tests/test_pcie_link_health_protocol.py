@@ -77,7 +77,7 @@ class PcieLinkHealthProtocolTests(unittest.TestCase):
 
     def test_zero_and_nonzero_counts_are_not_global_health_verdicts(self) -> None:
         self.assertIn("не healthy", self.lower)
-        self.assertIn("не повна справність", self.lower)
+        self.assertIn("повна справність пристрою/лінка", self.lower)
         self.assertIn("не повинен самостійно блокувати інсталяцію", self.lower)
 
     def test_protocol_keeps_schema_and_collector_out_of_scope(self) -> None:
