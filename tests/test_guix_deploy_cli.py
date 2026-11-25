@@ -277,8 +277,8 @@ class GuixDeployCliTests(unittest.TestCase):
             "--confirm-plan-sha256", self.plan["plan_sha256"],
             "--confirm-target-digest", self.selection.digest(),
         )
-        self.assertEqual(code, 3)
-        self.assertIn("argv.mountpoint", stderr)
+        self.assertEqual(code, 2)
+        self.assertIn("target mountpoint must be absolute", stderr)
         self.assertFalse(self.output_path.exists())
 
 
