@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from release_gate import (  # noqa: E402
     check_channels,
     check_image,
+    check_tests,
     criterion,
     exit_status,
     from_exit,
@@ -62,6 +63,24 @@ class ExitMappingTests(unittest.TestCase):
         self.assertEqual(from_exit("x", 1, "")["status"], "fail")
 
 
+class TestRunnerTests(unittest.TestCase):
+    def test_test_suite_uses_one_bounded_unittest_discovery_process(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "tests").mkdir()
+            (root / "tests" / "test_sample.py").write_text("pass\n", encoding="utf-8")
+            with patch("release_gate.ROOT", root), patch(
+                "release_gate.run", return_value=(0, "OK")
+            ) as run_mock:
+                result = check_tests()
+        self.assertEqual(result["status"], "pass")
+        self.assertEqual(run_mock.call_count, 1)
+        command = run_mock.call_args.args[0]
+        self.assertEqual(command[1:6], ["-m", "unittest", "discover", "-s", "tests"])
+        self.assertIn("-v", command)
+        self.assertEqual(run_mock.call_args.kwargs["timeout"], 900)
+
+
 class ChannelTests(unittest.TestCase):
     def test_missing_compatibility_lock_is_not_run_and_never_reuses_free_lock(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -81,6 +100,15 @@ class ChannelTests(unittest.TestCase):
         self.assertIn("free", args)
         self.assertIn("--lock", args)
         self.assertEqual(Path(args[args.index("--lock") + 1]).name, "channels.lock.scm")
+
+    def test_missing_required_free_lock_is_a_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with patch("release_gate.ROOT", root), patch("release_gate.run") as run_mock:
+                result = check_channels()
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("required channels.lock.scm is missing", result["detail"])
+        run_mock.assert_not_called()
 
     def test_each_configured_policy_uses_its_own_lock(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -175,6 +203,15 @@ class ImageTests(unittest.TestCase):
         result = self.run_nested(payload, 0)
         self.assertEqual(result["status"], "fail")
         self.assertIn("invalid status", result["detail"])
+
+    def test_unhashable_nested_status_types_are_refused(self) -> None:
+        for malformed in ([], {}):
+            with self.subTest(malformed=malformed):
+                payload = self.nested_payload("pass")
+                payload["criteria"][0]["status"] = malformed
+                result = self.run_nested(payload, 0)
+                self.assertEqual(result["status"], "fail")
+                self.assertIn("invalid status", result["detail"])
 
     def test_no_iso_is_recorded_as_not_run(self) -> None:
         self.assertEqual(check_image(None, boot=False)["status"], "not-run")
