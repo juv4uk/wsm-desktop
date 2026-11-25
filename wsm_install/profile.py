@@ -150,7 +150,24 @@ def problems(
         )
 
     limitations = " ".join(document["known_limitations"]).lower()
-    artifact_by_path = {artifact["path"]: artifact for artifact in document["artifacts"]}
+    artifact_by_path: dict[str, dict[str, Any]] = {}
+    for artifact in document["artifacts"]:
+        path = artifact["path"]
+        if path in artifact_by_path:
+            found.append(
+                f"duplicate artifact path {path!r}; each path must have exactly one manifest entry"
+            )
+            continue
+        artifact_by_path[path] = artifact
+
+    source_report_sha256 = next(
+        (
+            artifact["sha256"]
+            for artifact in document["artifacts"]
+            if artifact["kind"] == "wsm-hwcheck-report"
+        ),
+        None,
+    )
     for item in functions:
         status = item["status"]
         if status in {"pass", "fail"}:
@@ -165,9 +182,13 @@ def problems(
                     found.append(
                         f"function {item['name']!r} references missing artifact {reference!r}"
                     )
-                elif artifact["kind"] == "wsm-hwcheck-report":
+                elif artifact["kind"] != "functional-test-log":
                     found.append(
-                        f"function {item['name']!r} cites the source hardware report as functional proof; add a test artifact"
+                        f"function {item['name']!r} references non-functional artifact kind {artifact['kind']!r}"
+                    )
+                elif source_report_sha256 is not None and artifact["sha256"] == source_report_sha256:
+                    found.append(
+                        f"function {item['name']!r} references bytes identical to the source hardware report; add a distinct functional test artifact"
                     )
         if status == "fail" and item["name"].lower() not in limitations:
             found.append(
