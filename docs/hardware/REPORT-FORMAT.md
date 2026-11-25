@@ -3,6 +3,7 @@
 <!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 
 - Status: **initial schema proposal**
+- Critical path: **yes** — preflight and the installer plan both consume this schema
 - Schema: [hardware-report.schema.json](../../schemas/hardware-report.schema.json)
 - Parent: [Issue #3](https://github.com/juv4uk/wsm-desktop/issues/3)
 - Work item: [Issue #5](https://github.com/juv4uk/wsm-desktop/issues/5)

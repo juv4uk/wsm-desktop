@@ -3,6 +3,7 @@
 <!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 
 Статус: дослідницький протокол, не реалізація EFI application і не дозвіл змінювати report schema.
+Критичний шлях: **ні** — дослідження не блокує перший preview-образ.
 Дата: 2026-11-25. Задача: [#92](https://github.com/juv4uk/wsm-desktop/issues/92).
 
 ## Рішення
