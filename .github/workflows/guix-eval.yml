@@ -1,0 +1,79 @@
+name: Guix evaluation
+
+# The Scheme in systems/ has never been evaluated: no one has run `guix` on it.
+# That is how a missing (srfi srfi-1) import survives review - it reads fine and
+# fails at load time. A GitHub runner can install Guix and evaluate the files
+# without building anything, which is the check this repository lacks.
+
+on:
+  pull_request:
+    paths:
+      - "systems/**"
+      - "wsm/**"
+      - "channels.lock.scm"
+      - ".github/workflows/guix-eval.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: guix-eval-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    # Installing Guix and fetching the pinned channels is the slow part; the
+    # evaluation itself is seconds. A hard ceiling keeps a hung download from
+    # burning the runner.
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Guix
+        run: |
+          set -euo pipefail
+          wget -q https://git.savannah.gnu.org/cgit/guix.git/plain/etc/guix-install.sh
+          chmod +x guix-install.sh
+          # Non-interactive: the script otherwise waits on a prompt forever.
+          printf 'n\n' | ./guix-install.sh || true
+          test -x /var/guix/profiles/per-user/root/current-guix/bin/guix \
+            || test -x /usr/local/bin/guix
+          /usr/local/bin/guix --version
+
+      - name: Authorise the substitute key
+        run: |
+          set -euo pipefail
+          /usr/local/bin/guix archive --authorize < \
+            /var/guix/profiles/per-user/root/current-guix/share/guix/ci.guix.gnu.org.pub \
+            || /usr/local/bin/guix archive --authorize < \
+            /usr/local/share/guix/ci.guix.gnu.org.pub
+
+      - name: Evaluate every system file against the pinned channels
+        # --dry-run resolves the whole graph and reports what would be built,
+        # which requires reading and evaluating each file. It catches missing
+        # imports, unknown record fields and broken inheritance without
+        # downloading a single package.
+        run: |
+          set -euo pipefail
+          status=0
+          for file in systems/minimal.scm systems/desktop.scm systems/live.scm; do
+            echo "::group::evaluating $file"
+            if ! /usr/local/bin/guix time-machine -C channels.lock.scm -- \
+                 system build "$file" --dry-run; then
+              echo "::error file=$file::guix could not evaluate this system file"
+              status=1
+            fi
+            echo "::endgroup::"
+          done
+          # compatibility.scm needs Nonguix, which the locked channels do not
+          # contain on purpose. Evaluating it here would either fail for the
+          # wrong reason or require adding a nonfree channel to CI.
+          exit $status
+
+      - name: Note what was not evaluated
+        if: always()
+        run: |
+          echo "systems/compatibility.scm is not evaluated: it requires Nonguix," >&2
+          echo "which is deliberately absent from channels.lock.scm." >&2
