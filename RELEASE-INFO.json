@@ -1,28 +1,30 @@
 {
   "schema": "wsm-release-info/1",
   "release_id": "wsm-desktop-hardware-preview",
-  "version": "0.1.0-rc1",
-  "display_name": "WSM Desktop Hardware Preview RC1",
+  "version": "0.1.0-rc2",
+  "display_name": "WSM Desktop Hardware Preview RC2",
   "status": "pre-release",
-  "date": "2026-11-25",
+  "date": "2026-11-26",
   "scope": [
     "read-only hardware evidence report (wsm-hwcheck 0.2.0, report schema 1.0.0)",
     "diagnostic-only draft plan for the ratified Guix backend; the Nix plan is research-only (wsm-install 0.1.0)",
     "authenticated free-only Guix channel lock",
-    "reproducible source bundle with checksums and build manifest"
+    "reproducible source bundle with checksums and build manifest",
+    "KDE Plasma desktop profile and a live-ISO recipe, shipped as unverified source (not as an image)"
   ],
   "excluded": [
-    "supported installation image or USB installer",
+    "supported installation image or USB installer: systems/live.scm is a recipe, never built",
     "any write to a block device, partition table or bootloader",
     "Nonguix or nonfree firmware in the release channel lock",
-    "a second supported backend: ADR 0004 is ratified for GNU Guix; Nix/NixOS remains research (#55)"
+    "a second supported backend: ADR 0004 is ratified for GNU Guix; Nix/NixOS remains research",
+    "the Calamares module: ADR 0006 deprioritised that frontend"
   ],
   "requirements": {
     "python": ">=3.10",
     "jsonschema": "4.26.0"
   },
   "artifacts": [
-    "wsm-desktop-0.1.0-rc1-source.tar.gz",
+    "wsm-desktop-0.1.0-rc2-source.tar.gz",
     "SHA256SUMS",
     "release-manifest.json"
   ]
