@@ -30,10 +30,20 @@ def summarize_report(report: dict[str, Any]) -> str:
     for device in devices:
         identity = device.get("identity", {})
         label = identity.get("model") or identity.get("manufacturer") or device["device_id"]
+        test_summary = ", ".join(
+            f"{test['capability']}={test['status']}"
+            for test in device["functional_tests"]
+        ) or "none"
+        evidence = device.get("evidence", [])
+        provenance = (
+            f"source={evidence[0]['source']} @ {evidence[0]['observed_at']} "
+            f"({evidence[0]['confidence']})"
+            if evidence else "source=unknown"
+        )
         lines.append(
             f"- {device['category']}: {label}; discovery={device['discovery_status']}; "
             f"driver={device['driver']['status']}; firmware={device['firmware']['runtime_status']}; "
-            f"tests={len(device['functional_tests'])}"
+            f"tests=[{test_summary}]; {provenance}"
         )
     if report.get("warnings"):
         lines.append("Report warnings: " + "; ".join(report["warnings"]))
@@ -51,9 +61,10 @@ def build_plan(
 
     for device in report["devices"]:
         criticality = set(device.get("criticality", []))
-        if criticality & CRITICAL_REQUIRED and device["discovery_status"] == "unknown":
+        if criticality & CRITICAL_REQUIRED and device["discovery_status"] in {"unknown", "not-detected"}:
             blockers.append(
-                f"{device['device_id']}: required critical device discovery is unknown"
+                f"{device['device_id']}: required critical device discovery is "
+                f"{device['discovery_status']}"
             )
         firmware = device["firmware"]
         if (
