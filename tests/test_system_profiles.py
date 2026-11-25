@@ -144,6 +144,22 @@ class DesktopProfileTests(unittest.TestCase):
                 self.assertNotIn("channel", code)
 
 
+class SourceResolutionTests(unittest.TestCase):
+    def test_live_profile_does_not_use_a_relative_include(self) -> None:
+        """`include` with a relative path depends on the working directory."""
+        text = profile("live.scm")
+        self.assertNotIn('(include "desktop.scm")', text)
+        self.assertIn("current-filename", text)
+
+    def test_package_source_excludes_vcs_metadata(self) -> None:
+        """Without select? the store copy would embed .git and vary per clone."""
+        text = (ROOT / "wsm" / "packages" / "wsm.scm").read_text(encoding="utf-8")
+        self.assertIn("#:select?", text)
+        for skipped in ("/.git", "/__pycache__", "/build"):
+            with self.subTest(skip=skipped):
+                self.assertIn(skipped, text)
+
+
 class LiveProfileTests(unittest.TestCase):
     def test_live_profile_inherits_the_desktop_profile(self) -> None:
         text = profile("live.scm")
@@ -177,7 +193,7 @@ case " $* " in
         if [ "$WSM_TEST_AUTH_DISABLED" = '1' ]; then
             echo 'channel authentication disabled' >&2
         fi
-        printf '%s\\n' '(list (channel (name guix) (commit test)))'
+        printf '%s\\n' '(list (channel (name guix) (commit $WSM_TEST_LOCK_COMMIT)))'
         exit 0 ;;
     *" system image "*)
         for argument in "$@"; do
@@ -211,6 +227,11 @@ exit 8
             environment["WSM_ISO_DIR"] = str(output_dir)
             environment["WSM_TEST_GUIX_ARGS"] = str(args_log)
             environment["WSM_TEST_IMAGE"] = str(fake_image)
+            lock_commit = re.search(
+                r'\(commit\s+"([0-9a-f]{40})"\)',
+                (ROOT / "channels.lock.scm").read_text(encoding="utf-8"),
+            ).group(1)
+            environment["WSM_TEST_LOCK_COMMIT"] = lock_commit
             environment.pop("GUIX_PACKAGE_PATH", None)
 
             result = subprocess.run(
@@ -236,6 +257,7 @@ exit 8
             self.assertIn(f"CALL|time-machine|-C|{lock}|-L|{ROOT}|--|system|image", calls)
             self.assertIn(f"--root={gc_root}", calls)
             self.assertIn("--no-grafts", calls)
+            self.assertIn("--save-provenance", calls)
             self.assertIn("--image-type=iso9660", calls)
             self.assertIn(f"PWD={ROOT}", calls)
             self.assertNotIn("--disable-authentication", calls)
@@ -261,6 +283,8 @@ exit 8
             self.assertIn("-L", manifest["build"]["command"])
             self.assertIn(str(ROOT), manifest["build"]["command"])
             self.assertIn(f"--root={gc_root}", manifest["build"]["command"])
+            self.assertIn("--save-provenance", manifest["build"]["command"])
+            self.assertEqual(manifest["source"]["resolved_guix_channel_commit"], lock_commit)
             self.assertIn("default", manifest["guix"]["authentication_policy"])
             self.assertEqual(manifest["guix"]["locked_version"], "guix (GNU Guix) 1.5.0-pinned")
 
