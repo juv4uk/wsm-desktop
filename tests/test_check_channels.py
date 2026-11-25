@@ -130,6 +130,10 @@ class RuleTests(unittest.TestCase):
         )
         self.assertTrue(any("duplicate channel field" in item for item in check(text)))
 
+    def test_non_symbol_channel_field_name_is_refused(self) -> None:
+        text = GOOD.replace("(name 'guix)", "((nested) 'guix)")
+        self.assertTrue(any("unexpected channel field" in item for item in check(text)))
+
     def test_missing_introduction_is_refused(self) -> None:
         channel = CHANNEL.replace(INTRODUCTION, "")
         self.assertTrue(any("missing required fields" in item for item in check("(list " + channel + ")")))
