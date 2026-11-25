@@ -47,12 +47,12 @@ class PcieLinkHealthProtocolTests(unittest.TestCase):
         self.assertIn("та сама boot session", self.lower)
         self.assertIn("монотонний порядок часу", self.lower)
         self.assertIn("лічильник зменшився", self.lower)
-        self.assertIn("delta є unknown", self.lower)
+        self.assertIn("delta = unverifiable", self.lower)
         self.assertIn("зміни джерела", self.lower)
 
     def test_only_devlink_health_show_is_allowed_automatically(self) -> None:
         self.assertIn("devlink health show", self.lower)
-        self.assertIn("health-reporter-get", self.lower)
+        self.assertIn("get/status/configuration query", self.lower)
         self.assertIn("не запускати автоматично", self.lower)
         for forbidden in (
             "devlink health recover",
