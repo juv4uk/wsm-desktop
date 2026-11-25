@@ -10,6 +10,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -124,6 +125,19 @@ class HardwareCheckScriptTests(unittest.TestCase):
             self.assertIn("not a symlink", result.stderr)
             self.assertEqual(list(target.iterdir()), [])
 
+    def test_output_permission_failure_fails_closed(self) -> None:
+        from scripts.wsm_hardware_check import prepare_output
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "private"
+            with patch(
+                "scripts.wsm_hardware_check.os.chmod",
+                side_effect=PermissionError("permission denied"),
+            ):
+                with self.assertRaisesRegex(SystemExit, "cannot enforce output directory mode 0700"):
+                    prepare_output(str(output))
+            self.assertTrue(output.is_dir())
+
     def test_report_must_be_a_regular_file(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             result = subprocess.run(
@@ -186,6 +200,67 @@ class ReleaseBundleTests(unittest.TestCase):
                     names = set(archive.getnames())
             self.assertIn(f"wsm-desktop-{release['version']}/RELEASE-INFO.json", names)
             self.assertIn(f"wsm-desktop-{release['version']}/scripts/wsm_hardware_check.py", names)
+
+
+    def test_bundle_refuses_existing_tarball_without_overwriting(self) -> None:
+        from scripts.build_release_bundle import build, load_release
+
+        release = load_release()
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / f"wsm-desktop-{release['version']}-source.tar.gz"
+            output.write_bytes(b"keep this file")
+            with self.assertRaisesRegex(SystemExit, "refusing to overwrite existing artifact"):
+                build(release["version"], output)
+            self.assertEqual(output.read_bytes(), b"keep this file")
+
+    def test_bundle_refuses_existing_sidecar_before_creating_tarball(self) -> None:
+        from scripts.build_release_bundle import build, load_release
+
+        release = load_release()
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            output = parent / f"wsm-desktop-{release['version']}-source.tar.gz"
+            sums = parent / "SHA256SUMS"
+            sums.write_text("preserve existing checksum", encoding="utf-8")
+            with self.assertRaisesRegex(SystemExit, "refusing to overwrite existing artifact"):
+                build(release["version"], output)
+            self.assertFalse(output.exists())
+            self.assertEqual(sums.read_text(encoding="utf-8"), "preserve existing checksum")
+
+    def test_bundle_refuses_symlinked_output_parent(self) -> None:
+        from scripts.build_release_bundle import build, load_release
+
+        release = load_release()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            actual = root / "actual"
+            actual.mkdir()
+            alias = root / "alias"
+            alias.symlink_to(actual, target_is_directory=True)
+            output = alias / f"wsm-desktop-{release['version']}-source.tar.gz"
+            with self.assertRaisesRegex(SystemExit, "symlink path components"):
+                build(release["version"], output)
+            self.assertEqual(list(actual.iterdir()), [])
+
+    def test_bundle_refuses_repository_paths_outside_build(self) -> None:
+        from scripts.build_release_bundle import build, load_release
+
+        release = load_release()
+        output = ROOT / f"wsm-desktop-{release['version']}-source.tar.gz"
+        self.assertFalse(output.exists())
+        with self.assertRaisesRegex(SystemExit, "inside the repository is allowed only under build"):
+            build(release["version"], output)
+        self.assertFalse(output.exists())
+
+    def test_bundle_refuses_noncanonical_output_filename(self) -> None:
+        from scripts.build_release_bundle import build, load_release
+
+        release = load_release()
+        readme = ROOT / "README.md"
+        original = readme.read_bytes()
+        with self.assertRaisesRegex(SystemExit, "--output filename must be exactly"):
+            build(release["version"], readme)
+        self.assertEqual(readme.read_bytes(), original)
 
 
 def gzip_open(path: Path):  # pragma: no cover - tiny helper for readable test
