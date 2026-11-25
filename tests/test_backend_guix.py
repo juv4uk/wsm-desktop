@@ -278,12 +278,12 @@ class HandoffRefusalTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, "argv.config_path")
 
     def test_device_path_rejects_trailing_newline_and_extra_segments(self) -> None:
-        for disk in ("/dev/vda\\n", "/dev/vda/../../etc/passwd"):
+        for disk in ("/dev/vda\n", "/dev/vda/../../etc/passwd"):
             with self.subTest(disk=disk):
                 self.assert_refused("selection.disk", confirmed_plan(), selection(disk=disk))
 
     def test_full_name_rejects_control_format_and_surrogate_characters(self) -> None:
-        for full_name in ("Ada\\rLovelace", "Ada\\tLovelace", "Ada\\x00Lovelace", "Ada\\u2028Lovelace", "Ada\\u202eLovelace", "Ada\\ud800Lovelace"):
+        for full_name in ("Ada\rLovelace", "Ada\tLovelace", "Ada\x00Lovelace", "Ada\u2028Lovelace", "Ada\u202eLovelace", "Ada\ud800Lovelace"):
             with self.subTest(full_name=repr(full_name)):
                 self.assert_refused("selection.full_name", confirmed_plan(), selection(full_name=full_name))
 
@@ -293,7 +293,7 @@ class HandoffRefusalTests(unittest.TestCase):
         self.assertNotEqual(left.digest(), right.digest())
 
     def test_target_selection_digest_handles_unpaired_surrogate(self) -> None:
-        value = selection(full_name="Ada\\ud800Lovelace").digest()
+        value = selection(full_name="Ada\ud800Lovelace").digest()
         self.assertEqual(len(value), 64)
 
     def test_configuration_path_must_be_installer_owned(self) -> None:
