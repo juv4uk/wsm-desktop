@@ -154,7 +154,7 @@ The backend decision is closed. [ADR 0004](docs/decisions/0004-nix-guix-backend-
 
 ## Licensing and project identity
 
-The copyright holder of original material is Volodymyr Sidii. All work created for WSM Desktop in this repository — code, configuration, tests and documentation — is released under the **VOLNIST** licence. See [LICENSE](LICENSE) and [docs/LICENSING.md](docs/LICENSING.md).
+All work created for WSM Desktop in this repository — code, configuration, tests and documentation — is released under the **VOLNIST** licence. See [LICENSE](LICENSE) and [docs/LICENSING.md](docs/LICENSING.md).
 
 Third-party components — GNU Guix, Calamares, Nonguix, Linux, drivers, firmware — keep their own licences. This licence does not change them and does not relicense them.
 
