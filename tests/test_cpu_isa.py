@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from wsm_hwcheck.isa import IsaError, evaluate, read_cpuinfo_flags  # noqa: E402
+from wsm_hwcheck.isa import IsaError, build_evidence, evaluate, read_cpuinfo_flags  # noqa: E402
 
 V2 = ["cx16", "lahf_lm", "popcnt", "pni", "ssse3", "sse4_1", "sse4_2"]
 V3 = V2 + ["avx", "avx2", "bmi1", "bmi2", "f16c", "fma", "abm", "movbe", "osxsave"]
@@ -84,6 +84,9 @@ class CpuinfoParsingTests(unittest.TestCase):
         self.assertEqual(fields["vendor_id"], "GenuineIntel")
         self.assertEqual(fields["_cpuinfo_processor_count"], "2")
         self.assertEqual(fields["_cpuinfo_flags_heterogeneous"], "true")
+        evidence = build_evidence(flags, fields, "x86_64", "procfs:test")
+        self.assertEqual(evidence["levels"]["highest_supported"], "x86-64-v2")
+        self.assertTrue(any("intersection" in item for item in evidence["warnings"]))
         path.unlink()
 
     def test_single_processor_preserves_its_complete_feature_set(self) -> None:
@@ -111,6 +114,17 @@ class CpuinfoParsingTests(unittest.TestCase):
         self.assertEqual(flags, [])
         self.assertEqual(fields["_cpuinfo_processor_count"], "2")
         self.assertEqual(fields["_cpuinfo_flags_incomplete"], "true")
+        evidence = build_evidence(flags, fields, "x86_64", "procfs:test")
+        self.assertEqual(evidence["evidence"]["confidence"], "unknown")
+        self.assertTrue(any("no flags field" in item for item in evidence["warnings"]))
+        path.unlink()
+
+    def test_empty_cpuinfo_is_incomplete_not_confirmed(self) -> None:
+        path = self.write("")
+        flags, fields = read_cpuinfo_flags(path)
+        self.assertEqual(flags, [])
+        evidence = build_evidence(flags, fields, "x86_64", "procfs:test")
+        self.assertEqual(evidence["evidence"]["confidence"], "unknown")
         path.unlink()
 
     def test_missing_cpuinfo_is_a_clean_refusal(self) -> None:
