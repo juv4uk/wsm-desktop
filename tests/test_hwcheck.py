@@ -8,15 +8,19 @@ import io
 import json
 import tempfile
 import unittest
+import sys
 from pathlib import Path
 
 from jsonschema import Draft202012Validator, FormatChecker
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from wsm_hwcheck.cli import main
 from wsm_hwcheck.collector import collect_report
 
 
-ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = ROOT / "schemas" / "hardware-report.schema.json"
 
 
