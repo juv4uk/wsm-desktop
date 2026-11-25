@@ -21,7 +21,7 @@ Milestones нижче утворюють критичний шлях до пер
 - [ ] Зберегти та описати наявний локальний Nix-експеримент: версія, inputs, build і VM result.
 - [ ] Перевірити NixOS-конфігурацію в disposable QEMU VM.
 - [ ] Окремо перевірити channels/free.scm та systems/minimal.scm на актуальній Guix-інсталяції.
-- [ ] Побудувати й завантажити мінімальну Guix System у QEMU.
+- [x] Побудувати й завантажити мінімальну Guix System у disposable QEMU VM (direct-kernel boot до `wsm-desktop login:` підтверджено; GRUB `--full-boot` ще не підтверджено).
 - [ ] Порівняти update, rollback, store growth, package availability, hardware support та UX.
 - [x] Прийняти ADR 0004: перший backend — GNU Guix, Nix відкладено.
 - [ ] Підготувати problem register для Guix-шляху.
