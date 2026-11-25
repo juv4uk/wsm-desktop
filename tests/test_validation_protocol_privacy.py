@@ -43,6 +43,9 @@ class ValidationProtocolPrivacyTests(unittest.TestCase):
         self.assertIn("RHEL-релізи не уражені", audit)
         self.assertIn("не запускається з підвищеними привілеями", audit)
         self.assertIn("Спеціально сформований EDID слід вважати untrusted input", audit)
+        self.assertIn("Amazon Linux 2023 та Amazon Linux 2027 Preview як **Pending Fix**", audit)
+        self.assertIn("ті самі downstream packages як **Not Affected**", audit)
+        self.assertIn("2026-11-25", audit)
 
     def test_network_endpoint_consent_discloses_source_ip_visibility(self) -> None:
         self.assertIn("source/egress-IP visibility", self.network)
