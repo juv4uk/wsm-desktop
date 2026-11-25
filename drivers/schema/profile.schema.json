@@ -1,0 +1,552 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/juv4uk/wsm-desktop/blob/main/drivers/schema/profile.schema.json",
+  "title": "WSM Hardware Driver and Firmware Profile",
+  "description": "Staged evidence for a named hardware target. Package resolution, file presence, runtime binding and functional validation are separate claims.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile_id",
+    "profile_class",
+    "profile_status",
+    "enabled_by_default",
+    "target",
+    "source",
+    "kernel",
+    "unobserved_device_classes",
+    "devices",
+    "policy"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "profile_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$"
+    },
+    "profile_class": {
+      "enum": [
+        "free",
+        "compatibility"
+      ]
+    },
+    "profile_status": {
+      "enum": [
+        "draft",
+        "channel-evaluated",
+        "image-built",
+        "physically-validated"
+      ]
+    },
+    "enabled_by_default": {
+      "type": "boolean"
+    },
+    "base_profile": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_id",
+        "board_vendor",
+        "board_model",
+        "firmware_vendor",
+        "firmware_version",
+        "boot_mode",
+        "evidence_source",
+        "evidence_date"
+      ],
+      "properties": {
+        "target_id": {
+          "const": "h170-gaming-3-owner-reference"
+        },
+        "board_vendor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "board_model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "firmware_vendor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "firmware_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "boot_mode": {
+          "enum": [
+            "uefi",
+            "bios",
+            "unknown"
+          ]
+        },
+        "evidence_source": {
+          "type": "string",
+          "format": "uri"
+        },
+        "evidence_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "secure_boot": {
+          "enum": [
+            "enabled",
+            "disabled",
+            "unknown"
+          ]
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "source_commit",
+        "channel_lock_file",
+        "channel_commit",
+        "channel_authentication_evidence",
+        "notes"
+      ],
+      "properties": {
+        "repository": {
+          "const": "juv4uk/wsm-desktop"
+        },
+        "source_commit": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "channel_lock_file": {
+          "const": "channels.lock.scm"
+        },
+        "channel_commit": {
+          "const": "4e5195be20d9b124df8a8bb69213412236e4668e"
+        },
+        "channel_authentication_evidence": {
+          "enum": [
+            "authenticated-pull-recorded-build-not-evaluated",
+            "authenticated-build-verified",
+            "not-evaluated",
+            "unknown"
+          ]
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "kernel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "package_candidate",
+        "version",
+        "configuration_status",
+        "notes"
+      ],
+      "properties": {
+        "package_candidate": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "configuration_status": {
+          "enum": [
+            "not-assessed",
+            "available",
+            "missing",
+            "unknown"
+          ]
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "unobserved_device_classes": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "wifi",
+          "bluetooth",
+          "thunderbolt",
+          "webcam",
+          "other-usb-peripheral"
+        ]
+      }
+    },
+    "devices": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/device"
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nonfree_components_included",
+        "automatic_firmware_updates",
+        "host_disk_writes",
+        "unknown_must_remain_unknown"
+      ],
+      "properties": {
+        "nonfree_components_included": {
+          "type": "boolean"
+        },
+        "automatic_firmware_updates": {
+          "const": false
+        },
+        "host_disk_writes": {
+          "const": false
+        },
+        "unknown_must_remain_unknown": {
+          "const": true
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "stageStatus": {
+      "enum": [
+        "not-assessed",
+        "present",
+        "absent",
+        "not-required",
+        "unknown"
+      ]
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "source",
+        "observed_at",
+        "summary"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "owner-hardware-profile",
+            "locked-package-query",
+            "package-build",
+            "image-inspection",
+            "runtime-observation",
+            "functional-test",
+            "upstream-reference"
+          ]
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_id",
+        "name",
+        "kernel_module",
+        "userspace_candidates",
+        "package_candidates",
+        "package_resolution",
+        "kernel_config",
+        "runtime_binding",
+        "source_license",
+        "evidence"
+      ],
+      "properties": {
+        "candidate_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{1,63}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kernel_module": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "userspace_candidates": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "package_candidates": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "package_resolution": {
+          "$ref": "#/$defs/stageStatus"
+        },
+        "kernel_config": {
+          "enum": [
+            "not-assessed",
+            "built-in",
+            "module-available",
+            "missing",
+            "unknown"
+          ]
+        },
+        "runtime_binding": {
+          "enum": [
+            "unknown",
+            "not-tested",
+            "bound",
+            "unbound",
+            "load-error"
+          ]
+        },
+        "source_license": {
+          "enum": [
+            "free",
+            "nonfree",
+            "mixed",
+            "unknown",
+            "not-applicable"
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          }
+        }
+      }
+    },
+    "firmware": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requirement",
+        "package_candidates",
+        "package_resolution",
+        "live_rootfs",
+        "initrd",
+        "installed_rootfs",
+        "runtime_load",
+        "redistribution",
+        "evidence"
+      ],
+      "properties": {
+        "requirement": {
+          "enum": [
+            "required",
+            "optional",
+            "not-required",
+            "unknown"
+          ]
+        },
+        "package_candidates": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "package_resolution": {
+          "$ref": "#/$defs/stageStatus"
+        },
+        "live_rootfs": {
+          "$ref": "#/$defs/stageStatus"
+        },
+        "initrd": {
+          "$ref": "#/$defs/stageStatus"
+        },
+        "installed_rootfs": {
+          "$ref": "#/$defs/stageStatus"
+        },
+        "runtime_load": {
+          "$ref": "#/$defs/stageStatus"
+        },
+        "redistribution": {
+          "enum": [
+            "free",
+            "nonfree",
+            "mixed",
+            "unknown",
+            "not-applicable"
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          }
+        }
+      }
+    },
+    "device": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "device_id",
+        "device_class",
+        "model",
+        "evidence_class",
+        "observed_bdf",
+        "pci_ids",
+        "driver_candidates",
+        "firmware",
+        "functional_validation",
+        "notes",
+        "identity_evidence"
+      ],
+      "properties": {
+        "device_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$"
+        },
+        "device_class": {
+          "enum": [
+            "platform",
+            "cpu",
+            "graphics",
+            "network",
+            "nvme-storage",
+            "sata-storage",
+            "audio",
+            "wifi",
+            "bluetooth",
+            "other"
+          ]
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_class": {
+          "enum": [
+            "windows-observed",
+            "linux-physical-observed",
+            "qemu-observed",
+            "wsl-observed",
+            "inferred",
+            "unknown"
+          ]
+        },
+        "observed_bdf": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-fA-F]{8}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}\\.[0-7]$"
+        },
+        "pci_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{4}:[0-9a-fA-F]{4}$"
+          }
+        },
+        "driver_candidates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/candidate"
+          }
+        },
+        "firmware": {
+          "$ref": "#/$defs/firmware"
+        },
+        "functional_validation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "environment",
+            "evidence"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "not-run",
+                "passed",
+                "failed",
+                "partial",
+                "unknown"
+              ]
+            },
+            "environment": {
+              "enum": [
+                "none",
+                "qemu",
+                "wsl",
+                "physical-linux",
+                "other"
+              ]
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/evidence"
+              }
+            }
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "identity_evidence": {
+          "$ref": "#/$defs/identityEvidence"
+        }
+      }
+    },
+    "identityEvidence": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/evidence"
+      }
+    }
+  }
+}
