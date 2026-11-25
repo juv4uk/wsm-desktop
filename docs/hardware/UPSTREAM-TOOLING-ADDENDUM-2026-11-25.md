@@ -14,7 +14,7 @@ WSM варто будувати не навколо одного «детект�
 
 | Джерело | Що може додати WSM | Межа доказу | Рекомендована роль |
 | --- | --- | --- | --- |
-| [hwloc 2.16.0](https://www.open-mpi.org/software/hwloc/v2.16/) | Ієрархія CPU/cache/NUMA/CXL та locality PCI/I/O-пристроїв, включно з окремими accelerator providers; XML topology export | I/O discovery вимкнено за замовчуванням у звичайному API та потребує підтримки ОС; для повного PCI discovery може знадобитися libpciaccess. Не описує USB interface binding або GPU→DRM connector→monitor | Опційний provider для CPU↔NUMA↔PCI locality, не заміна зв'язків #18 |
+| [hwloc 2.16.0 stable (19.11.2026)](https://www.open-mpi.org/software/hwloc/v2.16/) | Ієрархія CPU/cache/NUMA/CXL та locality PCI/I/O-пристроїв; XML topology export. Офіційний архів: SHA-256 `ad05eb466b915a4f0e0228173d7e09974ac38760c38d5b6f060254c050fca12d` | У звичайному API I/O discovery вимкнено; `lstopo` сканує ширше і може бути повільним. Для PCI bus details може знадобитися libpciaccess; не описує USB interface binding або GPU→DRM connector→monitor. OS/logical indexes не є сталими hardware IDs | Опційний provider для CPU↔NUMA↔PCI locality, не заміна зв'язків #18 |
 | [libdisplay-info 0.4.0](https://gitlab.freedesktop.org/emersion/libdisplay-info) | EDID/DisplayID decode; реліз додав DisplayID v1 Type IV timings та DisplayID v2 CTA-861 blocks | Advertised timing не є KMS-exposed mode, active mode або functional pass. High-level API краще ізолює споживача від змін low-level API | Опційний parser у display lane поруч із kernel DRM/KMS observations |
 | [drm_info 2.10.0](https://gitlab.freedesktop.org/emersion/drm_info) | Локальний DRM device/property inventory, JSON output через `drm_info -j` | JSON може містити GPU/monitor identifiers; output/version contract треба pin-ити. Не доводить, що режим реально працює або що монітор фізично підключений до конкретного GPU без явного topology edge | Опційний локальний DRM provider; без upload у DRM database |
 | [systemd hwdb 262](https://www.freedesktop.org/software/systemd/man/262/hwdb.html) | Локальне зіставлення modalias-подібних ключів із udev property/value metadata; підтримує окремий query шлях | Нормалізація назви/властивостей не доводить driver binding, runtime firmware load чи роботу пристрою | Допоміжний шар назв і quirks, не compatibility oracle |
@@ -22,6 +22,16 @@ WSM варто будувати не навколо одного «детект�
 | [devlink health](https://docs.kernel.org/6.19/networking/devlink/devlink-health.html) | `devlink health show` може показати status/config зареєстрованих драйвером health reporters для NIC/switch/accelerator | Покриття залежить від драйвера. `diagnose` викликає driver callback і має admin-only netlink permission; `dump show` може згенерувати новий dump; `recover`, `test`, `set`, `dump clear` не є пасивними | Лише опційний status query через `show`; інші команди — окремий consent-based support mode |
 | [VKMS](https://docs.kernel.org/gpu/vkms.html) + [IGT GPU Tools](https://gitlab.freedesktop.org/drm/igt-gpu-tools) | Віртуальний DRM/KMS display для headless CI/VM перевірок | Для VKMS потрібно завантажити модуль/налаштувати configfs; IGT може вимагати окремої сесії без compositor-а. Це змінює стан тестового kernel і не є live preflight | Ізольована CI/VM lane, не probe на фізичному ПК |
 | [fwupd HSI](https://fwupd.github.io/hsi.html) | Окремі показники firmware/platform security posture | Security posture не доводить наявність runtime firmware blob, успішне виконання `request_firmware()` чи ініціалізацію пристрою | Окремий security report; не змішувати з #16 compatibility evidence |
+
+## hwloc 2.16.0 — статус stable та режим використання
+
+Офіційна сторінка Open MPI позначає `2.16.0` як **stable release**, опублікований 19.11.2026. Для архіву `hwloc-2.16.0.tar.bz2` наведено SHA-256 `ad05eb466b915a4f0e0228173d7e09974ac38760c38d5b6f060254c050fca12d`. Це вже не release candidate.
+
+Для WSM особливо важливі дві межі з офіційної документації:
+- Звичайний hwloc API за замовчуванням не включає I/O objects; їх потрібно явно вмикати відповідним topology flag/provider.
+- `lstopo` вмикає майже всі discovery features за замовчуванням, включно з I/O і зовнішніми providers, тому може бути значно повільнішим. Для контрольованого inventory треба задавати мінімальний набір компонентів і вимірювати час/closure size.
+
+hwloc logical indexes зручні для відображення ієрархії всередині snapshot, але не слід використовувати їх як стійкі hardware IDs. В офіційному FAQ зазначено, що OS/physical indexes можуть бути непослідовними й змінюватися після BIOS/system update; WSM має тримати власні report-local IDs і джерельні bus locators.
 
 ## Безпека EDID/DisplayID parser-а — обов'язкова умова
 
@@ -83,7 +93,8 @@ WSM варто будувати не навколо одного «детект�
 
 ## Джерела
 
-- [hwloc v2.16.0 release](https://www.open-mpi.org/software/hwloc/v2.16/) — release та можливості CPU/NUMA/I/O locality.
+- [hwloc v2.16.0 stable release](https://www.open-mpi.org/software/hwloc/v2.16/) — офіційний stable archive від 19.11.2026, SHA-256 та можливості CPU/NUMA/I/O locality.
+- [hwloc v2.16.0 FAQ](https://www.open-mpi.org/projects/hwloc/doc/v2.16.0/faq.html) — default I/O filtering, lstopo discovery cost та нестабільність OS indexes.
 - [hwloc I/O device documentation](https://hwloc.gitlabpages.inria.fr/doc-snapshots/v2.x-html/a00369.html) — фільтри I/O discovery та залежність від підтримки ОС/libpciaccess.
 - [libdisplay-info 0.4.0 release announcement](https://mail-archive.com/wayland-devel%40lists.freedesktop.org/msg44365.html) — DisplayID v1/v2 coverage та API compatibility notes.
 - [drm_info 2.10.0 package record](https://openmamba.org/en/rpms/base/drm_info/) — version, MIT license та build requirements; upstream source вище.
