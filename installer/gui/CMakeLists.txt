@@ -14,6 +14,8 @@ qt_add_executable(wsm-installer
     src/main.cpp
     src/PreflightController.cpp
     src/PreflightController.h
+    src/PlanJson.cpp
+    src/PlanJson.h
 )
 
 set_source_files_properties(qml/Main.qml PROPERTIES QT_RESOURCE_ALIAS Main.qml)
