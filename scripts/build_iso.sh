@@ -184,12 +184,32 @@ def digest(path: Path) -> str:
             hasher.update(chunk)
     return hasher.hexdigest()
 
+def has_iso9660_primary_volume_descriptor(path: Path) -> bool:
+    """Check the ISO9660 PVD header at logical sector 16."""
+    pvd_offset = 16 * 2048
+    if path.stat().st_size < pvd_offset + 7:
+        return False
+    with path.open("rb") as stream:
+        stream.seek(pvd_offset)
+        header = stream.read(7)
+    return (
+        len(header) == 7
+        and header[0] == 1
+        and header[1:6] == b"CD001"
+        and header[6] == 1
+    )
+
 published = False
 try:
     if destination.exists() or destination.is_symlink():
         raise SystemExit(f"refusing to overwrite existing ISO: {destination}")
     if not temporary.is_file() or temporary.stat().st_size == 0:
         raise SystemExit("materialized ISO is missing, not regular, or empty")
+    if not has_iso9660_primary_volume_descriptor(temporary):
+        raise SystemExit(
+            "materialized image lacks an ISO9660 Primary Volume Descriptor "
+            "(type 1, CD001, version 1) at sector 16"
+        )
     if not store_image.is_file() or temporary.stat().st_size != store_image.stat().st_size:
         raise SystemExit("materialized ISO size differs from the Guix store image")
     if digest(temporary) != digest(store_image):
