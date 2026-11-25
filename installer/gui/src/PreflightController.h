@@ -26,6 +26,7 @@ class PreflightController final : public QObject
     Q_PROPERTY(QVariantMap environment READ environment NOTIFY reportReadyChanged)
     Q_PROPERTY(QVariantList devices READ devices NOTIFY reportReadyChanged)
     Q_PROPERTY(QVariantList disks READ disks NOTIFY disksChanged)
+    Q_PROPERTY(QString diskInventoryState READ diskInventoryState NOTIFY disksChanged)
     Q_PROPERTY(QString selectedDisk READ selectedDisk NOTIFY selectedDiskChanged)
     Q_PROPERTY(bool planAvailable READ planAvailable NOTIFY planChanged)
     Q_PROPERTY(QString planStatus READ planStatus NOTIFY planChanged)
@@ -44,6 +45,7 @@ public:
     QVariantMap environment() const;
     QVariantList devices() const;
     QVariantList disks() const;
+    QString diskInventoryState() const;
     QString selectedDisk() const;
     bool planAvailable() const;
     QString planStatus() const;
@@ -104,6 +106,7 @@ private:
     QVariantMap m_environment;
     QVariantList m_devices;
     QVariantList m_disks;
+    QString m_diskInventoryState = QStringLiteral("not-run");
     QVariantList m_planWarnings;
     QVariantList m_planBlockers;
 
