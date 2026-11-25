@@ -29,15 +29,15 @@ partition table. Тому install sequence включає `sgdisk`-операц�
 
 ```sh
 /run/current-system/profile/sbin/sgdisk --zap-all /dev/nvme0n1
-/usr/sbin/sgdisk --new=1:1MiB:513MiB --typecode=1:ef00 --change-name=1:wsm-esp /dev/nvme0n1
-/usr/sbin/sgdisk --new=2:513MiB:0 --typecode=2:8300 --change-name=2:wsm-root /dev/nvme0n1
-/usr/sbin/partprobe /dev/nvme0n1
+/run/current-system/profile/sbin/sgdisk --new=1:1MiB:513MiB --typecode=1:ef00 --change-name=1:wsm-esp /dev/nvme0n1
+/run/current-system/profile/sbin/sgdisk --new=2:513MiB:0 --typecode=2:8300 --change-name=2:wsm-root /dev/nvme0n1
+/run/current-system/profile/sbin/partprobe /dev/nvme0n1
 /run/current-system/profile/bin/udevadm settle
-/usr/sbin/mkfs.ext4 -F /dev/nvme0n1p2
-/usr/sbin/mkfs.fat -F 32 /dev/nvme0n1p1
-/usr/bin/mount /dev/nvme0n1p2 /mnt
-/usr/bin/mkdir -p /mnt/boot/efi
-/usr/bin/mount /dev/nvme0n1p1 /mnt/boot/efi
+/run/current-system/profile/sbin/mkfs.ext4 -F /dev/nvme0n1p2
+/run/current-system/profile/sbin/mkfs.fat -F 32 /dev/nvme0n1p1
+/run/current-system/profile/bin/mount /dev/nvme0n1p2 /mnt
+/run/current-system/profile/bin/mkdir -p /mnt/boot/efi
+/run/current-system/profile/bin/mount /dev/nvme0n1p1 /mnt/boot/efi
 /run/current-system/profile/bin/guix time-machine -C /run/wsm/channels.lock.scm -- system init /run/wsm/system.scm /mnt
 ```
 
@@ -65,7 +65,7 @@ partition table. Тому install sequence включає `sgdisk`-операц�
 
 **Жодного довільного Scheme-файлу.** Backend argv будується спільним
 `backend_guix.build_argv()` і має форму
-`guix time-machine -C /run/wsm/channels.lock.scm -- system init
+`/run/current-system/profile/bin/guix time-machine -C /run/wsm/channels.lock.scm -- system init
 /run/wsm/system.scm /mnt`. Це pinned handoff preview; channel lock і
 згенерований конфіг мають бути staged та перевірені до будь-якого майбутнього
 виконання.
@@ -75,11 +75,13 @@ partition table. Тому install sequence включає `sgdisk`-операц�
 `/mnt/boot/efi`, не в live-систему. BIOS layout має `bios_grub` і не
 створює ESP/FAT filesystem.
 
-## Чому ext4 типово
+## Чому зараз лише ext4
 
-Бо він передбачуваний і має широку підтримку інструментів відновлення. btrfs
-та XFS доступні як явні альтернативи з власними аргументами форматування.
-Файлова система не обирається приховано за користувача.
+Поточний Guix renderer генерує root filesystem як ext4. Тому planner також
+дозволяє лише ext4: Btrfs і XFS відхиляються, доки вибір filesystem не стане
+частиною typed install plan/digest і не буде переданий у той самий Guix
+renderer. Форматувати Btrfs, а в декларації встановленої системи записати
+ext4 — неприпустима невідповідність.
 
 ## Чого ще немає
 
@@ -95,6 +97,7 @@ partition table. Тому install sequence включає `sgdisk`-операц�
 - **UUID у фінальній конфігурації.** Імена `/dev/...` використовуються
   лише для плану; майбутній `fstab`/boot config має спиратися на перевірені
   filesystem UUID.
+- **Tool closure proof.** Абсолютні шляхи `/run/current-system/profile/...` є запланованими, але присутність кожної утиліти в live ISO ще не доведена; це окремий locked Guix package/ISO acceptance gate у #170.
 - **Guix end-to-end proof.** Пін-форма argv ще не є доказом, що staged lock
   автентифікується в live-середовищі або що система встановлюється і
   завантажується з disposable QEMU disk.
