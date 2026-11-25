@@ -143,7 +143,7 @@ guix time-machine -C channels.lock.scm -- system vm --no-graphic systems/minimal
 
 Не відкривайте новий ADR і не змінюйте канонічний handoff-контракт у межах цього RC.
 
-## Один вердикт: `release-gate`
+## Один вердикт: release-gate
 
 ```sh
 python3 scripts/release_gate.py --iso build/wsm-desktop.iso --boot
@@ -154,27 +154,33 @@ python3 scripts/release_gate.py --iso build/wsm-desktop.iso --boot
 | Критерій | Що перевіряє |
 | --- | --- |
 | `docs` | посилання, наявність заголовків, заборонені шаблони |
-| `channels` | lock-файл за політиками `free` і `compatibility` |
+| `channels` | окремий lock для кожного образу: `channels.lock.scm` для Free і `channels.compatibility.lock.scm` для Compatibility |
 | `tests` | усі набори тестів |
 | `profile-evidence` | валідність bundle-ів заліза |
-| `image` | хеш, маніфест, ISO9660, завантаження в BIOS і UEFI |
+| `image` | checksum, manifest, ISO9660 та реальний BIOS + UEFI boot |
 
 `overall` буває `pass`, `fail` або **`incomplete`**. Одне `not-run` робить
 вердикт неповним: перевірка, яку не вдалося виконати, не доводить нічого.
+Відсутній Compatibility lock означає `NOT_CONFIGURED` і робить gate
+`incomplete`, а не PASS.
 
-Код виходу 1 буває лише при справжньому провалі. `incomplete` — це не привід
-зупиняти роботу, це привід знати, чого саме бракує.
+Коди виходу:
+- `0` — усі критерії `pass`;
+- `1` — є підтверджений `fail`;
+- `2` — `incomplete`: хоча б один критерій не запускався або недоступний.
 
-Приклад сьогоднішнього стану:
+Це дозволяє продовжувати розробку, але не дає shell/CI трактувати неповний
+релізний gate як успішний.
 
-```
+Приклад поточного стану:
+
+```text
 overall: incomplete
   docs               pass
-  channels           pass
+  channels           not-run   Compatibility lock NOT_CONFIGURED
   tests              pass
   profile-evidence   not-run   no hardware profile bundles exist yet
   image              not-run   no --iso supplied; nothing to verify
 ```
 
-Тобто: документація й канали в порядку, тести зелені, але **образу немає**, і
-доказів заліза теж. Це чесна картина, а не «майже готово».
+Тобто: перевірки не приховують відсутні Compatibility lock, hardware evidence та ISO. Це чесний стан релізу, а не «майже готово».
