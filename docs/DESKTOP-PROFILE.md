@@ -43,7 +43,7 @@ guix system vm systems/desktop.scm
 # 4. Наш пакет окремо.
 guix build -f wsm/packages/wsm.scm
 
-# 5. ISO — звичайний `.iso` файл + окремий GC-root.
+# 5. ISO — regular file, окремий GC-root, manifest і SHA-256.
 make image-live
 ```
 
@@ -54,23 +54,18 @@ channel resolution/build явно з'являється `channel authentication 
 Попередження `channel is not trusted` не приховується: воно фіксується
 в `manifest.json` для окремої перевірки.
 
-Збірка запускається однією командою:
-
-```sh
-make image-live
-```
-
 Результати за замовчуванням з'являються в `build/`:
-- `wsm-desktop-live.iso` — звичайний переносний ISO-файл; саме його передають QEMU harness і release uploader;
-- `.wsm-desktop-live.iso-root` — окреме GC-root посилання на незмінний Guix store object;
-- `manifest.json` і `SHA256SUMS` — source/lock/profile provenance, розмір та SHA-256 саме regular ISO;
+- `wsm-desktop-live.iso` — звичайний regular ISO-файл, який можна передавати QEMU та публікувати як asset;
+- `.wsm-desktop-live.iso-root` — окремий GC-root symlink на незмінний store object;
+- `manifest.json` і `SHA256SUMS` — source commit, lock/profile hashes, resolved Guix channel, розмір і SHA-256 саме regular ISO;
 - `channels.resolved.scm`, `channel-resolution.log` і `build.log` — channel/build evidence.
 
-Перед публікацією builder перевіряє ISO9660 Primary Volume Descriptor
-(`CD001`, сектор 16), байтову відповідність матеріалізованого ISO store object
-та збіг resolved Guix channel commit із `channels.lock.scm`. Команда збірки
-використовує `--save-provenance`, щоб додати походження системної конфігурації
-до образу.
+Перед публікацією builder перевіряє ISO9660 Primary Volume Descriptor (тип 1,
+`CD001`, version 1 у секторі 16), тотожність байтів матеріалізованого файлу
+образу зі store object і збіг resolved Guix channel commit із
+`channels.lock.scm`. Команда `guix time-machine ... system image` використовує
+`--save-provenance`, щоб записати походження системної конфігурації в образ.
+Це structural/build-output validation, а не доказ завантаження.
 
 Для іншого каталогу можна задати `WSM_ISO_DIR=/absolute/path`.
 Для наступної спроби використовуйте новий порожній каталог: скрипт не перезаписує
@@ -106,19 +101,21 @@ python3 scripts/qemu_boot_smoke.py --iso build/wsm-desktop-live.iso \
     --boot-marker WSM_LIVE_READY --timeout-seconds 300
 ```
 
-Для UEFI потрібна пара `OVMF_CODE.fd` і `OVMF_VARS.fd` **з одного пакета та
-однієї збірки OVMF**. CODE підключається як read-only pflash; harness копіює
-лише VARS template у приватний тимчасовий файл, який гість може змінювати.
-Вихідний VARS template та NVRAM хоста не змінюються. У dry-run це видно як
-`host_efi_variables_modified=false` і `guest_uefi_vars_writable=true`.
-Без будь-якого з `--ovmf-code` / `--ovmf-vars`, або якщо файли порожні,
-некоректні чи вказують на той самий файл, запуск відмовляє з кодом 2 — жодного
-неявного переходу на BIOS немає.
+Для UEFI використовуйте пару `OVMF_CODE.fd` і `OVMF_VARS.fd` **з одного
+пакета та однієї збірки OVMF**. CODE підключається read-only як pflash unit 0;
+harness копіює лише окремий VARS template у приватний тимчасовий файл і
+підключає копію writable як unit 1. Вихідні firmware inputs та NVRAM хоста
+не змінюються. У JSON це позначено як
+`host_efi_variables_modified=false` і
+`guest_uefi_vars_writable=true`. Без будь-якого з `--ovmf-code` /
+`--ovmf-vars`, або якщо файли порожні, є symlink чи вказують на той самий
+файл, запуск відмовляє з кодом 2 — жодного неявного переходу на BIOS немає.
 
-Builder зберігає GC-root посилання окремо в
-`build/.wsm-desktop-live.iso-root`, а `build/wsm-desktop-live.iso` є
-звичайним файлом, який можна перевіряти й передавати QEMU без dereference
-посилання на `/gnu/store`. Manifest і SHA-256 рахуються від цього regular ISO.
+Важлива межа доказу: `WSM_LIVE_READY` означає лише, що base live-system
+дійшла до Shepherd marker. Це **не** доказ запуску SDDM greeter чи активної
+Plasma session (`plasmashell`/KWin). Для заяви про робочий KDE live desktop
+потрібен окремий `WSM_PLASMA_SESSION_READY` marker з KDE autostart і окремий
+QEMU-session check.
 
 Критерій NO-GO: збірка успішна, але маркера немає в жодному або в одному з
 режимів.
