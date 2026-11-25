@@ -19,6 +19,23 @@ from scripts.qemu_boot_smoke import BoundedProcessResult\nfrom scripts.ci_probe_
 )
 
 
+
+def bounded_result(stdout: str, stderr: str = "", returncode: int = 0, *, timed_out: bool = False, truncated: bool = False) -> BoundedProcessResult:
+    stdout_bytes = stdout.encode("utf-8")
+    stderr_bytes = stderr.encode("utf-8")
+    return BoundedProcessResult(
+        returncode,
+        timed_out,
+        stdout_bytes[-(56 * 1024):],
+        stderr_bytes[-(8 * 1024):],
+        len(stdout_bytes),
+        len(stderr_bytes),
+        truncated or len(stdout_bytes) > 56 * 1024,
+        truncated or len(stderr_bytes) > 8 * 1024,
+        False,
+    )
+
+
 class QemuCxlProbeTests(unittest.TestCase):
     def test_kernel_config_keeps_y_m_n_and_unknown_distinct(self) -> None:
         parsed = parse_kernel_config(
@@ -58,7 +75,7 @@ class QemuCxlProbeTests(unittest.TestCase):
                 "returncode": 0,
             },
         )()
-        with patch("scripts.ci_probe_qemu_cxl.run_bounded_process", return_value=BoundedProcessResult(0, False, completed.stdout.encode(), completed.stderr.encode(), len(completed.stdout.encode()), len(completed.stderr.encode()), False, False, False)):
+        with patch("scripts.ci_probe_qemu_cxl.run_bounded_process", return_value=bounded_result(completed.stdout, completed.stderr)):
             result = run_qemu_topology_probe("qemu")
         self.assertEqual(result["status"], "type3-topology-instantiated")
         self.assertEqual(result["devices_seen"], ["cxl.1", "root_port0", "cxl-vmem0"])
@@ -73,7 +90,7 @@ class QemuCxlProbeTests(unittest.TestCase):
                 "returncode": 0,
             },
         )()
-        with patch("scripts.ci_probe_qemu_cxl.subprocess.run", return_value=completed):
+        with patch("scripts.ci_probe_qemu_cxl.run_bounded_process", return_value=bounded_result(completed.stdout, completed.stderr, completed.returncode)):
             result = run_qemu_topology_probe("qemu")
         self.assertEqual(result["status"], "topology-probe-failed")
 
@@ -90,6 +107,19 @@ class QemuCxlProbeTests(unittest.TestCase):
         with patch("scripts.ci_probe_qemu_cxl.subprocess.run", return_value=completed):
             result = run_qemu_topology_probe("qemu")
         self.assertEqual(result["status"], "cxl-device-or-machine-unsupported")
+
+    def test_qemu_topology_probe_rejects_streams_over_capture_budget(self) -> None:
+        captured = bounded_result("x" * (64 * 1024 + 1), truncated=True)
+        with patch("scripts.ci_probe_qemu_cxl.run_bounded_process", return_value=captured):
+            result = run_qemu_topology_probe("qemu")
+        self.assertEqual(result["status"], "output-limit-exceeded")
+        self.assertEqual(result["devices_seen"], [])
+
+    def test_qemu_topology_probe_reports_timeout_from_bounded_reader(self) -> None:
+        captured = bounded_result("", timed_out=True)
+        with patch("scripts.ci_probe_qemu_cxl.run_bounded_process", return_value=captured):
+            result = run_qemu_topology_probe("qemu")
+        self.assertEqual(result["status"], "timeout")
 
     def test_qemu_command_does_not_claim_guest_or_hardware_compatibility(self) -> None:
         # The probe instantiates QEMU objects while guest CPUs are paused; it
