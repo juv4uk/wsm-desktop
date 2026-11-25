@@ -32,6 +32,9 @@ command -v timeout >/dev/null || fail "timeout is missing"
 mapfile -t KERNEL_IMAGES < <(find /boot -maxdepth 1 -type f -name "vmlinuz-*" -print | sort -V)
 ((${#KERNEL_IMAGES[@]} > 0)) || fail "no bootable Linux kernel image found under /boot"
 KERNEL="${KERNEL_IMAGES[-1]}"
+GUEST_KERNEL="$WORK_DIR/guest-kernel"
+sudo cp "$KERNEL" "$GUEST_KERNEL"
+sudo chmod 0644 "$GUEST_KERNEL"
 printf "QEMU guest smoke: selected guest kernel %s\\n" "$(basename "$KERNEL")"
 
 mkdir -p "$ROOTFS/bin" "$ROOTFS/dev" "$ROOTFS/proc" "$ROOTFS/sys"
