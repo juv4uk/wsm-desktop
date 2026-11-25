@@ -16,6 +16,8 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
+from scripts.qemu_boot_smoke import run_bounded_process
+
 
 REQUIRED_CONFIG = (
     "CONFIG_CXL_BUS",
@@ -117,23 +119,15 @@ def build_qemu_command(qemu: str) -> list[str]:
 def run_qemu_topology_probe(qemu: str) -> dict[str, object]:
     command = build_qemu_command(qemu)
     try:
-        completed = subprocess.run(
+        completed = run_bounded_process(
             command,
-            input="info qtree\ninfo pci\nquit\n",
-            capture_output=True,
-            text=True,
-            errors="replace",
-            timeout=QEMU_TIMEOUT_SECONDS,
-            check=False,
+            timeout_seconds=QEMU_TIMEOUT_SECONDS,
+            marker=None,
+            stdin_bytes=b"info qtree\ninfo pci\nquit\n",
+            max_stdout_bytes=56 * 1024,
+            max_stderr_bytes=8 * 1024,
         )
-    except subprocess.TimeoutExpired:
-        return {
-            "status": "timeout",
-            "exit_code": None,
-            "devices_seen": [],
-            "diagnostic": "QEMU did not answer the in-memory monitor probe within 20 seconds.",
-        }
-    except OSError as exc:
+    except (OSError, ValueError) as exc:
         return {
             "status": "launch-error",
             "exit_code": None,
@@ -141,15 +135,32 @@ def run_qemu_topology_probe(qemu: str) -> dict[str, object]:
             "diagnostic": f"{type(exc).__name__}: {exc}",
         }
 
-    output = (completed.stdout + "\n" + completed.stderr)
-    captured_bytes = len(output.encode("utf-8", errors="replace"))
-    if captured_bytes > MAX_CAPTURE_BYTES:
+    if completed.timed_out:
+        return {
+            "status": "timeout",
+            "exit_code": completed.returncode,
+            "devices_seen": [],
+            "diagnostic": "QEMU did not answer the in-memory monitor probe within 20 seconds.",
+        }
+
+    captured_bytes = completed.stdout_bytes_seen + completed.stderr_bytes_seen
+    if (
+        completed.stdout_truncated
+        or completed.stderr_truncated
+        or captured_bytes > MAX_CAPTURE_BYTES
+    ):
         return {
             "status": "output-limit-exceeded",
             "exit_code": completed.returncode,
             "devices_seen": [],
-            "diagnostic": f"QEMU probe output was {captured_bytes} bytes; cap is {MAX_CAPTURE_BYTES}.",
+            "diagnostic": f"QEMU probe output exceeded the {MAX_CAPTURE_BYTES}-byte capture budget.",
         }
+
+    output = (
+        completed.stdout_tail.decode("utf-8", errors="replace")
+        + "\\n"
+        + completed.stderr_tail.decode("utf-8", errors="replace")
+    )
 
     expected = ("cxl.1", "root_port0", "cxl-vmem0")
     devices_seen = [device for device in expected if device in output]
