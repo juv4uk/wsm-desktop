@@ -100,7 +100,7 @@ class QemuCxlProbeTests(unittest.TestCase):
             "Completed",
             (),
             {
-                "stdout": "\\n".join([
+                "stdout": "\n".join([
                     "dev: pxb-cxl, id cxl.1",
                     "dev: cxl-rp, id root_port0",
                     "dev: cxl-type3, id cxl-vmem0",
