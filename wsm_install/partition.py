@@ -33,6 +33,7 @@ from typing import Any
 
 ESP_MIB = 512
 BIOS_BOOT_MIB = 1
+GPT_TAIL_RESERVE_MIB = 1
 MIN_ROOT_MIB = 12 * 1024
 SIZE_TOLERANCE = 0.02
 
@@ -64,6 +65,10 @@ class Layout:
     firmware: str
     disk: str
     partitions: list[dict[str, Any]] = field(default_factory=list)
+    # Preserve the user's exact disk acknowledgement and observed size across
+    # later planning stages. A Layout is intent, not proof the disk still matches.
+    acknowledgement: str | None = None
+    disk_size_bytes: int | None = None
 
     def commands(self) -> list[list[str]]:
         """sgdisk invocations as data. The caller decides whether to run them."""
@@ -84,10 +89,24 @@ def _require(condition: bool, code: str, message: str) -> None:
         raise Refused(code, message)
 
 
+def minimum_disk_size_bytes(firmware: str) -> int:
+    """Minimum geometry including 1 MiB GPT tail reserve and a 12 GiB root."""
+    if firmware == "uefi":
+        boot_partition_mib = ESP_MIB
+    elif firmware == "bios":
+        boot_partition_mib = BIOS_BOOT_MIB
+    else:
+        raise Refused(
+            "disk.firmware",
+            f"firmware must be 'uefi' or 'bios', got {firmware!r}",
+        )
+    return (1 + boot_partition_mib + MIN_ROOT_MIB + GPT_TAIL_RESERVE_MIB) * 1024 * 1024
+
+
 def validate_target(disk: Disk, acknowledgement: str | None, firmware: str) -> None:
     """Every reason this disk must not be touched, in the order that matters most."""
     _require(
-        bool(DEVICE_PATH.match(disk.path)),
+        bool(DEVICE_PATH.fullmatch(disk.path)),
         "disk.path",
         f"{disk.path!r} is not a whole block device; partitions and images are refused",
     )
@@ -101,19 +120,22 @@ def validate_target(disk: Disk, acknowledgement: str | None, firmware: str) -> N
         "disk.running-system",
         f"{disk.path} holds the system we are running from",
     )
+    minimum_size = minimum_disk_size_bytes(firmware)
+    minimum_mib = minimum_size // (1024 * 1024)
     _require(
-        disk.size_bytes >= (MIN_ROOT_MIB + ESP_MIB) * 1024 * 1024,
+        disk.size_bytes >= minimum_size,
         "disk.too-small",
-        f"{disk.path} is {disk.size_bytes} bytes; the smallest supported layout needs "
-        f"{MIN_ROOT_MIB + ESP_MIB} MiB",
+        f"{disk.path} is {disk.size_bytes} bytes; the smallest {firmware} layout needs "
+        f"{minimum_mib} MiB",
     )
-    if disk.has_existing_data:
-        _require(
-            acknowledgement == disk.path,
-            "disk.acknowledgement",
-            f"{disk.path} contains data; refusing without an acknowledgement that names "
-            f"exactly this disk (got {acknowledgement!r})",
-        )
+    # The install sequence always overwrites the partition table with
+    # sgdisk --zap-all. Even an inventory-empty disk needs explicit consent.
+    _require(
+        acknowledgement == disk.path,
+        "disk.acknowledgement",
+        f"refusing destructive partition-table replacement without an acknowledgement "
+        f"that names exactly {disk.path!r} (got {acknowledgement!r})",
+    )
 
 
 def plan(
@@ -134,7 +156,12 @@ def plan(
             f"expected ({drift:.1%} drift); the disk may have been replaced",
         )
 
-    layout = Layout(firmware=firmware, disk=disk.path)
+    layout = Layout(
+        firmware=firmware,
+        disk=disk.path,
+        acknowledgement=acknowledgement,
+        disk_size_bytes=disk.size_bytes,
+    )
     cursor = 1
     if firmware == "bios":
         layout.partitions.append({
