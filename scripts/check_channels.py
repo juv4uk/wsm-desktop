@@ -1,22 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""Refuse a channel lock that is not free-only and authenticated.
+"""Structural policy checks for WSM's separate Free and Compatibility locks.
 
-`channels.lock.scm` decides what ends up inside the image. It is four lines of
-Scheme that a pull request can quietly extend, and nothing in `make check`
-notices - until an image ships with a third-party channel in it.
-
-That is the Omarchy 4.0.0 lesson in its most expensive form: a third-party
-theme from a git repository was code execution (CVE-2026-108913). A third-party
-Guix channel is the same thing at a bigger scale - it replaces packages.
-
-The rules are deliberately narrow:
-
-* only official GNU Guix channels;
-* every URL is https on an allow-listed host;
-* every channel carries an introduction, so commits are authenticated;
-* every commit is a full 40-character hash, not a branch name.
-
-A comment saying "free only" is not evidence. This reads the forms.
+This module validates lock structure, repository identity, pins and channel
+introduction metadata. It does NOT cryptographically verify Git signatures.
+Actual authentication must be performed by Guix with authentication enabled.
 """
 
 from __future__ import annotations
@@ -26,42 +13,75 @@ import re
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
-# Two products, two policies.
-#
-# WSM ships a comfortable desktop out of the box, and that includes proprietary
-# drivers - so Nonguix is not an accident to be forbidden, it is part of the
-# Compatibility image. What must never happen is an *unnamed* third-party
-# channel, or one that is unpinned or unauthenticated.
-#
-# The free image keeps its own lock and stays free; the compatibility image has
-# a separate lock that names Nonguix explicitly.
-POLICIES: dict[str, dict[str, set[str]]] = {
+ROOT = Path(__file__).resolve().parents[1]
+COMMIT = re.compile(r"^[0-9a-f]{40}$")
+FINGERPRINT = re.compile(r"^[0-9A-F]{40}$")
+
+GUIX_INTRODUCTION_COMMIT = "9edb3f66fd807b096b48283debdcddccfea34bad"
+GUIX_INTRODUCTION_FINGERPRINT = "BBB02DDF2CEAF6A80D1DE643A2A06DF2A33A54FA"
+NONGUIX_INTRODUCTION_COMMIT = "897c1a470da759236cc11798f4e0a5f7d4d59fbc"
+NONGUIX_INTRODUCTION_FINGERPRINT = "2A393FFF68F4EF7A3D2912AF6F5120A022FBB2D5"
+
+GUIX_URLS = {
+    "https://git.guix.gnu.org/guix.git",
+    "https://git.savannah.gnu.org/git/guix.git",
+}
+NONGUIX_URLS = {"https://gitlab.com/nonguix/nonguix"}
+
+# Each product has a separate lock. The Compatibility policy explicitly allows
+# only the named Nonguix repository; it does not allow arbitrary third-party
+# channels or a second copy of either channel.
+POLICIES: dict[str, dict[str, Any]] = {
     "free": {
-        "channels": {"guix"},
-        "hosts": {"git.guix.gnu.org", "git.savannah.gnu.org"},
+        "channel_names": ("guix",),
+        "repositories": {"guix": GUIX_URLS},
+        "introductions": {
+            "guix": (GUIX_INTRODUCTION_COMMIT, GUIX_INTRODUCTION_FINGERPRINT)
+        },
     },
     "compatibility": {
-        "channels": {"guix", "nonguix"},
-        "hosts": {
-            "git.guix.gnu.org",
-            "git.savannah.gnu.org",
-            "gitlab.com",
-            "codeberg.org",
+        "channel_names": ("guix", "nonguix"),
+        "repositories": {
+            "guix": GUIX_URLS,
+            "nonguix": NONGUIX_URLS,
+        },
+        "introductions": {
+            "guix": (GUIX_INTRODUCTION_COMMIT, GUIX_INTRODUCTION_FINGERPRINT),
+            "nonguix": (
+                NONGUIX_INTRODUCTION_COMMIT,
+                NONGUIX_INTRODUCTION_FINGERPRINT,
+            ),
         },
     },
 }
 DEFAULT_POLICY = "free"
-COMMIT = re.compile(r"^[0-9a-f]{40}$")
-DEFAULT_LOCK = Path(__file__).resolve().parents[1] / "channels.lock.scm"
+DEFAULT_LOCKS = {
+    "free": ROOT / "channels.lock.scm",
+    "compatibility": ROOT / "channels.compatibility.lock.scm",
+}
+REQUIRED_FIELDS = {"name", "url", "branch", "commit", "introduction"}
 
 
 class ParseError(Exception):
-    pass
+    """The input is outside the deliberately small lock-file Scheme subset."""
+
+
+class SchemeSymbol(str):
+    """An unquoted Scheme symbol; distinct from a string literal."""
+
+
+class SchemeQuotedSymbol(str):
+    """A quoted Scheme symbol such as 'guix."""
+
+
+class SchemeString(str):
+    """A Scheme string literal; distinct from an unquoted symbol."""
 
 
 def tokenize(text: str) -> list[str]:
-    """Split Scheme into tokens, dropping comments. Enough for a channel lock."""
+    """Tokenize the deliberately small Scheme subset used by channel locks."""
     tokens: list[str] = []
     index = 0
     while index < len(text):
@@ -76,16 +96,26 @@ def tokenize(text: str) -> list[str]:
             index += 1
         elif char == '"':
             end = index + 1
-            buffer = []
-            while end < len(text) and text[end] != '"':
-                if text[end] == "\\" and end + 1 < len(text):
+            buffer: list[str] = []
+            terminated = False
+            while end < len(text):
+                current = text[end]
+                if current == '"':
+                    terminated = True
+                    end += 1
+                    break
+                if current == "\\":
+                    if end + 1 >= len(text):
+                        raise ParseError("unterminated escape in string")
                     buffer.append(text[end + 1])
                     end += 2
                     continue
-                buffer.append(text[end])
+                buffer.append(current)
                 end += 1
+            if not terminated:
+                raise ParseError("unterminated string")
             tokens.append('"' + "".join(buffer) + '"')
-            index = end + 1
+            index = end
         else:
             end = index
             while end < len(text) and not text[end].isspace() and text[end] not in '();':
@@ -101,7 +131,7 @@ def parse(tokens: list[str]) -> Any:
             raise ParseError("unexpected end of input")
         token = tokens[position]
         if token == "(":
-            items = []
+            items: list[Any] = []
             position += 1
             while True:
                 if position >= len(tokens):
@@ -113,8 +143,16 @@ def parse(tokens: list[str]) -> Any:
         if token == ")":
             raise ParseError("unexpected )")
         if token.startswith('"'):
-            return token[1:-1], position + 1
-        return token, position + 1
+            if len(token) < 2 or not token.endswith('"'):
+                raise ParseError("malformed string token")
+            return SchemeString(token[1:-1]), position + 1
+        if token == "#f":
+            return False, position + 1
+        if token.startswith("'"):
+            if len(token) == 1:
+                raise ParseError("empty quoted symbol")
+            return SchemeQuotedSymbol(token[1:]), position + 1
+        return SchemeSymbol(token), position + 1
 
     value, position = read(0)
     if position != len(tokens):
@@ -123,30 +161,94 @@ def parse(tokens: list[str]) -> Any:
 
 
 def channels_of(form: Any) -> list[dict[str, Any]]:
-    """Turn (list (channel (name 'guix) ...)) into plain dictionaries."""
-    if not isinstance(form, list) or not form or form[0] != "list":
+    """Read channel records, rejecting duplicate and unknown fields."""
+    if (
+        not isinstance(form, list)
+        or not form
+        or not isinstance(form[0], SchemeSymbol)
+        or form[0] != "list"
+    ):
         raise ParseError("expected (list (channel ...) ...)")
 
     found: list[dict[str, Any]] = []
     for entry in form[1:]:
-        if not isinstance(entry, list) or not entry or entry[0] != "channel":
+        if (
+            not isinstance(entry, list)
+            or not entry
+            or not isinstance(entry[0], SchemeSymbol)
+            or entry[0] != "channel"
+        ):
             raise ParseError(f"unexpected entry: {entry!r}")
         channel: dict[str, Any] = {}
         for field in entry[1:]:
             if not isinstance(field, list) or not field:
-                continue
+                raise ParseError(f"malformed channel field: {field!r}")
             key = field[0]
-            if key in {"name", "url", "branch", "commit"} and len(field) > 1:
-                value = field[1]
-                channel[key] = value[1:] if isinstance(value, str) and value.startswith("'") else value
-            elif key == "introduction":
-                channel["introduction"] = field[1:]
+            if not isinstance(key, SchemeSymbol) or key not in REQUIRED_FIELDS:
+                raise ParseError(f"unexpected channel field: {key!r}")
+            if key in channel:
+                raise ParseError(f"duplicate channel field: {key!r}")
+            if len(field) != 2:
+                raise ParseError(f"channel field {key!r} must have exactly one value")
+            value = field[1]
+            if key == "name":
+                if not isinstance(value, SchemeQuotedSymbol):
+                    raise ParseError("channel name must be a quoted symbol")
+                value = str(value)
+            elif key in {"url", "commit"}:
+                if not isinstance(value, SchemeString):
+                    raise ParseError(f"channel field {key!r} must be a Scheme string")
+                value = str(value)
+            elif key == "branch" and value is not False:
+                raise ParseError("channel branch must be the Scheme boolean #f")
+            channel[key] = value
+        missing = REQUIRED_FIELDS - channel.keys()
+        if missing:
+            raise ParseError(f"channel is missing required fields: {sorted(missing)}")
         found.append(channel)
     return found
 
 
+def _introduction_matches(value: Any, expected: tuple[str, str]) -> bool:
+    """Check canonical trust-root metadata, not the channel's Git signature."""
+    if (
+        not isinstance(value, list)
+        or len(value) != 3
+        or not isinstance(value[0], SchemeSymbol)
+        or value[0] != "make-channel-introduction"
+    ):
+        return False
+    commit, fingerprint_form = value[1], value[2]
+    expected_commit, expected_fingerprint = expected
+    if (
+        not isinstance(commit, SchemeString)
+        or not COMMIT.fullmatch(commit)
+        or str(commit) != expected_commit
+    ):
+        return False
+    if (
+        not isinstance(fingerprint_form, list)
+        or len(fingerprint_form) != 2
+        or not isinstance(fingerprint_form[0], SchemeSymbol)
+        or fingerprint_form[0] != "openpgp-fingerprint"
+        or not isinstance(fingerprint_form[1], SchemeString)
+    ):
+        return False
+    fingerprint = re.sub(r"\s+", "", str(fingerprint_form[1])).upper()
+    return bool(
+        FINGERPRINT.fullmatch(fingerprint)
+        and fingerprint == expected_fingerprint
+    )
+
+
+def default_lock_for(policy: str) -> Path:
+    if policy not in DEFAULT_LOCKS:
+        raise ValueError(f"unknown channel policy {policy!r}")
+    return DEFAULT_LOCKS[policy]
+
+
 def check(text: str, policy: str = DEFAULT_POLICY) -> list[str]:
-    """Return every reason this lock is not acceptable. Empty means acceptable."""
+    """Return structural policy violations; empty is not signature verification."""
     if policy not in POLICIES:
         return [f"unknown policy {policy!r}; choose one of {sorted(POLICIES)}"]
     rules = POLICIES[policy]
@@ -156,40 +258,56 @@ def check(text: str, policy: str = DEFAULT_POLICY) -> list[str]:
         return [f"cannot parse the channel lock: {exc}"]
 
     problems: list[str] = []
-    if not channels:
-        problems.append("the lock declares no channels")
+    expected_names = rules["channel_names"]
+    actual_names = tuple(channel["name"] for channel in channels)
+    if actual_names != expected_names:
+        problems.append(
+            f"the {policy} lock must declare channels in this exact order "
+            f"{expected_names!r}; found {actual_names!r}"
+        )
 
     for channel in channels:
-        name = channel.get("name", "<unnamed>")
-        if name not in rules["channels"]:
+        name = channel["name"]
+        allowed_urls = rules["repositories"].get(name)
+        if allowed_urls is None:
+            problems.append(f"channel {name!r} is not allowed by the {policy} policy")
+        elif channel["url"] not in allowed_urls:
             problems.append(
-                f"channel {name!r} is not an official Guix channel; a third-party "
-                "channel replaces packages and is code execution"
-            )
-
-        url = channel.get("url", "")
-        if not isinstance(url, str) or not url.startswith("https://"):
-            problems.append(f"channel {name!r} is not fetched over https: {url!r}")
-        else:
-            host = url.split("/")[2]
-            if host not in rules["hosts"]:
-                problems.append(f"channel {name!r} uses an unexpected host: {host!r}")
-
-        commit = channel.get("commit")
-        if not isinstance(commit, str) or not COMMIT.match(commit):
-            problems.append(
-                f"channel {name!r} is not pinned to a full commit: {commit!r}"
-            )
-
-        introduction = channel.get("introduction")
-        if not introduction:
-            problems.append(
-                f"channel {name!r} has no introduction, so its commits are not authenticated"
+                f"channel {name!r} does not use an exact allow-listed repository URL: "
+                f"{channel['url']!r}"
             )
         else:
-            blob = " ".join(str(part) for part in introduction)
-            if "openpgp-fingerprint" not in blob and "openpgp" not in blob:
-                problems.append(f"channel {name!r} introduction carries no OpenPGP fingerprint")
+            parsed_url = urlsplit(channel["url"])
+            if (
+                parsed_url.scheme != "https"
+                or not parsed_url.netloc
+                or parsed_url.username is not None
+                or parsed_url.password is not None
+                or parsed_url.port is not None
+                or parsed_url.query
+                or parsed_url.fragment
+            ):
+                problems.append(f"channel {name!r} URL contains unsupported components")
+
+        if channel["branch"] is not False:
+            problems.append(
+                f"channel {name!r} must use branch #f and a fixed commit, not a moving branch"
+            )
+
+        commit = channel["commit"]
+        if not isinstance(commit, str) or not COMMIT.fullmatch(commit):
+            problems.append(
+                f"channel {name!r} is not pinned to a full lowercase commit hash: {commit!r}"
+            )
+
+        expected_introduction = rules["introductions"].get(name)
+        if expected_introduction is None or not _introduction_matches(
+            channel["introduction"], expected_introduction
+        ):
+            problems.append(
+                f"channel {name!r} does not declare the canonical introduction commit "
+                "and full OpenPGP fingerprint for this policy"
+            )
 
     return problems
 
@@ -197,24 +315,33 @@ def check(text: str, policy: str = DEFAULT_POLICY) -> list[str]:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="check-channels",
-        description="Verify that channels.lock.scm is free-only, https and authenticated.",
+        description=(
+            "Check the structural Free/Compatibility channel policy. "
+            "Cryptographic authentication is verified by Guix, not this script."
+        ),
     )
-    parser.add_argument("--lock", type=Path, default=DEFAULT_LOCK)
     parser.add_argument(
         "--policy",
         choices=sorted(POLICIES),
         default=DEFAULT_POLICY,
-        help="free: official Guix only; compatibility: Guix plus an explicitly named Nonguix",
+        help="free: official Guix only; compatibility: Guix plus exactly the named Nonguix channel",
+    )
+    parser.add_argument(
+        "--lock",
+        type=Path,
+        default=None,
+        help="lock file; defaults to channels.lock.scm for free or channels.compatibility.lock.scm for compatibility",
     )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    lock_path = args.lock if args.lock is not None else default_lock_for(args.policy)
     try:
-        text = args.lock.read_text(encoding="utf-8")
+        text = lock_path.read_text(encoding="utf-8")
     except OSError as exc:
-        print(f"check-channels: cannot read {args.lock}: {exc}", file=sys.stderr)
+        print(f"check-channels: cannot read {lock_path}: {exc}", file=sys.stderr)
         return 2
 
     problems = check(text, args.policy)
@@ -224,8 +351,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     print(
-        f"check-channels: {args.lock.name} satisfies the {args.policy} policy "
-        "(https, pinned commit, authenticated introduction)"
+        f"check-channels: {lock_path.name} satisfies the {args.policy} structural policy; "
+        "cryptographic authentication remains a Guix verification step"
     )
     return 0
 
