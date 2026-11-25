@@ -98,6 +98,19 @@ class OrderingTests(unittest.TestCase):
             if step.command[0] == "mount":
                 self.assertFalse(step.destructive)
 
+    def test_layout_retains_disk_size_and_exact_acknowledgement(self) -> None:
+        proposed = layout()
+        self.assertEqual(proposed.disk_size_bytes, 256 * GIB)
+        self.assertEqual(proposed.acknowledgement, "/dev/nvme0n1")
+        self.assertTrue(proposed.requires_acknowledgement)
+
+    def test_missing_observed_disk_size_is_refused(self) -> None:
+        proposed = layout()
+        proposed.disk_size_bytes = None
+        with self.assertRaises(Refused) as caught:
+            plan_steps(proposed)
+        self.assertEqual(caught.exception.code, "disk.size-unrecorded")
+
     def test_lost_disk_acknowledgement_is_refused_before_planning(self) -> None:
         proposed = layout()
         proposed.acknowledgement = None
