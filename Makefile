@@ -3,9 +3,9 @@
 PYTHON ?= python3
 GUIX ?= guix
 
-.PHONY: check check-installer-gui check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle
+.PHONY: check check-installer-gui check-live-acceptance check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle
 
-check: check-installer-gui check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa
+check: check-installer-gui check-live-acceptance check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa
 
 check-profiles:
 	$(PYTHON) tests/test_system_profiles.py
@@ -18,6 +18,9 @@ check-state:
 
 check-isa:
 	$(PYTHON) tests/test_cpu_isa.py
+
+check-live-acceptance:
+	$(PYTHON) tests/test_live_iso_acceptance.py
 
 check-docs:
 	$(PYTHON) scripts/check_docs.py
