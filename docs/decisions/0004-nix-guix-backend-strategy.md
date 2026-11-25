@@ -3,7 +3,7 @@
 <!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 
 - Статус: **прийнято — перший backend GNU Guix, Nix відкладено**
-- Дата: 2026-11-25 (запропоновано), 2026-11-26 (прийнято)
+- Дата: 2026-11-25 (запропоновано й прийнято)
 - Пов'язане завдання: [#2](https://github.com/juv4uk/wsm-desktop/issues/2)
 - Уточнює: [ADR 0001 — GNU Guix System як системна основа](0001-guix-as-system-foundation.md)
 
@@ -114,19 +114,17 @@ Calamares більше не базовий кандидат на frontend: на�
 ### Статус доказової бази (2026-11-25)
 
 - Gate [#55](https://github.com/juv4uk/wsm-desktop/issues/55) вимагає реального boot-доказу, а не лише успішної збірки. Пакет доказів для Guix-шляху опубліковано в [#1](https://github.com/juv4uk/wsm-desktop/issues/1#issuecomment-7172142987): точний SHA, версії, exit codes, реальну ревізію каналу, `guix system build`, `guix system vm`, serial-маркер `wsm-desktop login:` з `vm_exit=0`, розкриття TCG і disposable-образи.
-- Окремого еквівалентного real-boot пакета для Nix/NixOS поки немає; тому цей ADR лишається `proposed`, а вибір primary backend-а в #2 не ратифіковано.
+- Окремого еквівалентного real-boot пакета для Nix/NixOS поки немає; це підстава залишити Nix поза першим релізом, а не ставити під сумнів ратифікований вибір Guix.
 - `--full-boot` через GRUB у TCG до ядра не дійшов і як успішний boot не заявляється.
 
-## Експериментальний план
+## План повторного дослідження Nix (поза критичним шляхом)
 
 1. Зберегти поточну локальну роботу та логи без перезапису.
-2. Зафіксувати реальне середовище Nix: версія, канали/flake inputs, спосіб побудови, VM launch і обмеження.
-3. Окремо побудувати мінімальну Guix System у disposable QEMU VM.
-4. Порівняти однакові критерії: installation, boot, updates, rollback, store growth, package availability, hardware path, developer UX.
-5. Створити problem register із пріоритетами та acceptance tests.
-6. Вибрати один з напрямків:
-   - один primary backend для першого WSM Desktop preview;
-   - дві незалежні редакції WSM, якщо обидві доведені та супроводжувані.
+2. Зафіксувати точні версії Nix/NixOS, inputs, команду побудови, VM launch і обмеження.
+3. Якщо з'явиться обґрунтована потреба, окремо довести NixOS real-boot у disposable QEMU VM.
+4. Порівнювати installation, boot, updates, rollback, store growth, package availability, hardware path і developer UX лише для оцінки можливого майбутнього другого backend-а.
+
+Цей план не відкриває заново вибір backend-а першого релізу: GNU Guix залишається єдиним підтримуваним шляхом до першого preview. Умови повернення до Nix наведено нижче.
 
 ## Рішення
 

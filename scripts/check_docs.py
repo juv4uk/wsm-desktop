@@ -23,7 +23,7 @@ ENTRY_POINT_DOCUMENTS = (
 TRANSLATION_SUFFIXES = (".uk.md", ".en.md")
 CYRILLIC_PATTERN = re.compile(r"[\u0400-\u04ff]")
 LATIN_PATTERN = re.compile(r"[A-Za-z]")
-CYRILLIC_TOLERANCE = 0.02
+CYRILLIC_TOLERANCE = 1.0  # At least as many Cyrillic as Latin letters.
 
 
 def markdown_files() -> list[Path]:
