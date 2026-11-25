@@ -37,19 +37,18 @@ class QemuBootSmokeTests(unittest.TestCase):
             qcow2 = root / "tmp,comma" / "disk.qcow2"
             serial = root / "tmp,comma" / "serial.log"
             iso.write_bytes(b"synthetic ISO placeholder")
-            command = build_qemu_command("qemu-system-x86_64", iso, qcow2, serial, 2048, 2)
+            command = build_qemu_command("qemu-system-x86_64", iso, qcow2, 2048, 2)
 
             blockdev_args = [
                 json.loads(command[index + 1])
                 for index, item in enumerate(command[:-1])
                 if item == "-blockdev"
             ]
-            chardev_index = command.index("-chardev")
-            chardev = json.loads(command[chardev_index + 1])
 
             self.assertEqual(blockdev_args[0]["filename"], str(qcow2))
             self.assertEqual(blockdev_args[1]["file"], "wsm-disk-file")
-            self.assertEqual(chardev["path"], str(serial))
+            self.assertEqual(command[command.index("-serial") + 1], "stdio")
+            self.assertNotIn("-chardev", command)
             self.assertIn("-nic", command)
             self.assertEqual(command[command.index("-nic") + 1], "none")
             self.assertIn("accel=tcg", " ".join(command))
@@ -81,9 +80,9 @@ class QemuBootSmokeTests(unittest.TestCase):
                 for index, item in enumerate(command[:-1])
                 if item == "-blockdev"
             ]
-            chardev = json.loads(command[command.index("-chardev") + 1])
             self.assertIn("tmp,comma", blockdev[0]["filename"])
-            self.assertIn("tmp,comma", chardev["path"])
+            self.assertEqual(command[command.index("-serial") + 1], "stdio")
+            self.assertNotIn("tmp,comma", command)
 
     def test_resource_limits_accept_all_documented_edges(self) -> None:
         validate_limits(MIN_TIMEOUT_SECONDS, MIN_MEMORY_MIB, MIN_CPUS, f"{MIN_DISK_MIB}M")
@@ -170,8 +169,8 @@ class QemuBootSmokeTests(unittest.TestCase):
                 if command[0] == "qemu-img":
                     Path(command[4]).touch()
                     return subprocess.CompletedProcess(command, 0, "", "")
-                chardev = json.loads(command[command.index("-chardev") + 1])
-                Path(chardev["path"]).write_text("booting\\nWSM-LIVE-READY\\n", encoding="utf-8")
+                self.assertEqual(command[command.index("-serial") + 1], "stdio")
+                kwargs["stdout"].write("booting\\nWSM-LIVE-READY\\n")
                 raise subprocess.TimeoutExpired(command, kwargs["timeout"])
 
             stdout = io.StringIO()
