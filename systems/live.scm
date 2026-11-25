@@ -21,6 +21,8 @@
 ;; user-account або входьте через root у консолі.
 
 (use-modules (gnu)
+             (gnu services)
+             (gnu services shepherd)
              (gnu services desktop)
              (gnu services networking)
              (gnu services sddm)
@@ -29,6 +31,31 @@
              (wsm packages wsm))
 
 (define base-os (include "desktop.scm"))
+
+;; Acceptance for the live image is a serial marker, not "it built". Without a
+;; marker the only thing a boot smoke test can say is "QEMU exited".
+;;
+;; The service writes once, after user processes are up, and never fails the
+;; boot: if the console is missing, the marker is simply absent, and the
+;; verifier reports a missing marker instead of a broken system.
+(define wsm-live-ready-marker
+  (simple-service 'wsm-live-ready shepherd-root-service-type
+    (list (shepherd-service
+           (documentation "Announce on the serial console that the live system is up.")
+           (provision '(wsm-live-ready))
+           (requirement '(user-processes))
+           (respawn? #f)
+           (start #~(lambda ()
+                      (catch #t
+                        (lambda ()
+                          (call-with-output-file "/dev/console"
+                            (lambda (port)
+                              (display "WSM_LIVE_READY" port)
+                              (newline port)
+                              (force-output port))))
+                        (lambda _ #f))
+                      #t))
+           (stop #~(const #t))))))
 
 (operating-system
   (inherit base-os)
@@ -47,5 +74,9 @@
          (locale-definition (name "en_US.utf8") (source "en_US"))))
 
   ;; Ядро без тихих параметрів: якщо live-образ не стартує, причину має бути
-  ;; видно на консолі, а не вгадано.
-  (kernel-arguments '("console=ttyS0,115200")))
+  ;; видно на консолі, а не вгадано. console=ttyS0 потрібен і для маркера.
+  (kernel-arguments '("console=ttyS0,115200"))
+
+  (services
+   (append (list wsm-live-ready-marker)
+           (operating-system-services base-os))))
