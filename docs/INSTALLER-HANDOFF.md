@@ -336,7 +336,8 @@ Frontend реалізація може змінюватися (Calamares, інш
 **Обмеження поточного adapter prototype:**
 
 - disk input наразі обмежено простим вузлом `/dev/<name>`; `/dev/.`, `/dev/..`, підрядки з newline та додаткові path segments відхиляються. Це синтаксична allowlist, а не доказ ідентичності block device.
-- configuration staging path фіксований: `/run/wsm/system.scm`; install target mount root фіксований: `/mnt`. Довільні абсолютні шляхи, `/`, `..` та вкладені target mountpoints не приймаються.
+- configuration staging path фіксований: `/run/wsm/system.scm`; authenticated channel lock staging path фіксований: `/run/wsm/channels.lock.scm`; install target mount root фіксований: `/mnt`. Довільні абсолютні шляхи, `/`, `..` та вкладені target mountpoints не приймаються.
+- майбутній deployment argv має запускати `system init` через зафіксований lock: `guix time-machine -C /run/wsm/channels.lock.scm -- system init /run/wsm/system.scm /mnt`. Обидва файли мають бути staged і перевірені до запуску; сама команда наразі не виконується.
 - перед першою операцією запису майбутній `APPLY` все одно мусить повторно розв'язати явно обраний `/dev/...` у поточну block-device identity й порівняти її з підтвердженим target; adapter поки не реалізує цю операцію.
 - поля тексту, що потрапляють у Scheme, відхиляють Unicode control/format/line-separator characters; regex-поля перевіряються повним збігом, не префіксом.
 
@@ -356,12 +357,12 @@ Frontend реалізація може змінюватися (Calamares, інш
 
 - `python3 -m wsm_install.guix_deploy --plan PLAN.json --selection TARGET.json --show-confirmation` перевіряє обидва входи й показує точні SHA-256 плану та вибору цілі; файл конфігурації не створюється;
 - другий виклик вимагає обидва digest-и через `--confirm-plan-sha256` і `--confirm-target-digest`, після чого створює новий абсолютний `.scm` файл з режимом `0600` як **оглядову копію**;
-- CLI друкує JSON із allow-listed `argv`, але ніколи не виконує його. `argv` завжди містить фіксовані `/run/wsm/system.scm` і `/mnt`, навіть коли оглядова копія лежить в іншому абсолютному шляху: це відображення майбутньої команди інсталятора, а не дозвіл на довільні шляхи. Окремі `--mountpoint` немає;
+- CLI друкує JSON із allow-listed `argv`, але ніколи не виконує його. `argv` використовує `guix time-machine -C /run/wsm/channels.lock.scm -- system init` і завжди містить фіксовані `/run/wsm/system.scm` та `/mnt`, навіть коли оглядова копія лежить в іншому абсолютному шляху: це відображення майбутньої команди інсталятора, а не дозвіл на довільні шляхи. Окремі `--mountpoint` немає;
 - CLI відхиляє symlink/не regular input, duplicate JSON keys, змінені чи diagnostic-only plans, неузгоджені підтвердження, перезапис наявного output і будь-яку оглядову копію всередині цільового `/mnt`;
 - `make check-installer` запускає окремі backend і CLI safety tests.
 
 **Обмеження поточного стану:** `wsm_install/cli.py` поки формує лише diagnostic-only plan із `confirmable=false`; отже, поточний frontend ще не видає plan, який може пройти Guix handoff. Реалізований CLI приймає вже підтверджений plan і окремий target selection; тести використовують синтетичний confirmed fixture. Це не підміняє UI-підтвердження і не доводить readiness фізичного диска.
 
-**Не реалізовано** — кроки `REALIZE` та `APPLY`: адаптер не виконує `guix system init`, не монтує цільовий диск і не перевіряє його ідентичність перед записом. Це наступний крок і він потребує середовища з Guix.
+**Не реалізовано** — staging channel lock/configuration, кроки `REALIZE` та `APPLY`: адаптер не копіює inputs у `/run/wsm/`, не виконує `guix time-machine ... system init`, не монтує цільовий диск і не перевіряє його ідентичність перед записом. Це наступний крок і він потребує authenticated Guix environment та disposable QEMU disk.
 
 Тести: `tests/test_backend_guix.py` (20 тестів) перевіряють backend guardrails; `tests/test_guix_deploy_cli.py` (13 тестів) — standalone CLI, файлову безпеку та двофазне підтвердження. Вони не потребують Guix і не торкаються дисків.
