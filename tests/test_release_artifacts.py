@@ -5,12 +5,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import stat
 import subprocess
 import sys
 import tarfile
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -124,6 +127,31 @@ class HardwareCheckScriptTests(unittest.TestCase):
             self.assertIn("not a symlink", result.stderr)
             self.assertEqual(list(target.iterdir()), [])
 
+    def test_output_directory_is_exactly_private(self) -> None:
+        from scripts import wsm_hardware_check
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "check"
+            actual = wsm_hardware_check.prepare_output(str(output))
+            self.assertEqual(stat.S_IMODE(actual.stat().st_mode), 0o700)
+
+    def test_output_refuses_to_continue_when_chmod_fails(self) -> None:
+        from scripts import wsm_hardware_check
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "existing"
+            output.mkdir()
+            os.chmod(output, 0o755)
+            with mock.patch.object(
+                wsm_hardware_check.os,
+                "chmod",
+                side_effect=PermissionError("chmod denied"),
+            ):
+                with self.assertRaisesRegex(SystemExit, "cannot secure output directory"):
+                    wsm_hardware_check.prepare_output(str(output))
+            self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o755)
+            self.assertEqual(list(output.iterdir()), [])
+
     def test_report_must_be_a_regular_file(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             result = subprocess.run(
@@ -187,6 +215,42 @@ class ReleaseBundleTests(unittest.TestCase):
             self.assertIn(f"wsm-desktop-{release['version']}/RELEASE-INFO.json", names)
             self.assertIn(f"wsm-desktop-{release['version']}/scripts/wsm_hardware_check.py", names)
 
+
+    def test_bundle_refuses_existing_sidecar_without_partial_tarball(self) -> None:
+        from scripts.build_release_bundle import build, load_release
+
+        release = load_release()
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / f"wsm-desktop-{release['version']}-source.tar.gz"
+            sums = output.with_name("SHA256SUMS")
+            sums.write_text("preserve this file\\n", encoding="utf-8")
+            with self.assertRaisesRegex(SystemExit, "destination already exists"):
+                build(release["version"], output)
+            self.assertFalse(output.exists())
+            self.assertEqual(sums.read_text(encoding="utf-8"), "preserve this file\\n")
+
+    def test_bundle_refuses_symlink_manifest_without_writing_tarball(self) -> None:
+        from scripts.build_release_bundle import build, load_release
+
+        release = load_release()
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / f"wsm-desktop-{release['version']}-source.tar.gz"
+            target = Path(directory) / "outside.txt"
+            target.write_text("do not overwrite\\n", encoding="utf-8")
+            manifest = output.with_name("release-manifest.json")
+            manifest.symlink_to(target)
+            with self.assertRaisesRegex(SystemExit, "symlink"):
+                build(release["version"], output)
+            self.assertFalse(output.exists())
+            self.assertEqual(target.read_text(encoding="utf-8"), "do not overwrite\\n")
+            self.assertTrue(manifest.is_symlink())
+
+    def test_bundle_refuses_output_inside_repository(self) -> None:
+        from scripts.build_release_bundle import build, load_release
+
+        release = load_release()
+        with self.assertRaisesRegex(SystemExit, "outside the repository tree"):
+            build(release["version"], ROOT / "README.md")
 
 def gzip_open(path: Path):  # pragma: no cover - tiny helper for readable test
     import gzip
