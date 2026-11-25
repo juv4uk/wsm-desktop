@@ -329,7 +329,7 @@ Frontend реалізація може змінюватися (Calamares, інш
 
 ## 11. Стан реалізації
 
-Контракт описано повністю, реалізовано поки що одну його частину.
+Контракт описано повністю. Реалізовано backend adapter і окремий plan-only CLI; frontend/Calamares та фактичне застосування конфігурації ще не реалізовані.
 
 **Обмеження поточного adapter prototype:**
 
@@ -350,6 +350,15 @@ Frontend реалізація може змінюватися (Calamares, інш
 - повертає argv як типізований список, а не рядок для shell;
 - анулює підтвердження, якщо після нього змінився план або вибір цілі.
 
+**Реалізовано** — standalone CLI `wsm_install/guix_deploy.py`: 
+
+- `python3 -m wsm_install.guix_deploy --plan PLAN.json --selection TARGET.json --show-confirmation` перевіряє обидва входи й показує точні SHA-256 плану та вибору цілі; файл конфігурації не створюється;
+- другий виклик вимагає обидва digest-и через `--confirm-plan-sha256` і `--confirm-target-digest`, після чого створює новий абсолютний `.scm` файл з режимом `0600`;
+- CLI друкує JSON із allow-listed `argv`, але ніколи не виконує його; відхиляє symlink/не regular input, duplicate JSON keys, змінені чи diagnostic-only plans, неузгоджені підтвердження та перезапис наявного output;
+- `make check-installer` запускає окремі backend і CLI safety tests.
+
+**Обмеження поточного стану:** `wsm_install/cli.py` поки формує лише diagnostic-only plan із `confirmable=false`; отже, поточний frontend ще не видає plan, який може пройти Guix handoff. Реалізований CLI приймає вже підтверджений plan і окремий target selection; тести використовують синтетичний confirmed fixture. Це не підміняє UI-підтвердження і не доводить readiness фізичного диска.
+
 **Не реалізовано** — кроки `REALIZE` та `APPLY`: адаптер не виконує `guix system init`, не монтує цільовий диск і не перевіряє його ідентичність перед записом. Це наступний крок і він потребує середовища з Guix.
 
-Тести: `tests/test_backend_guix.py` (20 тестів) покривають відмови з розділу 8 і не потребують Guix.
+Тести: `tests/test_backend_guix.py` (20 тестів) перевіряють backend guardrails; `tests/test_guix_deploy_cli.py` (13 тестів) — standalone CLI, файлову безпеку та двофазне підтвердження. Вони не потребують Guix і не торкаються дисків.
