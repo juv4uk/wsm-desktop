@@ -32,6 +32,39 @@ class CxlGuestError(RuntimeError):
     """The isolated CXL guest did not reach the expected evidence."""
 
 
+SAFE_GUEST_STATUSES = {
+    "type3-memdev-discovered",
+    "cxl-sysfs-topology-incomplete",
+}
+SAFE_GUEST_STAGES = {
+    "WSM_CXL_STAGE_INIT",
+    "WSM_CXL_STAGE_MODULE_LOAD",
+}
+GUEST_COUNTS_PATTERN = re.compile(
+    r"^WSM_CXL_COUNTS devices=(\\d{1,5}) ports=(\\d{1,5}) "
+    r"memdevs=(\\d{1,5}) edges=(\\d{1,5})$"
+)
+
+
+def summarize_guest_serial(serial: str) -> str:
+    """Return only allow-listed guest markers; never echo raw console output."""
+    stages = [line for line in SAFE_GUEST_STAGES if line in serial.splitlines()]
+    status = "unknown"
+    counts = "not-reported"
+    for line in serial.splitlines():
+        if line.startswith("WSM_CXL_STATUS="):
+            candidate = line.split("=", 1)[1]
+            status = candidate if candidate in SAFE_GUEST_STATUSES else "unknown"
+        match = GUEST_COUNTS_PATTERN.fullmatch(line)
+        if match:
+            labels = ("devices", "ports", "memdevs", "edges")
+            counts = ",".join(
+                f"{label}={int(value)}"
+                for label, value in zip(labels, match.groups())
+            )
+    return f"stages={','.join(sorted(stages)) or 'none'};status={status};counts={counts}"
+
+
 def parse_insmod_plan(text: str, module_root: Path) -> list[Path]:
     """Accept only resolved insmod paths contained in the current kernel module tree."""
     root = module_root.resolve(strict=True)
@@ -313,14 +346,15 @@ def main() -> int:
             marker=GUEST_DONE_MARKER,
         )
         serial = result.stdout_tail.decode("utf-8", errors="replace")
+        safe_summary = summarize_guest_serial(serial)
         if result.timed_out:
-            raise CxlGuestError(f"QEMU CXL guest timed out; serial tail:\n{serial[-6000:]}")
+            raise CxlGuestError(f"QEMU CXL guest timed out; {safe_summary}")
         if result.returncode != 0:
-            raise CxlGuestError(f"QEMU CXL guest exited {result.returncode}; serial tail:\n{serial[-6000:]}")
+            raise CxlGuestError(f"QEMU CXL guest exited {result.returncode}; {safe_summary}")
         if result.stdout_truncated or result.stderr_truncated:
             raise CxlGuestError("QEMU CXL guest exceeded bounded serial/stderr capture limits")
         if not result.marker_seen:
-            raise CxlGuestError(f"QEMU CXL guest did not print completion marker; serial tail:\n{serial[-6000:]}")
+            raise CxlGuestError(f"QEMU CXL guest did not print completion marker; {safe_summary}")
 
         status = None
         devices: list[str] = []
@@ -363,7 +397,7 @@ def main() -> int:
         if status != "type3-memdev-discovered":
             raise CxlGuestError(
                 "Linux guest did not expose a Type-3 memdev and CXL port in sysfs; "
-                f"status={status!r}, counts={counts!r}, serial tail:\n{serial[-6000:]}"
+                safe_summary
             )
         if not devices or not any(name.startswith("mem") for name in devices):
             raise CxlGuestError("CXL guest reported Type-3 status without a memdev entry")
