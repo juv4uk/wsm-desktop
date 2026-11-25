@@ -132,6 +132,19 @@ class GuixDeployCliTests(unittest.TestCase):
         self.assertIn("confirmation.target_digest", stderr)
         self.assertFalse(self.output_path.exists())
 
+    def test_malformed_nested_plan_fields_are_refused(self) -> None:
+        malformed = copy.deepcopy(self.plan)
+        malformed["backend"] = "guix-system"
+        malformed.pop("plan_sha256", None)
+        malformed["plan_sha256"] = hashlib.sha256(
+            canonical_json(malformed).encode("utf-8")
+        ).hexdigest()
+        write_json(self.plan_path, malformed)
+        code, _stdout, stderr = self.run_cli("--show-confirmation")
+        self.assertEqual(code, 2)
+        self.assertIn("plan field 'backend' must be a JSON object", stderr)
+        self.assertFalse(self.output_path.exists())
+
     def test_diagnostic_only_plan_is_refused_before_creating_output(self) -> None:
         diagnostic = copy.deepcopy(self.plan)
         diagnostic["plan_readiness"]["confirmable"] = False
