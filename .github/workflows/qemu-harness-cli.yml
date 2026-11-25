@@ -1,0 +1,30 @@
+name: QEMU harness argument smoke
+
+on:
+  push:
+    branches:
+      - work/qemu-harness-hardening
+  pull_request:
+    paths:
+      - .github/workflows/qemu-harness-cli.yml
+      - scripts/qemu_boot_smoke.py
+      - tests/test_qemu_boot_smoke.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qemu-cli-smoke:
+    name: Validate generated arguments with real QEMU
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Install QEMU CLI tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends qemu-system-x86 qemu-utils
+      - name: Run harness tests including real QEMU CLI smoke
+        run: python -m unittest discover -s tests -p 'test_qemu_boot_smoke.py' -v
