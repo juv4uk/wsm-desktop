@@ -27,6 +27,7 @@ import argparse
 import datetime as dt
 import hashlib
 import json
+import math
 import os
 import platform
 import statistics
@@ -55,7 +56,9 @@ def median_and_spread(samples: list[float]) -> dict[str, float]:
     """Median, p90 and MAD - the issue asks for spread, not a mean of one run."""
     ordered = sorted(samples)
     median = statistics.median(ordered)
-    index = min(len(ordered) - 1, int(round(0.9 * (len(ordered) - 1))))
+    # Nearest-rank percentile: rank=ceil(0.9*N), then convert to zero-based index.
+    # Do not use round(): Python's ties-to-even makes N=6 choose rank 5, not 6.
+    index = max(0, min(len(ordered) - 1, math.ceil(0.9 * len(ordered)) - 1))
     p90 = ordered[index]
     mad = statistics.median([abs(value - median) for value in ordered])
     mad_relative = (mad / median) if median else 0.0

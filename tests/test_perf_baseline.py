@@ -36,6 +36,12 @@ class SpreadTests(unittest.TestCase):
         self.assertTrue(result["noisy"])
         self.assertGreater(result["relative_spread"], NOISE_THRESHOLD)
 
+    def test_p90_uses_nearest_rank_for_even_sample_counts(self) -> None:
+        six = median_and_spread([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+        self.assertEqual(six["p90"], 6.0)
+        ten = median_and_spread([float(value) for value in range(1, 11)])
+        self.assertEqual(ten["p90"], 9.0)
+
     def test_p90_is_within_range(self) -> None:
         samples = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
         result = median_and_spread(samples)
