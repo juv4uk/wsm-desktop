@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Evidence and safety guardrails for the PCIe AER/devlink protocol."""
+"""Guardrails for the canonical PCIe AER/devlink evidence protocol."""
 
 from pathlib import Path
 import unittest
@@ -15,8 +15,8 @@ class PcieLinkHealthProtocolTests(unittest.TestCase):
         cls.text = PROTOCOL.read_text(encoding="utf-8")
         cls.lower = cls.text.casefold()
 
-    def test_aer_counter_classes_and_paths_are_separate(self) -> None:
-        for path in (
+    def test_aer_counter_classes_and_sources_are_separate(self) -> None:
+        for attribute in (
             "aer_dev_correctable",
             "aer_dev_nonfatal",
             "aer_dev_fatal",
@@ -24,67 +24,71 @@ class PcieLinkHealthProtocolTests(unittest.TestCase):
             "aer_rootport_total_err_nonfatal",
             "aer_rootport_total_err_fatal",
         ):
-            with self.subTest(path=path):
-                self.assertIn(path, self.text)
+            with self.subTest(attribute=attribute):
+                self.assertIn(attribute, self.text)
         self.assertIn("correctable", self.lower)
         self.assertIn("non-fatal", self.lower)
         self.assertIn("fatal", self.lower)
+        self.assertIn("root-port", self.lower)
 
-    def test_missing_or_denied_data_never_becomes_zero(self) -> None:
+    def test_missing_or_unreadable_data_is_not_zero(self) -> None:
         self.assertIn("not-collected", self.lower)
-        self.assertIn("permission-denied", self.lower)
-        self.assertIn("verdict unknown", self.lower)
-        self.assertIn("не нуль", self.lower)
+        self.assertIn("unknown", self.lower)
+        self.assertIn("не підміняти його нулем", self.lower)
+        self.assertIn("permission denied", self.lower)
 
-    def test_rootport_counters_are_not_endpoint_attribution(self) -> None:
-        self.assertIn("root-port total counters доступні", self.lower)
-        self.assertIn("вони агрегують повідомлення в pcie hierarchy", self.lower)
-        self.assertIn("endpoint attribution лишається unknown", self.lower)
-        self.assertIn("не можна автоматично приписати одному endpoint", self.lower)
+    def test_rootport_totals_are_not_attributed_to_one_endpoint(self) -> None:
+        self.assertIn("root port totals агрегують", self.lower)
+        self.assertIn("не приписувати їх автоматично downstream endpoint", self.lower)
+        self.assertIn("endpoint-проблема може бути зафіксована", self.lower)
+        self.assertIn("link partner або root port", self.lower)
 
-    def test_snapshots_and_deltas_require_same_boot_and_monotonic_time(self) -> None:
-        self.assertIn("snapshot cumulative counter", self.lower)
-        self.assertIn("тієї самої boot session", self.lower)
-        self.assertIn("монотонний час строго зростає", self.lower)
-        self.assertIn("counter зменшився", self.lower)
-        self.assertIn("delta unknown", self.lower)
+    def test_delta_requires_same_boot_and_monotonic_order(self) -> None:
+        self.assertIn("та сама boot session", self.lower)
+        self.assertIn("монотонний порядок часу", self.lower)
+        self.assertIn("лічильник зменшився", self.lower)
+        self.assertIn("delta є unknown", self.lower)
+        self.assertIn("зміни джерела", self.lower)
 
-    def test_devlink_only_allows_health_show(self) -> None:
+    def test_only_devlink_health_show_is_allowed_automatically(self) -> None:
         self.assertIn("devlink health show", self.lower)
         self.assertIn("health-reporter-get", self.lower)
+        self.assertIn("не запускати автоматично", self.lower)
         for forbidden in (
-            "health-reporter-diagnose",
-            "health-reporter-dump-get",
-            "health-reporter-recover",
-            "health-reporter-test",
-            "health-reporter-set",
-            "health-reporter-dump-clear",
-        ):
-            with self.subTest(operation=forbidden):
-                self.assertIn(forbidden, self.text)
-        self.assertIn("єдина дозволена команда", self.lower)
-
-    def test_no_mutating_diagnostic_operations_are_recommended(self) -> None:
-        for forbidden in (
-            "setpci",
-            "error injection",
-            "retraining",
-            "driver reload",
-            "firmware update",
+            "devlink health recover",
+            "devlink health test",
+            "devlink health diagnose",
+            "devlink health dump show",
+            "devlink health dump clear",
+            "devlink health set",
         ):
             with self.subTest(operation=forbidden):
                 self.assertIn(forbidden, self.lower)
-        self.assertIn("змінювати pcie, driver, device, devlink", self.lower)
 
-    def test_zero_and_nonzero_counts_are_not_global_health_verdicts(self) -> None:
-        self.assertIn("не healthy", self.lower)
-        self.assertIn("повна справність пристрою/лінка", self.lower)
-        self.assertIn("не повинен самостійно блокувати інсталяцію", self.lower)
+    def test_no_mutating_diagnostic_operations_are_recommended(self) -> None:
+        for forbidden in (
+            "error injection",
+            "stress/throughput tests",
+            "link retraining",
+            "device reset",
+            "driver reload",
+            "firmware update/flash",
+            "recovery процедури",
+        ):
+            with self.subTest(operation=forbidden):
+                self.assertIn(forbidden, self.lower)
 
-    def test_protocol_keeps_schema_and_collector_out_of_scope(self) -> None:
-        self.assertIn("validation protocol", self.lower)
-        self.assertIn("власників #5/#6/#16", self.lower)
-        self.assertIn("нові report fields", self.lower)
+    def test_zero_and_nonzero_values_are_not_global_health_verdicts(self) -> None:
+        self.assertIn("нульовий не доводить", self.lower)
+        self.assertIn("нульове значення", self.lower)
+        self.assertIn("не доводить, що link або пристрій здоровий", self.lower)
+        self.assertIn("не повинні самостійно встановлювати hard-stop", self.lower)
+
+    def test_device_attribution_requires_explicit_topology(self) -> None:
+        self.assertIn("явні topology relationships", self.lower)
+        self.assertIn("report-local device id", self.lower)
+        self.assertIn("абсолютний sysfs path не є стабільним public identifier", self.lower)
+        self.assertIn("не поширюється на інші пристрої", self.lower)
 
 
 if __name__ == "__main__":

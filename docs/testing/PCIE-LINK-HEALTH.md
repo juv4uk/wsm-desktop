@@ -1,139 +1,158 @@
-# Протокол read-only спостереження PCIe AER та devlink health
+# Протокол read-only перевірки PCIe AER та devlink health
 
 <!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 
-- Статус: proposed validation protocol
-- Власник: [#69 — safe PCIe AER and devlink health evidence](https://github.com/juv4uk/wsm-desktop/issues/69)
-- Пов'язані контракти: #8, #16, #18
+- Статус: **proposed / validation protocol**
+- Пов’язана задача: [#69](https://github.com/juv4uk/wsm-desktop/issues/69)
+- Матриця тестування: [#8](https://github.com/juv4uk/wsm-desktop/issues/8)
+- Upstream tooling audit: [#4](https://github.com/juv4uk/wsm-desktop/issues/4)
+- Driver/runtime evidence: [#16](https://github.com/juv4uk/wsm-desktop/issues/16)
+- Topology relationships: [#18](https://github.com/juv4uk/wsm-desktop/pull/42)
 
-## Призначення та межі
+## 1. Призначення та межі
 
-Протокол визначає, як WSM збирає пасивні спостереження про PCI Express Advanced Error Reporting (AER) та optional devlink health reporters. Це допоміжні свідчення для support report, не сертифікація пристрою і не самостійний compatibility verdict.
+Протокол описує, як WSM може локально читати доступні PCIe Advanced Error Reporting (AER) counters і, за наявності відповідного драйвера, стан `devlink health`.
 
-Дозволено: читати вже наявні AER sysfs attributes; за наявності готового інструмента виконати тільки команду devlink health show.
+Це діагностичні спостереження, а не сертифікат справності PCIe, не функціональний тест пристрою й не глобальний verdict сумісності. Ненульовий лічильник сам по собі не доводить, що конкретний endpoint несправний; нульовий не доводить, що link або пристрій здоровий.
 
-Заборонено: встановлювати iproute2 або модулі; запускати stress/benchmark, error injection, retraining, reset, driver reload або firmware update; змінювати PCIe, driver, device, devlink чи системний стан.
+Автоматичний preflight лишається read-only. Заборонені error injection, stress/throughput tests, link retraining, device reset, driver reload, firmware update/flash та recovery процедури.
 
-AER counter не є глобальним показником «здоров'я ПК». Його значення прив'язане до конкретного джерела спостереження та класу повідомлень.
+## 2. PCIe AER: доступні лічильники
 
-## PCIe AER: джерела та семантика
+Для AER-capable PCI functions ядро може експонувати такі attributes у `/sys/bus/pci/devices/<BDF>/`:
 
-Linux експонує AER статистику через testing sysfs ABI для AER-capable PCI functions.
+| Attribute | Зміст | Інтерпретація |
+| --- | --- | --- |
+| `aer_dev_correctable` | Correctable ERR_COR events, повідомлені цією PCI function | Correctable errors; апаратний/програмний стек може виправити їх без втрати функції |
+| `aer_dev_nonfatal` | Uncorrectable non-fatal events, повідомлені цією PCI function | Окремий клас uncorrectable errors; сам по собі не доводить відмову пристрою |
+| `aer_dev_fatal` | Uncorrectable fatal events, повідомлені цією PCI function | Fatal errors, повідомлені цим компонентом |
+| `aer_rootport_total_err_cor` | ERR_COR messages, отримані Root Port | Сукупне спостереження Root Port, не лічильник одного endpoint |
+| `aer_rootport_total_err_nonfatal` | ERR_NONFATAL messages, отримані Root Port | Сукупне спостереження Root Port для його PCIe hierarchy |
+| `aer_rootport_total_err_fatal` | ERR_FATAL messages, отримані Root Port | Сукупне спостереження Root Port для його PCIe hierarchy |
 
-| Attribute | Значення |
+Device-level attributes доступні лише для компонентів, де ядро експонує AER statistics. Root-port totals доступні лише для відповідних AER-capable Root Ports / Root Complex Event Collectors. Інші attributes можуть бути відсутні через можливості пристрою, ядра або платформи.
+
+**Статус ABI:** ці sysfs attributes задокументовані в Linux `Documentation/ABI/testing/sysfs-bus-pci-devices-aer`, тобто належать до testing ABI, а не до гарантовано стабільного sysfs API. Їхня наявність, назва або формат можуть змінюватися між kernel releases. Кожне evidence record має зберігати `kernel_release`, точну назву attribute, BDF джерела та результат читання. Якщо attribute відсутній, перейменований або його формат не розпізнано, результат — `unknown/not-collected`; не підміняти його нулем і не вгадувати нову назву.
+
+### 2.1 Критичні семантичні обмеження
+
+1. AER counters відображають помилки, побачені або повідомлені саме тим компонентом, на якому прочитано counter. Endpoint-проблема може бути зафіксована link partner або Root Port; сам endpoint може показувати нуль.
+2. Root Port totals агрегують повідомлення для PCIe hierarchy. Вони можуть включати помилки, які Root Port бачить у собі; не приписувати їх автоматично downstream endpoint.
+3. Один ERR_COR message може представляти кілька correctable errors. Тому `TOTAL_ERR_COR` не обов’язково дорівнює сумі деталізованих записів.
+4. Відсутній або unreadable attribute означає `not-collected` / `unknown`, а не нуль.
+5. Ненульове значення не є самостійною причиною блокувати інсталяцію; воно може бути накопиченим історичним сигналом.
+6. Нульове значення означає лише те, що саме цей counter показує нуль, а не загальну справність.
+
+Реалізація Linux експонує AER statistics через read-only `DEVICE_ATTR_RO` attributes. Інші AER attributes, включно з ratelimit controls, не є частиною цього протоколу й не повинні змінюватися.
+
+## 3. Read-only збір snapshot
+
+Наведена команда призначена для локального діагностичного режиму. Не встановлювати додаткові пакунки заради preflight; читати лише attributes, які вже доступні:
+
+```sh
+for attr in /sys/bus/pci/devices/*/aer_dev_correctable \
+            /sys/bus/pci/devices/*/aer_dev_nonfatal \
+            /sys/bus/pci/devices/*/aer_dev_fatal \
+            /sys/bus/pci/devices/*/aer_rootport_total_err_cor \
+            /sys/bus/pci/devices/*/aer_rootport_total_err_nonfatal \
+            /sys/bus/pci/devices/*/aer_rootport_total_err_fatal; do
+  [ -r "$attr" ] || continue
+  printf "%s\n" "$attr"
+  cat "$attr"
+done
+```
+
+Для кожного значення report зберігає BDF фактичного джерела, назву attribute, результат читання, kernel release та час спостереження. У зовнішньому звіті використовувати report-local device ID; абсолютний sysfs path не є стабільним public identifier.
+
+Якщо частина attributes недоступна, не переривати весь preflight. Позначати конкретні джерела як `unknown` / `not-collected`.
+
+### 3.1 Один snapshot і delta
+
+Один запуск preflight читає snapshot. Він не повинен називати абсолютне значення «кількістю помилок під час інсталяції» або «поточною частотою помилок».
+
+Delta між двома snapshot-ами можна обчислювати лише за одночасного виконання умов:
+- та сама boot session;
+- той самий BDF і той самий attribute;
+- відомий монотонний порядок часу;
+- немає ознак reboot, driver/device reset або зміни джерела.
+
+Якщо лічильник зменшився, boot session змінилася або provenance не збігається — delta є `unknown`. Не припускати, що counter зберігається між reboot або driver reload.
+
+## 4. Attribution через topology
+
+Counter належить PCI function, на якій його прочитано. Щоб пов’язати його з endpoint, потрібні окремі явні topology relationships із #18.
+
+Заборонено:
+- приписувати Root Port total найближчому або єдиному endpoint;
+- визначати джерело помилки за порядком PCI enumeration;
+- вважати endpoint із нульовими counters гарантовано справним;
+- об’єднувати Root Port та endpoint counters у спільний total.
+
+Якщо relationship відсутній або unknown, evidence лишається локальним для BDF джерела й не поширюється на інші пристрої.
+
+## 5. Опційний devlink health
+
+Якщо `devlink` уже встановлений і драйвер зареєстрував health reporter, локальний виклик
+
+```sh
+devlink health show
+```
+
+може показати status/configuration цих reporter-ів. Покриття залежить від конкретного драйвера. Відсутність reporter-а означає `not-available` / `not-collected`, а не «пристрій здоровий».
+
+### Дозволено в автоматичному preflight
+- `devlink health show` — лише GET/status/configuration query;
+- зафіксувати, що binary/provider відсутній, reporter не зареєстрований або доступ заборонений;
+- локально зберігати мінімальний нормалізований результат без vendor/device dumps, які не потрібні для рішення.
+
+### Не запускати автоматично
+| Операція | Причина |
 | --- | --- |
-| /sys/bus/pci/devices/<BDF>/aer_dev_correctable | Correctable errors, побачені та повідомлені цією PCI function через ERR_COR |
-| /sys/bus/pci/devices/<BDF>/aer_dev_nonfatal | Uncorrectable non-fatal errors, побачені та повідомлені цією function через ERR_NONFATAL |
-| /sys/bus/pci/devices/<BDF>/aer_dev_fatal | Uncorrectable fatal errors, побачені та повідомлені цією function через ERR_FATAL |
-| /sys/bus/pci/devices/<BDF>/aer_rootport_total_err_cor | ERR_COR messages, повідомлені AER-capable root port / root complex event collector |
-| /sys/bus/pci/devices/<BDF>/aer_rootport_total_err_nonfatal | ERR_NONFATAL messages, повідомлені root port |
-| /sys/bus/pci/devices/<BDF>/aer_rootport_total_err_fatal | ERR_FATAL messages, повідомлені root port |
+| `devlink health recover` | Запускає driver recovery та змінює стан пристрою |
+| `devlink health test` | Створює тестову health event і може запустити recovery flow |
+| `devlink health diagnose` | Викликає driver callback; netlink operation вимагає admin permission |
+| `devlink health dump show` / dump-get | За відсутності готового dump драйвер може створити новий |
+| `devlink health dump clear` | Видаляє збережений dump |
+| `devlink health set` | Змінює reporter configuration, включно з auto-recovery / auto-dump |
 
-### As seen/reported — це не attribution до endpoint
+Ці команди можуть бути доречні в окремому support workflow, але лише після пояснення мети, оцінки ризику та явної згоди користувача. Вони не є частиною pre-install compatibility preflight.
 
-Device-level counters показують помилки, які побачив або повідомив саме цей пристрій. Endpoint може спричинити помилку, яку побачить його link partner/root port; root-port counter може зрости, а endpoint — залишитися на нулі. Root-port total counters доступні лише на відповідних AER-capable root ports або root complex event collectors. Вони агрегують повідомлення в PCIe hierarchy за цим root port, включно з повідомленнями від самого root port.
+## 6. Інтерпретація для WSM
 
-Отже, root-port counter не можна автоматично приписати одному endpoint. Якщо #18 не має явного evidence-backed relationship, endpoint attribution лишається unknown.
-
-### Класи та підсумки
-
-Correctable, uncorrectable non-fatal та uncorrectable fatal — три окремі класи. Не зводити їх до одного числа і не обчислювати глобальний score.
-
-Файл може містити counters окремих типів і TOTAL_ERR_*. Kernel ABI застерігає, що кілька помилок можуть бути повідомлені одним AER message; total message counter тому може не дорівнювати сумі окремих типів. Не додавати підкатегорії до TOTAL_ERR_*.
-
-Ці attributes належать до testing ABI. Записуй фактичний kernel release та назву ABI. Не припускай, що кожне ядро або кожна PCI function експонує всі файли.
-
-## Безпечний збір
-
-Приклад ручного read-only читання одного відомого BDF:
-
-    BDF=0000:00:1c.0
-    BASE="/sys/bus/pci/devices/$BDF"
-    for name in aer_dev_correctable aer_dev_nonfatal aer_dev_fatal aer_rootport_total_err_cor aer_rootport_total_err_nonfatal aer_rootport_total_err_fatal
-    do
-      path="$BASE/$name"
-      if [ -r "$path" ]; then
-        printf '\n[%s]\n' "$path"
-        cat -- "$path"
-      else
-        printf '\n[%s] not-collected (missing or unreadable)\n' "$path"
-      fi
-    done
-
-У WSM записувати source BDF, точний attribute, counter class, raw numeric values, kernel release, observation timestamp, boot/session context та collector version. BDF — локальна provenance поточного snapshot, а не стабільна міжсесійна ідентичність. Посилання на report-local device_id дозволене лише за точної відповідності; без topology evidence endpoint relationship не створюється.
-
-Зберігати окремо відсутній файл, permission denied, parse error і успішно прочитане значення 0. Не записувати ratelimit attributes під /aer/. Не використовувати setpci, config-space writes, AER injection чи reset paths.
-
-### Snapshot проти delta
-
-Одне читання є snapshot cumulative counter, не швидкістю помилок. Delta можна рахувати лише між двома samples тієї самої boot session, тієї самої BDF/attribute/counter class та kernel/source context, коли монотонний час строго зростає і друге значення не менше за перше.
-
-Boot/session change, BDF/source change, відсутній або регресований timestamp чи зменшення counter роблять delta unknown. Не обчислювати від'ємний приріст і не вгадувати причину reset/wrap.
-
-## Devlink health: тільки optional read query
-
-Reporter-и реалізує конкретний driver. Наявність reporter-а — свідчення експонованого driver health interface; відсутність reporter-а не означає, що пристрій здоровий.
-
-Єдина дозволена команда:
-
-    devlink health show
-
-Запускати лише якщо devlink вже наявний у live environment. Не встановлювати iproute2 і не завантажувати модулі. У devlink netlink specification health-reporter-get є GET operation без admin-perm; це відрізняється від driver callback та state-changing operations. Runtime access може залежати від namespace або policy; failure означає unknown.
-
-| Операція | Семантика | Preflight |
+| Observation | Що можна сказати | Чого не можна сказати |
 | --- | --- | --- |
-| devlink health show / health-reporter-get | Отримує reporter-и та поля стану | Так, optional read-only |
-| devlink health diagnose / health-reporter-diagnose | Driver callback, admin permission | Заборонено |
-| devlink health dump show / health-reporter-dump-get | Driver dump, admin permission; окремі драйвери можуть створювати dump за запитом | Заборонено |
-| devlink health recover / health-reporter-recover | Recovery callback | Заборонено |
-| devlink health test / health-reporter-test | Driver test | Заборонено |
-| devlink health set / health-reporter-set | Зміна reporter configuration | Заборонено |
-| devlink health dump clear / health-reporter-dump-clear | Очищення dump | Заборонено |
+| AER attributes відсутні | Джерело не зібране або не підтримується | Що PCIe errors відсутні |
+| Доступні counters = 0 | Ці counters наразі показують нуль | Що link або пристрій повністю справні |
+| Correctable counter > 0 | Компонент повідомив correctable AER events | Що endpoint несправний або помилки тривають зараз |
+| Non-fatal / fatal counter > 0 | Компонент повідомив відповідний клас uncorrectable events | Що саме цей endpoint є джерелом без topology attribution |
+| Root Port total > 0 | Root Port отримував AER messages у своїй hierarchy | Що конкретний downstream endpoint є винуватцем |
+| devlink reporter status доступний | Драйвер експонує reporter і його статус | Що всі функції пристрою працюють |
+| devlink reporter відсутній | Provider не надав цей тип evidence | Що пристрій здоровий |
 
-Якщо devlink відсутній, доступ заборонено або немає reporter-ів, записати not-collected / permission-denied / no-reporter-exposed. Похідний verdict лишається unknown, а не supported або healthy. Reporter state/error count/recover count/timestamp — окремі driver-provided observations, не end-to-end functional test.
+AER / devlink observations можуть підтримати пояснювальне попередження або рекомендацію перевірити hardware, firmware чи cabling у support mode. Вони не повинні самостійно встановлювати hard-stop сумісності, обирати target disk або дозволяти/забороняти backend deployment.
 
-## Правила інтерпретації
+## 7. Acceptance matrix
 
-| Спостереження | Допустимий висновок | Заборонений висновок |
-| --- | --- | --- |
-| AER attribute відсутній | not-collected; verdict unknown | Нуль помилок |
-| Permission denied/read error | permission-denied або unknown | Нуль або unsupported |
-| Counter = 0 | Snapshot конкретного source/counter дорівнює 0 | Повна справність пристрою/лінка |
-| Correctable > 0 | Correctable messages observed на конкретному BDF | Автоматично несправний endpoint |
-| Non-fatal > 0 | Non-fatal messages observed; потрібен контекст/review | Глобальна несумісність ПК |
-| Fatal > 0 | Fatal messages observed; high-priority manual review | Автоматично встановлена причина |
-| Root-port total без endpoint counter | Root-port aggregate | Attribution до одного endpoint |
-| Topology relationship відсутній | Endpoint attribution unknown | Висновок за сусідством BDF |
-| Boot/session змінився між samples | Окремі snapshots; delta unknown | Тренд між boots |
-| Counter зменшився | Delta unknown | Від'ємний приріст |
-| Reporter відсутній | Reporter не експоновано в snapshot | Reporter/пристрій здоровий |
+| Case | Очікуваний результат |
+| --- | --- |
+| AER tree / attribute відсутній | `not-collected`; preflight продовжується |
+| Permission denied | Конкретне джерело `unavailable`; не підміняти нулем |
+| Нульові counters | `observed-zero`, не `healthy` |
+| Ненульовий correctable | Окреме correctable observation; не hard-stop |
+| Ненульовий non-fatal / fatal | Відповідний severity observation із BDF source |
+| Root Port total nonzero, endpoint zero | Attribution лишається root-port-local |
+| Topology relationship unknown | Endpoint attribution = `unknown` |
+| Boot session змінилася | Delta = `unverifiable` |
+| Counter regression | Delta = `unverifiable` |
+| devlink binary / reporter відсутній | `not-available` / `not-registered` |
+| Потрібні diagnose / dump / recover / test | Автоматичний preflight їх не викликає |
 
-Абсолютні counters можуть накопичуватися протягом невідомого інтервалу. Кількість повідомлень не є прямою оцінкою severity. Один counter не повинен самостійно блокувати інсталяцію.
+## 8. Джерела
 
-## Acceptance cases
+- [Linux sysfs PCI AER ABI](https://github.com/torvalds/linux/blob/master/Documentation/ABI/testing/sysfs-bus-pci-devices-aer) — attributes, “as seen/reported” semantics та Root Port attribution.
+- [Linux PCIe AER HOWTO](https://www.kernel.org/doc/html/latest/PCI/pcieaer-howto.html) — error classes та модель обробки.
+- [Linux AER implementation](https://github.com/torvalds/linux/blob/master/drivers/pci/pcie/aer.c) — `DEVICE_ATTR_RO` counters.
+- [Linux devlink health](https://docs.kernel.org/6.19/networking/devlink/devlink-health.html) — reporter lifecycle, dumps та recovery.
+- [devlink netlink specification](https://docs.kernel.org/netlink/specs/devlink.html) — GET / SET / RECOVER / DIAGNOSE / DUMP operations і permissions.
 
-Усі cases синтетичні; вони не запускають error injection, devlink callbacks, hardware stress чи driver mutation.
-
-| Case | Input | Очікуваний результат |
-| --- | --- | --- |
-| A | AER files відсутні | not-collected; unknown, не нуль |
-| B | Усі counters дорівнюють 0 | Лише snapshot=0; не healthy |
-| C | Correctable counter > 0 | Correctable observation, без hard-stop |
-| D | Non-fatal counter > 0 | Non-fatal observation; review |
-| E | Fatal counter > 0 | Fatal observation; high-priority review |
-| F | Root-port total non-zero, endpoint counter=0 | Root-port aggregate; endpoint unknown |
-| G | Topology link до endpoint відсутній | Не створювати endpoint relationship |
-| H | Boot/session змінився | Delta unknown |
-| I | Другий counter менший | Delta unknown |
-| J | Devlink відсутній / reporter list порожній | Optional provider not-collected; не healthy |
-| K | Permission denied | Permission-denied/unknown; не нуль |
-
-## Upstream джерела
-
-- [Linux ABI testing overview](https://docs.kernel.org/admin-guide/abi-testing.html)
-- [Linux testing ABI files](https://docs.kernel.org/next/admin-guide/abi-testing-files.html)
-- [PCI sysfs](https://docs.kernel.org/PCI/sysfs-pci.html)
-- [Devlink netlink specification](https://docs.kernel.org/netlink/specs/devlink.html)
-- [Devlink documentation](https://docs.kernel.org/networking/devlink/index.html)
-
-Документ є validation protocol. Нові report fields, runtime collector implementation або compatibility verdict rules потребують окремого review власників #5/#6/#16.
+Документ визначає безпечні правила збору. Він не стверджує, що будь-який AER counter, devlink reporter або фізичний PCIe link уже перевірено на машині користувача.

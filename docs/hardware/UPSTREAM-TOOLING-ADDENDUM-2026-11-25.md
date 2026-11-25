@@ -23,24 +23,20 @@ WSM варто будувати не навколо одного «детект�
 | [VKMS](https://docs.kernel.org/gpu/vkms.html) + [IGT GPU Tools](https://gitlab.freedesktop.org/drm/igt-gpu-tools) | Віртуальний DRM/KMS display для headless CI/VM перевірок | Для VKMS потрібно завантажити модуль/налаштувати configfs; IGT може вимагати окремої сесії без compositor-а. Це змінює стан тестового kernel і не є live preflight | Ізольована CI/VM lane, не probe на фізичному ПК |
 | [fwupd HSI](https://fwupd.github.io/hsi.html) | Окремі показники firmware/platform security posture | Security posture не доводить наявність runtime firmware blob, успішне виконання `request_firmware()` чи ініціалізацію пристрою | Окремий security report; не змішувати з #16 compatibility evidence |
 
-## Security gate: EDID/DisplayID parser не можна додавати без перевірки CVE
+## Детальні межі hwloc I/O locality
 
-EDID/DisplayID надходить від зовнішнього пристрою або з локального файла і має трактуватися як недовірений вхід. Для `libdisplay-info` оприлюднено два дефекти читання за межами буфера в DisplayID parser-ах:
+Офіційна документація hwloc 2.16.0 уточнює кілька важливих умов, які мають бути явними в WSM adapter-і:
 
-- [CVE-2026-112271](https://access.redhat.com/security/cve/cve-2026-112271) — DisplayID v1 parser може читати за межами секції, коли оголошена довжина data block перевищує її межі.
-- [CVE-2026-112272](https://access.redhat.com/security/cve/cve-2026-112272) — відповідний out-of-bounds read у DisplayID v2 parser.
+- **I/O discovery не активується типовим API за замовчуванням.** Його потрібно явно вмикати до завантаження topology, наприклад через `HWLOC_TYPE_FILTER_KEEP_IMPORTANT` або точковий filter для потрібних типів. Не вмикати `KEEP_ALL` автоматично в preflight лише заради «повнішого» звіту.
+- **Фактична locality I/O зараз визначається тільки на Linux.** На інших ОС hwloc поміщає I/O devices під кореневий topology object, що не є реальною NUMA locality.
+- **Повніше PCI/bridge discovery залежить від libpciaccess.** Без нього Linux може побачити частину PCI topology, але втратити назви пристроїв/bridge-ів; частина платформ може вимагати привілеїв для певних probing-операцій. WSM не має підвищувати привілеї лише для hwloc.
+- **I/O object не несе власних CPU/node sets.** Їхні CPU/node sets є NULL; locality потрібно отримувати проходом до найближчого non-I/O ancestor у topology tree. Не трактувати CPU set самого PCI/OS node як відомий.
+- **PCI function і software handle не обов'язково відображаються 1:1.** Один PCI device може породити кілька OS-device handles (наприклад, HCA та кілька інтерфейсів), а PCI graphics device може не мати доступного software handle; DRM `card0`/ `renderD128` у Linux component за замовчуванням filtered out як non-important.
+- **Vendor accelerator backends — окремий optional layer.** NVML/RSMI/OpenCL/Level Zero можуть надати додаткові GPU/software device handles, але їхня доступність залежить від build flags і runtime libraries. Не запускати `lstopo` з широким default probing як безумовний preflight: документовані компоненти можуть пробуджувати GPU, ініціалізувати vendor runtime або виконувати додаткові звернення. Використовувати мінімальний explicit filter, фіксувати backend/version і пропускати provider, якщо його безпечність не підтверджена.
 
-Security advisories описують спеціально сформований EDID від дисплея/адаптера або з файла та можливе аварійне завершення процесу (DoS). AWS advisories додатково вказують affected versions through 0.4.0 для відповідних parser-ів: [112271](https://explore.alas.aws.amazon.com/CVE-2026-112271.html), [112272](https://explore.alas.aws.amazon.com/CVE-2026-112272.html). Це не підтверджує, що всі дистрибутивні збірки однаково уражені: vendor backport/patch статус треба перевіряти за конкретним пакунком і ревізією.
+Практичний висновок: WSM спершу збирає основні report-local identity/relationship факти через sysfs/DRM/udev; hwloc може доповнити тільки підтверджену CPU↔NUMA↔PCI locality. Його object tree не замінює schema #18 і не може самостійно встановити GPU→connector→display, USB composite interface binding або реальне фізичне підключення.
 
-Практичні вимоги WSM:
-
-- Не включати upstream `libdisplay-info 0.4.0` як обов'язковий компонент live image та не запускати його parser у привілейованому процесі, доки не підтверджено виправлений upstream commit/release або дистрибутивний backport.
-- Перед прийняттям будь-якої версії перевіряти security advisory, changelog/fix commit і фактичний package source у pinned Guix/Nix channel. Сам номер версії без перевірки backport недостатній.
-- Залишити EDID/DisplayID decoding опційним. За відсутності безпечного parser-а не збирати parsed identity/timing fields; не блокувати базовий hardware inventory і використовувати окремі kernel DRM/KMS connector/mode observations.
-- Перевірити dependency closure `drm_info`: наприклад, пакетний запис FreeBSD для 2.10.0 показує залежність від `libdisplay-info 0.4.0` ([package dependency record](https://portstatus.bsdproject.de/graphics/drm_info/)). Це приклад конкретного пакування, а не доказ такого самого closure в Guix/Nix.
-- Не вважати JSON `drm_info` автоматично privacy-safe: якщо в ньому є EDID/base64 або повні display identifiers, санітизувати їх до включення у WSM report/export.
-
-До підтвердження безпечного parser-а WSM має зберігати різницю між "EDID доступний у sysfs", "EDID успішно розібраний" та "KMS експонує mode". Відсутність parsed EDID полів — це `unknown/not-collected`, а не несумісність дисплея.
+Джерело: [hwloc 2.16.0 I/O Devices documentation](https://www.open-mpi.org/projects/hwloc/doc/v2.16.0/iodevices.html), зокрема розділи *Enabling and requirements*, *OS devices*, *Consulting I/O devices and binding*; [hwloc 2.16.0 FAQ](https://www.open-mpi.org/projects/hwloc/doc/v2.16.0/faq.html) — особливості lstopo та optional GPU runtimes.
 
 ## Правила інтеграції
 
@@ -62,6 +58,18 @@ Security advisories описують спеціально сформований
 - Відсутність reporter-а означає `not-collected/unsupported-by-provider`, а не «пристрій здоровий».
 
 ### Display stack
+
+#### Безпека DisplayID parser-а
+
+EDID/DisplayID надходить від зовнішнього пристрою або з локального файла й має трактуватися як недовірений вхід. Для `libdisplay-info` оприлюднено два дефекти читання за межами buffer у DisplayID parser-ах:
+
+- [CVE-2026-112271](https://access.redhat.com/security/cve/cve-2026-112271) — DisplayID v1 parser може читати за межами секції, коли оголошена довжина data block перевищує її межі.
+- [CVE-2026-112272](https://access.redhat.com/security/cve/cve-2026-112272) — аналогічна помилка у parser DisplayID v2; Red Hat зазначає, що його RHEL-релізи не уражені, оскільки shipped packages не містять уразливої parser logic.
+
+Публічні записи для upstream `libdisplay-info` вказують на вразливий код у версіях **through 0.4.0** ([112271](https://explore.alas.aws.amazon.com/CVE-2026-112271.html), [112272](https://explore.alas.aws.amazon.com/CVE-2026-112272.html)). Це не означає, що кожен downstream package з рядком версії `0.4.0` обов'язково уражений: vendor може вилучити DisplayID parser logic або backport-ити виправлення. Визначати affectedness треба за точним source/package revision та фактичним вмістом parser-а, а не лише за version string.
+
+**Правило для WSM:** не додавати `libdisplay-info 0.4.0` як обов'язковий parser до privileged/live preflight. EDID/DisplayID parsing лишається optional і не запускається з підвищеними привілеями; перед його використанням перевіряти точну upstream/downstream revision на наявність відповідних виправлень. За відсутності такої перевірки використовувати read-only DRM/KMS properties, а parser-specific fields залишати `unknown/not-collected`. Спеціально сформований EDID слід вважати untrusted input.
+
 
 - Користуватися kernel DRM/KMS connector properties та active state як окремими джерелами.
 - `drm_info -j` та libdisplay-info — додаткові provider-и, output яких треба прив'язувати до exact tool version.
