@@ -25,7 +25,7 @@ jobs:
       - name: Install QEMU and initramfs tools
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends qemu-system-x86 busybox-static cpio zstd kmod
+          sudo apt-get install --yes --no-install-recommends qemu-system-x86 busybox-static cpio zstd xz-utils kmod
 
       - name: Run shared bounded process helper tests
         run: python3 -m unittest discover -s tests -p "test_qemu_boot_smoke.py" -v

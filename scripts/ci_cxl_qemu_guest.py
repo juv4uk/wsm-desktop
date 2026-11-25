@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import selectors
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -36,6 +37,9 @@ MAX_COMMAND_STDOUT_BYTES = 256 * 1024
 MAX_COMMAND_STDERR_BYTES = 16 * 1024
 MAX_QEMU_STDERR_BYTES = 16 * 1024
 MAX_SERIAL_BYTES = 64 * 1024
+MAX_INITRAMFS_BYTES = 256 * 1024 * 1024
+INITRAMFS_TIMEOUT_SECONDS = 45
+PROCESS_OUTPUT_CHUNK_BYTES = 64 * 1024
 
 
 class ProbeError(RuntimeError):
@@ -373,6 +377,103 @@ echo WSM_CXL_GUEST_END
 """
 
 
+def run_bounded_file(
+    command: list[str],
+    *,
+    cwd: Path,
+    destination: Path,
+    timeout_seconds: float,
+    max_bytes: int,
+) -> int:
+    """Stream child stdout to a new file with hard byte and wall-clock limits."""
+    if timeout_seconds <= 0 or max_bytes < 1:
+        raise ValueError("timeout_seconds and max_bytes must be positive")
+    process = subprocess.Popen(
+        command,
+        cwd=cwd,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        bufsize=0,
+        close_fds=True,
+        start_new_session=True,
+    )
+    if process.stdout is None:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except OSError:
+            process.kill()
+        process.wait()
+        raise ProbeError("initramfs pipeline stdout pipe was not created")
+
+    stream = process.stdout
+    selector = selectors.DefaultSelector()
+    total = 0
+    created = False
+    deadline = time.monotonic() + timeout_seconds
+    try:
+        os.set_blocking(stream.fileno(), False)
+        selector.register(stream, selectors.EVENT_READ)
+        with destination.open("xb") as output:
+            created = True
+            while selector.get_map() or process.poll() is None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise ProbeError("initramfs pipeline exceeded its time limit")
+                events = selector.select(min(0.1, remaining)) if selector.get_map() else ()
+                if not selector.get_map() and process.poll() is None:
+                    time.sleep(min(0.02, remaining))
+                for key, _ in events:
+                    try:
+                        chunk = os.read(
+                            key.fd,
+                            min(PROCESS_OUTPUT_CHUNK_BYTES, max_bytes - total + 1),
+                        )
+                    except BlockingIOError:
+                        continue
+                    if not chunk:
+                        selector.unregister(key.fileobj)
+                        continue
+                    total += len(chunk)
+                    if total > max_bytes:
+                        raise ProbeError(
+                            f"initramfs output exceeded the {max_bytes}-byte ceiling"
+                        )
+                    output.write(chunk)
+
+            try:
+                returncode = process.wait(timeout=max(0.1, deadline - time.monotonic()))
+            except subprocess.TimeoutExpired as exc:
+                raise ProbeError("initramfs pipeline exceeded its time limit") from exc
+        if returncode != 0:
+            raise ProbeError(f"initramfs pipeline failed with exit code {returncode}")
+        if total <= 0:
+            raise ProbeError("initramfs pipeline produced an empty archive")
+        return total
+    except BaseException:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except OSError:
+            try:
+                process.kill()
+            except OSError:
+                pass
+        try:
+            process.wait(timeout=1)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        if created:
+            try:
+                destination.unlink()
+            except FileNotFoundError:
+                pass
+        raise
+    finally:
+        selector.close()
+        if not stream.closed:
+            stream.close()
+
+
 def build_initramfs(kernel_release: str, modules: list[Path], work: Path) -> tuple[Path, int]:
     root = work / "rootfs"
     for name in ("bin", "dev", "proc", "sys", "tmp", "lib/modules"):
@@ -423,31 +524,20 @@ def build_initramfs(kernel_release: str, modules: list[Path], work: Path) -> tup
     init.chmod(0o755)
 
     archive = work / "cxl-guest-initramfs.cpio.gz"
-    find = subprocess.Popen(
-        ["find", ".", "-print0"], cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-    )
-    assert find.stdout is not None
-    cpio = subprocess.Popen(
-        ["cpio", "--null", "-o", "-H", "newc"],
+    command = [
+        "bash",
+        "-o",
+        "pipefail",
+        "-c",
+        "find . -print0 | sort -z | cpio --null -o -H newc 2>/dev/null | gzip -n",
+    ]
+    run_bounded_file(
+        command,
         cwd=root,
-        stdin=find.stdout,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        destination=archive,
+        timeout_seconds=INITRAMFS_TIMEOUT_SECONDS,
+        max_bytes=MAX_INITRAMFS_BYTES,
     )
-    find.stdout.close()
-    assert cpio.stdout is not None
-    with archive.open("wb") as output:
-        gzip = shutil.which("gzip")
-        if not gzip:
-            raise ProbeError("gzip is required")
-        pack = subprocess.Popen([gzip, "-n"], stdin=cpio.stdout, stdout=output, stderr=subprocess.PIPE)
-        cpio.stdout.close()
-        _, pack_error = pack.communicate(timeout=20)
-    _, cpio_error = cpio.communicate(timeout=20)
-    _, find_error = find.communicate(timeout=20)
-    if pack.returncode != 0 or cpio.returncode != 0 or find.returncode != 0:
-        detail = (pack_error or b"") + (cpio_error or b"") + (find_error or b"")
-        raise ProbeError("initramfs packing failed: " + detail.decode("utf-8", errors="replace")[-2000:])
     return archive, expanded_bytes
 
 
@@ -485,6 +575,32 @@ def parse_guest_output(output: str) -> dict[str, Any]:
     return {"nodes": nodes, "devtypes": devtypes, "memdev_count": memdev_count}
 
 
+def build_qemu_command(qemu: str, kernel: Path, initramfs: Path) -> list[str]:
+    """Build an isolated QEMU command for the disposable CXL guest."""
+    return [
+        qemu,
+        "-no-user-config",
+        "-machine", "q35,cxl=on",
+        "-m", "4G,maxmem=8G,slots=8",
+        "-smp", "2",
+        "-accel", "tcg",
+        "-nodefaults",
+        "-nic", "none",
+        "-display", "none",
+        "-monitor", "none",
+        "-serial", "stdio",
+        "-no-reboot",
+        "-kernel", str(kernel),
+        "-initrd", str(initramfs),
+        "-append", "console=ttyS0 rdinit=/init panic=1 loglevel=4",
+        "-object", "memory-backend-ram,id=vmem0,share=on,size=256M",
+        "-device", "pxb-cxl,bus_nr=12,bus=pcie.0,id=cxl.1",
+        "-device", "cxl-rp,port=0,bus=cxl.1,id=root_port13,chassis=0,slot=2",
+        "-device", "cxl-type3,bus=root_port13,volatile-memdev=vmem0,id=cxl-vmem0",
+        "-M", "cxl-fmw.0.targets.0=cxl.1,cxl-fmw.0.size=4G",
+    ]
+
+
 def run_probe(timeout_seconds: int) -> dict[str, Any]:
     kernel_release = os.uname().release
     kernel = Path("/boot") / ("vmlinuz-" + kernel_release)
@@ -507,26 +623,7 @@ def run_probe(timeout_seconds: int) -> dict[str, Any]:
             ["sudo", "install", "-m", "0644", str(kernel), str(guest_kernel)],
             timeout=15,
         )
-        command = [
-            qemu,
-            "-machine", "q35,cxl=on",
-            "-m", "4G,maxmem=8G,slots=8",
-            "-smp", "2",
-            "-accel", "tcg",
-            "-nodefaults",
-            "-display", "none",
-            "-monitor", "none",
-            "-serial", "stdio",
-            "-no-reboot",
-            "-kernel", str(guest_kernel),
-            "-initrd", str(archive),
-            "-append", "console=ttyS0 rdinit=/init panic=1 loglevel=4",
-            "-object", "memory-backend-ram,id=vmem0,share=on,size=256M",
-            "-device", "pxb-cxl,bus_nr=12,bus=pcie.0,id=cxl.1",
-            "-device", "cxl-rp,port=0,bus=cxl.1,id=root_port13,chassis=0,slot=2",
-            "-device", "cxl-type3,bus=root_port13,volatile-memdev=vmem0,id=cxl-vmem0",
-            "-M", "cxl-fmw.0.targets.0=cxl.1,cxl-fmw.0.size=4G",
-        ]
+        command = build_qemu_command(qemu, guest_kernel, archive)
         try:
             result = run_bounded_process(
                 command,
