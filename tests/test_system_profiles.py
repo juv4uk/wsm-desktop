@@ -187,6 +187,33 @@ class LiveProfileTests(unittest.TestCase):
         self.assertIn("wsm-tools", (ROOT / "wsm" / "packages" / "wsm.scm").read_text(encoding="utf-8"))
 
 
+class CompatibilityProfileTests(unittest.TestCase):
+    def test_compatibility_profile_uses_the_nonguix_transformation(self) -> None:
+        text = profile("compatibility.scm")
+        self.assertIn("nonguix-transformation-nvidia", text)
+        self.assertIn("#:driver nvda-580", text)
+        # Without this the Xorg session never learns about the nvidia module.
+        self.assertIn("#:configure-xorg? sddm-service-type", text)
+
+    def test_compatibility_profile_blacklists_nouveau(self) -> None:
+        self.assertIn("modprobe.blacklist=nouveau", profile("compatibility.scm"))
+
+    def test_free_profiles_do_not_import_nonguix(self) -> None:
+        """A single Nonguix import in desktop.scm would poison the Free profile."""
+        for name in ("desktop.scm", "live.scm"):
+            code = "\n".join(
+                line for line in profile(name).splitlines()
+                if not line.strip().startswith(";")
+            )
+            with self.subTest(profile=name):
+                self.assertNotIn("nonguix", code.lower())
+                self.assertNotIn("nongnu", code.lower())
+
+    def test_compatibility_profile_is_not_reachable_from_the_live_image(self) -> None:
+        """The live image stays Free; Compatibility is a deliberate separate build."""
+        self.assertNotIn("compatibility.scm", profile("live.scm"))
+
+
 class IsoScriptTests(unittest.TestCase):
     def _fake_guix(self, bin_dir: Path) -> None:
         fake_guix = bin_dir / "guix"
