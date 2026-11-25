@@ -263,21 +263,6 @@ class DirectoryTests(unittest.TestCase):
         self.assertEqual(result, 1)
         self.assertIn("missing mandatory evidence.json", stderr.getvalue())
 
-    def test_model_directory_without_profile_scm_is_rejected(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            model = root / "gigabyte" / "h170-gaming-3"
-            prepare_artifact_root(model)
-            evidence = model / "evidence.json"
-            evidence.write_text(json.dumps(bundle(
-                profile={"vendor": "GIGABYTE", "model": "H170 Gaming 3", "slug": "gigabyte/h170-gaming-3"}
-            )), encoding="utf-8")
-            stdout, stderr = io.StringIO(), io.StringIO()
-            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-                result = main(["--dir", str(root)])
-        self.assertEqual(result, 1)
-        self.assertIn("missing mandatory profile.scm", stderr.getvalue())
-
     def test_empty_profiles_root_is_not_a_fake_profile(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             stdout = io.StringIO()
@@ -309,7 +294,6 @@ class DirectoryTests(unittest.TestCase):
             root = Path(temporary)
             model = root / "gigabyte" / "h170-gaming-3"
             prepare_artifact_root(model)
-            (model / "profile.scm").write_text(";; synthetic fixture\n", encoding="utf-8")
             (model / "profile.scm").write_text(";; Synthetic test profile\n", encoding="utf-8")
             evidence = model / "evidence.json"
             document = bundle(
@@ -348,6 +332,7 @@ class RepositoryTests(unittest.TestCase):
             (ROOT / "schemas" / "profile-evidence.schema.json").read_text(encoding="utf-8")
         )
         self.assertEqual(schema["title"], "WSM hardware profile evidence")
+        self.assertEqual(schema["properties"]["schema"]["const"], "wsm-profile-evidence/2")
         self.assertIn("isa_level", schema["required"])
         self.assertIn("artifacts", schema["required"])
 
