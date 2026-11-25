@@ -76,21 +76,37 @@ def problems(
         found.append("verified_by must not contain an e-mail address")
 
     if artifact_root is not None:
-        found.extend(validate_artifact_files(document["artifacts"], artifact_root))
+        found.extend(validate_artifact_files(document, artifact_root))
 
     return found
 
 
 def validate_artifact_files(
-    artifacts: list[dict[str, Any]],
+    document: dict[str, Any],
     root: Path,
 ) -> list[str]:
-    """Verify safe relative paths and SHA-256 digests against files inside a profile."""
+    """Verify profile files and SHA-256 digests against the supplied evidence bundle."""
     problems: list[str] = []
     if root.is_symlink() or not root.is_dir():
         return ["profile directory must be a real directory, not a symlink or missing path"]
     root_path = root.resolve()
 
+    for required_name in ("profile.scm", "evidence.json"):
+        required_path = root / required_name
+        if required_path.is_symlink() or not required_path.is_file():
+            problems.append(f"profile directory is missing mandatory regular file {required_name!r}")
+
+    evidence_path = root / "evidence.json"
+    if evidence_path.is_file() and not evidence_path.is_symlink():
+        try:
+            on_disk = json.loads(evidence_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            problems.append(f"evidence.json cannot be read as UTF-8 JSON: {exc}")
+        else:
+            if on_disk != document:
+                problems.append("supplied evidence bundle does not match the profile's evidence.json bytes")
+
+    artifacts = document["artifacts"]
     for artifact in artifacts:
         relative = artifact["path"]
         raw_parts = relative.split("/")
