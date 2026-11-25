@@ -82,3 +82,14 @@ Generic Calamares users module не вважається сумісним із G
 ## Безпечна розробка
 
 Перші тести виконуються на одноразових qcow2-образах у QEMU. Фізичні диски не є середовищем розробки. Перед будь-якою операцією запису адаптер повинен мати однозначний план і явне підтвердження користувача.
+
+
+## Еволюція архітектури: Nix і GNU Guix
+
+Початковий прототип був орієнтований на Guix System. Тепер WSM досліджує Nix/NixOS та Guix System як **окремі нативні backend-и**.
+
+Спільний рівень WSM має містити UX, hardware inventory, compatibility evidence, профілі користувача, безпечні інсталяційні плани та політику оновлення. Він не повинен намагатися переписати повну семантику NixOS module system або Guix operating-system declaration в універсальну мову.
+
+Одна конкретна інсталяція має одного системного власника. Не допускається паралельне керування тим самим root filesystem, bootloader, системними службами чи activation state двома backend-ами.
+
+Повне рішення поки не прийнято. Див. [ADR 0004](decisions/0004-nix-guix-backend-strategy.md) та [issue #2](https://github.com/juv4uk/wsm-desktop/issues/2).
