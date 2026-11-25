@@ -15,7 +15,9 @@
 
 Це діагностичні спостереження, а не сертифікат справності PCIe, не функціональний тест пристрою й не глобальний verdict сумісності. Ненульовий лічильник сам по собі не доводить, що конкретний endpoint несправний; нульовий не доводить, що link або пристрій здоровий.
 
-Автоматичний preflight лишається read-only. Заборонені error injection, stress/throughput tests, link retraining, device reset, driver reload, firmware update/flash та recovery процедури.
+Цей документ визначає лише read-only протокол доказів і acceptance cases, а не реалізацію збору. Не змінювати schemas/, wsm_hwcheck/, collector або installer verdict logic у межах цього протоколу; реалізаційні зміни потребують окремого погодження з власниками #5/#6/#16/#18.
+
+Автоматичний preflight лишається read-only. Заборонені `setpci`, error injection, stress/throughput tests, link retraining, device reset, driver reload, firmware update/flash та recovery процедури.
 
 ## 2. PCIe AER: доступні лічильники
 
