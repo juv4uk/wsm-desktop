@@ -30,7 +30,7 @@ class OptionalHardwareProviderTests(unittest.TestCase):
 
     def test_intel_xpu_smi_is_limited_to_documented_device_families(self) -> None:
         self.assertIn("Arc Pro Series", self.audit)
-        self.assertIn("не поширювати підтримку на всі consumer Intel iGPU/Arc", self.lower)
+        self.assertIn("не поширювати підтримку на всі consumer intel igpu/arc", self.lower)
         self.assertIn("xpu-smi discovery --device <BDF> -j", self.audit)
         self.assertIn("SOC UUID", self.audit)
         self.assertIn("firmware update", self.lower)
