@@ -4,10 +4,6 @@ concurrency:
   group: installer-gui-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-concurrency:
-  group: installer-gui-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
 on:
   pull_request:
     paths:
@@ -58,10 +54,14 @@ jobs:
       - name: Configure Qt application
         run: |
           cmake -S installer/gui -B build/wsm-installer \
-            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_BUILD_TYPE=Release \\
+            -DWSM_BUILD_TESTS=ON
 
       - name: Compile C++ and QML resources
         run: cmake --build build/wsm-installer --parallel 2
+
+      - name: Run C++ navigation policy tests
+        run: ctest --test-dir build/wsm-installer --output-on-failure
 
       - name: Verify QML application loads offscreen
         shell: bash
