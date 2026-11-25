@@ -1,28 +1,17 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""Run install steps, verifying each one before starting the next.
+"""Build a dry-run report for an install sequence; real apply is disabled.
 
-This is the module that actually executes. Everything before it produced
-plans; this one runs them, which means the safety rules here matter more than
-anywhere else in the repository.
+This module previously exposed a callable path to run arbitrary Step.command
+arrays. That was not a safe execution contract: disk identity was not
+revalidated before each destructive action, the acknowledgement was checked
+only once, GPT writes had no verifier, and several verifiers reported success
+without proving the requested state.
 
-Four rules, and none of them is negotiable:
-
-1. **Dry run is the default.** Running for real requires an explicit
-   acknowledgement that names the disk, exactly like the partition planner.
-2. **A destructive step never runs unattended.** Each one is announced, and the
-   acknowledgement is checked again immediately before it, not once at the
-   start: a confirmation given for step one must not silently cover step seven.
-3. **Every step is verified before the next begins.** A `mkfs` that returned 0
-   but produced nothing is not success. Verification reads the system, not the
-   exit code.
-4. **The first failure stops everything.** Continuing past a failed mount and
-   formatting anyway is how a machine ends up with a system that cannot boot and
-   no explanation.
-
-The executor is injectable: `run` and `verify` are parameters, so the whole
-thing is testable without a disk, a root shell or QEMU.
+Until a typed plan is bound to a live block-device identity and every
+mutating operation has a meaningful verifier and per-step confirmation, this
+module is deliberately dry-run only. Passing dry_run=False always fails
+closed before the runner or verifier is called.
 """
-
 from __future__ import annotations
 
 import subprocess
@@ -81,15 +70,22 @@ def default_verifier(step: Step) -> tuple[bool, str]:
     tool = step.command[0].rsplit("/", 1)[-1]
 
     if tool == "partprobe":
-        return True, "partition table re-read requested"
+        return False, "no verifier yet confirms that the planned partition nodes exist and match the disk identity"
     if tool == "udevadm":
-        return True, "device nodes settled"
+        return False, "udev settle completion does not prove that the expected partition nodes are present"
     if tool.startswith("mkfs"):
         device = step.command[-1]
         if not Path(device).exists():
             return False, f"{device} does not exist after formatting"
         # blkid is the authority on what a device now contains.
-        result = default_runner(["blkid", "-o", "value", "-s", "TYPE", device])
+        result = default_runner([
+            "/run/current-system/profile/sbin/blkid",
+            "-o",
+            "value",
+            "-s",
+            "TYPE",
+            device,
+        ])
         fstype = (result.stdout or "").strip()
         expected = {"mkfs.ext4": "ext4", "mkfs.btrfs": "btrfs", "mkfs.xfs": "xfs", "mkfs.fat": "vfat"}
         want = expected.get(tool, "")
@@ -110,7 +106,7 @@ def default_verifier(step: Step) -> tuple[bool, str]:
         if not Path(target).is_dir():
             return False, f"{target} was not created"
         return True, f"{target} exists"
-    return True, "no verification defined for this step"
+    return False, "no verifier registered for this step"
 
 
 def execute(
@@ -138,6 +134,12 @@ def execute(
                 "execute.no-destructive-steps",
                 "refusing a real run that has nothing destructive to do; the plan looks wrong",
             )
+        raise ExecutorError(
+            "execute.not-enabled",
+            "real disk execution is disabled: the executor does not yet bind the plan to "
+            "a revalidated block-device identity, repeat consent before each destructive "
+            "step, or verify GPT/partition/udev state",
+        )
 
     for index, step in enumerate(steps, start=1):
         printable = " ".join(step.command)
