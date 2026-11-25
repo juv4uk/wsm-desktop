@@ -47,7 +47,7 @@ def problems(document: dict[str, Any], schema: dict[str, Any] | None = None) -> 
         ) from None
 
     try:
-        jsonschema.validate(document, schema)
+        jsonschema.validate(document, schema, format_checker=jsonschema.FormatChecker())
     except jsonschema.ValidationError as exc:
         location = "/".join(str(part) for part in exc.absolute_path) or "<root>"
         return [f"schema: {location}: {exc.message}"]
