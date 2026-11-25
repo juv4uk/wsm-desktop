@@ -32,6 +32,8 @@
 
 Device-level attributes доступні лише для компонентів, де ядро експонує AER statistics. Root-port totals доступні лише для відповідних AER-capable Root Ports / Root Complex Event Collectors. Інші attributes можуть бути відсутні через можливості пристрою, ядра або платформи.
 
+**Статус ABI:** ці sysfs attributes задокументовані в Linux `Documentation/ABI/testing/sysfs-bus-pci-devices-aer`, тобто належать до testing ABI, а не до гарантовано стабільного sysfs API. Їхня наявність, назва або формат можуть змінюватися між kernel releases. Кожне evidence record має зберігати `kernel_release`, точну назву attribute, BDF джерела та результат читання. Якщо attribute відсутній, перейменований або його формат не розпізнано, результат — `unknown/not-collected`; не підміняти його нулем і не вгадувати нову назву.
+
 ### 2.1 Критичні семантичні обмеження
 
 1. AER counters відображають помилки, побачені або повідомлені саме тим компонентом, на якому прочитано counter. Endpoint-проблема може бути зафіксована link partner або Root Port; сам endpoint може показувати нуль.

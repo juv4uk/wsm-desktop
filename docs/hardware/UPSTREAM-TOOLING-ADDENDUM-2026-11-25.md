@@ -38,6 +38,61 @@ WSM варто будувати не навколо одного «детект�
 
 Джерело: [hwloc 2.16.0 I/O Devices documentation](https://www.open-mpi.org/projects/hwloc/doc/v2.16.0/iodevices.html), зокрема розділи *Enabling and requirements*, *OS devices*, *Consulting I/O devices and binding*; [hwloc 2.16.0 FAQ](https://www.open-mpi.org/projects/hwloc/doc/v2.16.0/faq.html) — особливості lstopo та optional GPU runtimes.
 
+## Додаткове оновлення: PCIe DOE/SPDM та CXL RAS
+
+### PCIe DOE, CMA-SPDM, TDISP та IDE
+
+Linux PCI sysfs тепер може експонувати directory `doe_features` для пристроїв із PCIe Data Object Exchange (DOE). Обов'язковий `doe_discovery` feature має значення `0001:00`; якщо пристрій підтримує CMA/SPDM та secure CMA/SPDM, документація наводить додаткові feature IDs `0001:01` і `0001:02`. Це **capability discovery**, не доказ успішної автентифікації.
+
+Окремий security state може з'являтися в `/sys/bus/pci/devices/<BDF>/tsm/` лише якщо фізична function підтримує CMA-SPDM authentication і TDISP та прийнята platform TSM driver-ом. Directory з'являється динамічно після завантаження TSM driver; до появи `/sys/class/tsm/tsm0` відсутність `tsm/` не можна трактувати як unsupported.
+
+Ключові attributes мають різні семантики:
+
+| Attribute | Семантика | Межа / preflight rule |
+| --- | --- | --- |
+| `doe_features/*` | Список DOE feature IDs, які device повідомляє як підтримувані | Capability only; не означає, що SPDM session встановлено |
+| `tsm/connect` | RW: створює TSM connection; зазвичай встановлює SPDM over PCIe DOE і може встановити PCIe IDE | **Ніколи не писати** в автоматичному preflight |
+| `tsm/disconnect` | WO: розриває TSM connection | Не викликати в preflight |
+| `tsm/dsm` | RO: назва Device Security Manager; у connected state свідчить про secure-session connection | Можна читати лише як уже наявне state, без connect/disconnect |
+| `tsm/bound` | RO: TSM binding для TDISP operational states LOCKED/RUN/ERROR | Це security/virtualization state, не функціональна перевірка пристрою |
+| `authenticated` | Native CMA-SPDM authentication status, або alias до TSM connect state, коли `tsm/` присутня | Вміст залежить від режиму TSM; reauthentication через запис не запускати |
+
+Не змішувати DOE feature IDs, authentication outcome, TDISP binding, IDE link encryption, driver binding та звичайну runtime functionality. Якщо TSM ще не завантажився або sysfs status недоступний — `unknown/not-collected`, не `unauthenticated`.
+
+PCIe SPDM authentication належить до окремої security pane. Вона не доводить, що Linux драйвер завантажено, runtime firmware blob присутній/застосований, пристрій ініціалізовано або його функція сумісна з installer-ом. Невдала authentication також не повинна непомітно змінювати драйвер binding чи запускати автоматичний unbind/remove policy у WSM.
+
+### CXL memory device RAS та security
+
+Linux CXL sysfs надає кілька потенційних read-only спостережень для CXL memory devices/regions. Це не загальна функція звичайного ПК без CXL hardware; provider має бути optional і працювати лише коли kernel експонує відповідні об'єкти.
+
+| Attribute | ABI semantics | WSM interpretation |
+| --- | --- | --- |
+| `memX/firmware_version` | RO: firmware revision із Identify Memory Device output | Версія, заявлена CXL device; не доказ оновлення або успішної runtime driver firmware request |
+| `memX/ram/size`, `memX/pmem/size` | RO: volatile та persistent capacity | Capacity evidence, не compatibility verdict |
+| `memX/numa_node` | RO: CPU NUMA affinity, коли платформа її визначила | Допоміжний topology/locality факт, якщо він доступний |
+| `memX/security/state` | RO: CXL security state (`disabled`, `sanitize`, а для persistent memory також `locked`/`unlocked`/`frozen`) | Security state; `sanitize` — спостереження процесу, не дозвіл його запускати |
+| `memX/trigger_poison_list` | WO: write `true` просить driver зчитати poison list з пристрою | **Не запускати** автоматично; це operation-triggering retrieval, не пасивний read |
+| `nvdimm-bridge0/ndbusX/nmemY/cxl/dirty_shutdown` | RO: persistent count можливих data-loss dirty shutdown events; counter зберігається через power loss та може wrap | Історичний risk signal із provenance; ненульове значення не локалізує причину, нуль/відсутність не гарантує цілісність |
+| EDAC scrub controls | Unified sysfs controls абстрагують CXL patrol scrub, CXL ECS, ACPI RAS2/ARS та інші scrubbers | Для preflight не змінювати scrub rates і не запускати on-demand scrub; capability queries потребують окремого exact-ABI review |
+
+Особливо важливо: `trigger_poison_list` є write-only, отже його не можна сприймати як read-only спосіб дізнатися, чи є poison. Не використовувати `sanitize`, `region/commit`, scrub-rate settings, on-demand scrub або repair controls у hardware preflight. Якщо poison/error records уже наявні в kernel event stream, їх можна аналізувати за окремим privacy/redaction policy; не створювати новий device query автоматично.
+
+### Категорії evidence
+
+- **Capability**: пристрій повідомляє, що має DOE feature або CXL capability.
+- **Security state**: kernel/TSM звітує про authentication, secure-session або TDISP state.
+- **Reliability history**: dirty-shutdown/poison/error record уже був зафіксований.
+- **Runtime driver evidence**: окремо підтверджує driver binding та firmware request semantics.
+- **Functional evidence**: доводить роботу конкретної функції в тестовому сценарії.
+
+Жодна з цих категорій не підміняє іншу. Зберігати source BDF/report-local ID, точний attribute, час/boot session і versioned provider; не експортувати PCI/CXL serials або raw memory addresses за замовчуванням.
+
+Джерела:
+- [Linux PCI sysfs ABI: DOE features, TSM, SPDM and TDISP](https://github.com/torvalds/linux/blob/master/Documentation/ABI/testing/sysfs-bus-pci) — у поточному upstream описані `doe_features`, `tsm/connect`, `tsm/dsm`, `tsm/bound` та `authenticated` semantics.
+- [Linux CXL sysfs ABI](https://gbmc.googlesource.com/linux/+/e003ef2cb1de41edda508ea1fdb21974f9f18dfb/Documentation/ABI/testing/sysfs-bus-cxl) — firmware_version, capacity, NUMA, security state, poison-list trigger, QoS, dirty-shutdown count.
+- [Linux EDAC scrub control](https://docs.kernel.org/edac/scrub.html) — CXL patrol scrub/ECS та інші scrub capabilities; частина operations змінює scrub policy або запускає роботу.
+- [PCI CMA/SPDM sysfs RFC history](https://lkml.iu.edu/hypermail/linux/kernel/2602.1/03817.html) — authentication state та повторна автентифікація через write; WSM preflight не повинен запускати reauthentication.
+
 ## Правила інтеграції
 
 ### PCIe AER
@@ -58,6 +113,18 @@ WSM варто будувати не навколо одного «детект�
 - Відсутність reporter-а означає `not-collected/unsupported-by-provider`, а не «пристрій здоровий».
 
 ### Display stack
+
+#### Безпека DisplayID parser-а
+
+EDID/DisplayID надходить від зовнішнього пристрою або з локального файла й має трактуватися як недовірений вхід. Для `libdisplay-info` оприлюднено два дефекти читання за межами buffer у DisplayID parser-ах:
+
+- [CVE-2026-112271](https://access.redhat.com/security/cve/cve-2026-112271) — DisplayID v1 parser може читати за межами секції, коли оголошена довжина data block перевищує її межі.
+- [CVE-2026-112272](https://access.redhat.com/security/cve/cve-2026-112272) — аналогічна помилка у parser DisplayID v2; Red Hat зазначає, що його RHEL-релізи не уражені, оскільки shipped packages не містять уразливої parser logic.
+
+Публічні записи для upstream `libdisplay-info` вказують на вразливий код у версіях **through 0.4.0** ([112271](https://explore.alas.aws.amazon.com/CVE-2026-112271.html), [112272](https://explore.alas.aws.amazon.com/CVE-2026-112272.html)). Це не означає, що кожен downstream package з рядком версії `0.4.0` обов'язково уражений: vendor може вилучити DisplayID parser logic або backport-ити виправлення. Визначати affectedness треба за точним source/package revision та фактичним вмістом parser-а, а не лише за version string.
+
+**Правило для WSM:** не додавати `libdisplay-info 0.4.0` як обов'язковий parser до privileged/live preflight. EDID/DisplayID parsing лишається optional і не запускається з підвищеними привілеями; перед його використанням перевіряти точну upstream/downstream revision на наявність відповідних виправлень. За відсутності такої перевірки використовувати read-only DRM/KMS properties, а parser-specific fields залишати `unknown/not-collected`. Спеціально сформований EDID слід вважати untrusted input.
+
 
 - Користуватися kernel DRM/KMS connector properties та active state як окремими джерелами.
 - `drm_info -j` та libdisplay-info — додаткові provider-и, output яких треба прив'язувати до exact tool version.
