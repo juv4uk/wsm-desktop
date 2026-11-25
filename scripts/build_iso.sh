@@ -22,7 +22,7 @@ if ! command -v guix >/dev/null 2>&1; then
     printf '%s\n' "build-iso: guix not found in PATH." >&2
     exit 127
 fi
-for tool in git python3 readlink; do
+for tool in git python3 readlink grep; do
     if ! command -v "$tool" >/dev/null 2>&1; then
         printf '%s\n' "build-iso: required tool not found: $tool" >&2
         exit 127
@@ -129,6 +129,18 @@ else
     exit "$status"
 fi
 
+# A successful command that explicitly reports disabled channel authentication
+# is not acceptable evidence for this pinned build.
+if grep -Eiq 'channel authentication disabled' "$CHANNELS_FILE" "$CHANNELS_LOG" "$BUILD_LOG"; then
+    printf '%s\n' "build-iso: refusing an image resolved with channel authentication disabled." >&2
+    grep -Ein 'channel authentication disabled' "$CHANNELS_FILE" "$CHANNELS_LOG" "$BUILD_LOG" >&2 || true
+    exit 7
+fi
+CHANNEL_TRUST_WARNING=false
+if grep -Eiq 'channel is not trusted|channel .* not trusted' "$CHANNELS_FILE" "$CHANNELS_LOG" "$BUILD_LOG"; then
+    CHANNEL_TRUST_WARNING=true
+fi
+
 if [ ! -L "$ISO_OUTPUT" ] || [ ! -e "$ISO_OUTPUT" ]; then
     printf '%s\n' "build-iso: Guix returned success but did not create the expected image link." >&2
     exit 4
@@ -195,6 +207,7 @@ manifest = {
         "channel_lock": lock.name,
         "channel_lock_sha256": digest(lock),
         "locked_guix_channel_commit": os.environ["WSM_CHANNEL_COMMIT"],
+        "untrusted_channel_warning_present": os.environ["WSM_CHANNEL_TRUST_WARNING"] == "true",
     },
     "guix": {
         "bootstrap_client_version": os.environ["WSM_GUIX_CLIENT_VERSION"],
