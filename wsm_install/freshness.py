@@ -66,7 +66,7 @@ class LiveSession:
 @dataclass(frozen=True)
 class FreshnessDecision:
     status: FreshnessStatus
-    confirmable: bool
+    freshness_gate_passed: bool
     reason: str
     age_seconds: float | None = None
 
@@ -116,7 +116,7 @@ def _decision(
 ) -> FreshnessDecision:
     return FreshnessDecision(
         status=status,
-        confirmable=status is FreshnessStatus.FRESH,
+        freshness_gate_passed=status is FreshnessStatus.FRESH,
         reason=reason,
         age_seconds=age_seconds,
     )
