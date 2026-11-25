@@ -16,7 +16,7 @@ guix time-machine -C channels.lock.scm -- system build systems/minimal.scm
 guix time-machine -C channels.lock.scm -- system vm --no-graphic systems/minimal.scm
 ```
 
-`guix time-machine -C channels.lock.scm -- describe -f channels` друкує розв'язані revisions; саме цей вивід варто додавати до звіту про відтворення. Не оновлюйте lock автоматично разом із звичайними pull-ами: це pinned fact, а не рухома гілка.
+`guix time-machine -C channels.lock.scm -- describe -f channels` друкує розв'язані revisions; саме цей вивід варто додавати до звіту про відтворення. Команда може попередити «channel is not trusted», якщо цей local channels-файл не внесено до `~/.config/guix/trusted-channels.scm`; це не failing signature. У перевірці RC1 `time_machine_exit=0` без `--disable-authentication`. Не оновлюйте lock автоматично разом із звичайними pull-ами: це pinned fact, а не рухома гілка.
 
 ## Поточні файли
 

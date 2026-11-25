@@ -48,6 +48,20 @@ class HardwareCheckScriptTests(unittest.TestCase):
                 self.assertEqual(plan_entry["status"], "verified-diagnostic")
                 self.assertTrue(plan_entry["safe_execution_flags"])
                 self.assertTrue(plan_entry["plan_sha256_matches"])
+                self.assertTrue(plan_entry["source_report_sha256_matches"])
+                self.assertTrue(plan_entry["backend_id_matches_request"])
+                self.assertTrue(plan_entry["confirmable_false"])
+
+            for command in manifest["commands"]:
+                self.assertIn("argv", command)
+                self.assertNotIn("command", command)
+                self.assertIsInstance(command["argv"], list)
+            serialized = json.dumps(manifest)
+            self.assertNotIn(str(output), serialized)
+            self.assertIsInstance(
+                manifest["safety"]["observed"]["run_as_root"],
+                bool,
+            )
 
             expected = {
                 "report.json",
@@ -55,7 +69,9 @@ class HardwareCheckScriptTests(unittest.TestCase):
                 "plan-nix.json",
                 "manifest.json",
                 "SHA256SUMS",
+                "install-guix.stdout.log",
                 "install-guix.stderr.log",
+                "install-nix.stdout.log",
                 "install-nix.stderr.log",
             }
             self.assertTrue(expected.issubset({path.name for path in output.iterdir()}))
@@ -83,6 +99,74 @@ class HardwareCheckScriptTests(unittest.TestCase):
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("output must not be under /dev", result.stderr)
+
+    def test_output_refuses_symlink(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "target"
+            target.mkdir()
+            link = Path(directory) / "link"
+            link.symlink_to(target, target_is_directory=True)
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "wsm_hardware_check.py"),
+                    "--out",
+                    str(link),
+                    "--report",
+                    str(FIXTURE),
+                ],
+                cwd=str(ROOT),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("not a symlink", result.stderr)
+            self.assertEqual(list(target.iterdir()), [])
+
+    def test_report_must_be_a_regular_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "wsm_hardware_check.py"),
+                    "--out",
+                    str(Path(directory) / "check"),
+                    "--report",
+                    "/dev/zero",
+                ],
+                cwd=str(ROOT),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("report must be a regular file", result.stderr)
+
+    def test_blocked_report_is_safely_blocked(self) -> None:
+        blocked = ROOT / "tests" / "fixtures" / "hardware" / "unknown-incomplete.json"
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "check"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "wsm_hardware_check.py"),
+                    "--out",
+                    str(output),
+                    "--report",
+                    str(blocked),
+                ],
+                cwd=str(ROOT),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["overall"], "preflight-blocked")
+            for backend in ("guix", "nix"):
+                self.assertEqual(manifest["plans"][backend]["status"], "safely-blocked")
+                self.assertFalse((output / f"plan-{backend}.json").exists())
 
 
 class ReleaseBundleTests(unittest.TestCase):

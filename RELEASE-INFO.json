@@ -6,7 +6,7 @@
   "status": "pre-release",
   "date": "2026-11-25",
   "scope": [
-    "read-only hardware evidence report (wsm-hwcheck 0.1.0)",
+    "read-only hardware evidence report (wsm-hwcheck 0.2.0, report schema 1.0.0)",
     "diagnostic-only draft plan for the ratified Guix backend; the Nix plan is research-only (wsm-install 0.1.0)",
     "authenticated free-only Guix channel lock",
     "reproducible source bundle with checksums and build manifest"

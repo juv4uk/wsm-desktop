@@ -3,7 +3,7 @@
 PYTHON ?= python3
 GUIX ?= guix
 
-.PHONY: check check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system describe-lock check-locked-system release-bundle
+.PHONY: check check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle
 
 check: check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy
 
@@ -15,6 +15,9 @@ check-system:
 
 vm-system:
 	$(GUIX) system vm systems/minimal.scm
+
+vm-system-serial:
+	$(GUIX) system vm --no-graphic systems/minimal.scm
 
 check-hardware-schema:
 	$(PYTHON) tests/test_hardware_report.py

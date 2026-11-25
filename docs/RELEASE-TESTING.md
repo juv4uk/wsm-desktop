@@ -2,7 +2,7 @@
 
 <!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 
-Ця інструкція описує **read-only** перевірку RC1 на вашому Linux-ПК. Вона не встановлює WSM Desktop, не змінює розділи, bootloader, UEFI або firmware і не вимагає root.
+Ця інструкція описує **read-only** перевірку RC1 на вашому Linux-ПК. Вона не встановлює WSM Desktop, не змінює розділи, bootloader, UEFI або firmware і не вимагає root. Деяка runtime-діагностика може бути недоступна без прав — тоді відповідні поля лишаються `unknown` і з'являється warning. Єдині записи — файли у вказаному вами output-каталозі.
 
 ## 0. Що ви отримуєте
 
@@ -18,9 +18,10 @@
 
 - Linux (будь-який дистрибутив із `/sys` і `/proc`);
 - Python 3.10 або новіший;
-- `jsonschema[format]==4.26.0` — з `requirements-install.txt` або з системного пакета.
+- `jsonschema[format]==4.26.0` — з `requirements-install.txt` або з системного пакета;
+- опційно `/lib/modules/<kernel>/` та `journalctl` або `dmesg` для багатшої діагностики.
 
-Встановлення залежності ізольовано в користувача (без sudo):
+Підготовка залежності може потребувати мережі. Після встановлення сам RC1 працює offline. Встановлення залежності ізольовано в користувача (без sudo):
 
 ```sh
 python3 -m pip install --user -r requirements-install.txt
@@ -44,18 +45,21 @@ python3 scripts/wsm_hardware_check.py \
   --out "$HOME/wsm-check-$(date -u +%Y%m%dT%H%M%SZ)"
 ```
 
-Скрипт сам створить каталог із режимом `0700` і відмовиться писати, якщо каталог уже існує й не порожній. Він ніколи не приймає шлях під `/dev`, `/proc` або `/sys`.
+Скрипт сам створить каталог із режимом `0700` і відмовиться писати, якщо каталог уже існує й не порожній. Він відхиляє симлінк як кінцевий шлях або будь-який існуючий батьківський компонент, а також ніколи не приймає шлях під `/dev`, `/proc` або `/sys`.
 
 Усі вихідні файли:
 
 ```text
-report.json              сирий hardware evidence report v1
-plan-guix.json           diagnostic-only draft plan для guix-system
-plan-nix.json            diagnostic-only draft plan для nixos
-manifest.json            версія, commit, exit codes, перевірки безпеки
-install-guix.stderr.log  людський summary + warnings/blockers
-install-nix.stderr.log   те саме для nixos
-SHA256SUMS               checksum усіх попередніх файлів
+report.json               сирий hardware evidence report (schema 1.0.0)
+plan-guix.json            diagnostic-only draft plan для guix-system
+plan-nix.json             diagnostic-only draft plan для nixos
+manifest.json             версія, commit, exit codes, argv-команди, перевірки безпеки
+install-guix.stdout.log   стандартний вивід preflight (зазвичай порожній)
+install-guix.stderr.log   людський summary + warnings/blockers
+install-nix.stdout.log    стандартний вивід preflight (зазвичай порожній)
+install-nix.stderr.log    те саме для nixos
+hwcheck.*.log             з'являються лише якщо звіт збирається, а не подається через --report
+SHA256SUMS                checksum усіх попередніх файлів
 ```
 
 ## 3. Що вважати успіхом
@@ -77,9 +81,9 @@ PY
 Очікувані значення:
 
 - `overall: "pass"` — обидва плани видано й перевірено;
-- `overall: "preflight-blocked"` — звіт зібрано, але один/обидва backend-и зупинилися з exit=3 через невирішені critical blockers. Це **безпечний результат**, а не помилка скрипта;
+- `overall: "preflight-blocked"` — звіт зібрано, але один/обидва backend-и зупинилися з exit=3, порожнім stdout і маркером `no plan emitted because required critical evidence is unresolved` у stderr. Це **безпечний результат**, а не помилка скрипта;
 - `status: "verified-diagnostic"` для кожного виданого плану;
-- `safe_execution_flags: true`, `plan_sha256_matches: true`, `source_report_sha256_matches: true`.
+- `safe_execution_flags: true`, `plan_sha256_matches: true`, `source_report_sha256_matches: true`, `backend_id_matches_request: true`, `confirmable_false: true`.
 
 Перевірте checksum всередині каталогу:
 
@@ -87,7 +91,7 @@ PY
 sha256sum -c SHA256SUMS
 ```
 
-Якщо `overall: "failed"` — не ігноруйте це. Прикладіть `manifest.json` і відповідний `*.stderr.log` до issue, але спершу перевірте privacy (розділ 5).
+Якщо `overall: "failed"` — не ігноруйте це. Прикладіть `manifest.json` і відповідні `*.stdout.log` / `*.stderr.log` до issue, але спершу перевірте privacy (розділ 5). У `manifest.json` команди зберігаються як argv-масиви, а шляхи до output замінено на `<out>`.
 
 ## 4. Що план не означає
 
@@ -95,13 +99,13 @@ sha256sum -c SHA256SUMS
 - `plan_readiness.confirmable` завжди `false`.
 - `execution.mutations_authorized`, `backend_invoked`, `disk_access_performed` завжди `false`.
 - `blockers: []` означає лише «не знайдено critical evidence, яке б зупинило dry-run у цій версії», а не «обладнання повністю сумісне».
-- `wsm-hwcheck` v0.1.0 не запускає функціональних тестів; `driver.status=bound` і наявність firmware-файлу не доводять працездатність.
+- `wsm-hwcheck` 0.2.0 (схема звіту 1.0.0) не запускає функціональних тестів; `driver.status=bound` і наявність firmware-файлу не доводять працездатність.
 
 Детальні правила інтерпретації — в [INSTALLER-PREFLIGHT.md](INSTALLER-PREFLIGHT.md) і канонічному [INSTALLER-HANDOFF.md](INSTALLER-HANDOFF.md).
 
 ## 5. Приватність перед надсиланням
 
-Схема v1 забороняє serial numbers, MAC, UUID, WWN, hostname, username і IP. Перегляньте вміст перед публікацією:
+Схема 1.0.0 забороняє serial numbers, MAC, UUID, WWN, hostname, username і IP. `manifest.json` не містить абсолютних шляхів до вашого output-каталогу, але `report.json` може розкрити модель і середовище. Перегляньте вміст перед публікацією:
 
 ```sh
 python3 - <<'PY'
@@ -116,12 +120,12 @@ PY
 
 Надсилайте публічно лише:
 
-- версію й commit з `manifest.json`;
+- версію з `manifest.json`; якщо `source_commit` має значення `null` (розпакування tarball всередині іншого git-репо), беріть commit із `release-manifest.json`;
 - `overall` і статуси `guix`/`nix`;
 - стислий human-readable summary зі stderr;
 - модель/категорію пристрою й опис проблеми.
 
-Не надсилайте `report.json` цілком без явної згоди: навіть після redaction він може розкрити модель обладнання або середовище. Політику див. у [REPORT-FORMAT.md](hardware/REPORT-FORMAT.md).
+Не надсилайте `report.json` цілком без явної згоди: навіть після redaction він може розкрити модель обладнання або середовище. Для публічного issue підготуйте окрему санітизовану копію; чутливі деталі надішліть приватно. Політику див. у [REPORT-FORMAT.md](hardware/REPORT-FORMAT.md).
 
 ## 6. Додаткова перевірка збірки (опційно)
 
@@ -131,10 +135,10 @@ PY
 make check
 make describe-lock
 make check-locked-system
-make vm-system
+make vm-system-serial
 ```
 
-`describe-lock` і `check-locked-system` явно споживають автентифікований `channels.lock.scm`. Це будує й запускає мінімальну Guix System у disposable VM. Не запускайте `guix system init` на реальному диску. Зафіксовані результати й межі — у [systems/README.md](../systems/README.md).
+`describe-lock` і `check-locked-system` явно споживають автентифікований `channels.lock.scm`. `vm-system-serial` відповідає proofs-у з #1: disposable QEMU/TCG, серійний вивід і маркер `wsm-desktop login:`. Звичайний `make vm-system` такого маркера не перевіряє. `guix system vm --full-boot` показував `Welcome to GRUB!`, але до ядра не дійшов за 600 секунд, тому bootloader-шлях не вважається підтвердженим. Не запускайте `guix system init` на реальному диску. Зафіксовані результати — у [systems/README.md](../systems/README.md).
 
 ## 7. Куди писати результати
 
