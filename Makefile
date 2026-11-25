@@ -3,9 +3,9 @@
 PYTHON ?= python3
 GUIX ?= guix
 
-.PHONY: check check-docs check-hardware-schema check-hwcheck check-installer check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system
+.PHONY: check check-docs check-hardware-schema check-hwcheck check-installer check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-cxl-guest check-system vm-system
 
-check: check-docs check-hardware-schema check-hwcheck check-installer check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy
+check: check-docs check-hardware-schema check-hwcheck check-installer check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-cxl-guest
 
 check-docs:
 	$(PYTHON) scripts/check_docs.py
@@ -44,3 +44,7 @@ check-minimal-system:
 
 check-uefi-preboot-policy:
 	$(PYTHON) tests/test_uefi_preboot_probe_policy.py
+
+check-cxl-guest:
+	$(PYTHON) -m unittest discover -s tests -p 'test_qemu_cxl_probe.py' -v
+	$(PYTHON) -m unittest discover -s tests -p 'test_qemu_cxl_guest.py' -v
