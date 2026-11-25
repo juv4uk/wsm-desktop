@@ -12,8 +12,8 @@ express:
   not-assessed proves nothing;
 * if any function failed, the failure must appear in known-limitations,
   otherwise the profile reads as healthy while it is not;
-* personal names and e-mail addresses are refused, in line with the rest of the
-  project;
+* e-mail addresses are refused; a team or role label is preferred for
+  attribution, while personal names are not a validation failure;
 * the directory the bundle sits in must match the slug inside it, so a profile
   cannot be moved and keep pointing at another machine.
 """
