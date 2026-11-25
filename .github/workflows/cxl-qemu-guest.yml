@@ -10,6 +10,10 @@ on:
       - "tests/test_qemu_boot_smoke.py"
   workflow_dispatch:
 
+concurrency:
+  group: cxl-qemu-guest-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
