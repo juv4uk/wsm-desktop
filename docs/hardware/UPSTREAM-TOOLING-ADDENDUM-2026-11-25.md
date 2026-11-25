@@ -23,6 +23,23 @@ WSM варто будувати не навколо одного «детект�
 | [VKMS](https://docs.kernel.org/gpu/vkms.html) + [IGT GPU Tools](https://gitlab.freedesktop.org/drm/igt-gpu-tools) | Віртуальний DRM/KMS display для headless CI/VM перевірок | Для VKMS потрібно завантажити модуль/налаштувати configfs; IGT може вимагати окремої сесії без compositor-а. Це змінює стан тестового kernel і не є live preflight | Ізольована CI/VM lane, не probe на фізичному ПК |
 | [fwupd HSI](https://fwupd.github.io/hsi.html) | Окремі показники firmware/platform security posture | Security posture не доводить наявність runtime firmware blob, успішне виконання `request_firmware()` чи ініціалізацію пристрою | Окремий security report; не змішувати з #16 compatibility evidence |
 
+## Безпека EDID/DisplayID parser-а — обов'язкова умова
+
+Реліз `libdisplay-info 0.4.0` додав корисну підтримку DisplayID v1 Type IV timings і DisplayID v2 CTA-861 blocks, але **не можна вважати його безпечним baseline для live image**. Станом на 25.11.2026 публічні записи описують два out-of-bounds read дефекти в parser-ах DisplayID:
+
+- [CVE-2026-112271](https://access.redhat.com/security/cve/cve-2026-112271) — DisplayID v1 parser може читати за межами heap buffer, коли довжина data block виходить за межі секції.
+- [CVE-2026-112272](https://access.redhat.com/security/cve/cve-2026-112272) — аналогічний вихід за межі буфера в DisplayID v2 parser.
+
+Умовою атаки може бути спеціально сформований EDID з фізичного дисплея/адаптера або з локального файла; описані наслідки — аварійне завершення застосунку (DoS), не підтверджене виконання коду. Red Hat та OSV позначають уражені версії включно з 0.4.0. У досліджених джерелах на цю дату не підтверджено виправлений upstream release; не стверджувати, що 0.4.1 або інша patched версія вже існує, без повторної перевірки.
+
+Практичні вимоги до WSM:
+
+- Не додавати `libdisplay-info <= 0.4.0` до live image або обов'язкового preflight dependency.
+- Перед інтеграцією перевірити upstream fix/реліз, дистрибутивні security advisories та фактичну версію залежності в pinned Guix/Nix closure.
+- Поки виправлення не підтверджено, залишити EDID parsing необов'язковим і пропускати його без блокування inventory. Не парсити неперевірений EDID у привілейованому процесі.
+- Для `drm_info` перевіряти, чи його build лінкований із `libdisplay-info`; якщо так, застосовувати ті самі обмеження. JSON режим може містити EDID bytes у base64, тому raw JSON не можна експортувати як privacy-safe результат.
+- Kernel DRM/KMS connector properties і kernel-exposed modes залишаються окремим джерелом. Відкладання userspace EDID parser-а не повинно перетворювати відсутні parsed fields на негативний verdict.
+
 ## Правила інтеграції
 
 ### PCIe AER
