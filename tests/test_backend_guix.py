@@ -190,6 +190,36 @@ class HandoffRefusalTests(unittest.TestCase):
             )
         self.assertEqual(caught.exception.code, "handoff.plan_changed")
 
+    def test_source_report_id_rejects_scheme_comment_injection(self) -> None:
+        plan = confirmed_plan()
+        plan["source_report"]["report_id"] = "report-id-valid-0001\\n(define injected #t)"
+        refresh_plan_hash(plan)
+        self.assert_refused("plan.provenance.report_id", plan, selection())
+
+    def test_source_report_sha256_rejects_scheme_comment_injection(self) -> None:
+        plan = confirmed_plan()
+        plan["source_report"]["sha256"] = "a" * 64 + "\\n(define injected #t)"
+        refresh_plan_hash(plan)
+        self.assert_refused("plan.provenance.sha256", plan, selection())
+
+    def test_source_report_requires_an_object(self) -> None:
+        plan = confirmed_plan()
+        plan["source_report"] = ["report-id-valid-0001", "a" * 64]
+        refresh_plan_hash(plan)
+        self.assert_refused("plan.provenance", plan, selection())
+
+    def test_source_report_rejects_non_string_provenance(self) -> None:
+        mutations = (
+            ("report_id", 123, "plan.provenance.report_id"),
+            ("sha256", ["a" * 64], "plan.provenance.sha256"),
+        )
+        for field, value, code in mutations:
+            with self.subTest(field=field):
+                plan = confirmed_plan()
+                plan["source_report"][field] = value
+                refresh_plan_hash(plan)
+                self.assert_refused(code, plan, selection())
+
     def test_blockers_stop_the_handoff(self) -> None:
         plan = confirmed_plan()
         plan["blockers"] = ["boot-path: required critical device discovery is unknown"]
