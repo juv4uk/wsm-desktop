@@ -36,10 +36,14 @@ class QemuCxlProbeTests(unittest.TestCase):
         self.assertIn("q35,cxl=on", command)
         self.assertIn("cxl-type3,bus=root_port0,volatile-memdev=vmem0,id=cxl-vmem0", command)
         self.assertIn("-nodefaults", command)
+        self.assertIn("-no-user-config", command)
         self.assertIn("-S", command)
         self.assertNotIn("-drive", command)
         self.assertNotIn("-cdrom", command)
-        self.assertNotIn("-nic", command)
+        self.assertIn("-nic", command)
+        self.assertEqual(command[command.index("-nic") + 1], "none")
+        self.assertIn("-serial", command)
+        self.assertEqual(command[command.index("-serial") + 1], "none")
         self.assertNotIn("-netdev", command)
         self.assertFalse(any("host=" in token for token in command))
         self.assertFalse(any("serial=" in token.casefold() for token in command))
@@ -91,6 +95,28 @@ class QemuCxlProbeTests(unittest.TestCase):
             result = run_qemu_topology_probe("qemu")
         self.assertEqual(result["status"], "cxl-device-or-machine-unsupported")
 
+    def test_probe_does_not_return_raw_pci_or_resource_diagnostics(self) -> None:
+        completed = type(
+            "Completed",
+            (),
+            {
+                "stdout": "\\n".join([
+                    "dev: pxb-cxl, id cxl.1",
+                    "dev: cxl-rp, id root_port0",
+                    "dev: cxl-type3, id cxl-vmem0",
+                    "Bus 00:02.0 BDF 0000:00:02.0 Memory at 0xf0000000",
+                ]),
+                "stderr": "synthetic PCI resource diagnostic",
+                "returncode": 0,
+            },
+        )()
+        with patch("scripts.ci_probe_qemu_cxl.subprocess.run", return_value=completed) as run:
+            result = run_qemu_topology_probe("qemu")
+        self.assertNotIn("0000:00:02.0", repr(result))
+        self.assertNotIn("0xf0000000", repr(result))
+        self.assertNotIn("synthetic PCI resource diagnostic", repr(result))
+        self.assertIn("expected synthetic CXL qdev objects", result["diagnostic"])
+        self.assertNotIn("info pci", run.call_args.kwargs["input"])
     def test_qemu_command_does_not_claim_guest_or_hardware_compatibility(self) -> None:
         # The probe instantiates QEMU objects while guest CPUs are paused; it
         # intentionally makes no claim about Linux discovery or physical CXL.
