@@ -14,7 +14,7 @@ from .collector import VERSION, collect_report
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="wsm-hwcheck",
-        description="Collect a local-only, read-only Linux hardware inventory report.",
+        description="Collect a local-only, read-only Linux hardware and driver/firmware evidence report.",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
     parser.add_argument("--sysfs-root", default="/sys", help=argparse.SUPPRESS)
@@ -25,6 +25,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="write the JSON report to this path; stdout is used when omitted",
     )
     parser.add_argument("--compact", action="store_true", help="emit compact JSON")
+    parser.add_argument(
+        "--no-runtime-diagnostics",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
     return parser
 
 
@@ -32,7 +37,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
-        report = collect_report(args.sysfs_root, args.proc_root)
+        report = collect_report(
+            args.sysfs_root,
+            args.proc_root,
+            include_runtime_diagnostics=not args.no_runtime_diagnostics,
+        )
         rendered = json.dumps(
             report,
             ensure_ascii=False,
