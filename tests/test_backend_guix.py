@@ -214,6 +214,13 @@ class HandoffRefusalTests(unittest.TestCase):
             external_bootloader_job=True,
         )
 
+    def test_dot_device_paths_are_refused(self) -> None:
+        for disk in ("/dev/.", "/dev/.."):
+            with self.subTest(disk=disk):
+                self.assert_refused(
+                    "selection.disk", confirmed_plan(), selection(disk=disk)
+                )
+
     def test_shell_metacharacters_in_disk_are_refused(self) -> None:
         self.assert_refused(
             "selection.disk", confirmed_plan(), selection(disk="/dev/vda; rm -rf /")
