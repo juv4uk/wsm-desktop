@@ -25,7 +25,7 @@
 | `verified_functions` | що саме перевірено: `pass`, `fail` або `not-assessed` |
 | `known_limitations` | усе, що не працює |
 | `not_assessed` | **непорожній** — жодна машина не перевірена повністю |
-| `artifacts` | логи з `sha256`, щоб файл не можна було підмінити |
+| `artifacts` | тип і SHA-256 у bundle; у схемі v1 хеш має перевірений формат, але файл за ним ще не знаходиться й не хешується |
 
 ## Правила, які перевіряються
 
@@ -88,6 +88,18 @@ JSON Schema перевіряє форму. Скрипт перевіряє те,
 
 Вгадувати тут означало б знищити сенс доказів: неправильний профіль гірший за
 відсутній, бо він **виглядає** перевіреним.
+
+## Дослідницькі довідки — не hardware profiles
+
+Поточну машину власника описано окремо в
+[`OWNER-HARDWARE-REFERENCE.md`](hardware/OWNER-HARDWARE-REFERENCE.md). Це
+датоване Windows/WSL спостереження з іншого репозиторію, а не WSM
+`wsm-hwcheck` report; воно не створює profile directory і не містить
+`verified_functions`.
+
+Ревізія плати, native Linux driver binding, firmware state, Plasma/display,
+network/audio та suspend/resume мають лишатися `unknown` / `not-assessed`,
+доки їх не перевірено на самій машині.
 
 ## Чого тут ще немає
 
