@@ -10,9 +10,9 @@ on:
   workflow_dispatch:
 
 # Keep one run per pull request: a newer commit supersedes that PR's old run.
-# Main-branch runs are not cancelled; every merged commit gets its own result.
+# Main-branch runs are not cancelled or coalesced: every commit SHA gets its own result.
 concurrency:
-  group: checks-${{ github.event.pull_request.number || github.ref }}
+  group: checks-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
