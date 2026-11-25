@@ -69,7 +69,7 @@ export LD_LIBRARY_PATH={ld_library_path}
 
 PYTHON=/opt/python/bin/python3.11
 echo WSM_HWCHECK_STAGE_PYTHON_IMPORT > /dev/console
-if ! "$PYTHON" -S -c 'import json, selectors, subprocess, pathlib, gzip, base64' > /dev/console 2>&1; then
+if ! "$PYTHON" -S -c 'import json, selectors, subprocess, pathlib, gzip, base64, jsonschema' > /dev/console 2>&1; then
     guest_fail "python-import-smoke"
 fi
 echo WSM_HWCHECK_STAGE_COLLECTOR_START > /dev/console
