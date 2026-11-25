@@ -27,8 +27,31 @@ import sys
 from pathlib import Path
 from typing import Any
 
-ALLOWED_CHANNELS = {"guix"}
-ALLOWED_HOSTS = {"git.guix.gnu.org", "git.savannah.gnu.org"}
+# Two products, two policies.
+#
+# WSM ships a comfortable desktop out of the box, and that includes proprietary
+# drivers - so Nonguix is not an accident to be forbidden, it is part of the
+# Compatibility image. What must never happen is an *unnamed* third-party
+# channel, or one that is unpinned or unauthenticated.
+#
+# The free image keeps its own lock and stays free; the compatibility image has
+# a separate lock that names Nonguix explicitly.
+POLICIES: dict[str, dict[str, set[str]]] = {
+    "free": {
+        "channels": {"guix"},
+        "hosts": {"git.guix.gnu.org", "git.savannah.gnu.org"},
+    },
+    "compatibility": {
+        "channels": {"guix", "nonguix"},
+        "hosts": {
+            "git.guix.gnu.org",
+            "git.savannah.gnu.org",
+            "gitlab.com",
+            "codeberg.org",
+        },
+    },
+}
+DEFAULT_POLICY = "free"
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 DEFAULT_LOCK = Path(__file__).resolve().parents[1] / "channels.lock.scm"
 
@@ -122,8 +145,11 @@ def channels_of(form: Any) -> list[dict[str, Any]]:
     return found
 
 
-def check(text: str) -> list[str]:
+def check(text: str, policy: str = DEFAULT_POLICY) -> list[str]:
     """Return every reason this lock is not acceptable. Empty means acceptable."""
+    if policy not in POLICIES:
+        return [f"unknown policy {policy!r}; choose one of {sorted(POLICIES)}"]
+    rules = POLICIES[policy]
     try:
         channels = channels_of(parse(tokenize(text)))
     except ParseError as exc:
@@ -135,7 +161,7 @@ def check(text: str) -> list[str]:
 
     for channel in channels:
         name = channel.get("name", "<unnamed>")
-        if name not in ALLOWED_CHANNELS:
+        if name not in rules["channels"]:
             problems.append(
                 f"channel {name!r} is not an official Guix channel; a third-party "
                 "channel replaces packages and is code execution"
@@ -146,7 +172,7 @@ def check(text: str) -> list[str]:
             problems.append(f"channel {name!r} is not fetched over https: {url!r}")
         else:
             host = url.split("/")[2]
-            if host not in ALLOWED_HOSTS:
+            if host not in rules["hosts"]:
                 problems.append(f"channel {name!r} uses an unexpected host: {host!r}")
 
         commit = channel.get("commit")
@@ -174,6 +200,12 @@ def build_parser() -> argparse.ArgumentParser:
         description="Verify that channels.lock.scm is free-only, https and authenticated.",
     )
     parser.add_argument("--lock", type=Path, default=DEFAULT_LOCK)
+    parser.add_argument(
+        "--policy",
+        choices=sorted(POLICIES),
+        default=DEFAULT_POLICY,
+        help="free: official Guix only; compatibility: Guix plus an explicitly named Nonguix",
+    )
     return parser
 
 
@@ -185,13 +217,16 @@ def main(argv: list[str] | None = None) -> int:
         print(f"check-channels: cannot read {args.lock}: {exc}", file=sys.stderr)
         return 2
 
-    problems = check(text)
+    problems = check(text, args.policy)
     if problems:
         for problem in problems:
             print(f"check-channels: {problem}", file=sys.stderr)
         return 1
 
-    print(f"check-channels: {args.lock.name} is free-only, https and authenticated")
+    print(
+        f"check-channels: {args.lock.name} satisfies the {args.policy} policy "
+        "(https, pinned commit, authenticated introduction)"
+    )
     return 0
 
 

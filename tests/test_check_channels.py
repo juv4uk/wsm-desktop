@@ -98,6 +98,47 @@ class RuleTests(unittest.TestCase):
         self.assertTrue(any("no channels" in problem for problem in check("(list)")))
 
 
+class PolicyTests(unittest.TestCase):
+    """The Compatibility image ships proprietary drivers; that is the product.
+
+    What must not happen is an unnamed, unpinned or unauthenticated channel -
+    not the existence of Nonguix itself.
+    """
+
+    def test_free_policy_refuses_nonguix(self) -> None:
+        problems = check(with_channel(NONGUIX), "free")
+        self.assertTrue(any("nonguix" in problem for problem in problems))
+
+    def test_compatibility_policy_accepts_a_pinned_authenticated_nonguix(self) -> None:
+        problems = check(with_channel(NONGUIX), "compatibility")
+        self.assertEqual(problems, [])
+
+    def test_compatibility_policy_still_requires_authentication(self) -> None:
+        unauthenticated = NONGUIX.replace(
+            '(introduction (make-channel-introduction "x" (openpgp-fingerprint "y")))', ""
+        )
+        problems = check(with_channel(unauthenticated), "compatibility")
+        self.assertTrue(any("authenticated" in problem for problem in problems))
+
+    def test_compatibility_policy_still_requires_a_full_commit(self) -> None:
+        branch = NONGUIX.replace("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "main")
+        problems = check(with_channel(branch), "compatibility")
+        self.assertTrue(any("full commit" in problem for problem in problems))
+
+    def test_compatibility_policy_refuses_an_unknown_host(self) -> None:
+        text = with_channel(NONGUIX.replace("gitlab.com/nonguix/nonguix", "evil.example/x"))
+        problems = check(text, "compatibility")
+        self.assertTrue(any("unexpected host" in problem for problem in problems))
+
+    def test_compatibility_policy_refuses_an_unnamed_channel(self) -> None:
+        rogue = NONGUIX.replace("(name 'nonguix)", "(name 'random-thing)")
+        problems = check(with_channel(rogue), "compatibility")
+        self.assertTrue(any("random-thing" in problem for problem in problems))
+
+    def test_unknown_policy_is_refused(self) -> None:
+        self.assertTrue(check(GOOD, "whatever"))
+
+
 class RepositoryTests(unittest.TestCase):
     def test_the_committed_lock_passes(self) -> None:
         completed = subprocess.run(

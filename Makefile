@@ -52,7 +52,8 @@ check-hygiene:
 
 check-channels:
 	$(PYTHON) tests/test_check_channels.py
-	$(PYTHON) scripts/check_channels.py
+	$(PYTHON) scripts/check_channels.py --policy free
+	$(PYTHON) scripts/check_channels.py --policy compatibility
 
 check-profiles-matrix:
 	$(PYTHON) tests/test_profiles.py
