@@ -79,7 +79,7 @@ class QemuCxlProbeTests(unittest.TestCase):
         )()
         with patch("scripts.ci_probe_qemu_cxl.run_bounded_process", return_value=bounded_result(completed.stdout, completed.stderr)) as reader:
             result = run_qemu_topology_probe("qemu")
-        self.assertEqual(reader.call_args.kwargs["stdin_bytes"], b"info qtree\\ninfo pci\\nquit\\n")
+        self.assertEqual(reader.call_args.kwargs["stdin_bytes"], b"info qtree\ninfo pci\nquit\n")
         self.assertEqual(reader.call_args.kwargs["max_stdout_bytes"] + reader.call_args.kwargs["max_stderr_bytes"], MAX_CAPTURE_BYTES)
         self.assertEqual(result["status"], "type3-topology-instantiated")
         self.assertEqual(result["devices_seen"], ["cxl.1", "root_port0", "cxl-vmem0"])
