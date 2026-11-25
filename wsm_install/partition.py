@@ -64,6 +64,10 @@ class Layout:
     firmware: str
     disk: str
     partitions: list[dict[str, Any]] = field(default_factory=list)
+    # Carry the original disk-name acknowledgement into later planning stages.
+    # A generated layout must not silently lose the user's destructive consent.
+    acknowledgement: str | None = None
+    disk_size_bytes: int | None = None
 
     def commands(self) -> list[list[str]]:
         """sgdisk invocations as data. The caller decides whether to run them."""
@@ -87,7 +91,7 @@ def _require(condition: bool, code: str, message: str) -> None:
 def validate_target(disk: Disk, acknowledgement: str | None, firmware: str) -> None:
     """Every reason this disk must not be touched, in the order that matters most."""
     _require(
-        bool(DEVICE_PATH.match(disk.path)),
+        bool(DEVICE_PATH.fullmatch(disk.path)),
         "disk.path",
         f"{disk.path!r} is not a whole block device; partitions and images are refused",
     )
@@ -107,13 +111,14 @@ def validate_target(disk: Disk, acknowledgement: str | None, firmware: str) -> N
         f"{disk.path} is {disk.size_bytes} bytes; the smallest supported layout needs "
         f"{MIN_ROOT_MIB + ESP_MIB} MiB",
     )
-    if disk.has_existing_data:
-        _require(
-            acknowledgement == disk.path,
-            "disk.acknowledgement",
-            f"{disk.path} contains data; refusing without an acknowledgement that names "
-            f"exactly this disk (got {acknowledgement!r})",
-        )
+    # The planned sequence always starts with sgdisk --zap-all. Even a disk
+    # reported as empty has a partition table that will be overwritten.
+    _require(
+        acknowledgement == disk.path,
+        "disk.acknowledgement",
+        f"refusing destructive partition-table replacement without an acknowledgement "
+        f"that names exactly {disk.path!r} (got {acknowledgement!r})",
+    )
 
 
 def plan(
@@ -134,7 +139,12 @@ def plan(
             f"expected ({drift:.1%} drift); the disk may have been replaced",
         )
 
-    layout = Layout(firmware=firmware, disk=disk.path)
+    layout = Layout(
+        firmware=firmware,
+        disk=disk.path,
+        acknowledgement=acknowledgement,
+        disk_size_bytes=disk.size_bytes,
+    )
     cursor = 1
     if firmware == "bios":
         layout.partitions.append({
