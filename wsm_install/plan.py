@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from pathlib import Path
 from typing import Any
 
 
@@ -56,6 +57,7 @@ def build_plan(
     report_bytes: bytes,
     backend: str,
     profile_evidence: dict[str, Any] | None = None,
+    profile_evidence_root: Path | None = None,
 ) -> tuple[dict[str, Any], list[str], list[str]]:
     """Build a backend-specific plan without probing or invoking a backend.
 
@@ -68,11 +70,76 @@ def build_plan(
     blockers: list[str] = []
     warnings: list[str] = []
 
+    profile_evidence_summary: dict[str, Any] | None = None
     if profile_evidence is not None:
         from wsm_install.profile import problems
+        from wsm_install.profile_match import match as match_profiles
 
-        for problem in problems(profile_evidence):
-            blockers.append(f"hardware profile evidence is not valid: {problem}")
+        if profile_evidence.get("report_id") != report.get("report_id"):
+            blockers.append(
+                "hardware profile evidence report_id does not match the current hardware report"
+            )
+        if profile_evidence.get("report_schema_version") != report.get("schema_version"):
+            blockers.append(
+                "hardware profile evidence report_schema_version does not match the current hardware report"
+            )
+
+        if profile_evidence_root is None:
+            blockers.append(
+                "hardware profile evidence cannot be verified without an evidence directory"
+            )
+            evidence_problems = problems(profile_evidence)
+        else:
+            evidence_problems = problems(
+                profile_evidence,
+                artifact_root=profile_evidence_root,
+            )
+        blockers.extend(
+            f"hardware profile evidence is not valid: {problem}"
+            for problem in evidence_problems
+        )
+
+        signature = profile_evidence.get("hardware_signature")
+        match_status = "manual-review-required"
+        if signature:
+            matched, ambiguous, _skipped = match_profiles(report, [profile_evidence])
+            if ambiguous:
+                blockers.append(
+                    "hardware profile evidence hardware_signature is ambiguous for this report"
+                )
+                match_status = "ambiguous"
+            elif not matched:
+                blockers.append(
+                    "hardware profile evidence hardware_signature does not match the current hardware report"
+                )
+                match_status = "mismatch"
+            else:
+                match_status = "matched"
+        else:
+            warnings.append(
+                "hardware profile evidence has no hardware_signature; automatic machine matching is not asserted"
+            )
+
+        if (
+            not evidence_problems
+            and profile_evidence_root is not None
+            and profile_evidence.get("report_id") == report.get("report_id")
+            and profile_evidence.get("report_schema_version") == report.get("schema_version")
+            and match_status not in {"mismatch", "ambiguous"}
+        ):
+            profile_evidence_summary = {
+                "profile": profile_evidence["profile"],
+                "report_id": profile_evidence["report_id"],
+                "report_schema_version": profile_evidence["report_schema_version"],
+                "verified_on": profile_evidence["verified_on"],
+                "verified_by": profile_evidence["verified_by"],
+                "verified_functions": profile_evidence["verified_functions"],
+                "known_limitations": profile_evidence["known_limitations"],
+                "not_assessed": profile_evidence["not_assessed"],
+                "hardware_signature": signature,
+                "hardware_match": match_status,
+                "artifact_count": len(profile_evidence["artifacts"]),
+            }
     else:
         warnings.append(
             "no verified hardware profile evidence for this machine; "
@@ -186,6 +253,9 @@ def build_plan(
             "disk_access_performed": False,
         },
     }
+    if profile_evidence_summary is not None:
+        plan["profile_evidence"] = profile_evidence_summary
+
     # Hash canonical plan bytes before adding the digest field.
     plan["plan_sha256"] = hashlib.sha256(canonical_json(plan).encode("utf-8")).hexdigest()
     return plan, blockers, warnings
