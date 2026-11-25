@@ -1,11 +1,30 @@
 # WSM Desktop
 
-> English translation. The canonical document is [README.md](README.md);
-> in any disagreement the Ukrainian text wins.
+> English translation. The canonical document is [README.md](README.md); in any disagreement, the Ukrainian text wins.
 
-> Hardware-oriented desktop Linux project exploring Nix and GNU Guix as declarative system foundations.
+> Hardware-oriented desktop Linux based on GNU Guix System.
 
 **WSM Desktop** is an independent, hardware-oriented project to build a comfortable, reproducible desktop Linux system with a graphical installer. Its central purpose is to select and integrate proven upstream kernels, drivers, firmware and hardware tools for concrete hardware configurations, while making compatibility evidence understandable before installation. GNU Guix System is the selected system backend for the first release; Nix/NixOS is deferred, not rejected. The project does not merge their package stores or system managers.
+
+## Try it now
+
+The hardware collector is the verified read-only component of this repository. It reads sysfs and procfs only: no network, disk writes, root privileges or installation.
+
+```console
+$ git clone https://github.com/juv4uk/wsm-desktop.git
+$ cd wsm-desktop
+$ python3 -m wsm_hwcheck --compact            # JSON report to stdout
+$ python3 -m wsm_hwcheck --output hw.json     # or to a file
+```
+
+The report validates against a versioned schema and marks missing evidence as `unknown` instead of guessing compatibility:
+
+```console
+$ python3 -m pip install 'jsonschema[format]==4.26.0'
+$ python3 -m wsm_install --preflight --report hw.json --backend guix --dry-run
+```
+
+The `wsm_install` command produces a diagnostic plan only. It is not an installation plan: it cannot become confirmable until a target disk is selected and the required device-role evidence is observed.
 
 The project is in **pre-alpha**. There is no supported installation image yet. The repository currently defines the project architecture and development foundations; it must not be used to install or modify a real system.
 
@@ -13,15 +32,15 @@ The project is in **pre-alpha**. There is no supported installation image yet. T
 
 - [x] Project identity and scope
 - [x] Initial architecture and licensing policy
-- [ ] Comparative Nix and Guix backend evaluation
+- [ ] Optional Nix/NixOS research (not blocking the first Guix release)
 - [x] Select the first WSM system backend (GNU Guix; Nix deferred, see ADR 0004)
 - [ ] Calamares packaging and live-environment feasibility check
-- [ ] Backend-specific deployment adapter prototype
+- [x] Guix handoff preparation adapter (dry-run only; no execution or disk writes)
 - [ ] End-to-end installation in QEMU
 - [ ] Hardware compatibility testing
 - [ ] First public preview image
 
-See [the roadmap](docs/ROADMAP.md) for milestones and acceptance criteria. The installer frontend is being evaluated in [issue #10](https://github.com/juv4uk/wsm-desktop/issues/10); Calamares is not a locked dependency. The hardware-first/upstream-first direction is explored through [the hardware preflight](docs/hardware/HWCHECK.md) and the [upstream tooling assessment](docs/hardware/UPSTREAM-TOOLING.md). The proposed dual-backend direction is recorded in [ADR 0004](docs/decisions/0004-nix-guix-backend-strategy.md) and is not yet ratified. The current Calamares 3.4.2 assessment is in [docs/CALAMARES-FEASIBILITY.md](docs/CALAMARES-FEASIBILITY.md).
+See [the roadmap](docs/ROADMAP.md) for milestones and acceptance criteria. The installer frontend is being evaluated in [issue #10](https://github.com/juv4uk/wsm-desktop/issues/10); Calamares is not a locked dependency. The hardware-first/upstream-first direction is explored through [the hardware preflight](docs/hardware/HWCHECK.md) and the [upstream tooling assessment](docs/hardware/UPSTREAM-TOOLING.md). [ADR 0004](docs/decisions/0004-nix-guix-backend-strategy.md) records the ratified decision: GNU Guix System first, Nix/NixOS deferred. The current Calamares 3.4.2 assessment is in [docs/CALAMARES-FEASIBILITY.md](docs/CALAMARES-FEASIBILITY.md).
 
 ## Technology
 
@@ -65,19 +84,19 @@ Selected WSM installer frontend (not selected yet)
               v
        WSM backend adapter
               |
-              +--> Nix/NixOS deployment path
+              +--> GNU Guix deployment path (selected, ADR 0004)
               |
-              +--> GNU Guix deployment path
+              +--> Nix/NixOS path (deferred, not implemented)
               |
               v
        installed WSM Desktop system
 ```
 
-This is a design target, not a working installer yet. Nix and Guix deployment must remain separate backend implementations until comparative tests justify a supported release model.
+This is a design target, not a working installer yet. The Guix adapter renders an `operating-system` declaration from a confirmed plan and returns allow-listed argv; it does not execute the command, mount filesystems or write to a disk. Nix/NixOS remains deferred and is not part of the first installation path.
 
 ### Backend ownership
 
-Each installed WSM system must have exactly one backend responsible for system configuration and activation. The Nix/NixOS and Guix deployment paths are separate and must not both attempt to manage the same root filesystem, bootloader, or service manager.
+Each installed WSM system must have exactly one backend responsible for system configuration and activation. The first release supports only GNU Guix System; Nix/NixOS remains deferred. The project will not let two backends manage the same root filesystem, bootloader, or service manager.
 
 For the **Guix backend**, the generated Guix configuration owns the target file systems, user accounts, services, and bootloader. We must not let a stock Calamares bootloader job and `guix system init` both attempt to install or configure the bootloader. If Calamares is selected, its generic user-creation step must not be assumed to create a correct declarative Guix `user-account`.
 
@@ -90,7 +109,7 @@ The project intends to provide two clearly separated software-policy choices:
 - **WSM Free** — only components that meet the project's free-software policy.
 - **WSM Compatibility** — explicitly selected components outside that policy, with their licenses and redistribution terms disclosed.
 
-These are WSM policy labels, not a claim that both backends already implement the profiles. Their package sources and exact behavior must be defined separately for each backend. On the Guix path, Nonguix may be considered as an optional independent channel; it is not endorsed by the GNU Guix project.
+These are WSM policy labels, not a claim that both profiles are already implemented. Their package sources and exact behavior must be defined separately for each backend. On the Guix path, Nonguix may be considered as an optional independent channel; it is not endorsed by the GNU Guix project.
 
 ## Repository map
 
@@ -115,7 +134,7 @@ Start with [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). The initial workflow is t
 
 ## Current architecture status
 
-The backend decision is closed. [ADR 0004](docs/decisions/0004-nix-guix-backend-strategy.md) was ratified on 2026-11-26: GNU Guix System is the first and only supported backend, consistent with the already accepted [ADR 0001](docs/decisions/0001-guix-as-system-foundation.md). The Nix experiment is kept as research and is off the critical path. Issue [#2](https://github.com/juv4uk/wsm-desktop/issues/2) now tracks the Guix deployment path only. Each installed system must have one authoritative backend; the project does not combine Nix and Guix stores or activation systems.
+The backend decision is closed. [ADR 0004](docs/decisions/0004-nix-guix-backend-strategy.md) was ratified on 2026-11-25: GNU Guix System is the first and only supported backend, consistent with the already accepted [ADR 0001](docs/decisions/0001-guix-as-system-foundation.md). The Nix experiment is kept as research and is off the critical path. Issue [#2](https://github.com/juv4uk/wsm-desktop/issues/2) now tracks the Guix deployment path only. Each installed system must have one authoritative backend; the project does not combine Nix and Guix stores or activation systems.
 
 ## Licensing and project identity
 
@@ -125,5 +144,5 @@ GNU, GNU Guix, Nonguix, and Calamares are independent projects. Their names and 
 
 ---
 
-**Project stage:** pre-alpha / backend architecture evaluation.  
+**Project stage:** pre-alpha / GNU Guix System integration.  
 **Current guarantee:** no production installation support; no supported ISO; no validated hardware support list.
