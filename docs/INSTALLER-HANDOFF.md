@@ -351,7 +351,7 @@ python3 -m wsm_install.guix_handoff \
   --target-mountpoint /mnt
 ```
 
-CLI перевіряє digest-и та явне поле `confirmed: true`, створює новий reviewable `.scm` файл із правами `0600` лише поза target mountpoint, не перезаписує наявний файл і друкує JSON handoff manifest з упорядкованим `argv`. Confirmation receipt — це локальне підтвердження від frontend-а, а не криптографічний підпис або доказ особи користувача. CLI не запускає команду з manifest-а.
+CLI перевіряє digest-и та явне поле `confirmed: true`, створює новий reviewable `.scm` файл із правами `0600` лише поза target mountpoint, не перезаписує наявний файл і друкує JSON handoff manifest з упорядкованим `argv`. Каталог для `--output` і каталог `--target-mountpoint` мають існувати до запуску. Confirmation receipt — це локальне підтвердження від frontend-а, а не криптографічний підпис або доказ особи користувача. CLI не запускає команду з manifest-а.
 
 **Не реалізовано** — кроки `REALIZE` та `APPLY`: adapter і CLI не виконують `guix system init`, не монтують цільовий диск і не перевіряють його фізичну ідентичність перед записом. Цей крок потребує окремого QEMU install test із disposable virtual disk і Guix environment.
 
