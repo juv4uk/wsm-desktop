@@ -47,6 +47,40 @@ GPT має кудись покласти core image.
 `/dev/nvme0n1` на іншій — це нормально. Ненормально, коли ім'я те саме, а диск
 інший: саме так стирають не той носій.
 
+
+## Інваріанти майбутнього APPLY: уроки сторонніх інсталяторів
+
+Наведені нижче випадки з Omarchy — не підстава копіювати його installer.
+Це реальні failure modes, які WSM має закрити до появи executable APPLY:
+
+1. **Partition table ≠ filesystem resize.** Зменшення розміру GPT entry не
+   зменшує файлову систему всередині. Не дозволяти загальному partition editor
+   зменшувати наявний NTFS без окремого підтриманого NTFS-aware offline flow,
+   попередньої перевірки та чіткої згоди. Якщо такого flow немає — відмовити й
+   попросити зменшити розділ штатним інструментом власної ОС. Див. Omarchy
+   [#7903](https://github.com/omacom/omarchy/issues/7903).
+2. **Зберігати чужі boot entries.** Майбутній backend може створювати або
+   змінювати лише ідентифіковані WSM entries. Не очищати BootOrder, ESP або
+   записи інших ОС під час install/reset. Після запису треба перевіряти, що
+   потрібні WSM boot files та entry існують; якщо firmware не прийняла entry,
+   повідомляти про це як окремий стан, а не оголошувати boot handoff успішним.
+   Див. Omarchy [#14949](https://github.com/omacom/omarchy/issues/14949) та
+   [#20178](https://github.com/omacom/omarchy/issues/20178).
+3. **Звіряти фактичну таблицю після кожного destructive boundary.** Після
+   partition-table write виконати rescan/udev settle, повторно прочитати
+   geometry, partition number, type і filesystem identity, а вже потім
+   дозволяти `mkfs` та mount. Свіжий path на кшталт `/dev/sda2` не доводить,
+   що це той самий розділ, який був погоджений.
+4. **Перевіряти boot artifact, а не лише exit code.** Kernel image, initrd/UKI,
+   `root=` аргумент і boot entry мають відповідати одній generation та
+   цільовому root. Збірка або завершення package transaction без перевірки
+   завантажувального шляху не є успішним встановленням. Див. Omarchy
+   [#6951](https://github.com/omacom/omarchy/issues/6951).
+
+Ці пункти є майбутніми acceptance requirements. Поточний
+`wsm_install.partition` лише генерує команди як дані й нічого не виконує;
+не трактувати цей розділ як дозвіл підключати його до фізичних дисків.
+
 ## Чого ще немає
 
 - **Виконання.** Модуль не викликає `sgdisk`. Хтось має це зробити свідомо, з
