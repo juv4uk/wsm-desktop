@@ -356,19 +356,20 @@ def main() -> int:
         if not result.marker_seen:
             raise CxlGuestError(f"QEMU CXL guest did not print completion marker; {safe_summary}")
 
-        status = None
+        summary_fields = dict(
+            field.split("=", 1) for field in safe_summary.split(";") if "=" in field
+        )
+        status_value = summary_fields.get("status", "unknown")
+        status = status_value if status_value in SAFE_GUEST_STATUSES else None
+        counts_value = summary_fields.get("counts", "not-reported")
+        counts = counts_value if counts_value != "not-reported" else None
         devices: list[str] = []
         edges: list[str] = []
-        counts = None
         for line in serial.splitlines():
-            if line.startswith("WSM_CXL_STATUS="):
-                status = line.split("=", 1)[1]
-            elif line.startswith("WSM_CXL_DEVICE="):
+            if line.startswith("WSM_CXL_DEVICE="):
                 devices.append(line.split("=", 1)[1])
             elif line.startswith("WSM_CXL_EDGE="):
                 edges.append(line.split("=", 1)[1])
-            elif line.startswith("WSM_CXL_COUNTS="):
-                counts = line.split("=", 1)[1]
 
         # Emit only allow-listed synthetic names and report-local relationships.
         import re
