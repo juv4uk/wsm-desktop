@@ -217,7 +217,6 @@ class DirectoryTests(unittest.TestCase):
                     "slug": "gigabyte/h170-pro",
                 }
             )
-            model.mkdir(parents=True)
             evidence.write_text(json.dumps(document), encoding="utf-8")
             problems = validate_directory(evidence, root)
         self.assertTrue(any("does not match the directory" in item for item in problems))
@@ -235,7 +234,6 @@ class DirectoryTests(unittest.TestCase):
                     "slug": "gigabyte/h170-gaming-3",
                 }
             )
-            model.mkdir(parents=True)
             evidence.write_text(json.dumps(document), encoding="utf-8")
             problems = validate_directory(evidence, root)
         self.assertEqual(problems, [])
