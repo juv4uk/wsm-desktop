@@ -32,6 +32,24 @@ from typing import Any
 
 from wsm_install.partition import Layout, Refused
 
+# Absolute paths for every tool a privileged step runs.
+#
+# This is a direct lesson from Omarchy 4.0.0: their privileged DNS helper ran
+# with an inherited PATH, and a user-writable directory earlier in PATH could
+# supply a file named like a standard utility that then executed as root
+# (fix #8172). The same shape applies here - these steps are meant to be run as
+# root - so no step may rely on PATH lookup at all.
+TRUSTED_TOOLS = {
+    "partprobe": "/usr/sbin/partprobe",
+    "udevadm": "/usr/bin/udevadm",
+    "mkfs.ext4": "/usr/sbin/mkfs.ext4",
+    "mkfs.btrfs": "/usr/sbin/mkfs.btrfs",
+    "mkfs.xfs": "/usr/sbin/mkfs.xfs",
+    "mkfs.fat": "/usr/sbin/mkfs.fat",
+    "mount": "/usr/bin/mount",
+    "mkdir": "/usr/bin/mkdir",
+}
+
 FILESYSTEMS = {
     "ext4": {"mkfs": "mkfs.ext4", "args": ["-F"], "root": True},
     "btrfs": {"mkfs": "mkfs.btrfs", "args": ["-f"], "root": True},
@@ -100,15 +118,16 @@ def plan_steps(
     root_device = device_for(layout.disk, root["number"])
     steps: list[Step] = [
         Step(
-            ["partprobe", layout.disk],
+            [TRUSTED_TOOLS["partprobe"], layout.disk],
             "re-read the partition table; the kernel does not always notice new partitions",
         ),
         Step(
-            ["udevadm", "settle"],
+            [TRUSTED_TOOLS["udevadm"], "settle"],
             "wait for device nodes to appear before touching them",
         ),
         Step(
-            [FILESYSTEMS[filesystem]["mkfs"], *FILESYSTEMS[filesystem]["args"], root_device],
+            [TRUSTED_TOOLS[FILESYSTEMS[filesystem]["mkfs"]],
+             *FILESYSTEMS[filesystem]["args"], root_device],
             f"create {filesystem} on the root partition",
             destructive=True,
         ),
@@ -118,26 +137,27 @@ def plan_steps(
         esp_device = device_for(layout.disk, esp["number"])
         steps.append(
             Step(
-                ["mkfs.fat", "-F", "32", esp_device],
+                [TRUSTED_TOOLS["mkfs.fat"], "-F", "32", esp_device],
                 "format the EFI system partition as FAT32; UEFI firmware reads nothing else",
                 destructive=True,
             )
         )
 
     steps.append(
-        Step(["mount", root_device, target], f"mount the root filesystem at {target}")
+        Step([TRUSTED_TOOLS["mount"], root_device, target], f"mount the root filesystem at {target}")
     )
 
     if esp is not None:
         steps.append(
             Step(
-                ["mkdir", "-p", f"{target}/boot/efi"],
+                [TRUSTED_TOOLS["mkdir"], "-p", f"{target}/boot/efi"],
                 "create the ESP mount point inside the target",
             )
         )
         steps.append(
             Step(
-                ["mount", device_for(layout.disk, esp["number"]), f"{target}/boot/efi"],
+                [TRUSTED_TOOLS["mount"], device_for(layout.disk, esp["number"]),
+                 f"{target}/boot/efi"],
                 "mount the ESP inside the target tree; outside it the bootloader lands on the live system",
             )
         )
@@ -152,6 +172,9 @@ def backend_command(layout: Layout, system_file: str, target: str = "/mnt") -> l
             "backend.system-file",
             f"expected a .scm system file, got {system_file!r}",
         )
+    # guix lives in a profile path that differs per system, so it is the one
+    # command allowed to be resolved by the caller - and the caller runs it
+    # interactively, not from a root shell.
     return ["guix", "system", "init", system_file, target]
 
 
