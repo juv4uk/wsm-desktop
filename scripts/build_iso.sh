@@ -22,7 +22,7 @@ if ! command -v guix >/dev/null 2>&1; then
     printf '%s\n' "build-iso: guix not found in PATH." >&2
     exit 127
 fi
-for tool in git python3 readlink grep; do
+for tool in git python3 readlink grep cp mktemp; do
     if ! command -v "$tool" >/dev/null 2>&1; then
         printf '%s\n' "build-iso: required tool not found: $tool" >&2
         exit 127
@@ -62,6 +62,7 @@ PY
 mkdir -p "$OUTPUT_DIR"
 OUTPUT_DIR=$(CDPATH= cd -- "$OUTPUT_DIR" && pwd)
 ISO_OUTPUT="$OUTPUT_DIR/wsm-desktop-live.iso"
+ISO_ROOT="$OUTPUT_DIR/.wsm-desktop-live.iso-root"
 BUILD_LOG="$OUTPUT_DIR/build.log"
 CHANNELS_FILE="$OUTPUT_DIR/channels.resolved.scm"
 CHANNELS_LOG="$OUTPUT_DIR/channel-resolution.log"
@@ -69,7 +70,7 @@ MANIFEST_FILE="$OUTPUT_DIR/manifest.json"
 CHECKSUMS_FILE="$OUTPUT_DIR/SHA256SUMS"
 
 # Preserve every previous attempt; use a fresh WSM_ISO_DIR for another run.
-for output in "$ISO_OUTPUT" "$BUILD_LOG" "$CHANNELS_FILE" "$CHANNELS_LOG" "$MANIFEST_FILE" "$CHECKSUMS_FILE"; do
+for output in "$ISO_OUTPUT" "$ISO_ROOT" "$BUILD_LOG" "$CHANNELS_FILE" "$CHANNELS_LOG" "$MANIFEST_FILE" "$CHECKSUMS_FILE"; do
     if [ -e "$output" ] || [ -L "$output" ]; then
         printf '%s\n' "build-iso: refusing to overwrite existing output: $output" >&2
         exit 3
@@ -93,6 +94,7 @@ printf '%s\n' "build-iso: source=$SOURCE_COMMIT"
 printf '%s\n' "build-iso: channel=$CHANNEL_COMMIT"
 printf '%s\n' "build-iso: profile=$PROFILE"
 printf '%s\n' "build-iso: output=$ISO_OUTPUT"
+printf '%s\n' "build-iso: GC root=$ISO_ROOT"
 printf '%s\n' "build-iso: resolving locked channels (Guix authentication is not disabled)"
 
 # Resolve the exact channel set through the same time-machine lock used below.
@@ -114,10 +116,29 @@ if grep -Eiq 'channel authentication disabled' "$CHANNELS_FILE" "$CHANNELS_LOG";
     exit 7
 fi
 
+RESOLVED_CHANNEL_COMMIT=$(python3 - "$CHANNELS_FILE" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+matches = re.findall(r'\(commit\s+"([0-9a-f]{40})"\)', text)
+if len(matches) != 1:
+    raise SystemExit("expected exactly one resolved Guix channel commit")
+print(matches[0])
+PY
+)
+if [ "$RESOLVED_CHANNEL_COMMIT" != "$CHANNEL_COMMIT" ]; then
+    printf '%s\n' "build-iso: resolved channel commit does not match channels.lock.scm." >&2
+    printf '%s\n' "build-iso: expected=$CHANNEL_COMMIT resolved=$RESOLVED_CHANNEL_COMMIT" >&2
+    exit 8
+fi
+
 printf '%s\n' "build-iso: building with locked Guix channel; see build.log"
 if guix time-machine -C "$LOCK" -L "$ROOT" -- system image \
     --no-grafts \
-    --root="$ISO_OUTPUT" \
+    --save-provenance \
+    --root="$ISO_ROOT" \
     --image-type=iso9660 \
     --system=x86_64-linux \
     "$PROFILE" >"$BUILD_LOG" 2>&1; then
@@ -141,24 +162,117 @@ if grep -Eiq 'channel is not trusted|channel .* not trusted' "$CHANNELS_FILE" "$
     CHANNEL_TRUST_WARNING=true
 fi
 
-if [ ! -L "$ISO_OUTPUT" ] || [ ! -e "$ISO_OUTPUT" ]; then
-    printf '%s\n' "build-iso: Guix returned success but did not create the expected image link." >&2
+if [ ! -L "$ISO_ROOT" ] || [ ! -e "$ISO_ROOT" ]; then
+    printf '%s\n' "build-iso: Guix returned success but did not create the expected GC-root link." >&2
     exit 4
 fi
-STORE_PATH=$(readlink -f "$ISO_OUTPUT")
+STORE_PATH=$(readlink -f "$ISO_ROOT")
 if [ ! -f "$STORE_PATH" ] || [ ! -s "$STORE_PATH" ]; then
     printf '%s\n' "build-iso: resolved image is missing, not a regular file, or empty." >&2
     exit 4
 fi
 
+# The GC-root remains a symlink to the immutable store object. The user-facing
+# ISO must be a regular file so QEMU and release uploaders do not need to
+# dereference a store link outside the output directory.
+ISO_TEMP=$(mktemp "$OUTPUT_DIR/.wsm-desktop-live.iso.tmp.XXXXXX")
+cleanup_iso_temp() {
+    if [ -n "$ISO_TEMP" ]; then
+        rm -f -- "$ISO_TEMP"
+    fi
+}
+trap cleanup_iso_temp EXIT HUP INT TERM
+if ! cp -- "$STORE_PATH" "$ISO_TEMP"; then
+    printf '%s\n' "build-iso: cannot materialize the ISO from the Guix store." >&2
+    exit 4
+fi
+if ! python3 - "$ISO_TEMP" "$ISO_OUTPUT" "$STORE_PATH" <<'PY'
+import hashlib
+import os
+import sys
+from pathlib import Path
+
+temporary = Path(sys.argv[1])
+destination = Path(sys.argv[2])
+store_image = Path(sys.argv[3])
+
+def digest(path: Path) -> str:
+    hasher = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+def has_iso9660_primary_volume_descriptor(path: Path) -> bool:
+    """Check the ISO9660 PVD header at logical sector 16."""
+    pvd_offset = 16 * 2048
+    if path.stat().st_size < pvd_offset + 7:
+        return False
+    with path.open("rb") as stream:
+        stream.seek(pvd_offset)
+        header = stream.read(7)
+    return (
+        len(header) == 7
+        and header[0] == 1
+        and header[1:6] == b"CD001"
+        and header[6] == 1
+    )
+
+published = False
+try:
+    if destination.exists() or destination.is_symlink():
+        raise SystemExit(f"refusing to overwrite existing ISO: {destination}")
+    if not temporary.is_file() or temporary.stat().st_size == 0:
+        raise SystemExit("materialized ISO is missing, not regular, or empty")
+    if not has_iso9660_primary_volume_descriptor(temporary):
+        raise SystemExit(
+            "materialized image lacks an ISO9660 Primary Volume Descriptor "
+            "(type 1, CD001, version 1) at sector 16"
+        )
+    if not store_image.is_file() or temporary.stat().st_size != store_image.stat().st_size:
+        raise SystemExit("materialized ISO size differs from the Guix store image")
+    if digest(temporary) != digest(store_image):
+        raise SystemExit("materialized ISO checksum differs from the Guix store image")
+    os.chmod(temporary, 0o644)
+    with temporary.open("rb+") as stream:
+        os.fsync(stream.fileno())
+    # link() atomically creates the destination and refuses to overwrite it.
+    os.link(temporary, destination)
+    published = True
+    temporary.unlink()
+except Exception:
+    if published:
+        try:
+            destination.unlink()
+        except OSError:
+            pass
+    try:
+        temporary.unlink()
+    except OSError:
+        pass
+    raise
+PY
+then
+    printf '%s\n' "build-iso: failed to publish a regular ISO file." >&2
+    exit 4
+fi
+ISO_TEMP=""
+trap - EXIT HUP INT TERM
+if [ ! -f "$ISO_OUTPUT" ] || [ -L "$ISO_OUTPUT" ] || [ ! -s "$ISO_OUTPUT" ]; then
+    printf '%s\n' "build-iso: materialized ISO is not a non-empty regular file." >&2
+    exit 4
+fi
+
 WSM_SOURCE_COMMIT="$SOURCE_COMMIT" \
 WSM_CHANNEL_COMMIT="$CHANNEL_COMMIT" \
+WSM_RESOLVED_CHANNEL_COMMIT="$RESOLVED_CHANNEL_COMMIT" \
 WSM_CHANNEL_TRUST_WARNING="$CHANNEL_TRUST_WARNING" \
 WSM_GUIX_LOCKED_VERSION="$GUIX_LOCKED_VERSION" \
 WSM_PROFILE="$PROFILE" \
 WSM_PROFILE_SHA256="$PROFILE_SHA256" \
 WSM_LOCK="$LOCK" \
 WSM_ISO_OUTPUT="$ISO_OUTPUT" \
+WSM_GC_ROOT="$ISO_ROOT" \
 WSM_STORE_PATH="$STORE_PATH" \
 WSM_CHANNELS_FILE="$CHANNELS_FILE" \
 WSM_CHANNELS_LOG="$CHANNELS_LOG" \
@@ -180,6 +294,7 @@ def digest(path: Path) -> str:
     return hasher.hexdigest()
 
 iso = Path(os.environ["WSM_ISO_OUTPUT"])
+gc_root = Path(os.environ["WSM_GC_ROOT"])
 store_path = Path(os.environ["WSM_STORE_PATH"])
 channels = Path(os.environ["WSM_CHANNELS_FILE"])
 channels_log = Path(os.environ["WSM_CHANNELS_LOG"])
@@ -196,9 +311,12 @@ manifest = {
         "filename": iso.name,
         "format": "iso9660",
         "system": "x86_64-linux",
+        "regular_file": iso.is_file() and not iso.is_symlink(),
         "store_path": str(store_path),
-        "size_bytes": store_path.stat().st_size,
-        "sha256": digest(store_path),
+        "gc_root": gc_root.name,
+        "size_bytes": iso.stat().st_size,
+        "sha256": digest(iso),
+        "store_object_sha256": digest(store_path),
     },
     "source": {
         "commit": os.environ["WSM_SOURCE_COMMIT"],
@@ -208,6 +326,7 @@ manifest = {
         "channel_lock": lock.name,
         "channel_lock_sha256": digest(lock),
         "locked_guix_channel_commit": os.environ["WSM_CHANNEL_COMMIT"],
+        "resolved_guix_channel_commit": os.environ["WSM_RESOLVED_CHANNEL_COMMIT"],
         "untrusted_channel_warning_present": os.environ["WSM_CHANNEL_TRUST_WARNING"] == "true",
     },
     "guix": {
@@ -223,8 +342,9 @@ manifest = {
     },
     "build": {
         "command": [
-            "guix", "time-machine", "-C", str(lock), "--", "system", "image",
-            "--no-grafts", f"--root={iso}", "--image-type=iso9660",
+            "guix", "time-machine", "-C", str(lock), "-L", str(lock.parent), "--",
+            "system", "image", "--no-grafts", "--save-provenance",
+            f"--root={gc_root}", "--image-type=iso9660",
             "--system=x86_64-linux", str(profile),
         ],
         "log": build_log.name,
