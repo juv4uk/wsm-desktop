@@ -102,6 +102,16 @@
           },
           "note": {
             "type": "string"
+          },
+          "evidence": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Artifact paths that support this specific pass/fail result; the source hardware report alone is provenance, not functional proof."
           }
         }
       }
