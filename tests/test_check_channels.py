@@ -18,6 +18,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from check_channels import (  # noqa: E402
     GUIX_INTRODUCTION_COMMIT,
     GUIX_INTRODUCTION_FINGERPRINT,
+    NONGUIX_INTRODUCTION_COMMIT,
+    NONGUIX_INTRODUCTION_FINGERPRINT,
     POLICY_LOCKS,
     SchemeString,
     check,
@@ -30,8 +32,6 @@ from check_channels import (  # noqa: E402
 
 GUIX_COMMIT = "4e5195be20d9b124df8a8bb69213412236e4668e"
 NONGUIX_COMMIT = "c" * 40
-NONGUIX_INTRODUCTION_COMMIT = "b" * 40
-NONGUIX_FINGERPRINT = "A" * 40
 
 
 def channel(
@@ -64,7 +64,7 @@ NONGUIX_CHANNEL = channel(
     "https://gitlab.com/nonguix/nonguix",
     NONGUIX_COMMIT,
     NONGUIX_INTRODUCTION_COMMIT,
-    NONGUIX_FINGERPRINT,
+    NONGUIX_INTRODUCTION_FINGERPRINT,
 )
 GOOD_FREE = "(list " + GUIX_CHANNEL + ")"
 GOOD_COMPATIBILITY = "(list " + GUIX_CHANNEL + " " + NONGUIX_CHANNEL + ")"
@@ -144,9 +144,19 @@ class CompatibilityPolicyTests(unittest.TestCase):
         self.assertTrue(any("exact allow-listed repository URL" in item for item in problems))
 
     def test_compatibility_introduction_requires_full_fingerprint(self) -> None:
-        bad = NONGUIX_CHANNEL.replace(NONGUIX_FINGERPRINT, "not-a-fingerprint")
+        bad = NONGUIX_CHANNEL.replace(NONGUIX_INTRODUCTION_FINGERPRINT, "not-a-fingerprint")
         problems = check("(list " + GUIX_CHANNEL + " " + bad + ")", "compatibility")
         self.assertTrue(any("full 40-hex-character fingerprint" in item for item in problems))
+
+    def test_noncanonical_nonguix_introduction_commit_is_refused(self) -> None:
+        bad = NONGUIX_CHANNEL.replace(NONGUIX_INTRODUCTION_COMMIT, "b" * 40)
+        problems = check("(list " + GUIX_CHANNEL + " " + bad + ")", "compatibility")
+        self.assertTrue(any("canonical Nonguix trust root" in item for item in problems))
+
+    def test_noncanonical_nonguix_fingerprint_is_refused(self) -> None:
+        bad = NONGUIX_CHANNEL.replace(NONGUIX_INTRODUCTION_FINGERPRINT, "A" * 40)
+        problems = check("(list " + GUIX_CHANNEL + " " + bad + ")", "compatibility")
+        self.assertTrue(any("canonical Nonguix trust root" in item for item in problems))
 
 
 class AdversarialStructureTests(unittest.TestCase):
