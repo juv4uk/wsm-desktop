@@ -51,14 +51,7 @@
         "runtime_status": "unknown",
         "redistribution_status": "unknown"
       },
-      "functional_tests": [
-        {
-          "capability": "drm-connector-detected",
-          "status": "passed",
-          "method": "read-only DRM sysfs inventory",
-          "result": "At least one connector is present."
-        }
-      ],
+      "functional_tests": [],
       "evidence": [
         {
           "kind": "live-observation",
@@ -77,10 +70,7 @@
       "criticality": [
         "primary-display"
       ],
-      "identity": {
-        "manufacturer": "Example Display",
-        "model": "Example 2560x1440 Monitor"
-      },
+      "identity": {},
       "discovery_status": "discovered",
       "driver": {
         "status": "not-applicable"
@@ -93,30 +83,20 @@
       "display": {
         "connector": "DP-1",
         "connected": true,
-        "edid_manufacturer": "EXM",
-        "edid_product_code": "1234",
         "advertised_modes": [
-          "2560x1440@60Hz",
-          "1920x1080@60Hz"
+          "2560x1440",
+          "1920x1080"
         ],
-        "active_mode": "2560x1440@60Hz",
-        "refresh_rate_hz": 60
+        "active_mode": "2560x1440"
       },
-      "functional_tests": [
-        {
-          "capability": "active-display-mode",
-          "status": "passed",
-          "method": "DRM/KMS state",
-          "result": "2560x1440 at 60 Hz is active."
-        }
-      ],
+      "functional_tests": [],
       "evidence": [
         {
           "kind": "live-observation",
           "source": "sysfs:/sys/class/drm",
           "observed_at": "2026-11-25T13:45:00Z",
           "confidence": "confirmed",
-          "summary": "Connector DP-1 is connected and has an active mode."
+          "summary": "Connector DP-1 reports connected status and an active mode; no end-to-end display test was performed."
         }
       ],
       "recommendations": []
@@ -124,7 +104,8 @@
   ],
   "warnings": [],
   "limitations": [
-    "Illustrative fixture only; values are not a real user probe."
+    "Illustrative fixture only; values are not a real user probe.",
+    "Connector state and active mode are observations, not functional display-test results; EDID identity and GPU relationship are not represented."
   ],
   "privacy": {
     "profile": "strict-local",

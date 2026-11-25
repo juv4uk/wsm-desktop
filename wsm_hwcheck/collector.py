@@ -331,8 +331,8 @@ def _usb_devices(sysfs_root: Path, observed_at: str) -> list[dict[str, Any]]:
             bus="usb",
             observed_at=observed_at,
             source=f"sysfs:/bus/usb/devices/{entry.name}",
-            summary="USB device identity and driver binding were read from sysfs.",
-            driver=_driver_facts(entry),
+            summary="USB parent identity was read; interface-level class and driver binding are not collected.",
+            driver={"status": "unknown"},
             identity=identity,
         ))
     return devices
@@ -474,6 +474,8 @@ def collect_report(
         "limitations": [
             "v0.1.0 performs inventory only; it does not prove end-to-end device functionality.",
             "Firmware requirements and runtime firmware load status remain unknown until a dedicated kernel-log and firmware-path collector is reviewed.",
+            "USB v0.1 records parent-device identity only; composite interface classes, per-interface driver bindings, and parent/interface relationships are not collected.",
+            "Display v0.1 records DRM connector state and modes only; it does not decode EDID or establish a connector-to-GPU relationship.",
             "No remote hardware database lookup or probe upload is performed.",
         ],
         "privacy": {

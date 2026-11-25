@@ -95,6 +95,7 @@ def build_qemu_command(
     return [
         qemu,
         "-machine", "q35,accel=tcg",
+        "-cpu", "max",
         "-m", str(memory_mib),
         "-smp", str(cpus),
         "-cdrom", str(iso),

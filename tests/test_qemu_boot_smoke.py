@@ -55,6 +55,7 @@ class QemuBootSmokeTests(unittest.TestCase):
                 "driver=qcow2,node-name=wsm-disk,file=wsm-disk-file",
             )
             self.assertEqual(command[command.index("-serial") + 1], "stdio")
+            self.assertEqual(command[command.index("-cpu") + 1], "max")
             self.assertNotIn("-chardev", command)
             self.assertIn("-nic", command)
             self.assertEqual(command[command.index("-nic") + 1], "none")
