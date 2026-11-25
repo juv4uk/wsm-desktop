@@ -360,6 +360,7 @@ class DirectoryTests(unittest.TestCase):
             root = Path(temporary)
             model = root / "gigabyte" / "h170-gaming-3"
             prepare_artifact_root(model)
+            (model / "profile.scm").unlink()
             evidence = bundle(profile={
                 "vendor": "GIGABYTE",
                 "model": "H170 Gaming 3",
@@ -378,7 +379,8 @@ class DirectoryTests(unittest.TestCase):
             root = Path(temporary)
             model = root / "gigabyte" / "h170-gaming-3"
             prepare_artifact_root(model)
-            (model / "profile.scm").write_text(";; Synthetic test profile\n", encoding="utf-8")
+            profile_bytes = b";; Synthetic test profile\n"
+            (model / "profile.scm").write_bytes(profile_bytes)
             evidence = model / "evidence.json"
             document = bundle(
                 profile={
@@ -387,6 +389,7 @@ class DirectoryTests(unittest.TestCase):
                     "slug": "gigabyte/h170-pro",
                 }
             )
+            document["profile_source"]["sha256"] = hashlib.sha256(profile_bytes).hexdigest()
             evidence.write_text(json.dumps(document), encoding="utf-8")
             problems = validate_directory(evidence, root)
         self.assertTrue(any("does not match the directory" in item for item in problems))
@@ -396,7 +399,8 @@ class DirectoryTests(unittest.TestCase):
             root = Path(temporary)
             model = root / "gigabyte" / "h170-gaming-3"
             prepare_artifact_root(model)
-            (model / "profile.scm").write_text(";; synthetic fixture\n", encoding="utf-8")
+            profile_bytes = b";; synthetic fixture\n"
+            (model / "profile.scm").write_bytes(profile_bytes)
             evidence = model / "evidence.json"
             document = bundle(
                 profile={
@@ -405,6 +409,7 @@ class DirectoryTests(unittest.TestCase):
                     "slug": "gigabyte/h170-gaming-3",
                 }
             )
+            document["profile_source"]["sha256"] = hashlib.sha256(profile_bytes).hexdigest()
             evidence.write_text(json.dumps(document), encoding="utf-8")
             problems = validate_directory(evidence, root)
         self.assertEqual(problems, [])
