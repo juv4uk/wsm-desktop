@@ -21,9 +21,10 @@
 - [ ] Окремо перевірити channels/free.scm та systems/minimal.scm на актуальній Guix-інсталяції.
 - [ ] Побудувати й завантажити мінімальну Guix System у QEMU.
 - [ ] Порівняти update, rollback, store growth, package availability, hardware support та UX.
-- [ ] Підготувати problem register та запропонувати primary backend або дві незалежні редакції.
+- [x] Прийняти ADR 0004: перший backend — GNU Guix, Nix відкладено.
+- [ ] Підготувати problem register для Guix-шляху.
 
-**Прийняття:** є відтворювані результати обох прототипів або чесно зафіксовані обмеження; рішення відображене в ADR 0004 після погодження.
+**Прийняття:** рішення про перший backend зафіксоване в ADR 0004; порівняння з Nix більше не блокує жодного пункту нижче.
 
 ## M2 — feasibility Calamares
 
