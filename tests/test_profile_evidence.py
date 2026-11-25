@@ -230,7 +230,7 @@ class DirectoryTests(unittest.TestCase):
     def test_invalid_utf8_evidence_is_a_controlled_error(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             evidence = Path(directory) / "evidence.json"
-            evidence.write_bytes(b"\\xff\\xfe")
+            evidence.write_bytes(bytes([0xFF, 0xFE]))
             document, problems = read_document(evidence)
         self.assertIsNone(document)
         self.assertTrue(any("cannot read evidence JSON" in problem for problem in problems))
