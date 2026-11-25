@@ -367,6 +367,45 @@ exit 8
             self.assertFalse((output_dir / "wsm-desktop-live.iso").exists())
             self.assertFalse((output_dir / "manifest.json").exists())
 
+    def test_builder_refuses_a_resolved_channel_commit_mismatch(self) -> None:
+        script = ROOT / "scripts" / "build_iso.sh"
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_root = Path(temporary)
+            bin_dir = temporary_root / "bin"
+            output_dir = temporary_root / "out"
+            bin_dir.mkdir()
+            output_dir.mkdir()
+            fake_image = temporary_root / "guix-store-image.iso"
+            self._write_minimal_iso9660(fake_image)
+            args_log = temporary_root / "guix-args.txt"
+            self._fake_guix(bin_dir)
+
+            environment = os.environ.copy()
+            environment["PATH"] = str(bin_dir) + os.pathsep + os.defpath
+            environment["WSM_ISO_DIR"] = str(output_dir)
+            environment["WSM_TEST_GUIX_ARGS"] = str(args_log)
+            environment["WSM_TEST_IMAGE"] = str(fake_image)
+            environment["WSM_TEST_CHANNEL_COMMIT"] = "0" * 40
+            environment.pop("GUIX_PACKAGE_PATH", None)
+
+            result = subprocess.run(
+                ["/bin/sh", str(script)],
+                cwd=temporary_root,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 8, result.stderr)
+            self.assertIn("resolved channel commit does not match", result.stderr)
+            calls = args_log.read_text(encoding="utf-8")
+            self.assertIn("describe|-f|channels", calls)
+            self.assertNotIn("|--|system|image", calls)
+            self.assertFalse((output_dir / "wsm-desktop-live.iso").exists())
+            self.assertFalse((output_dir / ".wsm-desktop-live.iso-root").exists())
+            self.assertFalse((output_dir / "manifest.json").exists())
+
     def test_builder_fails_closed_when_channel_authentication_is_disabled(self) -> None:
         script = ROOT / "scripts" / "build_iso.sh"
         with tempfile.TemporaryDirectory() as temporary:
