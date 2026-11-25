@@ -24,7 +24,9 @@ class OptionalHardwareProviderTests(unittest.TestCase):
         self.assertIn("NVML_ERROR_NO_PERMISSION", self.audit)
         self.assertIn("nvmlDeviceGetHandleByPciBusId_v2", self.audit)
         self.assertIn("не гарантується між перезавантаженнями", self.lower)
-        self.assertIn("ініціалізувати цільовий gpu", self.lower)
+        self.assertIn("можуть ініціалізувати цільовий gpu", self.lower)
+        self.assertIn("не є буквально пасивним filesystem reader", self.lower)
+        self.assertIn("opt-in diagnostics/support mode", self.lower)
         self.assertIn("GeForce/RTX", self.audit)
         self.assertIn("board serial", self.lower)
 
