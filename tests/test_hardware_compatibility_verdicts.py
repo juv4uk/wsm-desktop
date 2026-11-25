@@ -78,6 +78,13 @@ class HardwareCompatibilityVerdictPolicyTests(unittest.TestCase):
         self.assertIn("не змінює sysfs", self.lower)
 
 
+    def test_not_collected_maps_to_unknown_not_not_tested_or_not_detected(self) -> None:
+        self.assertIn("`not-collected`", self.text)
+        self.assertIn("verdict має бути `unknown`", self.lower)
+        self.assertIn("це не `not-tested`", self.lower)
+        self.assertIn("і не `not-detected`", self.lower)
+        self.assertIn("не може задовольняти critical evidence gate", self.lower)
+
     def test_not_detected_critical_function_requires_confirmed_fallback(self) -> None:
         self.assertIn("якщо вона critical і fallback не підтверджено", self.lower)
         self.assertIn("не дозволяти confirmable plan", self.lower)
