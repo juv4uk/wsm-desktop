@@ -38,32 +38,17 @@ class VerdictTests(unittest.TestCase):
 
 
 class ExitMappingTests(unittest.TestCase):
-    def test_missing_tool_is_not_run_not_fail(self) -> None:
-        self.assertEqual(from_exit("x", 127, "guix not found")["status"], "not-run")
+    def test_could_not_start_a_check_is_not_run(self) -> None:
+        self.assertEqual(from_exit("x", -1, "python unavailable")["status"], "not-run")
+
+    def test_child_exit_127_is_a_failure(self) -> None:
+        self.assertEqual(from_exit("x", 127, "child returned 127")["status"], "fail")
 
     def test_zero_is_pass(self) -> None:
         self.assertEqual(from_exit("x", 0, "")["status"], "pass")
 
     def test_nonzero_is_fail(self) -> None:
         self.assertEqual(from_exit("x", 1, "")["status"], "fail")
-
-
-class TestRunnerTests(unittest.TestCase):
-    def test_test_suite_uses_one_bounded_unittest_discovery_process(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            (root / "tests").mkdir()
-            (root / "tests" / "test_sample.py").write_text("pass\n", encoding="utf-8")
-            with patch("release_gate.ROOT", root), patch(
-                "release_gate.run", return_value=(0, "OK")
-            ) as run_mock:
-                result = check_tests()
-        self.assertEqual(result["status"], "pass")
-        self.assertEqual(run_mock.call_count, 1)
-        command = run_mock.call_args.args[0]
-        self.assertEqual(command[1:6], ["-m", "unittest", "discover", "-s", "tests"])
-        self.assertIn("-v", command)
-        self.assertEqual(run_mock.call_args.kwargs["timeout"], 900)
 
 
 class TestRunnerTests(unittest.TestCase):
@@ -96,6 +81,15 @@ class ChannelGateTests(unittest.TestCase):
         self.assertIn("Compatibility: NOT_CONFIGURED", result["detail"])
         self.assertIn("no Compatibility product claim", result["detail"])
         run_check.assert_called_once()
+
+    def test_missing_required_free_lock_is_a_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with patch("release_gate.ROOT", root), patch("release_gate.run") as run_mock:
+                result = check_channels()
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("required Free lock is missing", result["detail"])
+        run_mock.assert_not_called()
 
     def test_invalid_configured_compatibility_lock_fails(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
