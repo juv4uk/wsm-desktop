@@ -30,25 +30,14 @@ changes and accurate documentation.
 
 ## Documentation language policy
 
-The repository previously mixed languages without a stated rule: the README was
-English while `CONTRIBUTING.md` and `SECURITY.md` were Ukrainian, and nothing said
-which file a translator should treat as the original. The rule is now explicit and
-is checked by `scripts/check_docs.py`.
+The canonical language for **all project documentation is Ukrainian**. This applies to `README.md`, `CONTRIBUTING.md`, `SECURITY.md`, and every document under `docs/`.
 
-- **Entry points are canonical in English.** `README.md`, `CONTRIBUTING.md` and
-  `SECURITY.md` — the three files a first-time visitor reads.
-- **Design and research documents are canonical in Ukrainian.** Everything under
-  `docs/`, including the ADRs, the roadmap, and the hardware and testing notes.
-- **Subdirectory READMEs follow the language of the directory they document.**
-- **Translations sit beside the original and carry a language suffix.** A Ukrainian
-  translation of `CONTRIBUTING.md` is `CONTRIBUTING.uk.md`; an English translation of
-  `docs/ETHICS.md` is `docs/ETHICS.en.md`. A translation is never the only copy of a
-  document, and it must name the canonical file it follows.
-- Translations are optional and may lag. The canonical document is the source of
-  truth in any disagreement.
+- **English translations** live next to the canonical file and use the `.en.md` suffix, for example `README.en.md`, `CONTRIBUTING.en.md`, and `docs/ETHICS.en.md`.
+- A translation is never the only copy of a document; it must identify the canonical Ukrainian source.
+- Translations are optional and may lag. The Ukrainian canonical document is authoritative in any disagreement.
+- Source code, commit messages, and issue discussions may use English when that makes upstream collaboration easier.
 
-If a document genuinely belongs in the other language, move the whole document
-rather than adding a second copy under a different name.
+Do not create a translated copy as the only version of a document. Update the Ukrainian canonical source first.
 
 ## Checks
 
