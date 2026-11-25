@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import qemu_boot_smoke  # noqa: E402
-from qemu_boot_smoke import build_qemu_command  # noqa: E402
+from qemu_boot_smoke import build_qemu_command, validate_ovmf_image  # noqa: E402
 
 MARKER = "WSM_LIVE_READY"
 
@@ -77,6 +77,24 @@ class FirmwareSelectionTests(unittest.TestCase):
         image = Path("/tmp/OVMF.fd")
         with self.assertRaises(ValueError):
             self.command(firmware="uefi", ovmf_code=image, ovmf_vars=image)
+
+    def test_ovmf_inputs_must_be_nonempty_regular_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            code = root / "OVMF_CODE.fd"
+            vars_template = root / "OVMF_VARS.fd"
+            empty = root / "empty.fd"
+            code.write_bytes(b"code")
+            vars_template.write_bytes(b"vars")
+            empty.touch()
+            self.assertEqual(validate_ovmf_image(code, "OVMF CODE"), code.resolve())
+            self.assertEqual(validate_ovmf_image(vars_template, "OVMF VARS"), vars_template.resolve())
+            with self.assertRaisesRegex(ValueError, "empty"):
+                validate_ovmf_image(empty, "OVMF VARS")
+            link = root / "OVMF_VARS_LINK.fd"
+            link.symlink_to(vars_template)
+            with self.assertRaisesRegex(ValueError, "symlink"):
+                validate_ovmf_image(link, "OVMF VARS")
 
 
 class HarnessCliTests(unittest.TestCase):
@@ -139,6 +157,8 @@ class HarnessCliTests(unittest.TestCase):
             self.assertEqual(copied["destination"], vars_template.read_bytes())
             self.assertNotEqual(copied["destination"], code.read_bytes())
             payload = json.loads(output.getvalue())
+            self.assertFalse(payload["host_efi_variables_modified"])
+            self.assertTrue(payload["guest_uefi_vars_writable"])
             self.assertIn("unit=0,readonly=on", " ".join(payload["qemu_command"]))
             self.assertIn("unit=1", " ".join(payload["qemu_command"]))
             self.assertEqual(code.read_bytes(), b"READ ONLY FIRMWARE CODE")
