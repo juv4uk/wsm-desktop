@@ -9,9 +9,10 @@ alike - one implementation, one behaviour.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
@@ -34,7 +35,12 @@ def load(path: Path) -> dict[str, Any]:
         raise EvidenceUnavailable(f"cannot read evidence bundle {path}: {exc}") from exc
 
 
-def problems(document: dict[str, Any], schema: dict[str, Any] | None = None) -> list[str]:
+def problems(
+    document: dict[str, Any],
+    schema: dict[str, Any] | None = None,
+    *,
+    artifact_root: Path | None = None,
+) -> list[str]:
     """Return every reason this bundle is not evidence. Empty means acceptable."""
     schema = schema or load_schema()
     found: list[str] = []
@@ -47,7 +53,7 @@ def problems(document: dict[str, Any], schema: dict[str, Any] | None = None) -> 
         ) from None
 
     try:
-        jsonschema.validate(document, schema)
+        jsonschema.validate(document, schema, format_checker=jsonschema.FormatChecker())
     except jsonschema.ValidationError as exc:
         location = "/".join(str(part) for part in exc.absolute_path) or "<root>"
         return [f"schema: {location}: {exc.message}"]
@@ -69,7 +75,79 @@ def problems(document: dict[str, Any], schema: dict[str, Any] | None = None) -> 
     if EMAIL.search(document["verified_by"]):
         found.append("verified_by must not contain an e-mail address")
 
+    if artifact_root is not None:
+        found.extend(validate_artifact_files(document["artifacts"], artifact_root))
+
     return found
+
+
+def validate_artifact_files(
+    artifacts: list[dict[str, Any]],
+    root: Path,
+) -> list[str]:
+    """Verify safe relative paths and SHA-256 digests against files inside a profile."""
+    problems: list[str] = []
+    if root.is_symlink() or not root.is_dir():
+        return ["profile directory must be a real directory, not a symlink or missing path"]
+    root_path = root.resolve()
+
+    for artifact in artifacts:
+        relative = artifact["path"]
+        raw_parts = relative.split("/")
+        posix_path = PurePosixPath(relative)
+        if (
+            "\\" in relative
+            or relative.startswith("/")
+            or posix_path.is_absolute()
+            or bool(PureWindowsPath(relative).drive)
+            or ":" in relative
+            or not posix_path.parts
+            or any(part in {"", ".", ".."} for part in raw_parts)
+        ):
+            problems.append(
+                f"artifact path {relative!r} must be a safe relative path under the profile directory"
+            )
+            continue
+
+        candidate = root
+        has_symlink = False
+        for part in posix_path.parts:
+            candidate = candidate / part
+            if candidate.is_symlink():
+                has_symlink = True
+                break
+        if has_symlink:
+            problems.append(f"artifact path {relative!r} must not traverse a symlink")
+            continue
+
+        try:
+            resolved = candidate.resolve(strict=True)
+            resolved.relative_to(root_path)
+        except (OSError, ValueError):
+            problems.append(f"artifact path {relative!r} is missing or escapes the profile directory")
+            continue
+
+        if not resolved.is_file():
+            problems.append(f"artifact path {relative!r} is not a regular file")
+            continue
+
+        digest = hashlib.sha256()
+        try:
+            with resolved.open("rb") as stream:
+                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                    digest.update(chunk)
+        except OSError as exc:
+            problems.append(f"artifact path {relative!r} cannot be read: {exc}")
+            continue
+
+        actual = digest.hexdigest()
+        if actual != artifact["sha256"]:
+            problems.append(
+                f"artifact path {relative!r} sha256 mismatch: "
+                f"expected {artifact['sha256']}, got {actual}"
+            )
+
+    return problems
 
 
 def slug_matches_directory(document: dict[str, Any], directory: Path, root: Path) -> list[str]:
