@@ -72,6 +72,14 @@ jobs:
           # wrong reason or require adding a nonfree channel to CI.
           exit $status
 
+      - name: Evaluate the home environment
+        # Sound lives in the home configuration, so a system-only evaluation
+        # would never touch the file that decides whether audio works.
+        run: |
+          set -euo pipefail
+          /usr/local/bin/guix time-machine -C channels.lock.scm -- \
+            home build systems/home.scm --dry-run
+
       - name: Note what was not evaluated
         if: always()
         run: |
