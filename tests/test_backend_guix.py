@@ -271,7 +271,7 @@ class HandoffRefusalTests(unittest.TestCase):
                 self.assert_refused("selection.disk", confirmed_plan(), selection(disk=disk))
 
     def test_full_name_rejects_control_and_format_characters(self) -> None:
-        for full_name in ("Ada\rLovelace", "Ada\tLovelace", "Ada\x00Lovelace", "Ada\u2028Lovelace", "Ada\u202eLovelace"):
+        for full_name in ("Ada\rLovelace", "Ada\tLovelace", "Ada\x00Lovelace", "Ada\u2028Lovelace", "Ada\u202eLovelace", "Ada\ud800Lovelace"):
             with self.subTest(full_name=repr(full_name)):
                 self.assert_refused("selection.full_name", confirmed_plan(), selection(full_name=full_name))
 
