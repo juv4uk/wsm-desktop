@@ -124,7 +124,7 @@ class HandoffSuccessTests(unittest.TestCase):
         self.assertEqual(result.plan_sha256, plan["plan_sha256"])
         self.assertEqual(
             result.argv,
-            ("guix", "system", "init", "/run/wsm/system.scm", "/mnt"),
+            ("guix", "time-machine", "-C", "/run/wsm/channels.lock.scm", "--", "system", "init", "/run/wsm/system.scm", "/mnt"),
         )
 
     def test_configuration_carries_ownership(self) -> None:
