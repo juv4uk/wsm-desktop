@@ -2,7 +2,7 @@ version = 1
 SPDX-PackageName = "WSM Desktop"
 
 [[annotations]]
-path = ["README.md", "CONTRIBUTING.md", "SECURITY.md", "docs/**", "systems/README.md", "installer/**/README.md", "wsm/README.md"]
+path = ["README.md", "README.en.md", "CONTRIBUTING.md", "CONTRIBUTING.en.md", "SECURITY.md", "SECURITY.en.md", "docs/**", "systems/README.md", "installer/**/README.md", "wsm/README.md"]
 precedence = "aggregate"
 SPDX-License-Identifier = "CC-BY-SA-4.0"
 

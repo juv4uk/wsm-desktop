@@ -5,6 +5,7 @@
 - Research snapshot: **2026-11-25**
 - Scope: pre-install discovery and evidence collection for WSM Desktop
 - Status: **initial assessment; not a dependency lock or final adoption decision**
+- Critical path: **no** — research input, not a blocker for the first preview image
 - Parent: [Issue #3](https://github.com/juv4uk/wsm-desktop/issues/3)
 - Detailed audit task: [Issue #4](https://github.com/juv4uk/wsm-desktop/issues/4)
 
