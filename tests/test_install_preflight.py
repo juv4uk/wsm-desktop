@@ -42,7 +42,11 @@ def make_profile_evidence(report: dict, root: Path) -> dict:
         "isa_level": "x86-64-v2",
         "verified_on": "2026-11-26",
         "verified_by": "local agent",
-        "verified_functions": [{"name": "synthetic-fixture", "status": "pass"}],
+        "verified_functions": [{
+            "name": "synthetic-fixture",
+            "status": "pass",
+            "evidence": ["artifacts/dmesg.txt"],
+        }],
         "known_limitations": [],
         "not_assessed": ["physical-device-functionality"],
         "artifacts": [{
