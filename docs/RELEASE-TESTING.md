@@ -152,36 +152,41 @@ python3 scripts/release_gate.py --iso build/wsm-desktop.iso --boot
 Запускає всі перевірки й пише `wsm-release-gate/1`:
 
 Free lock перевіряється завжди. Окремий Compatibility lock перевіряється,
-лише якщо `channels.compatibility.lock.scm` існує. Його відсутність явно
-позначається як `NOT_CONFIGURED` і не є ані помилкою Free baseline, ані
-доказом працездатності Compatibility-профілю. Наявний, але невалідний
-Compatibility lock дає `fail`.
-
+лише якщо `channels.compatibility.lock.scm` існує. Його відсутність
+позначається як `NOT_CONFIGURED` і переводить критерій `channels` у
+`not-run`: це не помилка Free baseline, але й не підтвердження Compatibility.
+Наявний, але невалідний Compatibility lock дає `fail`.
 
 | Критерій | Що перевіряє |
 | --- | --- |
 | `docs` | посилання, наявність заголовків, заборонені шаблони |
 | `channels` | Free lock завжди; Compatibility lock — якщо він налаштований |
-| `tests` | усі набори тестів |
+| `tests` | bounded `unittest discover` для всього набору |
 | `profile-evidence` | валідність bundle-ів заліза |
-| `image` | хеш, маніфест, ISO9660, завантаження в BIOS і UEFI |
+| `image` | nested `wsm-release-verdict/1`: checksum, manifest, ISO9660, BIOS і UEFI |
 
 `overall` буває `pass`, `fail` або **`incomplete`**. Одне `not-run` робить
 вердикт неповним: перевірка, яку не вдалося виконати, не доводить нічого.
+Вкладений ISO verifier може повернути код 0 і для `incomplete`; тому release-gate
+аналізує структурований JSON verdict, а не вважає будь-який нульовий код успіхом.
 
-Код виходу 1 буває лише при справжньому провалі. `incomplete` — це не привід
-зупиняти роботу, це привід знати, чого саме бракує.
+Коди виходу придатні для shell/CI:
 
-Приклад сьогоднішнього стану:
+- `0` — усі критерії мають `pass`;
+- `1` — є хоча б один реальний `fail`;
+- `2` — немає `fail`, але є `not-run`, отже `overall: incomplete`.
+
+Приклад стану без Compatibility lock та ISO:
 
 ```
 overall: incomplete
   docs               pass
-  channels           pass
+  channels           not-run   Compatibility lock NOT_CONFIGURED
   tests              pass
   profile-evidence   not-run   no hardware profile bundles exist yet
   image              not-run   no --iso supplied; nothing to verify
 ```
 
-Тобто: документація й канали в порядку, тести зелені, але **образу немає**, і
-доказів заліза теж. Це чесна картина, а не «майже готово».
+Тобто: Free policy та тести можуть бути зеленими, але не налаштований
+Compatibility lock, відсутні hardware evidence та неперевірений ISO не
+маскуються під успішний release gate.
