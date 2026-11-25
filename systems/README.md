@@ -1,15 +1,43 @@
-# Guix System configurations
+# Конфігурації Guix System
 
 <!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 
-The minimal.scm file is a bring-up example intended for syntax/build testing and disposable virtual machines. It is not a release profile, not a live image, and not a production installer target.
+Файл \`minimal.scm\` — мінімальний приклад для перевірки синтаксису, побудови системи та запуску у відокремленій QEMU-віртуальній машині. Це не профіль випуску WSM Desktop, не live-образ і не виробничий інсталятор.
 
-Before deploying to a target:
-- verify all filesystem identifiers;
-- verify EFI System Partition mount and bootloader target;
-- define regular user accounts through the generated configuration;
-- choose and test the desktop environment and services;
-- inspect the complete configuration;
-- test the exact configuration in QEMU.
+## Режими запуску віртуальної машини
 
-Do not run guix system init against a physical disk as a substitute for these tests.
+У GNU/Linux команда \`guix system vm CONFIG.scm\` за замовчуванням використовує завантаження безпосередньо ядра. Такий режим **не перевіряє bootloader**, оголошений у конфігурації операційної системи.
+
+Для повного ланцюжка завантаження через bootloader використовуйте \`guix system vm --full-boot CONFIG.scm\`. У цьому профілі вибрано BIOS GRUB (\`grub-bootloader\`) із ціллю \`/dev/vda\` для відокремленої BIOS/SeaBIOS VM. Це налаштування саме для повного BIOS-шляху; воно **не означає**, що звичайний \`guix system vm\` завжди створює MBR-образ або запускає GRUB.
+
+Команда \`guix system image --image-type=qcow2 CONFIG.scm\` — окрема операція генерації образу, а не інша назва звичайного \`vm\`. Поведінку типу образу й bootloader потрібно звіряти з посібником саме тієї ревізії Guix, яку вибрав channel snapshot.
+
+## Зафіксована перевірка 25 листопада 2026 року
+
+Локальний експеримент виконався у відокремленому WSL2/QEMU-середовищі без доступу до фізичних дисків хоста:
+
+| Перевірка | Результат |
+| --- | --- |
+| Guix | \`1.5.0-unstable-2026-08-23\` |
+| QEMU | \`11.1.2\` |
+| \`guix system build systems/minimal.scm\` | \`exit=0\`; результат \`/gnu/store/xd6z8y4vvf88drnrkwbr0fx9jzhxaxa4-system\` |
+| \`guix system vm systems/minimal.scm\` | \`exit=0\`; launcher \`/gnu/store/gpwv4s60qyr349f3mxbp4ybs4068yx5w-run-vm.sh\` |
+| \`guix system vm --no-graphic systems/minimal.scm\` | disposable QEMU/TCG дійшов до \`wsm-desktop login:\`; launcher \`/gnu/store/q4bp2nljgghxxrjvrnw22fvj48cr7447-run-vm.sh\`; завершено контрольованим виходом QEMU, \`exit=0\` |
+| \`guix system vm --full-boot --no-graphic systems/minimal.scm\` | SeaBIOS передав керування GRUB, з'явилося \`Welcome to GRUB!\`, але ядро не стартувало за 600 секунд на TCG; **повний boot через GRUB не підтверджений** |
+
+У звичайному VM-завантаженні після повідомлення про ранній boot Guile зафіксовано попередження GC та segfault процесу раннього завантаження. Система відновилася й дійшла до login prompt. Це спостереження не приховується й потребує окремого дослідження; сам факт появи login prompt не доводить відсутності інших проблем.
+
+### Походження Guix channel snapshot
+
+Експеримент використовував Guix commit \`4e5195be20d9b124df8a8bb69213412236e4668e\`, отриманий shallow checkout із вимкненою автентифікацією через повільне завантаження повної історії у WSL. Це корисний локальний експериментальний знімок, але **не автентифікований lock-файл і не доказ відтворюваної збірки**. Не використовуйте його як підтверджений production channel pin. Повторити перевірку з автентифікованим channel lock — окрема робота (#39).
+
+## Налаштування для цільового обладнання
+
+Перед розгортанням на фізичний ПК потрібно:
+- перевірити ідентифікатори всіх файлових систем і bootloader target;
+- для UEFI замінити \`grub-bootloader\` на \`grub-efi-bootloader\`, змонтувати EFI System Partition у \`/boot/efi\` і використовувати GPT-схему;
+- визначити облікові записи звичайних користувачів;
+- окремо вибрати й перевірити desktop environment та сервіси;
+- перевірити повну конфігурацію у QEMU з відповідним BIOS/UEFI boot path.
+
+Не використовуйте \`guix system init\` на фізичному диску як заміну цим перевіркам. У межах цього експерименту не виконувались запис на фізичний диск, зміни EFI/firmware хоста або встановлення системи на реальне обладнання.
