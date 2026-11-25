@@ -40,7 +40,7 @@ MAX_SERIAL_OUTPUT_TAIL_CHARS = 4000
 MAX_BOOT_MARKER_BYTES = 1024
 PROCESS_READ_CHUNK_BYTES = 64 * 1024
 POST_KILL_DRAIN_SECONDS = 0.5
-MAX_PROCESS_INPUT_BYTES = 4 * 1024
+MAX_PROCESS_INPUT_BYTES = 1024
 
 
 @dataclass(frozen=True)
@@ -139,7 +139,7 @@ def run_bounded_process(
         finally:
             try:
                 process.stdin.close()
-            except BrokenPipeError:
+            except OSError:
                 pass
 
     selector = selectors.DefaultSelector()
