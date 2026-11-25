@@ -113,6 +113,11 @@ if [ ! -s "$CHANNELS_FILE" ]; then
     printf '%s\n' "build-iso: locked channel description is empty." >&2
     exit 6
 fi
+if grep -Eiq 'channel authentication disabled' "$CHANNELS_FILE" "$CHANNELS_LOG"; then
+    printf '%s\n' "build-iso: refusing to build because channel authentication is disabled." >&2
+    grep -Ein 'channel authentication disabled' "$CHANNELS_FILE" "$CHANNELS_LOG" >&2 || true
+    exit 7
+fi
 
 printf '%s\n' "build-iso: building with locked Guix channel; see build.log"
 if guix time-machine -C "$LOCK" -- system image \
@@ -153,6 +158,7 @@ fi
 
 WSM_SOURCE_COMMIT="$SOURCE_COMMIT" \
 WSM_CHANNEL_COMMIT="$CHANNEL_COMMIT" \
+WSM_CHANNEL_TRUST_WARNING="$CHANNEL_TRUST_WARNING" \
 WSM_GUIX_CLIENT_VERSION="$GUIX_CLIENT_VERSION" \
 WSM_PROFILE="$PROFILE" \
 WSM_PROFILE_SHA256="$PROFILE_SHA256" \
