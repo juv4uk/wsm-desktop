@@ -328,7 +328,7 @@ Frontend реалізація може змінюватися (Calamares, інш
 
 ## 11. Стан реалізації
 
-Контракт описано повністю, реалізовано поки що одну його частину.
+Контракт описано повністю. Реалізація тепер має окремий read-only preflight, чистий Guix handoff adapter і standalone CLI для reviewable конфігурації; виконання інсталяції все ще відкладено.
 
 **Реалізовано** — `wsm_install/backend_guix.py`, адаптер для обраного backend-а:
 
@@ -340,6 +340,19 @@ Frontend реалізація може змінюватися (Calamares, інш
 - повертає argv як типізований список, а не рядок для shell;
 - анулює підтвердження, якщо після нього змінився план або вибір цілі.
 
-**Не реалізовано** — кроки `REALIZE` та `APPLY`: адаптер не виконує `guix system init`, не монтує цільовий диск і не перевіряє його ідентичність перед записом. Це наступний крок і він потребує середовища з Guix.
+**Standalone CLI** — `wsm_install/guix_handoff.py` приймає три JSON-файли: підтверджений plan, точний target selection і confirmation receipt. Наприклад:
 
-Тести: `tests/test_backend_guix.py` (20 тестів) покривають відмови з розділу 8 і не потребують Guix.
+```console
+python3 -m wsm_install.guix_handoff \
+  --plan confirmed-plan.json \
+  --selection target-selection.json \
+  --confirmation confirmation.json \
+  --output /run/wsm/system.scm \
+  --target-mountpoint /mnt
+```
+
+CLI перевіряє digest-и та явне поле `confirmed: true`, створює новий reviewable `.scm` файл із правами `0600` лише поза target mountpoint, не перезаписує наявний файл і друкує JSON handoff manifest з упорядкованим `argv`. Confirmation receipt — це локальне підтвердження від frontend-а, а не криптографічний підпис або доказ особи користувача. CLI не запускає команду з manifest-а.
+
+**Не реалізовано** — кроки `REALIZE` та `APPLY`: adapter і CLI не виконують `guix system init`, не монтують цільовий диск і не перевіряють його фізичну ідентичність перед записом. Цей крок потребує окремого QEMU install test із disposable virtual disk і Guix environment.
+
+Тести: `tests/test_backend_guix.py` (22 тести) перевіряють handoff contract; `tests/test_guix_handoff_cli.py` (6 тестів) перевіряють CLI, target-mount boundary, explicit confirmation, відмови без створення output і відсутність запису в target. Обидві групи не потребують Guix runtime.
