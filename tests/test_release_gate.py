@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -21,6 +22,7 @@ def verifier_payload(overrides: dict[str, object] | None = None) -> dict:
     return {
         "schema": "wsm-release-verdict/1",
         "artifact": "live.iso",
+        "artifact_sha256": hashlib.sha256(b"placeholder").hexdigest(),
         "overall": "incomplete" if "not-run" in overrides.values()
         else "fail" if "fail" in overrides.values() else "pass",
         "criteria": [
@@ -186,6 +188,18 @@ class ImageTests(unittest.TestCase):
         self.assertEqual(result["status"], "not-run")
         self.assertIn("QEMU unavailable", result["detail"])
 
+    def test_verifier_wrong_iso_sha256_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            iso = Path(temporary) / "live.iso"
+            iso.write_bytes(b"selected ISO bytes differ")
+            payload = verifier_payload()
+            completed = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=json.dumps(payload), stderr=""
+            )
+            with patch("release_gate.subprocess.run", return_value=completed):
+                result = check_image(iso, boot=False)
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("SHA-256 does not match", result["detail"])
     def test_verifier_wrong_iso_artifact_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             iso = Path(temporary) / "live.iso"
