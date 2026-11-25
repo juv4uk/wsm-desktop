@@ -3,9 +3,9 @@
 PYTHON ?= python3
 GUIX ?= guix
 
-.PHONY: check check-docs check-hardware-schema check-hwcheck check-installer check-qemu-harness check-validation-protocols check-minimal-system check-system vm-system
+.PHONY: check check-docs check-hardware-schema check-hwcheck check-installer check-qemu-harness check-validation-protocols check-minimal-system check-uefi-preboot-policy check-system vm-system
 
-check: check-docs check-hardware-schema check-hwcheck check-installer check-qemu-harness check-validation-protocols check-minimal-system
+check: check-docs check-hardware-schema check-hwcheck check-installer check-qemu-harness check-validation-protocols check-minimal-system check-uefi-preboot-policy
 
 check-docs:
 	$(PYTHON) scripts/check_docs.py
@@ -37,3 +37,6 @@ check-validation-protocols:
 
 check-minimal-system:
 	$(PYTHON) tests/test_minimal_system.py
+
+check-uefi-preboot-policy:
+	$(PYTHON) tests/test_uefi_preboot_probe_policy.py
