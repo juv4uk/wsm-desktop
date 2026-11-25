@@ -246,6 +246,48 @@ def render_guest_init(library_path: str) -> str:
     )
 
 
+def _install_guest_python_dependencies(work: Path) -> Path:
+    """Resolve an exact, pinned Python 3.11 dependency set for the temporary guest."""
+    if sys.version_info[:2] != (3, 11):
+        raise RuntimeError(
+            f"guest dependency staging requires host Python 3.11, got {sys.version.split()[0]}"
+        )
+    target = work / "guest-site"
+    target.mkdir()
+    requirements = ROOT / "requirements-qemu-guest.txt"
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--disable-pip-version-check",
+            "--no-compile",
+            "--only-binary=:all:",
+            "--requirement",
+            str(requirements),
+            "--target",
+            str(target),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=180,
+    )
+    total_bytes = sum(
+        item.stat().st_size
+        for item in target.rglob("*")
+        if item.is_file() and not item.is_symlink()
+    )
+    if not any(target.glob("jsonschema/__init__.py")):
+        raise RuntimeError("pinned guest dependency staging did not install jsonschema")
+    if total_bytes > MAX_GUEST_SITE_BYTES:
+        raise RuntimeError("pinned guest Python dependencies exceed the 64 MiB site-packages ceiling")
+    return target
+
+
 def _copy_runtime_dependencies(
     python_home: Path,
     rootfs: Path,
