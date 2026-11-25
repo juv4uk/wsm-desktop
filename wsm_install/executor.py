@@ -34,7 +34,7 @@ class ExecutorError(Exception):
         self.message = message
 
 
-@dataclass
+@dataclass(frozen=True)
 class StepResult:
     command: list[str]
     purpose: str
