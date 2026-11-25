@@ -18,7 +18,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from wsm_install.backend_guix import TargetSelection  # noqa: E402
-from wsm_install.guix_deploy import DeployCliError, _ensure_output_outside_target, main  # noqa: E402
+from wsm_install.guix_deploy import (
+    DeployCliError,
+    _ensure_output_not_on_target_filesystem,
+    _ensure_output_outside_target,
+    main,
+)  # noqa: E402
 from wsm_install.plan import build_plan, canonical_json  # noqa: E402
 
 FIXTURE = ROOT / "tests" / "fixtures" / "hardware" / "desktop-observed.json"
@@ -243,6 +248,38 @@ class GuixDeployCliTests(unittest.TestCase):
                 with self.assertRaises(DeployCliError) as raised:
                     _ensure_output_outside_target(candidate)
                 self.assertIn("outside the target mountpoint", str(raised.exception))
+
+    def test_review_output_is_refused_on_target_bind_mount_alias(self) -> None:
+        # Simulate /mnt being mounted and a review directory sharing its st_dev
+        # through a bind-mount alias outside the lexical /mnt tree.
+        fake_stat = type("StatResult", (), {"st_dev": 123})()
+        with (
+            patch("wsm_install.guix_deploy.os.path.ismount", return_value=True),
+            patch.object(Path, "stat", return_value=fake_stat),
+        ):
+            with self.assertRaises(DeployCliError) as raised:
+                _ensure_output_not_on_target_filesystem(self.root / "review.scm")
+        self.assertIn("share the mounted target filesystem", str(raised.exception))
+
+    def test_review_output_on_separate_filesystem_is_allowed(self) -> None:
+        target_stat = type("StatResult", (), {"st_dev": 123})()
+        output_stat = type("StatResult", (), {"st_dev": 456})()
+
+        def fake_stat(path: Path):
+            return target_stat if path == Path("/mnt") else output_stat
+
+        with (
+            patch("wsm_install.guix_deploy.os.path.ismount", return_value=True),
+            patch.object(Path, "stat", autospec=True, side_effect=fake_stat),
+        ):
+            _ensure_output_not_on_target_filesystem(self.root / "review.scm")
+
+    def test_review_output_skips_device_comparison_before_target_mount(self) -> None:
+        with (
+            patch("wsm_install.guix_deploy.os.path.ismount", return_value=False),
+            patch.object(Path, "stat", side_effect=AssertionError("stat must not be called")),
+        ):
+            _ensure_output_not_on_target_filesystem(self.root / "review.scm")
 
     def test_custom_mountpoint_is_not_a_cli_option(self) -> None:
         # The backend allow-list fixes the installer-owned mount root; a CLI
