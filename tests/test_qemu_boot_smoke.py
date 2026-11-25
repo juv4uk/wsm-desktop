@@ -52,7 +52,7 @@ class QemuBootSmokeTests(unittest.TestCase):
             self.assertEqual(chardev["path"], str(serial))
             self.assertIn("-nic", command)
             self.assertEqual(command[command.index("-nic") + 1], "none")
-            self.assertIn("accel=tcg", command)
+            self.assertIn("accel=tcg", " ".join(command))
             self.assertNotIn("/dev/sd", " ".join(command))
             self.assertNotIn("/dev/nvme", " ".join(command))
             self.assertNotIn("host=", " ".join(command))
