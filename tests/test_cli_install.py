@@ -68,6 +68,17 @@ class InstallModeTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("disk.path", result.stderr)
 
+    def test_execute_with_matching_acknowledgement_is_disabled(self) -> None:
+        """A complete-looking CLI acknowledgement is not authority to write."""
+        result = run_cli(
+            "--install", "--execute", "--target-disk", "/dev/nvme0n1",
+            "--target-size-bytes", str(256 * GIB),
+            "--acknowledge-disk", "/dev/nvme0n1", "--quiet",
+        )
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("execute.apply-disabled", result.stderr)
+        self.assertEqual(result.stdout, "")
+
     def test_execute_without_acknowledgement_never_reaches_a_command(self) -> None:
         """The dangerous flag alone must not be enough."""
         result = run_cli(
