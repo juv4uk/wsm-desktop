@@ -25,7 +25,7 @@
 | `verified_functions` | що саме перевірено: `pass`, `fail` або `not-assessed` |
 | `known_limitations` | усе, що не працює |
 | `not_assessed` | **непорожній** — жодна машина не перевірена повністю |
-| `artifacts` | непорожній перелік файлів із `kind`, відносним `path` та SHA-256 реальних байтів |
+| `artifacts` | непорожній перелік файлів із `kind`, відносним `path` та SHA-256 реальних байтів; рівно один `hardware-report` мусить відповідати точним байтам поточного звіту |
 
 ## Правила, які перевіряються
 
@@ -64,10 +64,25 @@ JSON Schema перевіряє форму. Скрипт перевіряє те,
 
 Правила й перевірка фактичних байтів живуть в `wsm_install/profile.py`; і планувальник, і `scripts/check_profile_evidence.py` викликають той самий валідатор. Без `artifact_root` bundle не може пройти перевірку.
 
+### Створення чернетки з hardware report
+
+`scripts/draft_profile_evidence.py` приймає тільки report, який проходить
+`schemas/hardware-report.schema.json`, включно з privacy-полями
+(`sensitive_identifiers_included=false`, без мережевих upload/requests). Він
+вимагає `--out`, копіює незмінені raw bytes до
+`artifacts/hardware-report.json` і записує SHA-256 цих самих bytes у bundle.
+Наявний artifact/evidence файл не перезаписується.
+
+Генератор не ставить функціям `pass`: кожна починається з `not-assessed`.
+Такий bundle має коректну структуру та source provenance, але **не проходить
+semantic evidence gate**, доки людина не зафіксує хоча б одну реально
+перевірену функцію й не додасть відповідні artifacts.
+
+
 
 ### Передавання bundle до read-only preflight
 
-CLI приймає явний параметр `--profile-evidence PATH`. Шлях має вказувати на `evidence.json`; локальні artifact paths рахуються від його батьківської теки. Planner перевіряє збіг `report_id` і `report_schema_version` із поданим звітом та перераховує SHA-256 кожного artifact. Цей аргумент не запускає Guix, не змінює диски та не виконує мережевих запитів.
+CLI приймає явний параметр `--profile-evidence PATH`. Шлях має вказувати на `evidence.json`; локальні artifact paths рахуються від його батьківської теки. Planner перевіряє збіг `report_id` і `report_schema_version`, вимагає рівно один artifact типу `hardware-report` із SHA-256 від **точних raw bytes** поточного звіту та перераховує SHA-256 кожного artifact на диску. Файл плану не може перезаписати сам bundle або жоден із його artifacts. Цей аргумент не запускає Guix, не змінює диски та не виконує мережевих запитів.
 
 ```sh
 wsm-install --preflight --report report.json --backend guix --dry-run \\
