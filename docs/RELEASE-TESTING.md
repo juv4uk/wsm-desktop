@@ -2,7 +2,9 @@
 
 <!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 
-Ця інструкція описує **read-only** перевірку RC1 на вашому Linux-ПК. Вона не встановлює WSM Desktop, не змінює розділи, bootloader, UEFI або firmware і не вимагає root. Деяка runtime-діагностика може бути недоступна без прав — тоді відповідні поля лишаються `unknown` і з'являється warning. Єдині записи — файли у вказаному вами output-каталозі.
+Ця інструкція описує **read-only** перевірку RC1 у Linux-середовищі. Вона не встановлює WSM Desktop, не змінює розділи, bootloader, UEFI або firmware і не вимагає root. Деяка runtime-діагностика може бути недоступна без прав — тоді відповідні поля лишаються `unknown` і з'являється warning. Єдині записи — файли у вказаному вами output-каталозі.
+
+**Межа фізичних доказів:** у WSL, контейнері або віртуальній машині звіт описує лише пристрої та інтерфейси, видимі цьому гостьовому Linux-середовищу. Він не є повною інвентаризацією фізичного хоста й не підтверджує сумісність його PCI, firmware або storage path. Для bare-metal hardware evidence запускайте RC1 з native Linux або Linux live USB на самому ПК.
 
 ## 0. Що ви отримуєте
 
@@ -21,19 +23,15 @@
 - `jsonschema[format]==4.26.0` — з `requirements-install.txt` або з системного пакета;
 - опційно `/lib/modules/<kernel>/` та `journalctl` або `dmesg` для багатшої діагностики.
 
-Підготовка залежності може потребувати мережі. Після встановлення сам RC1 працює offline. Встановлення залежності ізольовано в користувача (без sudo):
-
-```sh
-python3 -m pip install --user -r requirements-install.txt
-```
-
-Якщо ваш дистрибутив забороняє `pip install --user`, використайте віртуальне оточення:
+Підготовка залежності може потребувати мережі. Після встановлення сам RC1 працює offline. Використовуйте ізольоване віртуальне оточення (без sudo); це основний і рекомендований спосіб, сумісний із дистрибутивами, що застосовують PEP 668:
 
 ```sh
 python3 -m venv ~/.venvs/wsm-preview
-~/.venvs/wsm-preview/bin/pip install -r requirements-install.txt
+~/.venvs/wsm-preview/bin/python -m pip install -r requirements-install.txt
 ~/.venvs/wsm-preview/bin/python scripts/wsm_hardware_check.py --out ...
 ```
+
+Якщо команда `python3 -m venv` недоступна, встановіть системний пакет підтримки venv (на Debian/Ubuntu він зазвичай називається `python3-venv`) і повторіть створення оточення. Не обходьте захист системного Python через `--break-system-packages`.
 
 ## 2. Перевірка цілісності та запуск
 
@@ -120,7 +118,7 @@ PY
 
 Надсилайте публічно лише:
 
-- версію з `manifest.json`; якщо `source_commit` має значення `null` (розпакування tarball всередині іншого git-репо), беріть commit із `release-manifest.json`;
+- версію з `manifest.json`; якщо `source_commit` має значення `null` (звичайний розпакований tarball поза його власним Git work tree, зокрема всередині іншого git-репо), беріть commit із `release-manifest.json`;
 - `overall` і статуси `guix`/`nix`;
 - стислий human-readable summary зі stderr;
 - модель/категорію пристрою й опис проблеми.
@@ -129,16 +127,16 @@ PY
 
 ## 6. Додаткова перевірка збірки (опційно)
 
-На машині з Guix і QEMU можна повторити VM-доказ із #1:
+На машині з Guix і QEMU можна **самостійно зібрати додатковий доказ саме для pinned lock**:
 
 ```sh
 make check
 make describe-lock
 make check-locked-system
-make vm-system-serial
+guix time-machine -C channels.lock.scm -- system vm --no-graphic systems/minimal.scm
 ```
 
-`describe-lock` і `check-locked-system` явно споживають автентифікований `channels.lock.scm`. `vm-system-serial` відповідає proofs-у з #1: disposable QEMU/TCG, серійний вивід і маркер `wsm-desktop login:`. Звичайний `make vm-system` такого маркера не перевіряє. `guix system vm --full-boot` показував `Welcome to GRUB!`, але до ядра не дійшов за 600 секунд, тому bootloader-шлях не вважається підтвердженим. Не запускайте `guix system init` на реальному диску. Зафіксовані результати — у [systems/README.md](../systems/README.md).
+`describe-lock` перевіряє розв'язану revision, а `check-locked-system` запускає system build із `channels.lock.scm`. Остання команда окремо запускає VM із тим самим lock; збережіть exact commit, exit codes і serial-маркери, перш ніж заявляти про успішний locked boot. `make vm-system-serial` використовує звичайне локальне Guix environment і не є доказом, прив'язаним до `channels.lock.scm`. У цьому RC автентифіковані pull і `describe` підтверджені, але locked build/VM boot ще не заявлені. `guix system vm --full-boot` у попередньому експерименті показував `Welcome to GRUB!`, але до ядра не дійшов за 600 секунд, тому bootloader-шлях не вважається підтвердженим. Не запускайте `guix system init` на реальному диску. Попередні результати — у [systems/README.md](../systems/README.md) і мають окрему provenance.
 
 ## 7. Куди писати результати
 
