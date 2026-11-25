@@ -22,6 +22,9 @@ check-isa:
 check-live-acceptance:
 	$(PYTHON) tests/test_live_iso_acceptance.py
 
+check-perf-baseline:
+	$(PYTHON) tests/test_perf_baseline.py
+
 check-profiles-matrix:
 	$(PYTHON) tests/test_profiles.py
 
