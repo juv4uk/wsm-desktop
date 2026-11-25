@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from check_profile_evidence import main, validate, validate_directory  # noqa: E402
+from wsm_install.plan import build_plan  # noqa: E402
 
 ARTIFACT_BYTES = b"synthetic dmesg evidence\n"
 ARTIFACT_SHA256 = hashlib.sha256(ARTIFACT_BYTES).hexdigest()
@@ -189,6 +190,68 @@ class RuleTests(unittest.TestCase):
         self.assertTrue(any("verified_by" in problem for problem in problems))
 
 
+class InstallerPlanGateTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        report_path = ROOT / "tests" / "fixtures" / "hardware" / "desktop-observed.json"
+        cls.report_bytes = report_path.read_bytes()
+        cls.report = json.loads(cls.report_bytes)
+
+    def matching_bundle(self) -> dict:
+        return bundle(
+            report_id=self.report["report_id"],
+            report_schema_version=self.report["schema_version"],
+        )
+
+    def build(self, evidence: dict, root: Path | None):
+        return build_plan(
+            self.report,
+            self.report_bytes,
+            "guix",
+            profile_evidence=evidence,
+            profile_evidence_root=root,
+        )
+
+    def test_build_plan_accepts_only_matching_report_and_verified_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            prepare_artifact_root(root)
+            plan, blockers, _warnings = self.build(self.matching_bundle(), root)
+        self.assertFalse(any("hardware profile evidence is not valid" in item for item in blockers))
+        self.assertIsNotNone(plan["profile_evidence"])
+        self.assertEqual(plan["profile_evidence"]["report_id"], self.report["report_id"])
+
+    def test_build_plan_rejects_artifact_bytes_changed_after_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            prepare_artifact_root(root)
+            (root / "artifacts" / "dmesg.txt").write_bytes(b"tampered after manifest creation")
+            _plan, blockers, _warnings = self.build(self.matching_bundle(), root)
+        self.assertTrue(any("does not match the bytes" in item for item in blockers))
+
+    def test_build_plan_rejects_profile_evidence_from_another_report(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            prepare_artifact_root(root)
+            evidence = self.matching_bundle()
+            evidence["report_id"] = "another-report-id"
+            _plan, blockers, _warnings = self.build(evidence, root)
+        self.assertTrue(any("report_id does not match" in item for item in blockers))
+
+    def test_build_plan_rejects_profile_evidence_from_another_schema_version(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            prepare_artifact_root(root)
+            evidence = self.matching_bundle()
+            evidence["report_schema_version"] = "9.9.9"
+            _plan, blockers, _warnings = self.build(evidence, root)
+        self.assertTrue(any("report_schema_version does not match" in item for item in blockers))
+
+    def test_build_plan_fails_closed_when_artifact_root_is_missing(self) -> None:
+        _plan, blockers, _warnings = self.build(self.matching_bundle(), None)
+        self.assertTrue(any("without an evidence directory" in item for item in blockers))
+
+
 class DirectoryTests(unittest.TestCase):
     def test_model_directory_without_evidence_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -199,6 +262,21 @@ class DirectoryTests(unittest.TestCase):
                 result = main(["--dir", str(root)])
         self.assertEqual(result, 1)
         self.assertIn("missing mandatory evidence.json", stderr.getvalue())
+
+    def test_model_directory_without_profile_scm_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            model = root / "gigabyte" / "h170-gaming-3"
+            prepare_artifact_root(model)
+            evidence = model / "evidence.json"
+            evidence.write_text(json.dumps(bundle(
+                profile={"vendor": "GIGABYTE", "model": "H170 Gaming 3", "slug": "gigabyte/h170-gaming-3"}
+            )), encoding="utf-8")
+            stdout, stderr = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                result = main(["--dir", str(root)])
+        self.assertEqual(result, 1)
+        self.assertIn("missing mandatory profile.scm", stderr.getvalue())
 
     def test_empty_profiles_root_is_not_a_fake_profile(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -232,6 +310,7 @@ class DirectoryTests(unittest.TestCase):
             model = root / "gigabyte" / "h170-gaming-3"
             prepare_artifact_root(model)
             (model / "profile.scm").write_text(";; synthetic fixture\n", encoding="utf-8")
+            (model / "profile.scm").write_text(";; Synthetic test profile\n", encoding="utf-8")
             evidence = model / "evidence.json"
             document = bundle(
                 profile={
