@@ -32,7 +32,7 @@ permissions:
 
 jobs:
   qt6-build-and-qml-smoke:
-    name: Qt 6 build and offscreen QML smoke
+    name: Qt 6 build, state tests, and offscreen QML smoke
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -51,20 +51,19 @@ jobs:
             qml6-module-qtquick-layouts \
             qt6-qpa-plugins
 
-      - name: Configure Qt application
+      - name: Configure Qt application and workflow tests
         run: |
           cmake -S installer/gui -B build/wsm-installer \
-            -DCMAKE_BUILD_TYPE=Release \\
+            -DCMAKE_BUILD_TYPE=Release \
             -DWSM_BUILD_TESTS=ON
 
       - name: Compile C++ and QML resources
         run: cmake --build build/wsm-installer --parallel 2
 
-      - name: Run C++ navigation policy tests
+      - name: Run C++ navigation state tests
         run: ctest --test-dir build/wsm-installer --output-on-failure
 
-      - name: Verify QML application loads offscreen
-        shell: bash
+      - name: Verify QML application loads offscreen without hardware probing
         run: |
           QT_QPA_PLATFORM=offscreen \
           QT_QUICK_CONTROLS_STYLE=Basic \
