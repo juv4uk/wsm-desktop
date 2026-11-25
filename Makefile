@@ -27,4 +27,4 @@ check-installer:
 	$(PYTHON) tests/test_install_preflight_acceptance.py
 
 check-qemu-harness:
-	$(PYTHON) tests/test_qemu_boot_smoke.py
+	$(PYTHON) -m unittest discover -s tests -p 'test_qemu_boot_smoke.py' -v
