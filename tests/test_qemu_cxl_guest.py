@@ -25,6 +25,8 @@ class QemuCxlGuestTests(unittest.TestCase):
         )
         self.assertIn("-accel", command)
         self.assertEqual(command[command.index("-accel") + 1], "tcg")
+        self.assertIn("-no-user-config", command)
+        self.assertIn("-nodefaults", command)
         self.assertIn("-nic", command)
         self.assertEqual(command[command.index("-nic") + 1], "none")
         self.assertNotIn("-drive", command)
@@ -53,6 +55,14 @@ class QemuCxlGuestTests(unittest.TestCase):
         self.assertIn("MAX_INITRAMFS_BYTES", source)
         self.assertIn("MAX_MODULE_TOTAL_BYTES", source)
 
+    def test_failure_path_does_not_emit_raw_dmesg_or_sysfs_listing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            guest.write_guest_init(root, [])
+            init = (root / "init").read_text(encoding="utf-8")
+        self.assertNotIn("dmesg", init)
+        self.assertNotIn("ls -l /sys/bus/cxl/devices", init)
+        self.assertIn("WSM_CXL_FAILURE_DIAGNOSTICS=redacted", init)
     def test_sysfs_report_uses_synthetic_names_not_host_addresses(self) -> None:
         source = (ROOT / "scripts" / "ci_qemu_cxl_guest.py").read_text(encoding="utf-8")
         self.assertIn("device_pattern.fullmatch", source)
