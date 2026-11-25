@@ -51,6 +51,30 @@ class NoPipeToShellTests(unittest.TestCase):
         self.assertEqual(offenders, [], "pipe-to-shell found: " + "; ".join(offenders))
 
 
+class NoShellInterpretationTests(unittest.TestCase):
+    """Omarchy 4.0.0 turned titles and device names into shell strings twice.
+
+    The durable fix there was to stop letting a shell parse anything. Our code
+    must keep that property: argv lists only, never a command string.
+    """
+
+    FORBIDDEN = (
+        re.compile(r"shell\s*=\s*True"),
+        re.compile(r"\bos\.system\s*\("),
+        re.compile(r"\bos\.popen\s*\("),
+    )
+
+    def test_our_python_never_hands_a_string_to_a_shell(self) -> None:
+        offenders: list[str] = []
+        for directory in ("scripts", "wsm_install", "wsm_hwcheck"):
+            for path in (ROOT / directory).rglob("*.py"):
+                text = path.read_text(encoding="utf-8", errors="replace")
+                for pattern in self.FORBIDDEN:
+                    if pattern.search(text):
+                        offenders.append(f"{path.relative_to(ROOT)}: {pattern.pattern}")
+        self.assertEqual(offenders, [], "shell interpretation found: " + "; ".join(offenders))
+
+
 class ScriptCoverageTests(unittest.TestCase):
     def test_every_script_is_referenced_by_a_test(self) -> None:
         """A script nobody tests is a script nobody can vouch for."""
