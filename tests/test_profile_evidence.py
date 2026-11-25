@@ -31,8 +31,8 @@ BASE = {
     "verified_on": "2026-11-26",
     "verified_by": "автори проєкту",
     "verified_functions": [
-        {"name": "graphics", "status": "pass", "note": "synthetic fixture only"},
-        {"name": "storage", "status": "pass"},
+        {"name": "graphics", "status": "pass", "note": "synthetic fixture only", "evidence": ["artifacts/dmesg.txt"]},
+        {"name": "storage", "status": "pass", "evidence": ["artifacts/dmesg.txt"]},
     ],
     "known_limitations": ["NVK reclocking unavailable on Pascal"],
     "not_assessed": ["suspend/resume", "audio over HDMI"],
@@ -159,12 +159,35 @@ class RuleTests(unittest.TestCase):
     def test_failure_must_appear_in_known_limitations(self) -> None:
         document = bundle(
             verified_functions=[
-                {"name": "graphics", "status": "pass"},
-                {"name": "wifi", "status": "fail"},
+                {"name": "graphics", "status": "pass", "evidence": ["artifacts/dmesg.txt"]},
+                {"name": "wifi", "status": "fail", "evidence": ["artifacts/dmesg.txt"]},
             ]
         )
         problems = validate_fixture(document)
         self.assertTrue(any("wifi" in problem for problem in problems))
+
+    def test_pass_requires_a_functional_evidence_reference(self) -> None:
+        document = bundle()
+        document["verified_functions"][0].pop("evidence")
+        problems = validate_fixture(document)
+        self.assertTrue(any("cites no functional evidence artifact" in item for item in problems))
+
+    def test_function_evidence_reference_must_exist(self) -> None:
+        document = bundle()
+        document["verified_functions"][0]["evidence"] = ["artifacts/missing.log"]
+        problems = validate_fixture(document)
+        self.assertTrue(any("references missing artifact" in item for item in problems))
+
+    def test_source_report_is_not_functional_test_evidence(self) -> None:
+        document = bundle(
+            artifacts=[{
+                "kind": "wsm-hwcheck-report",
+                "path": "artifacts/dmesg.txt",
+                "sha256": ARTIFACT_SHA256,
+            }]
+        )
+        problems = validate_fixture(document)
+        self.assertTrue(any("source hardware report as functional proof" in item for item in problems))
 
     def test_failure_listed_in_limitations_is_accepted(self) -> None:
         document = bundle(
