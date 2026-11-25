@@ -44,6 +44,10 @@ GUEST_COUNTS_PATTERN = re.compile(
     r"^WSM_CXL_COUNTS devices=([0-9]{1,5}) ports=([0-9]{1,5}) "
     r"memdevs=([0-9]{1,5}) edges=([0-9]{1,5})$"
 )
+PORT_DEV_TYPES = {"root", "switch-upstream", "switch-downstream", "endpoint"}
+PORT_DEVTYPE_PATTERN = re.compile(
+    r"^WSM_CXL_DEVTYPE=([A-Za-z0-9._-]{1,40})=(root|switch-upstream|switch-downstream|endpoint)$"
+)
 
 
 def summarize_guest_serial(serial: str) -> str:
@@ -63,6 +67,17 @@ def summarize_guest_serial(serial: str) -> str:
                 for label, value in zip(labels, match.groups())
             )
     return f"stages={','.join(sorted(stages)) or 'none'};status={status};counts={counts}"
+
+
+def extract_port_devtypes(serial: str) -> list[str]:
+    """Keep only synthetic port names paired with known kernel devtype values."""
+    values = {
+        f"{match.group(1)}={match.group(2)}"
+        for line in serial.splitlines()
+        if (match := PORT_DEVTYPE_PATTERN.fullmatch(line)) is not None
+        and match.group(2) in PORT_DEV_TYPES
+    }
+    return sorted(values)
 
 
 def parse_insmod_plan(text: str, module_root: Path) -> list[Path]:
@@ -137,7 +152,7 @@ def create_busybox_root(guest_root: Path) -> None:
     busybox = shutil.which("busybox")
     if not busybox:
         raise CxlGuestError("static BusyBox is unavailable")
-    applets = ("sh", "mount", "mkdir", "sleep", "poweroff", "insmod", "readlink")
+    applets = ("sh", "mount", "mkdir", "sleep", "poweroff", "insmod", "readlink", "cat")
     available = set(subprocess.run(
         [busybox, "--list"], capture_output=True, text=True, timeout=5, check=True
     ).stdout.splitlines())
@@ -228,6 +243,14 @@ for entry in /sys/bus/cxl/devices/*; do
             esac
             ;;
     esac
+    if [ -r "$entry/devtype" ]; then
+        devtype=$(cat "$entry/devtype" 2>/dev/null || true)
+        case "$devtype" in
+            root|switch-upstream|switch-downstream|endpoint)
+                echo "WSM_CXL_DEVTYPE=$name=$devtype"
+                ;;
+        esac
+    fi
     for link in "$entry"/uport "$entry"/dport*; do
         [ -L "$link" ] || continue
         link_name=${{link##*/}}
@@ -365,6 +388,7 @@ def main() -> int:
         counts = counts_value if counts_value != "not-reported" else None
         devices: list[str] = []
         edges: list[str] = []
+        port_devtypes = extract_port_devtypes(serial)
         for line in serial.splitlines():
             if line.startswith("WSM_CXL_DEVICE="):
                 devices.append(line.split("=", 1)[1])
@@ -381,6 +405,7 @@ def main() -> int:
             "qemu_guest_status": status,
             "synthetic_devices": devices,
             "synthetic_edges": edges,
+            "port_devtypes": port_devtypes,
             "counts": counts,
             "kernel_release": kernel_release,
             "qemu_acceleration": "tcg",
