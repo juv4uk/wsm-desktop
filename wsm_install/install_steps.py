@@ -63,7 +63,7 @@ def _validate_layout_confirmation(layout: Layout) -> None:
         or layout.disk_size_bytes <= 0
     ):
         raise Refused("disk.size-unrecorded", "layout does not retain the observed disk size")
-    if layout.requires_acknowledgement and layout.acknowledgement != layout.disk:
+    if layout.acknowledgement != layout.disk:
         raise Refused(
             "disk.acknowledgement",
             "the layout no longer carries the acknowledgement naming its exact target disk",
