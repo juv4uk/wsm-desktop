@@ -465,8 +465,8 @@ def _find_runner_kernel() -> Path:
     return candidates[-1]
 
 
-def _decode_guest_report(serial: str) -> dict:
-    """Decode one CRLF-tolerant gzip/base64 report with a strict expansion bound."""
+def _decode_guest_bundle(serial: str) -> dict:
+    """Decode one CRLF-tolerant gzip/base64 report/plan bundle with a strict expansion bound."""
     serial = serial.replace(chr(13) + chr(10), chr(10)).replace(chr(13), chr(10))
     if REPORT_BEGIN not in serial or REPORT_END not in serial:
         raise RuntimeError("guest report boundary markers were not fully captured")
@@ -478,17 +478,26 @@ def _decode_guest_report(serial: str) -> dict:
     )
     if len(matches) != 1:
         raise RuntimeError(f"expected one compressed guest report, found {len(matches)}")
-    if len(matches[0]) > 800_000:
-        raise RuntimeError("compressed guest report exceeds the serial payload ceiling")
+    if len(matches[0]) > 1_500_000:
+        raise RuntimeError("compressed guest bundle exceeds the serial payload ceiling")
     try:
         compressed = base64.b64decode(matches[0], validate=True)
         with gzip.GzipFile(fileobj=BytesIO(compressed), mode="rb") as stream:
-            payload = stream.read(MAX_REPORT_BYTES + 1)
-            if len(payload) > MAX_REPORT_BYTES or stream.read(1):
-                raise RuntimeError("decompressed guest report exceeds the 512 KiB ceiling")
-        return json.loads(payload.decode("utf-8"))
+            payload = stream.read(MAX_BUNDLE_BYTES + 1)
+            if len(payload) > MAX_BUNDLE_BYTES or stream.read(1):
+                raise RuntimeError("decompressed guest bundle exceeds the 1 MiB ceiling")
+        value = json.loads(payload.decode("utf-8"))
+        if not isinstance(value, dict):
+            raise RuntimeError("guest report/plan bundle must be a JSON object")
+        return value
     except (ValueError, OSError, EOFError, UnicodeError, json.JSONDecodeError) as exc:
         raise RuntimeError(f"cannot decode guest hardware report: {exc}") from exc
+
+
+def _decode_guest_report(serial: str) -> dict:
+    """Compatibility wrapper for existing report-only transport tests."""
+    bundle = _decode_guest_bundle(serial)
+    return bundle.get("hardware_report", bundle)
 
 
 def _validate_report(report: dict) -> tuple[int, int]:
