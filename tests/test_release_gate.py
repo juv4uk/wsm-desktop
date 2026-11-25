@@ -169,6 +169,13 @@ class ImageTests(unittest.TestCase):
                 result = check_image(iso, boot=True)
         self.assertEqual(result["status"], "fail")
 
+    def test_unhashable_nested_status_fails_closed(self) -> None:
+        payload = self.nested_payload("pass")
+        payload["criteria"][0]["status"] = []
+        result = self.run_nested(payload, 0)
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("invalid status", result["detail"])
+
     def test_no_iso_is_recorded_as_not_run(self) -> None:
         self.assertEqual(check_image(None, boot=False)["status"], "not-run")
 

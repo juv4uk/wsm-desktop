@@ -140,7 +140,7 @@ def _image_verdict_problem(payload: Any, iso: Path) -> str | None:
         status = item.get("status")
         if not isinstance(identifier, str) or identifier in indexed:
             return "nested image verdict contains a missing or duplicate criterion id"
-        if status not in {"pass", "fail", "not-run"}:
+        if not isinstance(status, str) or status not in {"pass", "fail", "not-run"}:
             return f"nested image verdict has an invalid status for {identifier!r}"
         if not isinstance(item.get("detail"), str):
             return f"nested image verdict has no detail for {identifier!r}"
