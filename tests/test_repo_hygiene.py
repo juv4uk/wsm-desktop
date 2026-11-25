@@ -128,6 +128,13 @@ class DecisionStatusTests(unittest.TestCase):
             f"more than one installer decision claims acceptance: {accepted}",
         )
 
+    def test_adr_0008_cites_the_nixos_precedent(self) -> None:
+        """The whole argument is that NixOS ships Calamares with the same architecture."""
+        text = (ROOT / "docs" / "decisions" / "0008-calamares-backend-module.md").read_text(encoding="utf-8")
+        self.assertIn("NixOS", text)
+        self.assertIn("installation-cd-graphical-calamares.nix", text)
+        self.assertIn("proposed", text.lower())
+
     def test_installer_document_states_that_nothing_is_chosen(self) -> None:
         text = (ROOT / "docs" / "INSTALLER.md").read_text(encoding="utf-8")
         self.assertIn("інсталятор не вибрано", text.lower())
