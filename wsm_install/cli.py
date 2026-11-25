@@ -36,6 +36,26 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--schema", type=Path, default=DEFAULT_SCHEMA, help=argparse.SUPPRESS)
     parser.add_argument("--plan-output", metavar="PATH", help="write draft plan; stdout is used otherwise")
     parser.add_argument("--quiet", action="store_true", help="suppress human summary")
+
+    install = parser.add_argument_group(
+        "install path",
+        "Plan a disk layout and the steps that would install onto it. Dry run "
+        "unless --execute is given together with --acknowledge-disk.",
+    )
+    install.add_argument("--install", action="store_true",
+                         help="plan disk layout and install steps for --target-disk")
+    install.add_argument("--target-disk", metavar="PATH", help="whole block device, e.g. /dev/nvme0n1")
+    install.add_argument("--target-size-bytes", type=int,
+                         help="size reported for the disk; drift above 2% is refused")
+    install.add_argument("--firmware", choices=("uefi", "bios"), default="uefi")
+    install.add_argument("--filesystem", choices=("ext4", "btrfs", "xfs"), default="ext4")
+    install.add_argument("--mount-point", default="/mnt")
+    install.add_argument("--system-file", default="systems/desktop.scm",
+                         help="Guix system file handed to guix system init")
+    install.add_argument("--execute", action="store_true",
+                         help="actually run the steps; requires --acknowledge-disk")
+    install.add_argument("--acknowledge-disk", metavar="PATH",
+                         help="must repeat --target-disk exactly; there is no --yes")
     return parser
 
 
@@ -124,6 +144,71 @@ def _write_plan_atomically(destination: Path, rendered: str) -> None:
         raise
 
 
+def _run_install(args: argparse.Namespace) -> int:
+    """Plan, then optionally run, the disk path. Dry run is the default."""
+    from wsm_install.executor import ExecutorError, execute
+    from wsm_install.install_steps import backend_command, plan_steps, render
+    from wsm_install.partition import Disk, Refused, plan as plan_layout
+
+    if not args.target_disk:
+        print("wsm-install: --install requires --target-disk", file=sys.stderr)
+        return 2
+    if args.target_size_bytes is None:
+        print(
+            "wsm-install: --install requires --target-size-bytes; the size is how a "
+            "replaced disk is detected, so it cannot be guessed",
+            file=sys.stderr,
+        )
+        return 2
+
+    disk = Disk(
+        path=args.target_disk,
+        size_bytes=args.target_size_bytes,
+        has_existing_data=True,
+    )
+    try:
+        layout = plan_layout(
+            disk,
+            args.firmware,
+            acknowledgement=args.acknowledge_disk,
+            expected_size_bytes=args.target_size_bytes,
+        )
+        steps = plan_steps(layout, args.filesystem, args.mount_point)
+        command = backend_command(layout, args.system_file, args.mount_point)
+    except Refused as exc:
+        print(f"wsm-install: {exc.code}: {exc.message}", file=sys.stderr)
+        return 2
+
+    if not args.quiet:
+        print(render(steps, command), file=sys.stderr)
+
+    try:
+        results = execute(
+            steps,
+            disk=disk.path,
+            acknowledgement=args.acknowledge_disk,
+            dry_run=not args.execute,
+        )
+    except ExecutorError as exc:
+        print(f"wsm-install: {exc.code}: {exc.message}", file=sys.stderr)
+        return 1
+
+    print(json.dumps(
+        {
+            "mode": "execute" if args.execute else "dry-run",
+            "disk": disk.path,
+            "firmware": args.firmware,
+            "filesystem": args.filesystem,
+            "steps": [result.as_dict() for result in results],
+            "handoff": command,
+        },
+        ensure_ascii=False,
+        indent=2,
+        sort_keys=True,
+    ))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -153,6 +238,9 @@ def main(argv: list[str] | None = None) -> int:
         if len(errors) > 20:
             print(f"wsm-install: {len(errors) - 20} additional schema errors omitted", file=sys.stderr)
         return 2
+
+    if args.install:
+        return _run_install(args)
 
     assert raw is not None
     plan, blockers, warnings = build_plan(report, raw, args.backend)
