@@ -30,6 +30,14 @@ def aggregate(text: str) -> set[str]:
     raise AssertionError("no aggregate check target")
 
 
+def phony_targets(text: str) -> set[str]:
+    result: set[str] = set()
+    for line in text.splitlines():
+        if line.startswith(".PHONY:"):
+            result.update(line.split(":", 1)[1].split())
+    return result
+
+
 def block_for(text: str, name: str) -> str:
     return text.split(f"{name}:", 1)[1].split("\n\n", 1)[0]
 
@@ -53,6 +61,10 @@ class MakefileCoverageTests(unittest.TestCase):
     def test_aggregate_does_not_reference_missing_targets(self) -> None:
         unknown = sorted(aggregate(self.text) - self.all_targets)
         self.assertEqual(unknown, [], f"aggregate mentions non-existent targets: {unknown}")
+
+    def test_every_check_target_is_phony(self) -> None:
+        missing = sorted(self.all_targets - phony_targets(self.text))
+        self.assertEqual(missing, [], f"check targets must be .PHONY: {missing}")
 
     def test_aggregate_does_not_pull_in_guix_targets(self) -> None:
         """A contributor without Guix must still be able to run `make check`."""
