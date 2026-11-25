@@ -33,7 +33,7 @@ GPT має кудись покласти core image.
 | `disk.path` | шлях не є цілим блочним пристроєм (розділ, файл-образ) |
 | `disk.firmware` | firmware не `uefi` і не `bios` |
 | `disk.running-system` | на цьому диску працює поточна система |
-| `disk.too-small` | нижче firmware-specific minimum: UEFI 12 801 MiB, BIOS 12 290 MiB (1 MiB alignment + boot partition + 12 GiB root) |
+| `disk.too-small` | нижче firmware-specific minimum: UEFI 12 802 MiB, BIOS 12 291 MiB (1 MiB alignment + boot partition + 12 GiB root + 1 MiB GPT tail reserve) |
 | `disk.acknowledgement` | підтвердження не називає саме цей диск; правило діє й для порожнього диска, бо GPT буде замінено |
 | `disk.size-drift` | розмір відрізняється від очікуваного більш ніж на 2% |
 
@@ -45,7 +45,7 @@ GPT має кудись покласти core image.
 
 **Розмір зберігається у Layout і перевіряється окремо від імені.** Мінімум
 розраховується для кожного firmware mode окремо: UEFI має 512 MiB ESP, BIOS —
-1 MiB `bios_grub`; обидва мають 1 MiB alignment і щонайменше 12 GiB root.
+1 MiB `bios_grub`; обидва мають 1 MiB alignment, щонайменше 12 GiB root і 1 MiB хвостового резерву під GPT backup metadata.
 Майбутній executor має повторно звірити його та block-device identity перед APPLY.
 
 ## Чого ще немає
