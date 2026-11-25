@@ -130,7 +130,10 @@ def run_bounded_process(
             # The child may reject the command and exit before consuming stdin.
             pass
         finally:
-            process.stdin.close()
+            try:
+                process.stdin.close()
+            except BrokenPipeError:
+                pass
 
     selector = selectors.DefaultSelector()
     stdout_tail = bytearray()
