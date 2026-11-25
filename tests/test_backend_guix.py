@@ -171,6 +171,24 @@ class HandoffRefusalTests(unittest.TestCase):
         plan, _, _ = build_plan(json.loads(report_bytes), report_bytes, "guix")
         self.assert_refused("plan.not_confirmable", plan, selection())
 
+    def test_source_report_id_rejects_scheme_comment_injection(self) -> None:
+        plan = confirmed_plan()
+        plan["source_report"]["report_id"] = "A" * 16 + "\\n(newline (display \\"injected\\")"
+        refresh_plan_hash(plan)
+        self.assert_refused("plan.report_id", plan, selection())
+
+    def test_source_report_sha256_requires_lowercase_hex(self) -> None:
+        plan = confirmed_plan()
+        plan["source_report"]["sha256"] = "a" * 63 + "\\n(newline (display \\"injected\\")"
+        refresh_plan_hash(plan)
+        self.assert_refused("plan.report_sha256", plan, selection())
+
+    def test_source_report_must_be_an_object(self) -> None:
+        plan = confirmed_plan()
+        plan["source_report"] = ["not", "an", "object"]
+        refresh_plan_hash(plan)
+        self.assert_refused("plan.provenance", plan, selection())
+
     def test_plan_payload_must_match_its_digest(self) -> None:
         plan = confirmed_plan()
         plan["warnings"].append("post-confirmation mutation")
