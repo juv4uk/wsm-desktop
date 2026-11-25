@@ -64,6 +64,10 @@ class Layout:
     firmware: str
     disk: str
     partitions: list[dict[str, Any]] = field(default_factory=list)
+    # Carry the original disk-name acknowledgement into later planning stages.
+    # A generated layout must not silently lose the user's destructive consent.
+    acknowledgement: str | None = None
+    requires_acknowledgement: bool = True
 
     def commands(self) -> list[list[str]]:
         """sgdisk invocations as data. The caller decides whether to run them."""
@@ -87,7 +91,7 @@ def _require(condition: bool, code: str, message: str) -> None:
 def validate_target(disk: Disk, acknowledgement: str | None, firmware: str) -> None:
     """Every reason this disk must not be touched, in the order that matters most."""
     _require(
-        bool(DEVICE_PATH.match(disk.path)),
+        bool(DEVICE_PATH.fullmatch(disk.path)),
         "disk.path",
         f"{disk.path!r} is not a whole block device; partitions and images are refused",
     )
@@ -134,7 +138,12 @@ def plan(
             f"expected ({drift:.1%} drift); the disk may have been replaced",
         )
 
-    layout = Layout(firmware=firmware, disk=disk.path)
+    layout = Layout(
+        firmware=firmware,
+        disk=disk.path,
+        acknowledgement=acknowledgement,
+        requires_acknowledgement=disk.has_existing_data,
+    )
     cursor = 1
     if firmware == "bios":
         layout.partitions.append({
