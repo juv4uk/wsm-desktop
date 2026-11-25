@@ -12,7 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.ci_qemu_cxl_guest import build_qemu_command, parse_insmod_plan
+from scripts import ci_qemu_cxl_guest as guest
+from scripts.ci_qemu_cxl_guest import build_qemu_command, parse_insmod_plan, summarize_guest_serial
 
 
 class QemuCxlGuestTests(unittest.TestCase):
@@ -63,6 +64,21 @@ class QemuCxlGuestTests(unittest.TestCase):
         self.assertNotIn("dmesg", init)
         self.assertNotIn("ls -l /sys/bus/cxl/devices", init)
         self.assertIn("WSM_CXL_FAILURE_DIAGNOSTICS=redacted", init)
+    def test_failure_summary_does_not_echo_raw_console_or_pci_addresses(self) -> None:
+        raw = (
+            "PCI: 0000:00:1f.0 EDID parser failure\n"
+            "WSM_CXL_STAGE_MODULE_LOAD\n"
+            "WSM_CXL_COUNTS devices=8 ports=4 memdevs=1 edges=7\n"
+            "WSM_CXL_STATUS=type3-memdev-discovered\n"
+        )
+        summary = summarize_guest_serial(raw)
+        self.assertIn("WSM_CXL_STAGE_MODULE_LOAD", summary)
+        self.assertIn("type3-memdev-discovered", summary)
+        self.assertIn("devices=8,ports=4,memdevs=1,edges=7", summary)
+        self.assertNotIn("0000:00:1f.0", summary)
+        self.assertNotIn("EDID", summary)
+        self.assertNotIn("PCI", summary)
+
     def test_sysfs_report_uses_synthetic_names_not_host_addresses(self) -> None:
         source = (ROOT / "scripts" / "ci_qemu_cxl_guest.py").read_text(encoding="utf-8")
         self.assertIn("device_pattern.fullmatch", source)
