@@ -230,6 +230,30 @@ class InstallerPlanTests(unittest.TestCase):
             self.assertEqual(plan["profile_evidence"]["slug"], "test/fixture")
             self.assertEqual(plan["profile_evidence"]["report_id"], report["report_id"])
 
+    def test_plan_output_cannot_overwrite_profile_evidence_artifact(self) -> None:
+        report, _ = load_fixture("desktop-observed.json")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report_path = root / "report.json"
+            report_path.write_bytes((FIXTURES / "desktop-observed.json").read_bytes())
+            profile_dir = root / "test" / "fixture"
+            profile_dir.mkdir(parents=True)
+            evidence = make_profile_evidence(report, profile_dir)
+            evidence_path = profile_dir / "evidence.json"
+            evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+            artifact = profile_dir / "artifacts" / "dmesg.txt"
+            original = artifact.read_bytes()
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                result = main([
+                    "--preflight", "--report", str(report_path), "--backend", "guix",
+                    "--dry-run", "--profile-evidence", str(evidence_path),
+                    "--plan-output", str(artifact),
+                ])
+        self.assertEqual(result, 2)
+        self.assertIn("must not overwrite", stderr.getvalue())
+        self.assertEqual(artifact.read_bytes(), original)
+
     def test_cli_refuses_profile_evidence_for_a_different_report(self) -> None:
         report, _ = load_fixture("desktop-observed.json")
         with tempfile.TemporaryDirectory() as directory:
