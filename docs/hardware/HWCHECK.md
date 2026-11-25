@@ -23,9 +23,16 @@ It does not run subprocesses, access the network, load kernel modules, install p
 
 - CPU model/vendor fields exposed through /proc/cpuinfo.
 - DMI platform and motherboard model fields, excluding serial-number files.
-- PCI and USB identifiers, modaliases and bound driver symlinks.
+- PCI identifiers, modaliases and PCI-function driver binding.
+- USB parent-device identifiers only; composite USB interface classes and per-interface driver bindings are not collected in v0.1.
 - Block storage model/vendor and kernel driver binding when exposed through sysfs.
-- DRM connector connection state and advertised/active modes when exposed by sysfs.
+- DRM connector connection state and kernel-exposed modes when available; EDID monitor identification and explicit connector-to-GPU relationships are not collected in v0.1.
+
+## Known v0.1 coverage gaps
+
+- USB composite-device functions are not enumerated as separate `*:1.N` interface records. A parent `bDeviceClass` value of `00` stays `other`; no interface-level driver binding is claimed. See #18 for the separately versioned topology work.
+- DRM connector records are not physical-monitor identities. v0.1 does not decode EDID or link a connector to its owning GPU; those relationships remain unknown until explicit topology evidence is implemented.
+- An observed connector state or active mode is inventory/runtime evidence only. It is never emitted as a passed functional test.
 
 ## What it does not yet prove
 
