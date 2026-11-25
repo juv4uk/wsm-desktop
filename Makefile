@@ -32,6 +32,7 @@ check-qemu-harness:
 
 check-validation-protocols:
 	$(PYTHON) tests/test_validation_protocol_privacy.py
+	$(PYTHON) tests/test_pcie_link_health_protocol.py
 
 check-minimal-system:
 	$(PYTHON) tests/test_minimal_system.py

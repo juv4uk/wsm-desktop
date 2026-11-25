@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Regression checks for the VM-facing minimal Guix System example."""
+"""Регресійні перевірки мінімального Guix System VM-профілю."""
 
 import unittest
 from pathlib import Path
@@ -23,11 +23,26 @@ class MinimalSystemTests(unittest.TestCase):
     def test_documentation_distinguishes_guix_vm_boot_paths(self) -> None:
         readme = (ROOT / "systems" / "README.md").read_text(encoding="utf-8")
 
-        self.assertIn("defaults to direct-kernel boot", readme)
-        self.assertIn("does **not** exercise the bootloader", readme)
+        self.assertIn("завантаження безпосередньо ядра", readme)
+        self.assertIn("не перевіряє bootloader", readme)
         self.assertIn("guix system vm --full-boot", readme)
         self.assertIn("guix system image --image-type=qcow2", readme)
-        self.assertNotIn("builds an MBR disk image", readme)
+
+    def test_readme_records_the_observed_direct_kernel_boot(self) -> None:
+        readme = (ROOT / "systems" / "README.md").read_text(encoding="utf-8")
+
+        self.assertIn("guix system build systems/minimal.scm", readme)
+        self.assertIn("exit=0", readme)
+        self.assertIn("wsm-desktop login:", readme)
+        self.assertIn("QEMU", readme)
+        self.assertIn("TCG", readme)
+
+    def test_readme_does_not_claim_grub_full_boot_is_verified(self) -> None:
+        readme = (ROOT / "systems" / "README.md").read_text(encoding="utf-8")
+
+        self.assertIn("повний boot через GRUB не підтверджений", readme)
+        self.assertIn("600 секунд", readme)
+        self.assertIn("не автентифікований lock-файл", readme)
 
     def test_readme_explains_the_uefi_override(self) -> None:
         readme = (ROOT / "systems" / "README.md").read_text(encoding="utf-8")
