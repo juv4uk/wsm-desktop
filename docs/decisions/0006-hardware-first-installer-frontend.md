@@ -88,7 +88,7 @@ Frontend показує звіт `wsm-hwcheck` (#5/#6) і похідні ріш�
 
 Матриця #11 показала, що найсильніше виявлення обладнання має YaST/libhd, а найкраща автоматична генерація апаратного конфігу — NixOS. Проте обидва інструменти тісно пов'язані зі своїм payload і bootloader-ом. Натомість archinstall дає найпридатнішу *форму взаємодії* з користувачем, яку можна адаптувати без успадкування його payload-у. `guix-install` додає корисні Guix-специфічні патерни lifecycle, але його поточні defaults і статус роблять його непридатним як залежність.
 
-Отже WSM інвестує у власний тонкий шар і два нативні backend-а, дотримуючись межі ADR 0004: спільний product/evidence/plan level, але жодного спільного runtime чи спільного власника bootloader.
+Отже WSM інвестує у власний тонкий frontend і спільний product/evidence/plan level, але для першого preview передає підтверджений план лише GNU Guix System — єдиному backend-у, ратифікованому в ADR 0004. Nix/NixOS залишається окремим дослідницьким напрямом поза критичним шляхом; другий backend можливий лише після виконання умов повернення з ADR 0004, із власною реалізацією та без спільного власника root filesystem або bootloader.
 
 ## Що може змінити це рішення
 
@@ -112,7 +112,7 @@ Frontend показує звіт `wsm-hwcheck` (#5/#6) і похідні ріш�
 
 ## Посилання
 
-- [ADR 0004: Nix і Guix як окремі backend-и](0004-nix-guix-backend-strategy.md)
+- [ADR 0004: GNU Guix першим; Nix/NixOS відкладено](0004-nix-guix-backend-strategy.md)
 - [ADR 0002: Calamares як інсталятор](0002-calamares-as-installer.md)
 - [Канонічний handoff-контракт #12](../INSTALLER-HANDOFF.md)
 - [Issue #1: реальна Guix VM](https://github.com/juv4uk/wsm-desktop/issues/1)
