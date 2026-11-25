@@ -2,7 +2,7 @@
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Статус: **proposed — на розгляді [#150](https://github.com/juv4uk/wsm-desktop/issues/150)**
+- Статус: **контракт реалізовано й змерджено в PR #189**; міграції persistent state та автоматичне відновлення даних ще не реалізовані
 - Дата: 2026-11-26
 - Батьківське рішення: [ADR 0007](decisions/0007-clear-linux-principles.md) — принципи Clear Linux без Clear Linux
 - Пов'язане: [ADR 0004](decisions/0004-nix-guix-backend-strategy.md), [INSTALLER-HANDOFF.md](INSTALLER-HANDOFF.md), [ETHICS.md](ETHICS.md)
@@ -77,6 +77,77 @@ Guix дає іншу, але сумісну за духом модель: `/gnu/
 Тест не доводить, що система поводиться правильно — він не дає документу
 розійтися з профілем і не дає забути шлях при зміні конфігурації.
 
+## Міграції й rollback: не плутати покоління з транзакцією
+
+Guix generation повертає декларативний стан системи, але не відкочує автоматично
+довільні зміни в `/var/lib/<service>` або `/home/<user>`. Це не лише
+теоретична межа: документація Omarchy прямо попереджає, що їхній root snapshot
+не повертає `/home`, а migration markers у home можуть пережити rollback,
+навіть коли root-зміни міграції вже скасовані
+([Omarchy system snapshots](https://omarchy.org/manual/system-snapshots/)).
+
+WSM має дотримуватися таких правил до появи автоматичних системних міграцій:
+
+1. **Міграція ідемпотентна.** Повторний запуск після переривання приводить до
+   того самого цільового стану, а не дублює побічні ефекти.
+2. **Маркер не замінює postcondition.** Міграцію можна вважати завершеною лише
+   після перевірки фактичного результату. Наявність marker-файла сама по собі
+   не доводить, що системна зміна досі існує.
+3. **Маркер не живе в чужій rollback-межі.** Не зберігати в `/home` єдиний
+   completion marker для зміни, що належить generation-controlled system
+   state. Якщо ефект і маркер неможливо оновити атомарно, наступна активація
+   мусить звіряти marker із generation/config digest та повторно перевіряти
+   postcondition.
+4. **Частковий успіх має шлях відновлення.** Якщо операція змінює кілька
+   persistent domains, вона повинна мати транзакційний commit, compensating
+   action або документований reconcile path. Timeout не доводить, що side
+   effect не відбувся.
+5. **Успіх оновлення підтверджується після boot-перевірки.** Побудова нової
+   generation ще не доводить, що вона завантажується. До оголошення update
+   успішним треба перевірити bootable generation у disposable QEMU; попередню
+   generation не видаляти до завершення acceptance.
+
+Omarchy issue [#12777](https://github.com/omacom/omarchy/issues/12777) описує
+конкретний випадок: side effect міграції вже записався, IPC timeout перервав
+крок до створення migration marker, і повторний запуск міг повторити операцію.
+Це аргумент на користь idempotency та перевірки postcondition, а не доказ, що
+WSM повинен переносити Omarchy migration framework.
+
+## Атомарний запис користувацької конфігурації
+
+Для будь-яких майбутніх mutable config writers WSM:
+
+- створювати тимчасовий файл **у тій самій директорії**, що й ціль;
+- записати повний вміст, виконати `fsync`, потім атомарно перейменувати файл
+  і за потреби синхронізувати директорію;
+- не створювати тимчасовий файл у `/tmp` з подальшим `mv` у `~/.config`:
+  між файловими системами перейменування перетворюється на копію і читач може
+  побачити порожній або частково записаний файл;
+- якщо config не читається або не проходить parse, зберегти початкові байти,
+  показати помилку й вимагати явного reset. Не перезаписувати пошкоджений файл
+  мовчазними defaults.
+
+Ці правила поєднують два **різні** класи помилок, які видно в Omarchy:
+
+- [#10885](https://github.com/omacom/omarchy/issues/10885) описує lost-update race: `shell.json` переписувався зі застарілого in-memory стану, через що могли зникнути паралельні зовнішні зміни. Це вимагає узгодження конкурентних writers або перевірки версії/вмісту перед commit.
+- [#9326](https://github.com/omacom/omarchy/issues/9326) описує зміну permissions під час заміни config-файла через тимчасовий файл: новий файл успадковував режим тимчасового файла `0600`, а не попередній режим цілі. Writer має явно зберігати потрібні mode/ownership/ACL.
+
+Окремо, **загальна гарантія файлової системи** така: rename є атомарним лише в межах однієї файлової системи. Якщо тимчасовий файл створено в `/tmp`, а ціль лежить в іншому mount, `mv` може перейти до copy+unlink замість атомарного rename. Тому same-directory temp file — правило WSM, але не приписування цього конкретного failure mode issue #10885 або #9326.
+
+## Окремий failure domain для необов'язкових інструментів
+
+Оновлення системної generation не повинно залежати від доступності стороннього
+agent/tool registry, мережевого endpoint або необов'язкового developer tool.
+Зовнішні lookups мають мати bounded timeout, cache/offline path та чіткий
+результат `unavailable`; вони не повинні повторюватися окремо для кожного
+елемента списку, коли достатньо одного batch/local query.
+
+Omarchy issue [#20030](https://github.com/omacom/omarchy/issues/20030) описує
+agent migration, що послідовно перевіряла 22 інструменти через remote
+`mise where` із таймаутами до 30–60 секунд. Для WSM такі перевірки належать
+до optional provisioning, а не до критичного hardware preflight або системної
+активації.
+
 ## Що може змінити це рішення
 
 - Поява в Guix штатного механізму для користувацьких overlay-конфігурацій, який
@@ -90,3 +161,6 @@ Guix дає іншу, але сумісну за духом модель: `/gnu/
 - UAPI.4 Extension Images — специфікація UAPI Group.
 - All Systems Go! 2026, «An update on systemd-sysext/confext» (30.09.2026) —
   завантаження з initrd, `bootctl link`, confext для `/etc`.
+- [Omarchy system snapshots](https://omarchy.org/manual/system-snapshots/) та [issue #12777](https://github.com/omacom/omarchy/issues/12777) — rollback межі й частково виконані міграції.
+- [Omarchy issue #10885](https://github.com/omacom/omarchy/issues/10885) — lost-update race для `shell.json`; [#9326](https://github.com/omacom/omarchy/issues/9326) — збереження permissions під час заміни config-файла.
+- [Omarchy issue #20030](https://github.com/omacom/omarchy/issues/20030) — необмежені remote lookups у migration path.
