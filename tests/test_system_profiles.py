@@ -159,25 +159,29 @@ class IsoScriptTests(unittest.TestCase):
     def _fake_guix(self, bin_dir: Path) -> None:
         fake_guix = bin_dir / "guix"
         fake_guix.write_text(
-            "#!/bin/sh\\n"
-            "printf 'CALL' >> \\"$WSM_TEST_GUIX_ARGS\\"\\n"
-            "for argument in \\"$@\\"; do printf '|%s' \\"$argument\\" >> \\"$WSM_TEST_GUIX_ARGS\\"; done\\n"
-            "printf '\\\\nPWD=%s\\\\n' \\"$PWD\\" >> \\"$WSM_TEST_GUIX_ARGS\\"\\n"
-            "root=\\n"
-            "last=\\n"
-            "for argument in \\"$@\\"; do last=$argument; case \\"$argument\\" in --root=*) root=${argument#--root=} ;; esac; done\\n"
-            "case \\" $* \\" in\\n"
-            "  *\\" -- --version \\"*) echo 'guix (GNU Guix) 1.5.0-pinned'; exit 0 ;;\\n"
-            "  *\\" describe -f channels \\"*)\\n"
-            "    if [ \\"${WSM_TEST_AUTH_DISABLED:-0}\\" = '1' ]; then echo 'channel authentication disabled' >&2; fi\\n"
-            "    printf '%s\\\\n' '(list (channel (name \\'guix\\') (commit \\'test\\')))'\\n"
-            "    exit 0 ;;\\n"
-            "  *\\" system image \\"*)\\n"
-            "    [ -n \\"$root\\" ] || exit 9\\n"
-            "    ln -s \\"$WSM_TEST_IMAGE\\" \\"$root\\"\\n"
-            "    exit 0 ;;\\n"
-            "esac\\n"
-            "exit 8\\n",
+            """#!/bin/sh
+printf 'CALL' >> "$WSM_TEST_GUIX_ARGS"
+for argument in "$@"; do printf '|%s' "$argument" >> "$WSM_TEST_GUIX_ARGS"; done
+printf '\\nPWD=%s\\n' "$PWD" >> "$WSM_TEST_GUIX_ARGS"
+root=
+case " $* " in
+    *" -- --version "*) echo 'guix (GNU Guix) 1.5.0-pinned'; exit 0 ;;
+    *" describe -f channels "*)
+        if [ "$WSM_TEST_AUTH_DISABLED" = '1' ]; then
+            echo 'channel authentication disabled' >&2
+        fi
+        printf '%s\\n' '(list (channel (name guix) (commit test)))'
+        exit 0 ;;
+    *" system image "*)
+        for argument in "$@"; do
+            case "$argument" in --root=*) root=\${argument#--root=} ;; esac
+        done
+        [ -n "$root" ] || exit 9
+        ln -s "$WSM_TEST_IMAGE" "$root"
+        exit 0 ;;
+esac
+exit 8
+""",
             encoding="utf-8",
         )
         fake_guix.chmod(0o755)
