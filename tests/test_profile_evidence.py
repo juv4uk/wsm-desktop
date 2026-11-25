@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""Rules for hardware profile evidence bundles."""
+"""Rules for hardware profile evidence bundles and referenced artifact bytes."""
 
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import sys
 import tempfile
@@ -13,7 +14,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from check_profile_evidence import validate  # noqa: E402
+from check_profile_evidence import (  # noqa: E402
+    discover_profiles,
+    main,
+    validate,
+    validate_directory,
+)
 
 BASE = {
     "schema": "wsm-profile-evidence/1",
@@ -24,11 +30,19 @@ BASE = {
     "verified_on": "2026-11-26",
     "verified_by": "автори проєкту",
     "verified_functions": [
-        {"name": "graphics", "status": "pass", "note": "i915, 1080p"},
+        {"name": "graphics", "status": "pass", "note": "synthetic fixture only"},
         {"name": "storage", "status": "pass"},
     ],
     "known_limitations": ["NVK reclocking unavailable on Pascal"],
     "not_assessed": ["suspend/resume", "audio over HDMI"],
+    "artifacts": [
+        {
+            "kind": "dmesg",
+            "path": "artifacts/dmesg.txt",
+            "sha256": "a" * 64,
+            "note": "synthetic fixture only",
+        }
+    ],
 }
 
 
@@ -38,8 +52,45 @@ def bundle(**overrides) -> dict:
     return document
 
 
+def write_profile(root: Path, artifact_bytes: bytes = b"synthetic dmesg\n") -> Path:
+    profile_dir = root / "asus" / "h170-pro"
+    artifact_dir = profile_dir / "artifacts"
+    artifact_dir.mkdir(parents=True)
+    (profile_dir / "profile.scm").write_text(";; synthetic test fixture\n", encoding="utf-8")
+    artifact = artifact_dir / "dmesg.txt"
+    artifact.write_bytes(artifact_bytes)
+
+    document = bundle()
+    document["artifacts"][0]["sha256"] = hashlib.sha256(artifact_bytes).hexdigest()
+    evidence = profile_dir / "evidence.json"
+    evidence.write_text(json.dumps(document), encoding="utf-8")
+    return evidence
+
+
 class ShapeTests(unittest.TestCase):
-    def test_minimal_bundle_is_accepted(self) -> None:
+    def test_minimal_bundle_is_accepted_by_schema(self) -> None:
+        self.assertEqual(validate(bundle()), [])
+
+    def test_missing_isa_level_is_refused(self) -> None:
+        document = bundle()
+        del document["isa_level"]
+        self.assertTrue(validate(document))
+
+    def test_missing_artifacts_is_refused(self) -> None:
+        document = bundle()
+        del document["artifacts"]
+        self.assertTrue(validate(document))
+
+    def test_empty_artifacts_is_refused(self) -> None:
+        self.assertTrue(validate(bundle(artifacts=[])))
+
+    def test_missing_artifact_path_is_refused(self) -> None:
+        self.assertTrue(validate(bundle(artifacts=[{"kind": "dmesg", "sha256": "a" * 64}])))
+
+    def test_artifact_needs_a_hash(self) -> None:
+        self.assertTrue(validate(bundle(artifacts=[{"kind": "dmesg", "path": "artifacts/dmesg.txt"}])))
+
+    def test_artifact_with_hash_and_path_is_accepted_by_schema(self) -> None:
         self.assertEqual(validate(bundle()), [])
 
     def test_missing_not_assessed_is_refused(self) -> None:
@@ -48,22 +99,47 @@ class ShapeTests(unittest.TestCase):
         self.assertTrue(validate(document))
 
     def test_empty_not_assessed_is_refused(self) -> None:
-        """No profile is fully verified; an empty list claims otherwise."""
         self.assertTrue(validate(bundle(not_assessed=[])))
 
     def test_unknown_status_is_refused(self) -> None:
-        document = bundle(
-            verified_functions=[{"name": "graphics", "status": "probably"}]
-        )
+        document = bundle(verified_functions=[{"name": "graphics", "status": "probably"}])
         self.assertTrue(validate(document))
 
-    def test_artifact_needs_a_hash(self) -> None:
-        document = bundle(artifacts=[{"kind": "dmesg"}])
-        self.assertTrue(validate(document))
 
-    def test_artifact_with_hash_is_accepted(self) -> None:
-        document = bundle(artifacts=[{"kind": "dmesg", "sha256": "a" * 64}])
-        self.assertEqual(validate(document), [])
+class ArtifactTests(unittest.TestCase):
+    def test_artifact_hash_is_verified_against_file_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            evidence = write_profile(root)
+            document = json.loads(evidence.read_text(encoding="utf-8"))
+            self.assertEqual(validate(document, artifact_root=evidence.parent), [])
+
+    def test_artifact_hash_mismatch_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            evidence = write_profile(root)
+            document = json.loads(evidence.read_text(encoding="utf-8"))
+            document["artifacts"][0]["sha256"] = "0" * 64
+            problems = validate(document, artifact_root=evidence.parent)
+            self.assertTrue(any("sha256 mismatch" in problem for problem in problems))
+
+    def test_artifact_path_traversal_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            evidence = write_profile(root)
+            document = json.loads(evidence.read_text(encoding="utf-8"))
+            document["artifacts"][0]["path"] = "../outside.txt"
+            problems = validate(document, artifact_root=evidence.parent)
+            self.assertTrue(any("safe relative path" in problem for problem in problems))
+
+    def test_missing_artifact_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            evidence = write_profile(root)
+            document = json.loads(evidence.read_text(encoding="utf-8"))
+            (evidence.parent / "artifacts" / "dmesg.txt").unlink()
+            problems = validate(document, artifact_root=evidence.parent)
+            self.assertTrue(any("missing" in problem for problem in problems))
 
 
 class RuleTests(unittest.TestCase):
@@ -94,13 +170,46 @@ class RuleTests(unittest.TestCase):
         )
         self.assertEqual(validate(document), [])
 
-    def test_email_in_verified_by_is_refused(self) -> None:
-        problems = validate(bundle(verified_by="someone@example.com"))
-        self.assertTrue(any("e-mail" in problem for problem in problems))
-
-    def test_personal_name_is_allowed_but_discouraged(self) -> None:
-        """The rule bans e-mail, not names; docs tell contributors what to use."""
+    def test_verified_by_only_accepts_nonpersonal_roles(self) -> None:
         self.assertEqual(validate(bundle(verified_by="local agent")), [])
+        self.assertEqual(validate(bundle(verified_by="web agent")), [])
+        self.assertTrue(validate(bundle(verified_by="John Smith")))
+        self.assertTrue(validate(bundle(verified_by="someone@example.com")))
+
+
+class DirectoryTests(unittest.TestCase):
+    def test_profile_without_evidence_is_detected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            profile_dir = root / "vendor" / "model"
+            profile_dir.mkdir(parents=True)
+            (profile_dir / "profile.scm").write_text(";; fixture\n", encoding="utf-8")
+            profiles, evidence, problems = discover_profiles(root)
+            self.assertEqual(len(profiles), 1)
+            self.assertEqual(evidence, [])
+            self.assertTrue(any("has no evidence.json" in problem for problem in problems))
+
+    def test_evidence_without_profile_is_detected(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            profile_dir = root / "asus" / "h170-pro"
+            profile_dir.mkdir(parents=True)
+            (profile_dir / "evidence.json").write_text("{}", encoding="utf-8")
+            _, _, problems = discover_profiles(root)
+            self.assertTrue(any("no matching profile.scm" in problem for problem in problems))
+
+    def test_custom_directory_root_is_supported(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "nonstandard-root"
+            evidence = write_profile(root)
+            self.assertEqual(validate_directory(evidence, root), [])
+
+    def test_main_accepts_a_valid_custom_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "nonstandard-root"
+            evidence = write_profile(root)
+            self.assertEqual(main(["--dir", str(root)]), 0)
+            self.assertTrue(evidence.is_file())
 
 
 class RepositoryTests(unittest.TestCase):
@@ -109,9 +218,10 @@ class RepositoryTests(unittest.TestCase):
             (ROOT / "schemas" / "profile-evidence.schema.json").read_text(encoding="utf-8")
         )
         self.assertEqual(schema["title"], "WSM hardware profile evidence")
+        self.assertIn("isa_level", schema["required"])
+        self.assertIn("artifacts", schema["required"])
 
     def test_no_bundle_lives_outside_the_profiles_tree(self) -> None:
-        """A bundle next to the code would be a claim nobody can find."""
         strays = [
             path for path in ROOT.rglob("evidence.json")
             if "profiles/hardware" not in path.as_posix()
