@@ -90,7 +90,7 @@ class MakefileCoverageTests(unittest.TestCase):
             fake_python.write_text(script, encoding="utf-8")
             fake_python.chmod(0o755)
             if compatibility_lock:
-                (root / "channels.compatibility.lock.scm").write_text("fixture\\n", encoding="utf-8")
+                (root / "channels.compatibility.lock.scm").write_text("fixture", encoding="utf-8")
             environment = dict(os.environ)
             environment["CALL_LOG"] = str(call_log)
             result = subprocess.run(
