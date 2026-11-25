@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from check_channels import (  # noqa: E402
     DEFAULT_LOCKS,
+    ParseError,
     check,
     channels_of,
     main,
@@ -76,7 +77,7 @@ class ParseTests(unittest.TestCase):
         self.assertTrue(check("(list (channel"))
 
     def test_unterminated_string_is_rejected(self) -> None:
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ParseError):
             tokenize('(url "https://example.org')
 
     def test_trailing_second_form_is_rejected(self) -> None:
@@ -111,7 +112,8 @@ class PolicyTests(unittest.TestCase):
             "https://git.guix.gnu.org/guix.git",
             "https://gitlab.com/attacker/guix",
         )
-        problems = check(with_channel(guix_fork + NONGUIX), "compatibility")
+        combined = guix_fork.rstrip()[:-1] + NONGUIX + ")"
+        problems = check(combined, "compatibility")
         self.assertTrue(any("unrecognized repository URL" in item for item in problems))
 
     def test_compatibility_rejects_noncanonical_nonguix_introduction_commit(self) -> None:
