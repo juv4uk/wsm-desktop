@@ -213,7 +213,6 @@ def render_guest_init(library_path: str) -> str:
         report_begin=REPORT_BEGIN,
         report_chunk_prefix=REPORT_CHUNK_PREFIX,
         report_chunk_chars=REPORT_CHUNK_CHARS,
-        report_begin=REPORT_BEGIN,
         report_end=REPORT_END,
         max_report_bytes=MAX_REPORT_BYTES,
     )
