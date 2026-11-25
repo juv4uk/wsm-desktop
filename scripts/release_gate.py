@@ -28,6 +28,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from check_channels import default_lock
+
 SCHEMA = "wsm-release-gate/1"
 VERSION = "0.1.0"
 ROOT = Path(__file__).resolve().parents[1]
@@ -39,7 +41,9 @@ def run(command: list[str], timeout: int = 900) -> tuple[int, str]:
         completed = subprocess.run(
             command, capture_output=True, text=True, check=False, cwd=ROOT, timeout=timeout
         )
-    except (OSError, subprocess.TimeoutExpired) as exc:
+    except subprocess.TimeoutExpired as exc:
+        return 124, f"timed out while running {command[0]} after {timeout}s"
+    except OSError as exc:
         return 127, f"could not run {command[0]}: {exc}"
     output = (completed.stdout + completed.stderr).strip().splitlines()
     tail = output[-1] if output else "no output"
@@ -62,14 +66,39 @@ def check_docs() -> dict[str, str]:
 
 
 def check_channels() -> dict[str, str]:
-    results = []
+    """Check required Free lock and report an absent optional Compatibility lock honestly."""
+    results: list[tuple[str, str, str]] = []
     for policy in ("free", "compatibility"):
-        code, detail = run([sys.executable, "scripts/check_channels.py", "--policy", policy])
-        results.append((policy, code, detail))
-    failed = [f"{policy}: {detail}" for policy, code, detail in results if code != 0]
-    if failed:
-        return criterion("channels", "fail", "; ".join(failed))
-    return criterion("channels", "pass", "free and compatibility policies both hold")
+        lock = default_lock(policy)
+        if not lock.is_file():
+            if policy == "free":
+                results.append(("free", "fail", f"required Free lock is missing: {lock.name}"))
+            else:
+                results.append(
+                    ("compatibility", "not-run", "Compatibility lock NOT_CONFIGURED")
+                )
+            continue
+
+        code, detail = run(
+            [
+                sys.executable,
+                "scripts/check_channels.py",
+                "--policy",
+                policy,
+                "--lock",
+                str(lock),
+            ]
+        )
+        status = "pass" if code == 0 else "not-run" if code == 127 else "fail"
+        results.append((policy, status, detail))
+
+    failures = [f"{policy}: {detail}" for policy, status, detail in results if status == "fail"]
+    if failures:
+        return criterion("channels", "fail", "; ".join(failures))
+    not_run = [f"{policy}: {detail}" for policy, status, detail in results if status == "not-run"]
+    if not_run:
+        return criterion("channels", "not-run", "; ".join(not_run))
+    return criterion("channels", "pass", "Free and configured Compatibility locks satisfy structural policy")
 
 
 def check_tests() -> dict[str, str]:
@@ -77,12 +106,17 @@ def check_tests() -> dict[str, str]:
     if not tests:
         return criterion("tests", "not-run", "no test files found")
     failures: list[str] = []
+    not_run: list[str] = []
     for path in tests:
         code, detail = run([sys.executable, str(path)])
-        if code != 0:
+        if code == 127:
+            not_run.append(f"{path.name}: {detail}")
+        elif code != 0:
             failures.append(f"{path.name}: {detail}")
     if failures:
         return criterion("tests", "fail", "; ".join(failures)[:300])
+    if not_run:
+        return criterion("tests", "not-run", "; ".join(not_run)[:300])
     return criterion("tests", "pass", f"{len(tests)} test files green")
 
 
@@ -101,10 +135,43 @@ def check_image(iso: Path | None, boot: bool) -> dict[str, str]:
     command = [sys.executable, "scripts/verify_live_release.py", "--iso", str(iso), "--compact"]
     if boot:
         command.append("--boot")
-    code, detail = run(command)
-    if code != 0:
-        return criterion("image", "fail", detail)
-    return criterion("image", "pass", "release verdict produced; see its output for criteria")
+    try:
+        completed = subprocess.run(
+            command, capture_output=True, text=True, check=False, cwd=ROOT, timeout=900
+        )
+    except subprocess.TimeoutExpired:
+        return criterion("image", "not-run", "live image verification timed out")
+    except OSError as exc:
+        return criterion("image", "not-run", f"could not run live image verifier: {exc}")
+
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        detail = (completed.stderr or completed.stdout).strip().splitlines()
+        return criterion("image", "fail", (detail[-1] if detail else "verifier emitted invalid JSON")[:300])
+
+    overall = payload.get("overall") if isinstance(payload, dict) else None
+    if completed.returncode == 0 and overall == "pass":
+        return criterion("image", "pass", "checksum, manifest, ISO structure and requested boot checks passed")
+    if completed.returncode == 2 and overall == "incomplete":
+        pending = [
+            f"{item.get('id')}: {item.get('detail')}"
+            for item in payload.get("criteria", [])
+            if isinstance(item, dict) and item.get("status") == "not-run"
+        ]
+        return criterion("image", "not-run", "; ".join(pending)[:300] or "live image verification is incomplete")
+    if completed.returncode == 1 and overall == "fail":
+        failed = [
+            f"{item.get('id')}: {item.get('detail')}"
+            for item in payload.get("criteria", [])
+            if isinstance(item, dict) and item.get("status") == "fail"
+        ]
+        return criterion("image", "fail", "; ".join(failed)[:300] or "live image verifier reported failure")
+    return criterion(
+        "image",
+        "fail",
+        f"verifier exit/status mismatch: exit={completed.returncode}, overall={overall!r}",
+    )
 
 
 def verdict(criteria: list[dict[str, str]]) -> dict[str, Any]:
@@ -157,7 +224,7 @@ def main(argv: list[str] | None = None) -> int:
         args.output.write_text(rendered, encoding="utf-8")
     else:
         sys.stdout.write(rendered)
-    return 1 if result["overall"] == "fail" else 0
+    return {"pass": 0, "fail": 1, "incomplete": 2}[result["overall"]]
 
 
 if __name__ == "__main__":
