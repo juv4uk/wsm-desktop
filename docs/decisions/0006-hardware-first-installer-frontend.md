@@ -6,7 +6,7 @@
 - Дата: 2026-11-25
 - Канонічне завдання: [#10 — вибір hardware-first frontend](https://github.com/juv4uk/wsm-desktop/issues/10)
 - Джерело оцінки: [#11 — матриця кандидатів](https://github.com/juv4uk/wsm-desktop/issues/11#issuecomment-7170700231) та [доповнення про `guix-install`](https://github.com/juv4uk/wsm-desktop/issues/11#issuecomment-7172014912)
-- Пов'язане: [ADR 0004](0004-nix-guix-backend-strategy.md), [#12 / handoff-контракт](../INSTALLER-HANDOFF.md), [#5/#6](https://github.com/juv4uk/wsm-desktop/issues/5) / [#6](https://github.com/juv4uk/wsm-desktop/issues/6), [#13](https://github.com/juv4uk/wsm-desktop/issues/13), [#14](https://github.com/juv4uk/wsm-desktop/issues/14), [#23](https://github.com/juv4uk/wsm-desktop/issues/23), [#24](https://github.com/juv4uk/wsm-desktop/issues/24), [#2](https://github.com/juv4uk/wsm-desktop/issues/2)
+- Пов'язане: [ADR 0004](0004-nix-guix-backend-strategy.md), [#12 / handoff-контракт](../INSTALLER-HANDOFF.md), [#5 — схема звіту](https://github.com/juv4uk/wsm-desktop/issues/5), [#6 — collector](https://github.com/juv4uk/wsm-desktop/issues/6), [#13](https://github.com/juv4uk/wsm-desktop/issues/13), [#14](https://github.com/juv4uk/wsm-desktop/issues/14), [#23](https://github.com/juv4uk/wsm-desktop/issues/23), [#24](https://github.com/juv4uk/wsm-desktop/issues/24), [#2](https://github.com/juv4uk/wsm-desktop/issues/2)
 - Переглядає [ADR 0002](0002-calamares-as-installer.md) у частині вибору frontend; його принцип про єдиного власника bootloader залишається чинним.
 
 ## Контекст
@@ -14,6 +14,25 @@
 Попередній напрямок розглядав Calamares як графічний frontend. Подальша оцінка показала, що Calamares не є готовим Guix backend, а користувацький напрямок подальшої роботи — hardware-first інсталятор, який спочатку показує докази про обладнання і лише потім передає керування одному нативному backend-у. Тому Calamares більше не є базовим frontend-ом, хоча його інтеграційні уроки про подвійний bootloader залишаються корисними.
 
 Матриця #11 перевірила archinstall, NixOS installer tooling, Anaconda, YaST/libhd, Debian-installer `hw-detect`, а пізніше — окремий проєкт `guix-install`. Жоден готовий frontend не встановлюється напряму з поточних користувацьких Nixpkgs або Guix package sets: вони є моделями інтеракції або distribution-coupled інструментами, а не залежностями, які WSM може просто додати. Натомість допоміжні пакети для виявлення обладнання доступні в обох системах.
+
+## Актуальний upstream-знімок frontend-патерна (25.11.2026)
+
+Офіційний release log `archinstall` позначає **4.5 від 29.09.2026** як останній реліз на дату цього ADR. Важливі зміни для нашої оцінки:
+
+- upstream перейшов від `curses` до **Textual** для TUI; це зміна UI toolkit, а не причина імпортувати `archinstall` як runtime dependency;
+- приклад JSON-конфігурації тепер має окреме тестове покриття;
+- `archinstall --dry-run` у guided workflow симулює конфігурацію та зберігає generated config, але цей режим не є WSM safety contract і не замінює нашого typed plan/explicit confirmation.
+
+**Textual 8.2.8** (MIT; реліз 30.06.2026) — окремий Python TUI framework із підтримкою Python 3.9+, Linux/macOS/Windows та можливістю запускати UI у терміналі або браузері. Це новий кандидат для окремої перевірки в прототипі #13 — особливо accessibility, keyboard navigation, live ISO footprint, terminal compatibility та testability. Не додавати його до production dependency set, доки не перевірено package closure у locked Guix/Nix inputs (#39), ліцензію й розмір.
+
+Отже, актуальна рекомендація уточнюється: **адаптувати guided/config/profile workflow archinstall; окремо оцінити Textual як UI toolkit; не залежати від Arch installer або його install engine**.
+
+Джерела:
+- [archinstall 4.5 release](https://github.com/archlinux/archinstall/releases) — TUI migration до Textual, JSON config sample tests та release details.
+- [archinstall guided configuration and dry-run](https://github.com/archlinux/archinstall/blob/master/docs/installing/guided.rst) — JSON config та безпечна симуляція guided run.
+- [Textual 8.2.8 release](https://github.com/Textualize/textual/releases) — upstream version, fixes та релізна історія.
+- [Textual documentation](https://textual.textualize.io/) — можливості, cross-platform та terminal/browser execution.
+
 
 Водночас #1 підтвердив, що мінімальна Guix System будується й запускається у disposable QEMU, а #55 зафіксував вимогу не називати build успішним boot без реального serial-доказу. Це знімає частину невизначеності щодо Guix-шляху, але не вирішує вибір primary backend у #2.
 
@@ -25,7 +44,6 @@ WSM розробляє власний тонкий frontend, а не форк б
 
 - гідований TUI з послідовними кроками;
 - декларативний, перегляданий JSON-план;
-
 - профілі замість довільного меню параметрів;
 - цикл перевірки у QEMU до будь-якого запису на цільовий диск.
 
@@ -41,7 +59,7 @@ Frontend показує звіт `wsm-hwcheck` (#5/#6) і похідні ріш�
 
 Після preflight frontend формує draft plan і показує його користувачеві. Подальша передача відбувається виключно за канонічним контрактом [#12](../INSTALLER-HANDOFF.md):
 
-- frontend не виконує partition, format, mount для запису,EFI-зміни, bootloader install чи `guix system init` / `nixos-install`;
+- frontend не виконує partition, format, mount для запису, зміни EFI-змінних, встановлення bootloader-а чи `guix system init` / `nixos-install`;
 - backend виконує фази `validate → realize/build → prepare → revalidate → apply → verify`;
 - для однієї інсталяції обирається рівно один backend: `guix-system` або `nixos`;
 - прототип #13 залишається read-only і видає лише `diagnostic-only` план;
