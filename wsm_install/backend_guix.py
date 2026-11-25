@@ -37,6 +37,8 @@ LABEL_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,16}$")
 LOCALE_PATTERN = re.compile(r"^[a-z]{2,3}_[A-Z]{2}\.[A-Za-z0-9-]+$")
 TIMEZONE_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_+-]*(/[A-Za-z0-9_+-]+)*$")
 KEYBOARD_PATTERN = re.compile(r"^[a-z]{2}(-[a-z0-9]+)?$")
+REPORT_ID_PATTERN = re.compile(r"[A-Za-z0-9_-]{16,80}")
+REPORT_SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 
 # argv is built from these two words only. The Guix deployment command is the
 # single allowed entry point for the Guix backend; NixOS commands are never
@@ -168,11 +170,24 @@ def validate_plan(plan: dict[str, Any]) -> None:
         "plan.digest_mismatch",
         "plan contents do not match plan_sha256; refusing stale or modified plan data",
     )
-    source = plan.get("source_report") or {}
+    source = plan.get("source_report")
     _require(
-        bool(source.get("sha256")) and bool(source.get("report_id")),
+        isinstance(source, dict),
         "plan.provenance",
-        "plan does not reference the report it was derived from",
+        "source_report must be an object",
+    )
+    report_id = source.get("report_id")
+    report_sha256 = source.get("sha256")
+    _require(
+        isinstance(report_id, str) and REPORT_ID_PATTERN.fullmatch(report_id) is not None,
+        "plan.provenance.report_id",
+        "source report_id must be 16-80 ASCII letters, digits, underscores or hyphens",
+    )
+    _require(
+        isinstance(report_sha256, str)
+        and REPORT_SHA256_PATTERN.fullmatch(report_sha256) is not None,
+        "plan.provenance.sha256",
+        "source report sha256 must be exactly 64 lowercase hexadecimal characters",
     )
 
 
