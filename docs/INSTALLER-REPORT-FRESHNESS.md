@@ -41,7 +41,7 @@ The prototype evaluator is pure and does not read files, probe hardware, invoke 
 
 ## Status semantics
 
-| Status | Meaning | Confirmable |
+| Status | Meaning | Freshness gate passed |
 |---|---|---:|
 | `fresh` | Report bytes, boot session, age, environment, and topology match | Yes |
 | `stale` | Same boot, but collection age exceeds policy | No |
@@ -52,6 +52,8 @@ The prototype evaluator is pure and does not read files, probe hardware, invoke 
 | `unverifiable` | Required freshness evidence is absent or inconsistent | No |
 
 A freshness failure is not evidence of hardware incompatibility. It means the report must be recollected or the user must return to preflight.
+
+**Important boundary:** `freshness_gate_passed = true` means only that this isolated freshness sub-check succeeded. It does **not** make the complete installation plan confirmable, authorize a backend, select or validate a target disk, satisfy scenario capability requirements, or permit disk writes. The current #19 `wsm-install` output remains `diagnostic-only` and `plan_readiness.confirmable=false`. The freshness evaluator is not wired into that CLI until #5/#6 approve a versioned producer envelope and the complete scenario/target confirmation path is implemented.
 
 ## Plan binding and target safety
 
