@@ -101,6 +101,56 @@ def _validate_layout_confirmation(layout: Layout) -> None:
         )
 
 
+def _validate_layout_shape(layout: Layout) -> None:
+    """Reject mutated or hand-crafted partition tables outside the planner contract."""
+    if layout.firmware == "uefi":
+        expected = [
+            {
+                "number": 1,
+                "start": "1MiB",
+                "end": "513MiB",
+                "typecode": "ef00",
+                "name": "wsm-esp",
+                "role": "esp",
+            },
+            {
+                "number": 2,
+                "start": "513MiB",
+                "end": "0",
+                "typecode": "8300",
+                "name": "wsm-root",
+                "role": "root",
+            },
+        ]
+    elif layout.firmware == "bios":
+        expected = [
+            {
+                "number": 1,
+                "start": "1MiB",
+                "end": "2MiB",
+                "typecode": "ef02",
+                "name": "wsm-bios-boot",
+                "role": "bios-grub",
+            },
+            {
+                "number": 2,
+                "start": "2MiB",
+                "end": "0",
+                "typecode": "8300",
+                "name": "wsm-root",
+                "role": "root",
+            },
+        ]
+    else:
+        raise Refused("disk.firmware", f"unsupported firmware mode {layout.firmware!r}")
+
+    if layout.partitions != expected:
+        raise Refused(
+            "layout.partition-plan",
+            "partition entries were modified or do not match the supported WSM layout",
+        )
+
+
 def _validate_target(target: str) -> None:
     if target != TARGET_MOUNTPOINT:
         raise Refused(
@@ -139,6 +189,7 @@ def plan_steps(
     partprobe only re-reads a partition table; it cannot create one.
     """
     _validate_layout_confirmation(layout)
+    _validate_layout_shape(layout)
     _validate_target(target)
 
     if filesystem not in FILESYSTEMS:
@@ -224,6 +275,7 @@ def backend_command(
 ) -> list[str]:
     """Return a fixed, lock-pinned Guix argv. Never execute it here."""
     _validate_layout_confirmation(layout)
+    _validate_layout_shape(layout)
     _validate_target(target)
     if system_file != SYSTEM_CONFIG_PATH:
         raise Refused(
