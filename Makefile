@@ -24,3 +24,4 @@ check-hwcheck:
 
 check-installer:
 	$(PYTHON) tests/test_install_preflight.py
+	$(PYTHON) tests/test_install_preflight_acceptance.py
