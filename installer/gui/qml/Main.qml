@@ -19,9 +19,16 @@ ApplicationWindow {
     property bool reviewAcknowledged: false
     property string hostname: "wsm-desktop"
     property string username: "wsm"
+    readonly property var workflowState: [
+        wsmController.busy,
+        wsmController.reportReady,
+        wsmController.planAvailable,
+        wsmController.planStatus,
+        wsmController.diskInventoryState
+    ]
 
     function canOpenStep(step) {
-        return wsmController.canEnterStep(step)
+        return root.workflowState.length === 5 && wsmController.canEnterStep(step)
     }
 
     function enterStep(step) {
