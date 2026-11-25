@@ -127,6 +127,7 @@ def evaluate_freshness(
     live: LiveSession,
     *,
     expected_report_sha256: str,
+    expected_boot_session_sha256: str,
     max_age_seconds: int = DEFAULT_MAX_AGE_SECONDS,
 ) -> FreshnessDecision:
     """Fail closed unless report bytes, boot session, age, environment and topology match."""
@@ -141,8 +142,15 @@ def evaluate_freshness(
             "report bytes differ from the report bound into the draft plan",
         )
 
+    if not _is_digest(expected_boot_session_sha256):
+        return _decision(FreshnessStatus.UNVERIFIABLE, "plan-bound boot-session identity is unavailable")
     if not _is_digest(report.boot_session_sha256) or not _is_digest(live.boot_session_sha256):
         return _decision(FreshnessStatus.UNVERIFIABLE, "boot-session identity is unavailable")
+    if report.boot_session_sha256 != expected_boot_session_sha256:
+        return _decision(
+            FreshnessStatus.SESSION_MISMATCH,
+            "source report boot session differs from the session bound into the draft plan",
+        )
     if report.boot_session_sha256 != live.boot_session_sha256:
         return _decision(
             FreshnessStatus.SESSION_MISMATCH,
