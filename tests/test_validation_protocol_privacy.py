@@ -47,7 +47,7 @@ class ValidationProtocolPrivacyTests(unittest.TestCase):
         self.assertIn("through 0.4.0", audit)
         self.assertIn("RHEL-релізи не уражені", audit)
         self.assertIn("не запускається з підвищеними привілеями", audit)
-        self.assertIn("crafted EDID слід вважати untrusted input", audit)
+        self.assertIn("Crafted EDID слід вважати untrusted input", audit)
 
 
 if __name__ == "__main__":
