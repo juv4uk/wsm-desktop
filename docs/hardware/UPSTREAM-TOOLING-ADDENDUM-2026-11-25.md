@@ -23,6 +23,25 @@ WSM варто будувати не навколо одного «детект�
 | [VKMS](https://docs.kernel.org/gpu/vkms.html) + [IGT GPU Tools](https://gitlab.freedesktop.org/drm/igt-gpu-tools) | Віртуальний DRM/KMS display для headless CI/VM перевірок | Для VKMS потрібно завантажити модуль/налаштувати configfs; IGT може вимагати окремої сесії без compositor-а. Це змінює стан тестового kernel і не є live preflight | Ізольована CI/VM lane, не probe на фізичному ПК |
 | [fwupd HSI](https://fwupd.github.io/hsi.html) | Окремі показники firmware/platform security posture | Security posture не доводить наявність runtime firmware blob, успішне виконання `request_firmware()` чи ініціалізацію пристрою | Окремий security report; не змішувати з #16 compatibility evidence |
 
+## Security gate: EDID/DisplayID parser не можна додавати без перевірки CVE
+
+EDID/DisplayID надходить від зовнішнього пристрою або з локального файла і має трактуватися як недовірений вхід. Для `libdisplay-info` оприлюднено два дефекти читання за межами буфера в DisplayID parser-ах:
+
+- [CVE-2026-112271](https://access.redhat.com/security/cve/cve-2026-112271) — DisplayID v1 parser може читати за межами секції, коли оголошена довжина data block перевищує її межі.
+- [CVE-2026-112272](https://access.redhat.com/security/cve/cve-2026-112272) — відповідний out-of-bounds read у DisplayID v2 parser.
+
+Security advisories описують спеціально сформований EDID від дисплея/адаптера або з файла та можливе аварійне завершення процесу (DoS). AWS advisories додатково вказують affected versions through 0.4.0 для відповідних parser-ів: [112271](https://explore.alas.aws.amazon.com/CVE-2026-112271.html), [112272](https://explore.alas.aws.amazon.com/CVE-2026-112272.html). Це не підтверджує, що всі дистрибутивні збірки однаково уражені: vendor backport/patch статус треба перевіряти за конкретним пакунком і ревізією.
+
+Практичні вимоги WSM:
+
+- Не включати upstream `libdisplay-info 0.4.0` як обов'язковий компонент live image та не запускати його parser у привілейованому процесі, доки не підтверджено виправлений upstream commit/release або дистрибутивний backport.
+- Перед прийняттям будь-якої версії перевіряти security advisory, changelog/fix commit і фактичний package source у pinned Guix/Nix channel. Сам номер версії без перевірки backport недостатній.
+- Залишити EDID/DisplayID decoding опційним. За відсутності безпечного parser-а не збирати parsed identity/timing fields; не блокувати базовий hardware inventory і використовувати окремі kernel DRM/KMS connector/mode observations.
+- Перевірити dependency closure `drm_info`: наприклад, пакетний запис FreeBSD для 2.10.0 показує залежність від `libdisplay-info 0.4.0` ([package dependency record](https://portstatus.bsdproject.de/graphics/drm_info/)). Це приклад конкретного пакування, а не доказ такого самого closure в Guix/Nix.
+- Не вважати JSON `drm_info` автоматично privacy-safe: якщо в ньому є EDID/base64 або повні display identifiers, санітизувати їх до включення у WSM report/export.
+
+До підтвердження безпечного parser-а WSM має зберігати різницю між "EDID доступний у sysfs", "EDID успішно розібраний" та "KMS експонує mode". Відсутність parsed EDID полів — це `unknown/not-collected`, а не несумісність дисплея.
+
 ## Правила інтеграції
 
 ### PCIe AER
