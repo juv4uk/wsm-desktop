@@ -19,7 +19,7 @@
     "artifacts"
   ],
   "properties": {
-    "schema": {"const": "wsm-profile-evidence/1"},
+    "schema": {"const": "wsm-profile-evidence/2"},
     "profile": {
       "type": "object",
       "additionalProperties": false,
