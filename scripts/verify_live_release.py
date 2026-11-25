@@ -153,6 +153,7 @@ def verdict(criteria: list[dict[str, str]], iso: Path) -> dict[str, Any]:
         "tool_version": VERSION,
         "collected_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
         "artifact": iso.name,
+        "artifact_sha256": sha256_of(iso),
         "overall": overall,
         "criteria": criteria,
         "note": "incomplete is not a pass: a criterion that could not run proves nothing",
