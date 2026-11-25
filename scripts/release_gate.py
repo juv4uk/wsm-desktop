@@ -67,18 +67,24 @@ def check_docs() -> dict[str, str]:
     return from_exit("docs", code, detail)
 
 
-def check_channels() -> dict[str, str]:
-    """Check required Free lock and report an absent optional Compatibility lock honestly."""
+def check_channels(product: str) -> dict[str, str]:
+    """Validate only the products selected for this release artifact."""
+    selected = {
+        "free": ("free",),
+        "compatibility": ("compatibility",),
+        "all": ("free", "compatibility"),
+    }
+    if product not in selected:
+        return criterion("channels", "fail", f"unsupported product selection: {product!r}")
+
     results: list[tuple[str, str, str]] = []
-    for policy in ("free", "compatibility"):
+    for policy in selected[product]:
         lock = CHANNEL_LOCKS[policy]
         if not lock.is_file():
             if policy == "free":
                 results.append(("free", "fail", f"required Free lock is missing: {lock.name}"))
             else:
-                results.append(
-                    ("compatibility", "not-run", "Compatibility lock NOT_CONFIGURED")
-                )
+                results.append(("compatibility", "not-run", "Compatibility lock NOT_CONFIGURED"))
             continue
 
         code, detail = run(
@@ -100,7 +106,11 @@ def check_channels() -> dict[str, str]:
     not_run = [f"{policy}: {detail}" for policy, status, detail in results if status == "not-run"]
     if not_run:
         return criterion("channels", "not-run", "; ".join(not_run))
-    return criterion("channels", "pass", "Free and configured Compatibility locks satisfy structural policy")
+    return criterion(
+        "channels",
+        "pass",
+        f"{product} product channel lock policy passed; no other product is implied",
+    )
 
 
 def check_tests() -> dict[str, str]:
@@ -150,6 +160,8 @@ def check_image(iso: Path | None, boot: bool) -> dict[str, str]:
 
     if not isinstance(payload, dict) or payload.get("schema") != "wsm-release-verdict/1":
         return criterion("image", "fail", "live image verifier returned an unknown or missing schema")
+    if payload.get("artifact") != iso.name:
+        return criterion("image", "fail", "live image verifier verdict names a different ISO artifact")
 
     expected_ids = {"checksum", "manifest", "iso-structure", "boot-bios", "boot-uefi"}
     criteria = payload.get("criteria")
@@ -158,7 +170,9 @@ def check_image(iso: Path | None, boot: bool) -> dict[str, str]:
     if any(
         not isinstance(item, dict)
         or not isinstance(item.get("id"), str)
+        or not isinstance(item.get("status"), str)
         or item.get("status") not in {"pass", "fail", "not-run"}
+        or not isinstance(item.get("detail"), str)
         for item in criteria
     ):
         return criterion("image", "fail", "live image verifier returned malformed criteria")
@@ -194,7 +208,7 @@ def check_image(iso: Path | None, boot: bool) -> dict[str, str]:
     return criterion("image", "fail", "; ".join(failed)[:300] or "live image verifier reported failure")
 
 
-def verdict(criteria: list[dict[str, str]]) -> dict[str, Any]:
+def verdict(criteria: list[dict[str, str]], product: str) -> dict[str, Any]:
     statuses = {item["status"] for item in criteria}
     if "fail" in statuses:
         overall = "fail"
@@ -205,6 +219,7 @@ def verdict(criteria: list[dict[str, str]]) -> dict[str, Any]:
     return {
         "schema": SCHEMA,
         "tool_version": VERSION,
+        "product": product,
         "collected_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
         "overall": overall,
         "criteria": criteria,
@@ -217,6 +232,12 @@ def build_parser() -> argparse.ArgumentParser:
         prog="release-gate",
         description="Run every read-only release check and emit one verdict.",
     )
+    parser.add_argument(
+        "--product",
+        choices=("free", "compatibility", "all"),
+        required=True,
+        help="product whose channel policy this release verdict covers",
+    )
     parser.add_argument("--iso", type=Path, help="live image to verify")
     parser.add_argument("--boot", action="store_true", help="also boot the image in QEMU")
     parser.add_argument("--output", type=Path)
@@ -228,7 +249,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
-    criteria = [check_docs(), check_channels()]
+    criteria = [check_docs(), check_channels(args.product)]
     if args.skip_tests:
         criteria.append(criterion("tests", "not-run", "--skip-tests was requested"))
     else:
@@ -236,7 +257,7 @@ def main(argv: list[str] | None = None) -> int:
     criteria.append(check_evidence())
     criteria.append(check_image(args.iso, args.boot))
 
-    result = verdict(criteria)
+    result = verdict(criteria, args.product)
     rendered = json.dumps(
         result, ensure_ascii=False, indent=None if args.compact else 2, sort_keys=True
     ) + "\n"
