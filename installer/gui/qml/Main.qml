@@ -22,22 +22,12 @@ ApplicationWindow {
     property string username: "wsm"
 
     function canOpenStep(step) {
-        if (step === 0 || step === 1)
-            return true
-        if (!wsmController.reportReady)
-            return false
-        if (step === 2)
-            return true
-        if (step === 3 || step === 4) {
-            var inventorySettled = wsmController.diskInventoryState === "loaded"
-                || wsmController.diskInventoryState === "unavailable"
-            if (!inventorySettled)
-                return false
-            if (step === 3)
-                return true
-            return wsmController.planAvailable || wsmController.planStatus === "blocked"
-        }
-        return false
+        return InstallerFlow.canOpenStep(
+            step,
+            wsmController.reportReady,
+            wsmController.diskInventoryState,
+            wsmController.planAvailable,
+            wsmController.planStatus)
     }
 
     function enterStep(step) {
@@ -668,11 +658,12 @@ ApplicationWindow {
                 highlighted: true
                 enabled: !wsmController.busy
                     && (root.currentStep === 4
-                        ? root.reviewAcknowledged
+                        ? InstallerFlow.canFinishReview(root.reviewAcknowledged)
                         : root.canOpenStep(root.currentStep + 1))
                 onClicked: {
                     if (root.currentStep === 4) {
-                        Qt.quit()
+                        if (InstallerFlow.canFinishReview(root.reviewAcknowledged))
+                            Qt.quit()
                     } else {
                         root.enterStep(root.currentStep + 1)
                     }
