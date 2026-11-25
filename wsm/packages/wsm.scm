@@ -19,6 +19,8 @@
   #:use-module (gnu packages python)
   #:use-module (gnu packages python-xyz)
   #:use-module (guix licenses)
+  #:use-module (srfi srfi-1)
+  #:use-module (srfi srfi-13)
   #:export (wsm-tools))
 
 (define-public wsm-tools
