@@ -41,11 +41,11 @@ GUEST_MEMORY_MIB = 512
 GUEST_INIT = """#!/bin/sh
 set -eu
 
-guest_fail() {
+guest_fail() {{
     echo "WSM_HWCHECK_GUEST_FAILURE:$1" > /dev/console
     sleep 2
     poweroff -f
-}
+}}
 
 echo WSM_HWCHECK_STAGE_INIT > /dev/console
 mount -t proc -o ro,nosuid,nodev,noexec proc /proc || guest_fail "proc-mount"
