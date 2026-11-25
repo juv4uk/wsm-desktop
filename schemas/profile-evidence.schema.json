@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/juv4uk/wsm-desktop/schemas/profile-evidence.schema.json",
+  "$id": "https://github.com/juv4uk/wsm-desktop/schemas/profile-evidence.schema.json#v2",
   "title": "WSM hardware profile evidence",
-  "description": "Evidence bundle that turns a hardware profile from a hypothesis into a claim. A profile without a valid bundle is not a profile.",
+  "description": "Version 2 evidence bundle. Breaking update to the initial v1 draft: binds evidence to a hardware report and requires hashed local artifacts.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -19,14 +19,26 @@
     "artifacts"
   ],
   "properties": {
-    "schema": {"const": "wsm-profile-evidence/2"},
+    "schema": {
+      "const": "wsm-profile-evidence/2"
+    },
     "profile": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["vendor", "model", "slug"],
+      "required": [
+        "vendor",
+        "model",
+        "slug"
+      ],
       "properties": {
-        "vendor": {"type": "string", "minLength": 1},
-        "model": {"type": "string", "minLength": 1},
+        "vendor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
         "slug": {
           "type": "string",
           "pattern": "^[a-z0-9]+(-[a-z0-9]+)*/[a-z0-9]+(-[a-z0-9]+)*$",
@@ -39,15 +51,31 @@
       "minLength": 8,
       "description": "report_id from wsm-hwcheck; the evidence must point at the report it came from"
     },
-    "report_schema_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "report_schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
     "isa_level": {
       "type": "string",
-      "enum": ["x86-64-v1", "x86-64-v2", "x86-64-v3", "x86-64-v4", "unknown"]
+      "enum": [
+        "x86-64-v1",
+        "x86-64-v2",
+        "x86-64-v3",
+        "x86-64-v4",
+        "unknown"
+      ]
     },
-    "verified_on": {"type": "string", "format": "date"},
+    "verified_on": {
+      "type": "string",
+      "format": "date"
+    },
     "verified_by": {
       "type": "string",
-      "enum": ["автори проєкту", "local agent", "web agent"],
+      "enum": [
+        "автори проєкту",
+        "local agent",
+        "web agent"
+      ],
       "description": "Role label only; personal names and e-mail addresses are not accepted."
     },
     "verified_functions": {
@@ -56,22 +84,42 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name", "status"],
+        "required": [
+          "name",
+          "status"
+        ],
         "properties": {
-          "name": {"type": "string", "minLength": 1},
-          "status": {"enum": ["pass", "fail", "not-assessed"]},
-          "note": {"type": "string"}
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "enum": [
+              "pass",
+              "fail",
+              "not-assessed"
+            ]
+          },
+          "note": {
+            "type": "string"
+          }
         }
       }
     },
     "known_limitations": {
       "type": "array",
-      "items": {"type": "string", "minLength": 1}
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
     },
     "not_assessed": {
       "type": "array",
       "minItems": 1,
-      "items": {"type": "string", "minLength": 1},
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
       "description": "What was not verified. Must be non-empty: no profile is fully verified."
     },
     "artifacts": {
@@ -80,16 +128,28 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["kind", "path", "sha256"],
+        "required": [
+          "kind",
+          "path",
+          "sha256"
+        ],
         "properties": {
-          "kind": {"type": "string", "minLength": 1},
+          "kind": {
+            "type": "string",
+            "minLength": 1
+          },
           "path": {
             "type": "string",
             "minLength": 1,
             "description": "Portable path relative to the directory containing evidence.json."
           },
-          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-          "note": {"type": "string"}
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "note": {
+            "type": "string"
+          }
         }
       }
     }
