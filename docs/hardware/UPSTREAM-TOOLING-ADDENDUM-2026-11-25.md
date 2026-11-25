@@ -14,7 +14,7 @@ WSM варто будувати не навколо одного «детект�
 
 | Джерело | Що може додати WSM | Межа доказу | Рекомендована роль |
 | --- | --- | --- | --- |
-| [hwloc 2.16.0](https://www.open-mpi.org/software/hwloc/v2.16/) | Ієрархія CPU/cache/NUMA/CXL та locality PCI/I/O-пристроїв, включно з окремими accelerator providers; XML topology export | I/O discovery вимкнено за замовчуванням у звичайному API та потребує підтримки ОС; для повного PCI discovery може знадобитися libpciaccess. Не описує USB interface binding або GPU→DRM connector→monitor | Опційний provider для CPU↔NUMA↔PCI locality, не заміна зв'язків #18 |
+| [hwloc 2.16.0rc1](https://www.open-mpi.org/software/hwloc/v2.16/) | Ієрархія CPU/cache/NUMA/CXL та locality PCI/I/O-пристроїв, включно з окремими accelerator providers; XML topology export | I/O discovery вимкнено за замовчуванням у звичайному API та потребує підтримки ОС; для повного PCI discovery може знадобитися libpciaccess. Не описує USB interface binding або GPU→DRM connector→monitor | Опційний provider для CPU↔NUMA↔PCI locality, не заміна зв'язків #18 |
 | [libdisplay-info 0.4.0](https://gitlab.freedesktop.org/emersion/libdisplay-info) | EDID/DisplayID decode; реліз додав DisplayID v1 Type IV timings та DisplayID v2 CTA-861 blocks | Advertised timing не є KMS-exposed mode, active mode або functional pass. High-level API краще ізолює споживача від змін low-level API | Опційний parser у display lane поруч із kernel DRM/KMS observations |
 | [drm_info 2.10.0](https://gitlab.freedesktop.org/emersion/drm_info) | Локальний DRM device/property inventory, JSON output через `drm_info -j` | JSON може містити GPU/monitor identifiers; output/version contract треба pin-ити. Не доводить, що режим реально працює або що монітор фізично підключений до конкретного GPU без явного topology edge | Опційний локальний DRM provider; без upload у DRM database |
 | [systemd hwdb 262](https://www.freedesktop.org/software/systemd/man/262/hwdb.html) | Локальне зіставлення modalias-подібних ключів із udev property/value metadata; підтримує окремий query шлях | Нормалізація назви/властивостей не доводить driver binding, runtime firmware load чи роботу пристрою | Допоміжний шар назв і quirks, не compatibility oracle |
@@ -66,7 +66,7 @@ WSM варто будувати не навколо одного «детект�
 
 ## Джерела
 
-- [hwloc v2.16.0 release](https://www.open-mpi.org/software/hwloc/v2.16/) — release та можливості CPU/NUMA/I/O locality.
+- [hwloc v2.16.0rc1 release candidate](https://www.open-mpi.org/software/hwloc/v2.16/) — prerelease від 2026-11-13; не позначати як фінальний stable release. Перевіряти фінальний реліз перед закріпленням версії.
 - [hwloc I/O device documentation](https://hwloc.gitlabpages.inria.fr/doc-snapshots/v2.x-html/a00369.html) — фільтри I/O discovery та залежність від підтримки ОС/libpciaccess.
 - [libdisplay-info 0.4.0 release announcement](https://mail-archive.com/wayland-devel%40lists.freedesktop.org/msg44365.html) — DisplayID v1/v2 coverage та API compatibility notes.
 - [drm_info 2.10.0 package record](https://openmamba.org/en/rpms/base/drm_info/) — version, MIT license та build requirements; upstream source вище.
@@ -78,6 +78,6 @@ WSM варто будувати не навколо одного «детект�
 
 ## Висновок
 
-Першими для реального WSM експерименту варто оцінити `libdisplay-info`, `drm_info`, `hwloc` та read-only PCIe AER counters. `devlink health show` — optional support for selected NIC/accelerator drivers. VKMS/IGT — тільки CI/VM. fwupd HSI — окремий security pane.
+Першими для реального WSM експерименту варто оцінити `libdisplay-info 0.4.0`, `drm_info 2.10.0`, `hwloc 2.16.0rc1` (тільки в ізольованому експерименті до фінального релізу) та read-only PCIe AER counters. `devlink health show` — optional support for selected NIC/accelerator drivers. VKMS/IGT — тільки CI/VM. fwupd HSI — окремий security pane.
 
 Ні один із цих інструментів не повинен самостійно виставляти загальний verdict сумісності. WSM має зберігати первинний факт, джерело, час, обмеження та невідомі стани окремо від policy decision.
