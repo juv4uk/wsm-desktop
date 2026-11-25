@@ -108,7 +108,13 @@ WSM не обіцяє усунути всі обмеження upstream. Кож�
 
 ### Calamares
 
-Calamares лишається кандидатом на спільний frontend. Він не вирішує backend deployment самостійно: WSM повинен мати окремі Nix/NixOS та Guix deployment adapters або один adapter лише для обраного backend-а.
+Calamares більше не базовий кандидат на frontend: напрямок hardware-first frontend запропоновано в [PR #100 / ADR 0006](https://github.com/juv4uk/wsm-desktop/pull/100). Він не вирішує backend deployment самостійно: WSM повинен мати окремі Nix/NixOS та Guix deployment adapters або один adapter лише для обраного backend-а.
+
+### Статус доказової бази (2026-11-25)
+
+- Gate [#55](https://github.com/juv4uk/wsm-desktop/issues/55) вимагає реального boot-доказу, а не лише успішної збірки. Пакет доказів для Guix-шляху опубліковано в [#1](https://github.com/juv4uk/wsm-desktop/issues/1#issuecomment-7172142987): точний SHA, версії, exit codes, реальну ревізію каналу, `guix system build`, `guix system vm`, serial-маркер `wsm-desktop login:` з `vm_exit=0`, розкриття TCG і disposable-образи.
+- Окремого еквівалентного real-boot пакета для Nix/NixOS поки немає; тому цей ADR лишається `proposed`, а вибір primary backend-а в #2 не ратифіковано.
+- `--full-boot` через GRUB у TCG до ядра не дійшов і як успішний boot не заявляється.
 
 ## Експериментальний план
 
