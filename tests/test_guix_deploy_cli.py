@@ -281,19 +281,22 @@ class GuixDeployCliTests(unittest.TestCase):
                     _ensure_output_outside_target(candidate)
                 self.assertIn("outside the target mountpoint", str(raised.exception))
 
-    def test_review_output_is_refused_on_target_bind_mount_alias(self) -> None:
-        # Simulate /mnt being mounted and a review directory sharing its st_dev
-        # through a bind-mount alias outside the lexical /mnt tree.
+    def test_review_output_is_refused_on_same_filesystem_bind_mount_even_if_ismount_is_false(self) -> None:
+        # Python's ismount may return False for a same-filesystem bind mount.
+        # mountinfo still contains the exact /mnt mountpoint, so st_dev must be compared.
+        mountinfo = "36 25 8:1 / /mnt rw,relatime - ext4 /dev/vda1 rw\n"
         fake_stat = type("StatResult", (), {"st_dev": 123})()
         with (
-            patch("wsm_install.guix_deploy.os.path.ismount", return_value=True),
+            patch.object(Path, "read_text", return_value=mountinfo),
             patch.object(Path, "stat", return_value=fake_stat),
+            patch("wsm_install.guix_deploy.os.path.ismount", return_value=False),
         ):
             with self.assertRaises(DeployCliError) as raised:
                 _ensure_output_not_on_target_filesystem(self.root / "review.scm")
         self.assertIn("share the mounted target filesystem", str(raised.exception))
 
     def test_review_output_on_separate_filesystem_is_allowed(self) -> None:
+        mountinfo = "36 25 8:1 / /mnt rw,relatime - ext4 /dev/vda1 rw\n"
         target_stat = type("StatResult", (), {"st_dev": 123})()
         output_stat = type("StatResult", (), {"st_dev": 456})()
 
@@ -301,17 +304,36 @@ class GuixDeployCliTests(unittest.TestCase):
             return target_stat if path == Path("/mnt") else output_stat
 
         with (
-            patch("wsm_install.guix_deploy.os.path.ismount", return_value=True),
+            patch.object(Path, "read_text", return_value=mountinfo),
             patch.object(Path, "stat", autospec=True, side_effect=fake_stat),
         ):
             _ensure_output_not_on_target_filesystem(self.root / "review.scm")
 
-    def test_review_output_skips_device_comparison_before_target_mount(self) -> None:
+    def test_review_output_skips_device_comparison_when_mountinfo_has_no_target_mount(self) -> None:
+        root_mount = "1 0 8:1 / / rw,relatime - ext4 /dev/root rw\n"
         with (
-            patch("wsm_install.guix_deploy.os.path.ismount", return_value=False),
+            patch.object(Path, "read_text", return_value=root_mount),
             patch.object(Path, "stat", side_effect=AssertionError("stat must not be called")),
         ):
             _ensure_output_not_on_target_filesystem(self.root / "review.scm")
+
+    def test_review_output_fails_closed_when_mountinfo_is_unavailable(self) -> None:
+        with patch.object(Path, "read_text", side_effect=OSError("proc unavailable")):
+            with self.assertRaisesRegex(DeployCliError, "cannot read target mount table"):
+                _ensure_output_not_on_target_filesystem(self.root / "review.scm")
+
+    def test_review_output_fails_closed_on_malformed_mountinfo(self) -> None:
+        malformed = "36 25 8:1 / /mnt rw,relatime\n"
+        with patch.object(Path, "read_text", return_value=malformed):
+            with self.assertRaisesRegex(DeployCliError, "mountinfo line 1 is malformed"):
+                _ensure_output_not_on_target_filesystem(self.root / "review.scm")
+
+    def test_mountinfo_path_escape_is_decoded(self) -> None:
+        from wsm_install.guix_deploy import _decode_mountinfo_field
+
+        self.assertEqual(_decode_mountinfo_field(r"/target\040drive\134name"), "/target drive\\name")
+        with self.assertRaisesRegex(DeployCliError, "invalid octal path escape"):
+            _decode_mountinfo_field(r"/target\04x")
 
     def test_custom_mountpoint_is_not_a_cli_option(self) -> None:
         # The backend allow-list fixes the installer-owned mount root; a CLI
