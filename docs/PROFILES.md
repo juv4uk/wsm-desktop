@@ -61,6 +61,13 @@ Clear Linux продавав bundles як спосіб зібрати систе
 Профіль реалізовано окремим файлом `systems/compatibility.scm`, а не прапорцем у
 `desktop.scm`: у Free-профілю не має бути жодного шляху, який тягне Nonguix.
 
+Канали також розділені фізично:
+
+- `channels.lock.scm` — лише офіційний GNU Guix; він залишається джерелом Free і live builds.
+- `channels.compatibility.lock.scm` — той самий pinned GNU Guix плюс окремо pinned Nonguix з його upstream channel introduction та перевіреним підписом commit. Він використовується лише для явної Compatibility-збірки.
+
+Поточний Nonguix pin: `6b8897cd6f3223b158c070cdc9cc638279f8c337` (2026-11-25). У цьому знімку `(nongnu packages nvidia)` експортує `nvda-580`; сама наявність визначення не доводить, що package closure збирається з цим Guix pin або працює на фізичному H170.
+
 Механіка (Nonguix, `nonguix-transformation-nvidia`):
 
 ```scheme
