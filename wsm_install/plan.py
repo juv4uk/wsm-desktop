@@ -104,6 +104,19 @@ def build_plan(
                     )
                 )
 
+        source_reports = [
+            item for item in profile_evidence.get("artifacts", [])
+            if item.get("kind") == "wsm-hwcheck-report"
+        ]
+        if len(source_reports) != 1:
+            blockers.append(
+                "hardware profile evidence must contain exactly one wsm-hwcheck-report artifact"
+            )
+        elif source_reports[0].get("sha256") != hashlib.sha256(report_bytes).hexdigest():
+            blockers.append(
+                "hardware profile evidence source-report SHA-256 does not match the current report bytes"
+            )
+
         for problem in evidence_problems:
             blockers.append(f"hardware profile evidence is not valid: {problem}")
         if not blockers:
