@@ -12,8 +12,8 @@ express:
   not-assessed proves nothing;
 * if any function failed, the failure must appear in known-limitations,
   otherwise the profile reads as healthy while it is not;
-* personal names and e-mail addresses are refused, in line with the rest of the
-  project;
+* e-mail addresses are rejected; contributors use a generic attribution role;
+* each declared artifact must exist under artifacts/ and match its SHA-256;
 * the directory the bundle sits in must match the slug inside it, so a profile
   cannot be moved and keep pointing at another machine.
 """
@@ -21,6 +21,7 @@ express:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -43,7 +44,11 @@ def load_schema() -> dict:
     return json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
 
 
-def validate(document: dict, schema: dict | None = None) -> list[str]:
+def validate(
+    document: dict,
+    schema: dict | None = None,
+    artifacts_base: Path | None = None,
+) -> list[str]:
     """Return a list of problems. An empty list means the bundle is acceptable."""
     schema = schema or load_schema()
     problems: list[str] = []
@@ -73,18 +78,66 @@ def validate(document: dict, schema: dict | None = None) -> list[str]:
     if EMAIL.search(document["verified_by"]):
         problems.append("verified_by must not contain an e-mail address")
 
+    if artifacts_base is not None:
+        bundle_root = artifacts_base.resolve()
+        for index, artifact in enumerate(document["artifacts"]):
+            relative = Path(artifact["path"])
+            if (
+                relative.is_absolute()
+                or len(relative.parts) != 2
+                or relative.parts[0] != "artifacts"
+                or relative.parts[1] in ("", ".", "..")
+            ):
+                problems.append(f"artifact {index} has an unsafe path: {artifact['path']!r}")
+                continue
+
+            artifact_dir = bundle_root / "artifacts"
+            artifact_path = bundle_root / relative
+            if artifact_dir.is_symlink() or artifact_path.is_symlink():
+                problems.append(f"artifact {artifact['path']!r} must not be a symlink")
+                continue
+
+            try:
+                resolved = artifact_path.resolve(strict=True)
+                resolved.relative_to(bundle_root)
+            except (OSError, RuntimeError, ValueError):
+                problems.append(f"artifact file is missing or outside the bundle: {artifact['path']!r}")
+                continue
+
+            if not resolved.is_file():
+                problems.append(f"artifact path is not a regular file: {artifact['path']!r}")
+                continue
+
+            digest = hashlib.sha256()
+            try:
+                with resolved.open("rb") as stream:
+                    for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                        digest.update(chunk)
+            except OSError as exc:
+                problems.append(f"cannot read artifact {artifact['path']!r}: {exc}")
+                continue
+
+            if digest.hexdigest() != artifact["sha256"]:
+                problems.append(f"SHA-256 mismatch for artifact {artifact['path']!r}")
+
     return problems
 
 
-def validate_directory(path: Path) -> list[str]:
-    """Validate profiles/hardware/<vendor>/<model>/evidence.json and its slug."""
-    problems = validate(json.loads(path.read_text(encoding="utf-8")))
-    slug = json.loads(path.read_text(encoding="utf-8"))["profile"]["slug"]
-    expected = path.parent.relative_to(PROFILES_DIR).as_posix()
-    if slug != expected:
+def validate_directory(path: Path, profiles_dir: Path = PROFILES_DIR) -> list[str]:
+    """Validate one bundle, its artifact files and its location-relative slug."""
+    document = json.loads(path.read_text(encoding="utf-8"))
+    problems = validate(document, artifacts_base=path.parent)
+    try:
+        expected = path.parent.resolve().relative_to(profiles_dir.resolve()).as_posix()
+    except ValueError:
         problems.append(
-            f"slug {slug!r} does not match the directory {expected!r}"
+            f"bundle directory {str(path.parent)!r} is outside {str(profiles_dir)!r}"
         )
+        return problems
+
+    slug = document["profile"]["slug"]
+    if slug != expected:
+        problems.append(f"slug {slug!r} does not match the directory {expected!r}")
     return problems
 
 
@@ -122,9 +175,12 @@ def main(argv: list[str] | None = None) -> int:
     failures = 0
     for target in targets:
         problems = (
-            validate_directory(target)
+            validate_directory(target, args.dir)
             if use_directory_rules
-            else validate(json.loads(target.read_text(encoding="utf-8")))
+            else validate(
+                json.loads(target.read_text(encoding="utf-8")),
+                artifacts_base=target.parent,
+            )
         )
         if problems:
             failures += 1
