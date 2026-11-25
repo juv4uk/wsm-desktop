@@ -27,9 +27,14 @@ from scripts.qemu_boot_smoke import (
     MIN_DISK_MIB,
     MIN_MEMORY_MIB,
     MIN_TIMEOUT_SECONDS,
+    BoundedProcessResult,
+    MAX_BOOT_MARKER_BYTES,
+    MAX_SERIAL_CAPTURE_BYTES,
+    MAX_STDERR_CAPTURE_BYTES,
     build_qemu_command,
     main,
     parse_disk_size_mib,
+    run_bounded_process,
     validate_iso,
     validate_limits,
 )
@@ -172,26 +177,125 @@ class QemuBootSmokeTests(unittest.TestCase):
 
             def fake_run(command, **kwargs):
                 calls.append(command)
-                if command[0] == "qemu-img":
-                    Path(command[4]).touch()
-                    return subprocess.CompletedProcess(command, 0, "", "")
-                self.assertEqual(command[command.index("-serial") + 1], "stdio")
-                kwargs["stdout"].write("booting\\nWSM-LIVE-READY\\n")
-                raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+                Path(command[4]).touch()
+                return subprocess.CompletedProcess(command, 0, "", "")
 
+            captured = BoundedProcessResult(
+                returncode=None,
+                timed_out=True,
+                stdout_tail=b"booting\\nWSM-LIVE-READY\\n",
+                stderr_tail=b"bounded warning",
+                stdout_bytes_seen=24,
+                stderr_bytes_seen=15,
+                stdout_truncated=False,
+                stderr_truncated=False,
+                marker_seen=True,
+            )
             stdout = io.StringIO()
             with patch("scripts.qemu_boot_smoke.shutil.which", side_effect=lambda name: name), patch(
                 "scripts.qemu_boot_smoke.subprocess.run", side_effect=fake_run
-            ), contextlib.redirect_stdout(stdout):
+            ), patch("scripts.qemu_boot_smoke.run_bounded_process", return_value=captured) as runner, contextlib.redirect_stdout(stdout):
                 result = main(["--iso", str(iso), "--boot-marker", "WSM-LIVE-READY"])
             self.assertEqual(result, 0)
             payload = json.loads(stdout.getvalue())
             self.assertTrue(payload["boot_confirmed"])
             self.assertTrue(payload["qemu_timed_out"])
-            self.assertEqual(len(calls), 2)
+            self.assertEqual(payload["serial_output_tail"], "booting\\nWSM-LIVE-READY\\n")
+            self.assertEqual(payload["qemu_error"], "bounded warning")
+            self.assertFalse(payload["serial_truncated"])
+            self.assertFalse(payload["stderr_truncated"])
+            self.assertEqual(len(calls), 1)
             self.assertEqual(calls[0][1:4], ["create", "-f", "qcow2"])
-            self.assertIn("-nic", calls[1])
-            self.assertIn("none", calls[1])
+            runner.assert_called_once()
+            self.assertEqual(runner.call_args.kwargs["marker"], "WSM-LIVE-READY")
+
+    def test_bounded_capture_detects_marker_before_retained_tail(self) -> None:
+        marker = "WSM_MARKER_AT_STREAM_START"
+        child = (
+            "import sys\\n"
+            f"sys.stdout.buffer.write({marker.encode()!r} + b'S' * 200000)\\n"
+            "sys.stdout.flush()\\n"
+            "sys.stderr.buffer.write(b'E' * 100000)\\n"
+            "sys.stderr.flush()\\n"
+        )
+        result = run_bounded_process(
+            [sys.executable, "-c", child],
+            timeout_seconds=5,
+            marker=marker,
+            max_stdout_bytes=1024,
+            max_stderr_bytes=512,
+            read_chunk_bytes=257,
+        )
+        self.assertFalse(result.timed_out)
+        self.assertEqual(result.returncode, 0)
+        self.assertTrue(result.marker_seen)
+        self.assertTrue(result.stdout_truncated)
+        self.assertTrue(result.stderr_truncated)
+        self.assertEqual(len(result.stdout_tail), 1024)
+        self.assertEqual(len(result.stderr_tail), 512)
+        self.assertGreater(result.stdout_bytes_seen, 200000)
+        self.assertEqual(result.stderr_bytes_seen, 100000)
+        self.assertNotIn(marker.encode(), result.stdout_tail)
+
+    def test_bounded_capture_detects_marker_split_across_reads(self) -> None:
+        marker = "SPLIT-MARKER-BOUNDARY"
+        child = (
+            "import os, sys, time\\n"
+            "os.write(1, b'prefix-SPLIT-')\\n"
+            "time.sleep(0.05)\\n"
+            "os.write(1, b'MARKER-BOUNDARY-suffix')\\n"
+        )
+        result = run_bounded_process(
+            [sys.executable, "-c", child],
+            timeout_seconds=5,
+            marker=marker,
+            max_stdout_bytes=8,
+            max_stderr_bytes=8,
+            read_chunk_bytes=3,
+        )
+        self.assertTrue(result.marker_seen)
+        self.assertTrue(result.stdout_truncated)
+        self.assertLessEqual(len(result.stdout_tail), 8)
+
+    def test_bounded_capture_kills_noisy_child_after_timeout(self) -> None:
+        child = (
+            "import os, time\\n"
+            "chunk = b'X' * 8192\\n"
+            "while True:\\n"
+            "    os.write(1, chunk)\\n"
+            "    os.write(2, chunk)\\n"
+        )
+        result = run_bounded_process(
+            [sys.executable, "-c", child],
+            timeout_seconds=0.2,
+            marker="NEVER-SEEN",
+            max_stdout_bytes=2048,
+            max_stderr_bytes=1024,
+            read_chunk_bytes=512,
+        )
+        self.assertTrue(result.timed_out)
+        self.assertTrue(result.stdout_truncated)
+        self.assertTrue(result.stderr_truncated)
+        self.assertLessEqual(len(result.stdout_tail), 2048)
+        self.assertLessEqual(len(result.stderr_tail), 1024)
+        self.assertGreater(result.stdout_bytes_seen, 2048)
+        self.assertGreater(result.stderr_bytes_seen, 1024)
+        self.assertFalse(result.marker_seen)
+
+    def test_oversized_boot_marker_is_rejected_before_qemu(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            iso = Path(directory) / "live.iso"
+            iso.write_bytes(b"synthetic ISO placeholder")
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with patch("scripts.qemu_boot_smoke.subprocess.run") as run, contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                result = main([
+                    "--iso", str(iso),
+                    "--boot-marker", "M" * (MAX_BOOT_MARKER_BYTES + 1),
+                ])
+            self.assertEqual(result, 2)
+            run.assert_not_called()
+            self.assertIn("boot marker must be no more than", stderr.getvalue())
 
     @unittest.skipUnless(
         shutil.which("qemu-system-x86_64") and shutil.which("qemu-img"),
