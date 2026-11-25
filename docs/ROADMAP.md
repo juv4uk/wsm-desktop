@@ -101,5 +101,6 @@ Milestones нижче утворюють критичний шлях до пер
 | [TOPOLOGY-RELATIONSHIPS.md](hardware/TOPOLOGY-RELATIONSHIPS.md) | контракт топології пристроїв | M5 |
 | [UPSTREAM-TOOLING.md](hardware/UPSTREAM-TOOLING.md) | аудит upstream-інструментів | M5 |
 | [UPSTREAM-TOOLING-ADDENDUM-2026-11-25.md](hardware/UPSTREAM-TOOLING-ADDENDUM-2026-11-25.md) | доповнення до аудиту | M5 |
+| [CPU-OPTIMIZATION-POLICY.md](performance/CPU-OPTIMIZATION-POLICY.md) | переносна CPU/runtime dispatch та holistic performance policy (#147–#151) | після RC1 |
 
 На критичному шляху з цього каталогу лишаються тільки два документи: [HWCHECK.md](hardware/HWCHECK.md) — працюючий колектор, який інсталятор викликає перед записом на диск, і [REPORT-FORMAT.md](hardware/REPORT-FORMAT.md) — схема звіту, яку споживають preflight та план встановлення.
