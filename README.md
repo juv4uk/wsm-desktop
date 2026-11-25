@@ -18,7 +18,9 @@ The project is in **pre-alpha**. There is no supported installation image yet. T
 - [ ] Hardware compatibility testing
 - [ ] First public preview image
 
-See [the roadmap](docs/ROADMAP.md) for milestones and acceptance criteria. The installer frontend is being evaluated in [issue #10](https://github.com/juv4uk/wsm-desktop/issues/10); Calamares is not a locked dependency. The hardware-first/upstream-first direction is explored through [the hardware preflight](docs/hardware/HWCHECK.md) and the [upstream tooling assessment](docs/hardware/UPSTREAM-TOOLING.md). The proposed dual-backend direction is recorded in [ADR 0004](docs/decisions/0004-nix-guix-backend-strategy.md) and is not yet ratified. The current Calamares 3.4.2 assessment is in [docs/CALAMARES-FEASIBILITY.md](docs/CALAMARES-FEASIBILITY.md). See [docs/DECISIONS.md](docs/DECISIONS.md) for the canonical artifact registry.
+See [the roadmap](docs/ROADMAP.md) for milestones and acceptance criteria. The installer frontend is being evaluated in [issue #10](https://github.com/juv4uk/wsm-desktop/issues/10); Calamares is not a locked dependency. The hardware-first/upstream-first direction is explored through [the hardware preflight](docs/hardware/HWCHECK.md) and the [upstream tooling assessment](docs/hardware/UPSTREAM-TOOLING.md). The proposed dual-backend direction is recorded in [ADR 0004](docs/decisions/0004-nix-guix-backend-strategy.md) and is not yet ratified. The current Calamares 3.4.2 assessment is in [docs/CALAMARES-FEASIBILITY.md](docs/CALAMARES-FEASIBILITY.md).
+
+Canonical issues and documents for each decision topic are listed in [docs/DECISIONS.md](docs/DECISIONS.md).
 
 ## Technology
 
