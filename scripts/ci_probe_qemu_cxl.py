@@ -11,7 +11,9 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import selectors
 import subprocess
+import time
 import sys
 from pathlib import Path
 from typing import Sequence
@@ -114,41 +116,129 @@ def build_qemu_command(qemu: str) -> list[str]:
     ]
 
 
+def run_bounded_command(
+    command: list[str],
+    *,
+    input_data: bytes,
+    max_output_bytes: int,
+    timeout_seconds: float,
+) -> tuple[str, int | None, str]:
+    """Run a small monitor command with a hard combined stdout/stderr ceiling."""
+    process = subprocess.Popen(
+        command,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        bufsize=0,
+        close_fds=True,
+    )
+    if process.stdin is None or process.stdout is None or process.stderr is None:
+        process.kill()
+        process.wait()
+        raise OSError("QEMU monitor pipes were not created")
+    try:
+        try:
+            process.stdin.write(input_data)
+            process.stdin.flush()
+        except BrokenPipeError:
+            pass
+        finally:
+            process.stdin.close()
+
+        selector = selectors.DefaultSelector()
+        outputs = {"stdout": bytearray(), "stderr": bytearray()}
+        total_seen = 0
+        deadline = time.monotonic() + timeout_seconds
+        timed_out = False
+        overflow = False
+        streams = ((process.stdout, "stdout"), (process.stderr, "stderr"))
+        try:
+            for stream, name in streams:
+                os.set_blocking(stream.fileno(), False)
+                selector.register(stream, selectors.EVENT_READ, name)
+            while selector.get_map() or process.poll() is None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    timed_out = True
+                    break
+                if selector.get_map():
+                    events = selector.select(min(0.1, remaining))
+                else:
+                    time.sleep(min(0.02, remaining))
+                    events = ()
+                for key, _ in events:
+                    try:
+                        chunk = os.read(key.fd, min(4096, max_output_bytes + 1 - total_seen))
+                    except BlockingIOError:
+                        continue
+                    if not chunk:
+                        selector.unregister(key.fileobj)
+                        key.fileobj.close()
+                        continue
+                    total_seen += len(chunk)
+                    if total_seen > max_output_bytes:
+                        overflow = True
+                        break
+                    outputs[key.data].extend(chunk)
+                if overflow:
+                    break
+        finally:
+            selector.close()
+
+        if overflow or timed_out:
+            try:
+                process.kill()
+            except OSError:
+                pass
+            try:
+                process.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+            status = "output-limit-exceeded" if overflow else "timeout"
+            return status, process.returncode, ""
+        returncode = process.wait(timeout=1)
+        output = (
+            outputs["stdout"].decode("utf-8", errors="replace")
+            + "\\n"
+            + outputs["stderr"].decode("utf-8", errors="replace")
+        )
+        return "completed", returncode, output
+    finally:
+        for stream in (process.stdin, process.stdout, process.stderr):
+            if stream is not None and not stream.closed:
+                stream.close()
+
+
 def run_qemu_topology_probe(qemu: str) -> dict[str, object]:
     command = build_qemu_command(qemu)
     try:
-        completed = subprocess.run(
+        execution, returncode, output = run_bounded_command(
             command,
-            input="info qtree\ninfo pci\nquit\n",
-            capture_output=True,
-            text=True,
-            errors="replace",
-            timeout=QEMU_TIMEOUT_SECONDS,
-            check=False,
+            input_data=b"info qtree\\ninfo pci\\nquit\\n",
+            max_output_bytes=MAX_CAPTURE_BYTES,
+            timeout_seconds=QEMU_TIMEOUT_SECONDS,
         )
-    except subprocess.TimeoutExpired:
-        return {
-            "status": "timeout",
-            "exit_code": None,
-            "devices_seen": [],
-            "diagnostic": "QEMU did not answer the in-memory monitor probe within 20 seconds.",
-        }
     except OSError as exc:
         return {
             "status": "launch-error",
             "exit_code": None,
             "devices_seen": [],
-            "diagnostic": f"{type(exc).__name__}: {exc}",
+            "diagnostic": type(exc).__name__,
         }
-
-    output = (completed.stdout + "\n" + completed.stderr)
-    captured_bytes = len(output.encode("utf-8", errors="replace"))
-    if captured_bytes > MAX_CAPTURE_BYTES:
+    if execution == "timeout":
+        return {
+            "status": "timeout",
+            "exit_code": returncode,
+            "devices_seen": [],
+            "diagnostic": "QEMU did not answer the in-memory monitor probe within 20 seconds.",
+        }
+    if execution == "output-limit-exceeded":
         return {
             "status": "output-limit-exceeded",
-            "exit_code": completed.returncode,
+            "exit_code": returncode,
             "devices_seen": [],
-            "diagnostic": f"QEMU probe output was {captured_bytes} bytes; cap is {MAX_CAPTURE_BYTES}.",
+            "diagnostic": f"QEMU probe output exceeded the {MAX_CAPTURE_BYTES}-byte streaming limit.",
         }
 
     expected = ("cxl.1", "root_port0", "cxl-vmem0")
@@ -158,7 +248,7 @@ def run_qemu_topology_probe(qemu: str) -> dict[str, object]:
         or "not found" in output.casefold()
         or "Property 'CXL" in output
     )
-    if completed.returncode == 0 and len(devices_seen) == len(expected):
+    if returncode == 0 and len(devices_seen) == len(expected):
         status = "type3-topology-instantiated"
     elif unsupported:
         status = "cxl-device-or-machine-unsupported"
@@ -167,7 +257,7 @@ def run_qemu_topology_probe(qemu: str) -> dict[str, object]:
 
     return {
         "status": status,
-        "exit_code": completed.returncode,
+        "exit_code": returncode,
         "devices_seen": devices_seen,
         "diagnostic": output[-6000:],
     }
