@@ -27,6 +27,7 @@ BASE = {
     "profile": {"vendor": "ASUS", "model": "H170-PRO", "slug": "asus/h170-pro"},
     "report_id": "0f3c9a1e-2b44-4c8d-9f10-77a1b2c3d4e5",
     "report_schema_version": "1.0.0",
+    "profile_source": {"path": "profile.scm", "sha256": PROFILE_SOURCE_SHA256},
     "isa_level": "x86-64-v2",
     "verified_on": "2026-11-26",
     "verified_by": "автори проєкту",
@@ -37,7 +38,8 @@ BASE = {
     "known_limitations": ["NVK reclocking unavailable on Pascal"],
     "not_assessed": ["suspend/resume", "audio over HDMI"],
     "artifacts": [
-        {"kind": "dmesg", "path": "artifacts/dmesg.txt", "sha256": ARTIFACT_SHA256}
+        {"kind": "dmesg", "path": "artifacts/dmesg.txt", "sha256": ARTIFACT_SHA256},
+        {"kind": "wsm-hwcheck-report", "path": "artifacts/wsm-hwcheck-report.json", "sha256": SOURCE_REPORT_SHA256},
     ],
 }
 
@@ -48,12 +50,13 @@ def bundle(**overrides) -> dict:
     return document
 
 
-def prepare_artifact_root(root: Path) -> None:
+def prepare_artifact_root(root: Path, source_report_bytes: bytes = SOURCE_REPORT_BYTES) -> None:
     root.mkdir(parents=True, exist_ok=True)
-    (root / "profile.scm").write_text(";; synthetic test fixture\\n", encoding="utf-8")
-    artifact = root / "artifacts" / "dmesg.txt"
-    artifact.parent.mkdir(parents=True, exist_ok=True)
-    artifact.write_bytes(ARTIFACT_BYTES)
+    (root / "profile.scm").write_bytes(PROFILE_SOURCE_BYTES)
+    artifact_dir = root / "artifacts"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    (artifact_dir / "dmesg.txt").write_bytes(ARTIFACT_BYTES)
+    (artifact_dir / "wsm-hwcheck-report.json").write_bytes(source_report_bytes)
 
 
 def validate_fixture(document: dict | None = None) -> list[str]:
@@ -223,10 +226,13 @@ class InstallerPlanGateTests(unittest.TestCase):
         cls.report = json.loads(cls.report_bytes)
 
     def matching_bundle(self) -> dict:
-        return bundle(
+        document = bundle(
             report_id=self.report["report_id"],
             report_schema_version=self.report["schema_version"],
         )
+        source = next(item for item in document["artifacts"] if item["kind"] == "wsm-hwcheck-report")
+        source["sha256"] = hashlib.sha256(self.report_bytes).hexdigest()
+        return document
 
     def build(self, evidence: dict, root: Path | None):
         return build_plan(
@@ -240,7 +246,7 @@ class InstallerPlanGateTests(unittest.TestCase):
     def test_build_plan_accepts_only_matching_report_and_verified_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "asus" / "h170-pro"
-            prepare_artifact_root(root)
+            prepare_artifact_root(root, self.report_bytes)
             plan, blockers, _warnings = self.build(self.matching_bundle(), root)
         self.assertFalse(any("hardware profile evidence is not valid" in item for item in blockers))
         self.assertIsNotNone(plan["profile_evidence"])
@@ -249,7 +255,7 @@ class InstallerPlanGateTests(unittest.TestCase):
     def test_build_plan_rejects_artifact_bytes_changed_after_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "asus" / "h170-pro"
-            prepare_artifact_root(root)
+            prepare_artifact_root(root, self.report_bytes)
             (root / "artifacts" / "dmesg.txt").write_bytes(b"tampered after manifest creation")
             _plan, blockers, _warnings = self.build(self.matching_bundle(), root)
         self.assertTrue(any("does not match the bytes" in item for item in blockers))
@@ -257,7 +263,7 @@ class InstallerPlanGateTests(unittest.TestCase):
     def test_build_plan_rejects_profile_evidence_from_another_report(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "asus" / "h170-pro"
-            prepare_artifact_root(root)
+            prepare_artifact_root(root, self.report_bytes)
             evidence = self.matching_bundle()
             evidence["report_id"] = "another-report-id"
             _plan, blockers, _warnings = self.build(evidence, root)
@@ -266,7 +272,7 @@ class InstallerPlanGateTests(unittest.TestCase):
     def test_build_plan_rejects_profile_evidence_from_another_schema_version(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "asus" / "h170-pro"
-            prepare_artifact_root(root)
+            prepare_artifact_root(root, self.report_bytes)
             evidence = self.matching_bundle()
             evidence["report_schema_version"] = "9.9.9"
             _plan, blockers, _warnings = self.build(evidence, root)
@@ -275,7 +281,7 @@ class InstallerPlanGateTests(unittest.TestCase):
     def test_build_plan_rejects_missing_profile_configuration(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "asus" / "h170-pro"
-            prepare_artifact_root(root)
+            prepare_artifact_root(root, self.report_bytes)
             (root / "profile.scm").unlink()
             _plan, blockers, _warnings = self.build(self.matching_bundle(), root)
         self.assertTrue(any("no regular profile.scm" in item for item in blockers))
@@ -283,9 +289,42 @@ class InstallerPlanGateTests(unittest.TestCase):
     def test_build_plan_rejects_profile_slug_for_another_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "gigabyte" / "h170-gaming-3"
-            prepare_artifact_root(root)
+            prepare_artifact_root(root, self.report_bytes)
             _plan, blockers, _warnings = self.build(self.matching_bundle(), root)
         self.assertTrue(any("does not match the directory" in item for item in blockers))
+
+    def test_build_plan_rejects_profile_source_modified_after_verification(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "asus" / "h170-pro"
+            prepare_artifact_root(root, self.report_bytes)
+            (root / "profile.scm").write_bytes(b";; changed after verification\\n")
+            _plan, blockers, _warnings = self.build(self.matching_bundle(), root)
+        self.assertTrue(any("profile_source/sha256 does not match" in item for item in blockers))
+
+    def test_build_plan_rejects_source_report_bytes_with_same_report_id(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "asus" / "h170-pro"
+            changed_report = self.report_bytes + b"\\n"
+            prepare_artifact_root(root, changed_report)
+            evidence = self.matching_bundle()
+            source = next(item for item in evidence["artifacts"] if item["kind"] == "wsm-hwcheck-report")
+            source["sha256"] = hashlib.sha256(changed_report).hexdigest()
+            _plan, blockers, _warnings = self.build(evidence, root)
+        self.assertTrue(any("source-report SHA-256 does not match" in item for item in blockers))
+
+    def test_build_plan_requires_exactly_one_source_report_artifact(self) -> None:
+        for mode in ("missing", "duplicate"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary) / "asus" / "h170-pro"
+                prepare_artifact_root(root, self.report_bytes)
+                evidence = self.matching_bundle()
+                source = next(item for item in evidence["artifacts"] if item["kind"] == "wsm-hwcheck-report")
+                if mode == "missing":
+                    evidence["artifacts"].remove(source)
+                else:
+                    evidence["artifacts"].append(copy.deepcopy(source))
+                _plan, blockers, _warnings = self.build(evidence, root)
+            self.assertTrue(any("exactly one wsm-hwcheck-report" in item for item in blockers))
 
     def test_build_plan_fails_closed_when_artifact_root_is_missing(self) -> None:
         _plan, blockers, _warnings = self.build(self.matching_bundle(), None)
