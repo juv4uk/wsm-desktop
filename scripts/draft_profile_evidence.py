@@ -177,14 +177,21 @@ def write_bundle(
         raise OSError("source report and evidence artifact resolve to the same file")
 
     created_artifact = False
+    created_evidence = False
     try:
         with artifact_path.open("xb") as stream:
+            created_artifact = True
             stream.write(report_bytes)
-        created_artifact = True
         rendered = json.dumps(bundle, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
         with out.open("x", encoding="utf-8") as stream:
+            created_evidence = True
             stream.write(rendered)
     except Exception:
+        if created_evidence:
+            try:
+                out.unlink()
+            except OSError:
+                pass
         if created_artifact:
             try:
                 artifact_path.unlink()
