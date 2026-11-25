@@ -5,7 +5,7 @@ GUIX ?= guix
 
 .PHONY: check check-docs check-hardware-schema check-hwcheck check-installer check-qemu-harness check-validation-protocols check-hardware-providers check-cxl-guest check-minimal-system check-uefi-preboot-policy check-system vm-system
 
-check: check-docs check-hardware-schema check-hwcheck check-installer check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy
+check: check-docs check-hardware-schema check-hwcheck check-installer check-qemu-harness check-validation-protocols check-hardware-providers check-cxl-guest check-minimal-system check-uefi-preboot-policy
 
 check-docs:
 	$(PYTHON) scripts/check_docs.py
