@@ -346,6 +346,7 @@ def _copy_runtime_dependencies(
 ) -> list[Path]:
     """Copy external shared libraries for CPython and optional guest packages."""
     home_resolved = python_home.resolve()
+    rootfs_resolved = rootfs.resolve()
     dependencies: set[Path] = set()
     seen_binaries: set[Path] = set()
     elf_count = 0
@@ -380,7 +381,12 @@ def _copy_runtime_dependencies(
                     resolved = library.resolve(strict=True)
                 except OSError as exc:
                     raise RuntimeError(f"ldd reported a missing library path {library}") from exc
-                if resolved == home_resolved or home_resolved in resolved.parents:
+                if (
+                    resolved == home_resolved
+                    or home_resolved in resolved.parents
+                    or resolved == rootfs_resolved
+                    or rootfs_resolved in resolved.parents
+                ):
                     continue
                 dependencies.add(library)
 
