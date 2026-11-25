@@ -34,23 +34,21 @@ class ValidationProtocolPrivacyTests(unittest.TestCase):
         self.assertIn("`not-detected`", self.network)
         self.assertIn("не задовольняє installation-/first-boot-critical evidence gate", self.network)
 
+
+    def test_displayid_parser_cves_remain_a_security_gate(self) -> None:
+        audit = (ROOT / "docs" / "hardware" / "UPSTREAM-TOOLING-ADDENDUM-2026-11-25.md").read_text(encoding="utf-8")
+        self.assertIn("CVE-2026-112271", audit)
+        self.assertIn("CVE-2026-112272", audit)
+        self.assertIn("through 0.4.0", audit)
+        self.assertIn("RHEL-релізи не уражені", audit)
+        self.assertIn("не запускається з підвищеними привілеями", audit)
+        self.assertIn("Спеціально сформований EDID слід вважати untrusted input", audit)
+
     def test_network_endpoint_consent_discloses_source_ip_visibility(self) -> None:
         self.assertIn("source/egress-IP visibility", self.network)
         self.assertIn("NAT/proxy egress address", self.network)
         self.assertIn("resolver або endpoint може логувати ці дані", self.network)
         self.assertIn("source/egress IP не зберігається в публічному profile record", self.network)
-
-    def test_displayid_parser_cves_are_treated_as_untrusted_input_risk(self) -> None:
-        audit = (ROOT / "docs" / "hardware" / "UPSTREAM-TOOLING-ADDENDUM-2026-11-25.md").read_text(encoding="utf-8")
-        self.assertIn("CVE-2026-112271", audit)
-        self.assertIn("CVE-2026-112272", audit)
-        self.assertIn("through 0.4.0", audit)
-        self.assertIn("Amazon Linux 2023 та 2027 Preview як **Pending Fix**", audit)
-        self.assertIn("ці самі Amazon Linux package targets як **Not Affected**", audit)
-        self.assertIn("RHEL releases не уражені", audit)
-        self.assertIn("SUSE так само оцінює перелічені SLE products як **Not affected**", audit)
-        self.assertIn("не запускається з підвищеними привілеями", audit)
-        self.assertIn("Crafted EDID слід вважати untrusted input", audit)
 
 
 if __name__ == "__main__":
