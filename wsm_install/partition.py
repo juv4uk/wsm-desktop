@@ -33,6 +33,7 @@ from typing import Any
 
 ESP_MIB = 512
 BIOS_BOOT_MIB = 1
+GPT_TAIL_RESERVE_MIB = 1
 MIN_ROOT_MIB = 12 * 1024
 SIZE_TOLERANCE = 0.02
 
@@ -89,7 +90,7 @@ def _require(condition: bool, code: str, message: str) -> None:
 
 
 def minimum_disk_size_bytes(firmware: str) -> int:
-    """Minimum geometry: 1 MiB alignment + firmware boot partition + 12 GiB root."""
+    """Minimum geometry including 1 MiB GPT tail reserve and a 12 GiB root."""
     if firmware == "uefi":
         boot_partition_mib = ESP_MIB
     elif firmware == "bios":
@@ -99,7 +100,7 @@ def minimum_disk_size_bytes(firmware: str) -> int:
             "disk.firmware",
             f"firmware must be 'uefi' or 'bios', got {firmware!r}",
         )
-    return (1 + boot_partition_mib + MIN_ROOT_MIB) * 1024 * 1024
+    return (1 + boot_partition_mib + MIN_ROOT_MIB + GPT_TAIL_RESERVE_MIB) * 1024 * 1024
 
 
 def validate_target(disk: Disk, acknowledgement: str | None, firmware: str) -> None:
