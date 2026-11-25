@@ -1,0 +1,24 @@
+{
+  "schema": "wsm-profile-evidence/1",
+  "profile": {
+    "vendor": "ASUS",
+    "model": "H170-PRO",
+    "slug": "asus/h170-pro"
+  },
+  "report_id": "замінити на report_id зі звіту wsm-hwcheck",
+  "report_schema_version": "1.0.0",
+  "isa_level": "x86-64-v2",
+  "verified_on": "2026-11-26",
+  "verified_by": "автори проєкту",
+  "verified_functions": [
+    {"name": "graphics", "status": "not-assessed", "note": "що саме перевіряли"},
+    {"name": "storage", "status": "not-assessed"},
+    {"name": "network", "status": "not-assessed"},
+    {"name": "audio", "status": "not-assessed"}
+  ],
+  "known_limitations": ["кожне обмеження окремим рядком"],
+  "not_assessed": ["suspend/resume", "що ще не перевірено"],
+  "artifacts": [
+    {"kind": "dmesg", "sha256": "0000000000000000000000000000000000000000000000000000000000000000", "note": "замінити на справжній хеш"}
+  ]
+}

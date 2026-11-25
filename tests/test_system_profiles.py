@@ -173,7 +173,7 @@ class SourceResolutionTests(unittest.TestCase):
         self.assertIn("#:use-module (srfi srfi-1)", text)
         self.assertIn("#:use-module (srfi srfi-13)", text)
 
-    def test_package_source_excludes_vcs_metadata(self) -> None:
+    def test_package_source_excludes_vcs_metadata(self) -> None
         """Without select? the store copy would embed .git and vary per clone."""
         text = (ROOT / "wsm" / "packages" / "wsm.scm").read_text(encoding="utf-8")
         self.assertIn("#:select?", text)

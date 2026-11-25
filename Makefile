@@ -25,6 +25,10 @@ check-live-acceptance:
 check-perf-baseline:
 	$(PYTHON) tests/test_perf_baseline.py
 
+check-profile-evidence:
+	$(PYTHON) tests/test_profile_evidence.py
+	$(PYTHON) scripts/check_profile_evidence.py
+
 check-profiles-matrix:
 	$(PYTHON) tests/test_profiles.py
 
