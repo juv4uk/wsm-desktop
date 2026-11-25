@@ -112,13 +112,14 @@ def validate_target(disk: Disk, acknowledgement: str | None, firmware: str) -> N
         f"{disk.path} is {disk.size_bytes} bytes; the smallest supported layout needs "
         f"{MIN_ROOT_MIB + ESP_MIB} MiB",
     )
-    if disk.has_existing_data:
-        _require(
-            acknowledgement == disk.path,
-            "disk.acknowledgement",
-            f"{disk.path} contains data; refusing without an acknowledgement that names "
-            f"exactly this disk (got {acknowledgement!r})",
-        )
+    # The planned sequence always starts with sgdisk --zap-all. Even a disk
+    # reported as empty has a partition table that will be overwritten.
+    _require(
+        acknowledgement == disk.path,
+        "disk.acknowledgement",
+        f"refusing destructive partition-table replacement without an acknowledgement "
+        f"that names exactly {disk.path!r} (got {acknowledgement!r})",
+    )
 
 
 def plan(
@@ -143,7 +144,7 @@ def plan(
         firmware=firmware,
         disk=disk.path,
         acknowledgement=acknowledgement,
-        requires_acknowledgement=disk.has_existing_data,
+        requires_acknowledgement=True,
         disk_size_bytes=disk.size_bytes,
     )
     cursor = 1
