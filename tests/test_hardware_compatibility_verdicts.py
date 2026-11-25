@@ -72,7 +72,7 @@ class HardwareCompatibilityVerdictPolicyTests(unittest.TestCase):
         self.assertIn("sibling-інтерфейсів", self.lower)
 
     def test_privacy_and_read_only_boundaries_are_documented(self) -> None:
-        for term in ("serial numbers", "mac addresses", "raw edid blobs"):
+        for term in ("serial numbers", "mac addresses", "сирі edid blobs"):
             with self.subTest(term=term):
                 self.assertIn(term, self.lower)
         self.assertIn("не змінює sysfs", self.lower)
