@@ -3,7 +3,7 @@
 PYTHON ?= python3
 GUIX ?= guix
 
-.PHONY: check check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle
+.PHONY: check check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle check-profiles check-syntax check-state check-isa check-live-acceptance check-perf-baseline check-profile-evidence check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-hygiene check-channels check-profiles-matrix
 
 check: check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa check-live-acceptance check-profiles-matrix check-perf-baseline check-profile-evidence check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-hygiene check-channels
 
@@ -52,8 +52,12 @@ check-hygiene:
 
 check-channels:
 	$(PYTHON) tests/test_check_channels.py
-	$(PYTHON) scripts/check_channels.py --policy free
-	$(PYTHON) scripts/check_channels.py --policy compatibility
+	$(PYTHON) scripts/check_channels.py --policy free --lock channels.lock.scm
+	@if test -f channels.compatibility.lock.scm; then \
+		$(PYTHON) scripts/check_channels.py --policy compatibility --lock channels.compatibility.lock.scm; \
+	else \
+		printf '%s\n' 'check-channels: Compatibility lock not present; policy is covered by synthetic tests'; \
+	fi
 
 check-profiles-matrix:
 	$(PYTHON) tests/test_profiles.py
