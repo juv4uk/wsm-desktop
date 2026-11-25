@@ -41,6 +41,11 @@ from scripts.qemu_boot_smoke import (
 
 
 class QemuBootSmokeTests(unittest.TestCase):
+    def test_default_capture_limits_are_explicit(self) -> None:
+        self.assertEqual(MAX_SERIAL_CAPTURE_BYTES, 1024 * 1024)
+        self.assertEqual(MAX_STDERR_CAPTURE_BYTES, 256 * 1024)
+        self.assertLessEqual(MAX_BOOT_MARKER_BYTES, 1024)
+
     def test_command_uses_json_for_paths_and_disables_host_io_paths(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
