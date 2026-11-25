@@ -44,7 +44,8 @@ KEYBOARD_PATTERN = re.compile(r"^[a-z]{2}(-[a-z0-9]+)?$")
 # argv is built from these two words only. The Guix deployment command is the
 # single allowed entry point for the Guix backend; NixOS commands are never
 # reachable from this module.
-GUIX_PROGRAM = "guix"
+GUIX_SYSTEM_PROFILE = "/run/current-system/profile"
+GUIX_PROGRAM = f"{GUIX_SYSTEM_PROFILE}/bin/guix"
 GUIX_CHANNEL_LOCK_PATH = "/run/wsm/channels.lock.scm"
 GUIX_SUBCOMMAND = (
     "time-machine",
