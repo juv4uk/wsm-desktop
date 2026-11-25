@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-SCHEMA = "wsm-profile-evidence/1"
+SCHEMA = "wsm-profile-evidence/2"
 
 # Device category -> the function a user cares about. Several categories map to
 # one function on purpose: "graphics" covers gpu and display.
