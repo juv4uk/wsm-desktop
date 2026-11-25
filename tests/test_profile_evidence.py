@@ -19,14 +19,19 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from check_profile_evidence import main, validate, validate_directory  # noqa: E402
 from wsm_install.plan import build_plan  # noqa: E402
 
-ARTIFACT_BYTES = b"synthetic dmesg evidence\n"
+ARTIFACT_BYTES = b"synthetic dmesg evidence\\n"
 ARTIFACT_SHA256 = hashlib.sha256(ARTIFACT_BYTES).hexdigest()
+PROFILE_SOURCE_BYTES = b";; synthetic profile source\\n"
+PROFILE_SOURCE_SHA256 = hashlib.sha256(PROFILE_SOURCE_BYTES).hexdigest()
+SOURCE_REPORT_BYTES = (ROOT / "tests" / "fixtures" / "hardware" / "desktop-observed.json").read_bytes()
+SOURCE_REPORT = json.loads(SOURCE_REPORT_BYTES)
+SOURCE_REPORT_SHA256 = hashlib.sha256(SOURCE_REPORT_BYTES).hexdigest()
 
 BASE = {
     "schema": "wsm-profile-evidence/2",
     "profile": {"vendor": "ASUS", "model": "H170-PRO", "slug": "asus/h170-pro"},
-    "report_id": "0f3c9a1e-2b44-4c8d-9f10-77a1b2c3d4e5",
-    "report_schema_version": "1.0.0",
+    "report_id": SOURCE_REPORT["report_id"],
+    "report_schema_version": SOURCE_REPORT["schema_version"],
     "profile_source": {"path": "profile.scm", "sha256": PROFILE_SOURCE_SHA256},
     "isa_level": "x86-64-v2",
     "verified_on": "2026-11-26",
