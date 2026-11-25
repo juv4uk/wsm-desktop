@@ -355,7 +355,7 @@ Frontend реалізація може змінюватися (Calamares, інш
 - `python3 -m wsm_install.guix_deploy --plan PLAN.json --selection TARGET.json --show-confirmation` перевіряє обидва входи й показує точні SHA-256 плану та вибору цілі; файл конфігурації не створюється;
 - другий виклик вимагає обидва digest-и через `--confirm-plan-sha256` і `--confirm-target-digest`, після чого створює новий абсолютний `.scm` файл з режимом `0600` як **оглядову копію**;
 - CLI друкує JSON із allow-listed `argv`, але ніколи не виконує його. `argv` завжди містить фіксовані `/run/wsm/system.scm` і `/mnt`, навіть коли оглядова копія лежить в іншому абсолютному шляху: це відображення майбутньої команди інсталятора, а не дозвіл на довільні шляхи. Окремі `--mountpoint` немає;
-- CLI відхиляє symlink/не regular input, duplicate JSON keys, змінені чи diagnostic-only plans, неузгоджені підтвердження та перезапис наявного output;
+- CLI відхиляє symlink/не regular input, duplicate JSON keys, змінені чи diagnostic-only plans, неузгоджені підтвердження, перезапис наявного output і будь-яку оглядову копію всередині цільового `/mnt`;
 - `make check-installer` запускає окремі backend і CLI safety tests.
 
 **Обмеження поточного стану:** `wsm_install/cli.py` поки формує лише diagnostic-only plan із `confirmable=false`; отже, поточний frontend ще не видає plan, який може пройти Guix handoff. Реалізований CLI приймає вже підтверджений plan і окремий target selection; тести використовують синтетичний confirmed fixture. Це не підміняє UI-підтвердження і не доводить readiness фізичного диска.

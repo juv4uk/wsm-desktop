@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from wsm_install.backend_guix import TargetSelection  # noqa: E402
-from wsm_install.guix_deploy import main  # noqa: E402
+from wsm_install.guix_deploy import DeployCliError, _ensure_output_outside_target, main  # noqa: E402
 from wsm_install.plan import build_plan, canonical_json  # noqa: E402
 
 FIXTURE = ROOT / "tests" / "fixtures" / "hardware" / "desktop-observed.json"
@@ -236,6 +236,13 @@ class GuixDeployCliTests(unittest.TestCase):
             code = main(arguments)
         self.assertEqual(code, 2)
         self.assertIn("cannot open plan", stderr.getvalue())
+
+    def test_review_output_may_not_live_inside_the_target_mountpoint(self) -> None:
+        for candidate in (Path("/mnt"), Path("/mnt/system.scm"), Path("/mnt/wsm/review.scm")):
+            with self.subTest(candidate=str(candidate)):
+                with self.assertRaises(DeployCliError) as raised:
+                    _ensure_output_outside_target(candidate)
+                self.assertIn("outside the target mountpoint", str(raised.exception))
 
     def test_custom_mountpoint_is_not_a_cli_option(self) -> None:
         # The backend allow-list fixes the installer-owned mount root; a CLI

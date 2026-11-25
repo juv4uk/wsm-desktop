@@ -115,6 +115,16 @@ def _load_selection(value: dict[str, Any]) -> TargetSelection:
     return selection
 
 
+def _ensure_output_outside_target(destination: Path) -> None:
+    """Never write a review copy into the installer-owned target mount root."""
+    target = Path(GUIX_TARGET_MOUNTPOINT).resolve(strict=False)
+    if destination == target or target in destination.parents:
+        raise DeployCliError(
+            "configuration output must be outside the target mountpoint "
+            "to avoid writing to the target filesystem"
+        )
+
+
 def _resolve_output(
     output_value: str,
     protected_inputs: tuple[Path, ...],
@@ -275,6 +285,7 @@ def main(argv: list[str] | None = None) -> int:
             args.output,
             (plan_path, selection_path),
         )
+        _ensure_output_outside_target(destination)
         handoff = prepare(
             plan,
             selection,
