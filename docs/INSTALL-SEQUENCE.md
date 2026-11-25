@@ -25,20 +25,20 @@ partition table. Тому install sequence включає `sgdisk`-операц�
 
 Усі рядки нижче — лише preview. Кожна операція `sgdisk` і `mkfs` має
 позначку **DESTRUCTIVE** у структурованому результаті. Шляхи інструментів —
-абсолютні, а не залежні від успадкованого `PATH`.
+абсолютні всередині `/run/current-system/profile`, а не `/usr` і не успадкований `PATH`.
 
 ```sh
-/usr/sbin/sgdisk --zap-all /dev/nvme0n1
+/run/current-system/profile/sbin/sgdisk --zap-all /dev/nvme0n1
 /usr/sbin/sgdisk --new=1:1MiB:513MiB --typecode=1:ef00 --change-name=1:wsm-esp /dev/nvme0n1
 /usr/sbin/sgdisk --new=2:513MiB:0 --typecode=2:8300 --change-name=2:wsm-root /dev/nvme0n1
 /usr/sbin/partprobe /dev/nvme0n1
-/usr/bin/udevadm settle
+/run/current-system/profile/bin/udevadm settle
 /usr/sbin/mkfs.ext4 -F /dev/nvme0n1p2
 /usr/sbin/mkfs.fat -F 32 /dev/nvme0n1p1
 /usr/bin/mount /dev/nvme0n1p2 /mnt
 /usr/bin/mkdir -p /mnt/boot/efi
 /usr/bin/mount /dev/nvme0n1p1 /mnt/boot/efi
-guix time-machine -C /run/wsm/channels.lock.scm -- system init /run/wsm/system.scm /mnt
+/run/current-system/profile/bin/guix time-machine -C /run/wsm/channels.lock.scm -- system init /run/wsm/system.scm /mnt
 ```
 
 ## Запобіжники
