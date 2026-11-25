@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import sys
 import tempfile
@@ -13,7 +14,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from check_profile_evidence import validate  # noqa: E402
+from check_profile_evidence import validate, validate_directory  # noqa: E402
+
+ARTIFACT_BYTES = b"kernel log\\n"
+ARTIFACT_HASH = hashlib.sha256(ARTIFACT_BYTES).hexdigest()
 
 BASE = {
     "schema": "wsm-profile-evidence/1",
@@ -29,6 +33,9 @@ BASE = {
     ],
     "known_limitations": ["NVK reclocking unavailable on Pascal"],
     "not_assessed": ["suspend/resume", "audio over HDMI"],
+    "artifacts": [
+        {"kind": "dmesg", "path": "artifacts/dmesg.txt", "sha256": ARTIFACT_HASH}
+    ],
 }
 
 
@@ -41,6 +48,25 @@ def bundle(**overrides) -> dict:
 class ShapeTests(unittest.TestCase):
     def test_minimal_bundle_is_accepted(self) -> None:
         self.assertEqual(validate(bundle()), [])
+
+    def test_missing_isa_level_is_refused(self) -> None:
+        document = bundle()
+        del document["isa_level"]
+        self.assertTrue(validate(document))
+
+    def test_missing_artifacts_is_refused(self) -> None:
+        document = bundle()
+        del document["artifacts"]
+        self.assertTrue(validate(document))
+
+    def test_empty_artifacts_is_refused(self) -> None:
+        self.assertTrue(validate(bundle(artifacts=[])))
+
+    def test_artifact_path_must_be_bundle_relative(self) -> None:
+        document = bundle(
+            artifacts=[{"kind": "dmesg", "path": "../dmesg.txt", "sha256": ARTIFACT_HASH}]
+        )
+        self.assertTrue(validate(document))
 
     def test_missing_not_assessed_is_refused(self) -> None:
         document = bundle()
@@ -58,11 +84,11 @@ class ShapeTests(unittest.TestCase):
         self.assertTrue(validate(document))
 
     def test_artifact_needs_a_hash(self) -> None:
-        document = bundle(artifacts=[{"kind": "dmesg"}])
+        document = bundle(artifacts=[{"kind": "dmesg", "path": "artifacts/dmesg.txt"}])
         self.assertTrue(validate(document))
 
     def test_artifact_with_hash_is_accepted(self) -> None:
-        document = bundle(artifacts=[{"kind": "dmesg", "sha256": "a" * 64}])
+        document = bundle(artifacts=[{"kind": "dmesg", "path": "artifacts/dmesg.txt", "sha256": "a" * 64}])
         self.assertEqual(validate(document), [])
 
 
@@ -101,6 +127,40 @@ class RuleTests(unittest.TestCase):
     def test_personal_name_is_allowed_but_discouraged(self) -> None:
         """The rule bans e-mail, not names; docs tell contributors what to use."""
         self.assertEqual(validate(bundle(verified_by="local agent")), [])
+
+
+class DirectoryTests(unittest.TestCase):
+    def test_custom_profile_root_checks_artifact_sha256(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            profile_dir = root / "acme" / "test-board"
+            artifacts_dir = profile_dir / "artifacts"
+            artifacts_dir.mkdir(parents=True)
+            (artifacts_dir / "dmesg.txt").write_bytes(ARTIFACT_BYTES)
+            document = bundle(
+                profile={"vendor": "ACME", "model": "Test Board", "slug": "acme/test-board"}
+            )
+            evidence = profile_dir / "evidence.json"
+            evidence.write_text(json.dumps(document), encoding="utf-8")
+            self.assertEqual(validate_directory(evidence, root), [])
+
+    def test_artifact_digest_mismatch_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            profile_dir = root / "acme" / "test-board"
+            artifacts_dir = profile_dir / "artifacts"
+            artifacts_dir.mkdir(parents=True)
+            (artifacts_dir / "dmesg.txt").write_bytes(ARTIFACT_BYTES)
+            document = bundle(
+                profile={"vendor": "ACME", "model": "Test Board", "slug": "acme/test-board"},
+                artifacts=[
+                    {"kind": "dmesg", "path": "artifacts/dmesg.txt", "sha256": "0" * 64}
+                ],
+            )
+            evidence = profile_dir / "evidence.json"
+            evidence.write_text(json.dumps(document), encoding="utf-8")
+            problems = validate_directory(evidence, root)
+            self.assertTrue(any("SHA-256 mismatch" in problem for problem in problems))
 
 
 class RepositoryTests(unittest.TestCase):
