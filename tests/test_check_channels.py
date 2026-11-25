@@ -224,7 +224,8 @@ class SchemeShapeTests(unittest.TestCase):
         self.assertTrue(any("unexpected channel field" in item for item in check(text, "free")))
 
     def test_missing_introduction_is_rejected_even_if_comment_mentions_it(self) -> None:
-        text = FREE_LOCK_TEXT.replace(GUIX_INTRODUCTION, "") + "\n;; " + GUIX_INTRODUCTION
+        comment = ";; " + GUIX_INTRODUCTION.replace("\\n", " ")
+        text = FREE_LOCK_TEXT.replace(GUIX_INTRODUCTION, "") + "\\n" + comment + "\\n"
         self.assertTrue(any("missing required fields" in item for item in check(text, "free")))
 
     def test_wrong_guix_introduction_is_rejected(self) -> None:
