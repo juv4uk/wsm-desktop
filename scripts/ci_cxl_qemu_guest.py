@@ -540,6 +540,7 @@ def build_initramfs(kernel_release: str, modules: list[Path], work: Path) -> tup
     )
     return archive, expanded_bytes
 
+
 def parse_guest_output(output: str) -> dict[str, Any]:
     encoded_size = len(output.encode("utf-8", errors="replace"))
     if encoded_size > MAX_SERIAL_BYTES:
