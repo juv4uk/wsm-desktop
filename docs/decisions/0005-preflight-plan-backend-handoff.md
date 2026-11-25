@@ -28,7 +28,7 @@
 
 ## 1. Вхідні дані та довіра до звіту
 
-Перший обов'язковий вхід — JSON report від `wsm-hwcheck`, що відповідає підтриманій версії [WSM Hardware Evidence Report](../hardware/REPORT-FORMAT.md) та її JSON Schema.
+Перший обов'язковий вхід — JSON report від `wsm-hwcheck`, що відповідає підтриманій версії [WSM Hardware Evidence Report v1](https://github.com/juv4uk/wsm-desktop/issues/5) та її JSON Schema.
 
 Споживач повинен:
 
