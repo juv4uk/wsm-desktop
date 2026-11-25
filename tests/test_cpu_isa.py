@@ -71,13 +71,13 @@ class CpuinfoParsingTests(unittest.TestCase):
 
     def test_intersects_flags_across_all_processor_blocks(self) -> None:
         path = self.write(
-            "processor\\t: 0\\n"
-            "vendor_id\\t: GenuineIntel\\n"
-            "model name\\t: Test CPU\\n"
-            "flags\\t\\t: " + " ".join(V3) + "\\n"
-            "\\n"
-            "processor\\t: 1\\n"
-            "flags\\t\\t: " + " ".join(V2) + "\\n"
+            "processor\t: 0\n"
+            "vendor_id\t: GenuineIntel\n"
+            "model name\t: Test CPU\n"
+            "flags\t\t: " + " ".join(V3) + "\n"
+            "\n"
+            "processor\t: 1\n"
+            "flags\t\t: " + " ".join(V2) + "\n"
         )
         flags, fields = read_cpuinfo_flags(path)
         self.assertEqual(flags, sorted(V2))
@@ -88,9 +88,9 @@ class CpuinfoParsingTests(unittest.TestCase):
 
     def test_single_processor_preserves_its_complete_feature_set(self) -> None:
         path = self.write(
-            "processor\\t: 0\\n"
-            "vendor_id\\t: GenuineIntel\\n"
-            "flags\\t\\t: " + " ".join(V3) + "\\n"
+            "processor\t: 0\n"
+            "vendor_id\t: GenuineIntel\n"
+            "flags\t\t: " + " ".join(V3) + "\n"
         )
         flags, fields = read_cpuinfo_flags(path)
         self.assertEqual(flags, sorted(V3))
@@ -100,12 +100,12 @@ class CpuinfoParsingTests(unittest.TestCase):
 
     def test_missing_flags_on_any_processor_prevents_partial_claim(self) -> None:
         path = self.write(
-            "processor\\t: 0\\n"
-            "vendor_id\\t: GenuineIntel\\n"
-            "flags\\t\\t: " + " ".join(V3) + "\\n"
-            "\\n"
-            "processor\\t: 1\\n"
-            "vendor_id\\t: GenuineIntel\\n"
+            "processor\t: 0\n"
+            "vendor_id\t: GenuineIntel\n"
+            "flags\t\t: " + " ".join(V3) + "\n"
+            "\n"
+            "processor\t: 1\n"
+            "vendor_id\t: GenuineIntel\n"
         )
         flags, fields = read_cpuinfo_flags(path)
         self.assertEqual(flags, [])
