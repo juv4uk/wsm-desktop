@@ -598,7 +598,7 @@ def build_qemu_command(qemu: str, kernel: Path, initramfs: Path) -> list[str]:
         "-device", "cxl-rp,port=0,bus=cxl.1,id=root_port13,chassis=0,slot=2",
         "-device", "cxl-type3,bus=root_port13,volatile-memdev=vmem0,id=cxl-vmem0",
         "-M", "cxl-fmw.0.targets.0=cxl.1,cxl-fmw.0.size=4G",
-    )
+    ]
 
 
 def run_probe(timeout_seconds: int) -> dict[str, Any]:
