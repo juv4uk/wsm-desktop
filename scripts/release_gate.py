@@ -29,8 +29,10 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA = "wsm-release-gate/1"
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 ROOT = Path(__file__).resolve().parents[1]
+IMAGE_VERDICT_SCHEMA = "wsm-release-verdict/1"
+IMAGE_CRITERIA = {"checksum", "manifest", "iso-structure", "boot-bios", "boot-uefi"}
 
 
 def run(command: list[str], timeout: int = 900) -> tuple[int, str]:
@@ -107,21 +109,64 @@ def check_tests() -> dict[str, str]:
     tests = sorted((ROOT / "tests").glob("test_*.py"))
     if not tests:
         return criterion("tests", "not-run", "no test files found")
-    failures: list[str] = []
-    for path in tests:
-        code, detail = run([sys.executable, str(path)])
-        if code != 0:
-            failures.append(f"{path.name}: {detail}")
-    if failures:
-        return criterion("tests", "fail", "; ".join(failures)[:300])
-    return criterion("tests", "pass", f"{len(tests)} test files green")
+    code, detail = run(
+        [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"],
+        timeout=900,
+    )
+    if code == 127:
+        return criterion("tests", "not-run", detail)
+    if code != 0:
+        return criterion("tests", "fail", detail)
+    return criterion("tests", "pass", f"unittest discovery passed across {len(tests)} test modules")
 
 
 def check_evidence() -> dict[str, str]:
     code, detail = run([sys.executable, "scripts/check_profile_evidence.py"])
-    if code == 0 and "no evidence bundles yet" in detail:
-        return criterion("profile-evidence", "not-run", "no hardware profile bundles exist yet")
+    normalized = detail.casefold()
+    if code == 0 and (
+        "no evidence bundles yet" in normalized
+        or "no profiles directory at" in normalized
+    ):
+        return criterion("profile-evidence", "not-run", detail)
     return from_exit("profile-evidence", code, detail)
+
+
+def _image_verdict_problem(payload: Any, iso: Path) -> str | None:
+    """Validate the nested ISO verdict schema and its exact criteria set."""
+    if not isinstance(payload, dict):
+        return "nested image verdict root is not an object"
+    if payload.get("schema") != IMAGE_VERDICT_SCHEMA:
+        return "nested image verdict has an unsupported schema"
+    if payload.get("artifact") != iso.name:
+        return "nested image verdict names a different artifact"
+
+    criteria = payload.get("criteria")
+    if not isinstance(criteria, list) or not criteria:
+        return "nested image verdict has no criteria"
+    indexed: dict[str, dict[str, Any]] = {}
+    for item in criteria:
+        if not isinstance(item, dict):
+            return "nested image verdict contains a malformed criterion"
+        identifier = item.get("id")
+        status = item.get("status")
+        if not isinstance(identifier, str) or identifier in indexed:
+            return "nested image verdict contains a missing or duplicate criterion id"
+        if not isinstance(status, str) or status not in {"pass", "fail", "not-run"}:
+            return f"nested image verdict has an invalid status for {identifier!r}"
+        if not isinstance(item.get("detail"), str):
+            return f"nested image verdict has no detail for {identifier!r}"
+        indexed[identifier] = item
+
+    if set(indexed) != IMAGE_CRITERIA:
+        missing = sorted(IMAGE_CRITERIA - indexed.keys())
+        extra = sorted(indexed.keys() - IMAGE_CRITERIA)
+        return f"nested image criteria mismatch (missing={missing}, extra={extra})"
+
+    statuses = {item["status"] for item in indexed.values()}
+    expected = "fail" if "fail" in statuses else "incomplete" if "not-run" in statuses else "pass"
+    if payload.get("overall") != expected:
+        return "nested image verdict overall does not match its criterion statuses"
+    return None
 
 
 def check_image(iso: Path | None, boot: bool) -> dict[str, str]:
@@ -129,13 +174,63 @@ def check_image(iso: Path | None, boot: bool) -> dict[str, str]:
         return criterion("image", "not-run", "no --iso supplied; nothing to verify")
     if not iso.is_file():
         return criterion("image", "fail", f"{iso} does not exist")
-    command = [sys.executable, "scripts/verify_live_release.py", "--iso", str(iso), "--compact"]
+    command = [
+        sys.executable,
+        "scripts/verify_live_release.py",
+        "--iso",
+        str(iso),
+        "--compact",
+    ]
     if boot:
         command.append("--boot")
-    code, detail = run(command)
-    if code != 0:
-        return criterion("image", "fail", detail)
-    return criterion("image", "pass", "release verdict produced; see its output for criteria")
+
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=ROOT,
+            timeout=1200,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return criterion("image", "not-run", f"nested verifier did not complete: {exc}")
+
+    try:
+        payload = json.loads(completed.stdout)
+    except (TypeError, json.JSONDecodeError):
+        return criterion("image", "fail", "nested image verifier did not emit valid JSON")
+
+    problem = _image_verdict_problem(payload, iso)
+    if problem:
+        return criterion("image", "fail", problem)
+
+    overall = payload["overall"]
+    if overall == "fail":
+        failures = [
+            f'{item["id"]}: {item["detail"]}'
+            for item in payload["criteria"]
+            if item["status"] == "fail"
+        ]
+        if completed.returncode != 1:
+            return criterion("image", "fail", "nested image verifier exit code disagrees with fail verdict")
+        return criterion("image", "fail", "; ".join(failures)[:300])
+
+    if overall == "incomplete":
+        # verify_live_release.py intentionally returns 0 for an incomplete
+        # verdict; its structured JSON, not the process code, is authoritative.
+        if completed.returncode != 0:
+            return criterion("image", "fail", "nested image verifier exit code disagrees with incomplete verdict")
+        missing = [
+            f'{item["id"]}: {item["detail"]}'
+            for item in payload["criteria"]
+            if item["status"] == "not-run"
+        ]
+        return criterion("image", "not-run", "; ".join(missing)[:300])
+
+    if completed.returncode != 0:
+        return criterion("image", "fail", "nested image verifier exit code disagrees with pass verdict")
+    return criterion("image", "pass", "checksum, manifest, ISO structure, BIOS boot and UEFI boot passed")
 
 
 def verdict(criteria: list[dict[str, str]]) -> dict[str, Any]:
@@ -188,7 +283,7 @@ def main(argv: list[str] | None = None) -> int:
         args.output.write_text(rendered, encoding="utf-8")
     else:
         sys.stdout.write(rendered)
-    return 1 if result["overall"] == "fail" else 0
+    return {"pass": 0, "fail": 1, "incomplete": 2}[result["overall"]]
 
 
 if __name__ == "__main__":
