@@ -19,9 +19,9 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from check_profile_evidence import main, validate, validate_directory  # noqa: E402
 from wsm_install.plan import build_plan  # noqa: E402
 
-ARTIFACT_BYTES = b"synthetic dmesg evidence\\n"
+ARTIFACT_BYTES = b"synthetic dmesg evidence\n"
 ARTIFACT_SHA256 = hashlib.sha256(ARTIFACT_BYTES).hexdigest()
-PROFILE_SOURCE_BYTES = b";; synthetic profile source\\n"
+PROFILE_SOURCE_BYTES = b";; synthetic profile source\n"
 PROFILE_SOURCE_SHA256 = hashlib.sha256(PROFILE_SOURCE_BYTES).hexdigest()
 SOURCE_REPORT_BYTES = (ROOT / "tests" / "fixtures" / "hardware" / "desktop-observed.json").read_bytes()
 SOURCE_REPORT = json.loads(SOURCE_REPORT_BYTES)
