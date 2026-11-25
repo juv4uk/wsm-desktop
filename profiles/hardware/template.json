@@ -1,5 +1,5 @@
 {
-  "schema": "wsm-profile-evidence/1",
+  "schema": "wsm-profile-evidence/2",
   "profile": {
     "vendor": "ASUS",
     "model": "H170-PRO",
@@ -39,8 +39,9 @@
   "artifacts": [
     {
       "kind": "dmesg",
+      "path": "artifacts/dmesg.txt",
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-      "note": "замінити на справжній хеш"
+      "note": "замінити на справжній файл і SHA-256"
     }
   ],
   "hardware_signature": {
