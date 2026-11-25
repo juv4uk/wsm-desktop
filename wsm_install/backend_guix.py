@@ -125,19 +125,35 @@ def validate_plan(plan: dict[str, Any]) -> None:
         "plan.version",
         "unsupported plan version; expected 0.1.0",
     )
-    backend = plan.get("backend") or {}
+    backend = plan.get("backend")
+    _require(
+        isinstance(backend, dict),
+        "plan.backend_shape",
+        "backend must be an object",
+    )
     _require(
         backend.get("id") == BACKEND_ID,
         "plan.backend",
         f"this adapter only deploys {BACKEND_ID}, got {backend.get('id')!r}; "
         "one installation has exactly one backend",
     )
+    blockers = plan.get("blockers")
     _require(
-        not plan.get("blockers"),
-        "plan.blockers",
-        f"plan has unresolved blockers: {plan.get('blockers')}",
+        isinstance(blockers, list),
+        "plan.blockers_shape",
+        "blockers must be an array",
     )
-    readiness = plan.get("plan_readiness") or {}
+    _require(
+        not blockers,
+        "plan.blockers",
+        f"plan has unresolved blockers: {blockers}",
+    )
+    readiness = plan.get("plan_readiness")
+    _require(
+        isinstance(readiness, dict),
+        "plan.readiness_shape",
+        "plan_readiness must be an object",
+    )
     _require(
         readiness.get("confirmable") is True,
         "plan.not_confirmable",
@@ -145,15 +161,62 @@ def validate_plan(plan: dict[str, Any]) -> None:
         f"{readiness.get('required_user_actions')}",
     )
     _require(
-        not readiness.get("missing_required_roles"),
-        "plan.missing_roles",
-        f"required device roles were never observed: {readiness.get('missing_required_roles')}",
+        plan.get("plan_mode") == "dry-run",
+        "plan.mode",
+        "Guix handoff accepts only a dry-run plan snapshot",
     )
-    execution = plan.get("execution") or {}
+    _require(
+        plan.get("plan_status") == "confirmation-ready",
+        "plan.not_confirmation_ready",
+        "only a confirmation-ready plan can enter the Guix handoff; diagnostic-only plans are never accepted",
+    )
+    missing_roles = readiness.get("missing_required_roles")
+    _require(
+        isinstance(missing_roles, list),
+        "plan.missing_roles_shape",
+        "plan_readiness.missing_required_roles must be an array",
+    )
+    _require(
+        not missing_roles,
+        "plan.missing_roles",
+        f"required device roles were never observed: {missing_roles}",
+    )
+    required_actions = readiness.get("required_user_actions")
+    _require(
+        isinstance(required_actions, list),
+        "plan.user_actions_shape",
+        "plan_readiness.required_user_actions must be an array",
+    )
+    _require(
+        not required_actions,
+        "plan.user_actions",
+        f"required user actions remain unresolved: {required_actions}",
+    )
+    execution = plan.get("execution")
+    _require(
+        isinstance(execution, dict),
+        "plan.execution_shape",
+        "execution must be an object",
+    )
     _require(
         execution.get("dry_run") is True,
         "plan.dry_run",
         "plan was not produced in dry-run mode",
+    )
+    _require(
+        execution.get("plan_confirmable") is True,
+        "plan.execution_not_confirmable",
+        "execution.plan_confirmable must agree with plan_readiness.confirmable",
+    )
+    _require(
+        execution.get("mutations_authorized") is False,
+        "plan.mutations_authorized",
+        "prepare-only handoff must not carry mutation authorization",
+    )
+    _require(
+        execution.get("backend_invoked") is False,
+        "plan.backend_invoked",
+        "plan already claims backend execution; refusing to continue",
     )
     _require(
         execution.get("disk_access_performed") is False,
@@ -228,171 +291,3 @@ def validate_selection(selection: TargetSelection) -> None:
     _require(
         _matches(LOCALE_PATTERN, selection.locale),
         "selection.locale",
-        f"locale {selection.locale!r} is not a valid locale name",
-    )
-    _require(
-        _matches(TIMEZONE_PATTERN, selection.timezone)
-        and all(part not in {".", ".."} for part in selection.timezone.split("/")),
-        "selection.timezone",
-        f"timezone {selection.timezone!r} is not a valid timezone name",
-    )
-    _require(
-        _matches(KEYBOARD_PATTERN, selection.keyboard_layout),
-        "selection.keyboard_layout",
-        f"keyboard layout {selection.keyboard_layout!r} is not a valid layout name",
-    )
-    _require(
-        selection.boot_mode in {"efi", "bios"},
-        "selection.boot_mode",
-        f"boot mode {selection.boot_mode!r} must be 'efi' or 'bios'",
-    )
-    _require(
-        isinstance(selection.full_name, str)
-        and len(selection.full_name) <= 80
-        and not any(
-            unicodedata.category(character).startswith("C")
-            or unicodedata.category(character) in {"Zl", "Zp"}
-            for character in selection.full_name
-        ),
-        "selection.full_name",
-        "full name must be a single line of at most 80 characters without control or format characters",
-    )
-
-
-def _scheme_string(value: str) -> str:
-    """Quote an already-validated value for Scheme.
-
-    Validation is the security boundary; this function only prevents a value
-    from breaking the generated file's syntax.
-    """
-    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
-
-
-def render_configuration(plan: dict[str, Any], selection: TargetSelection) -> str:
-    """Render the Guix operating-system declaration for this target.
-
-    The generated configuration owns file systems, user accounts, services and
-    the bootloader. The installer frontend must not run a second bootloader
-    job against the same target.
-    """
-    if selection.boot_mode == "efi":
-        bootloader = (
-            "  (bootloader (bootloader-configuration\n"
-            "                (bootloader grub-efi-bootloader)\n"
-            "                (targets (list \"/boot/efi\"))))\n"
-        )
-        extra_file_system = (
-            "    (file-system\n"
-            "     (mount-point \"/boot/efi\")\n"
-            f"     (device (file-system-label {_scheme_string(selection.efi_label)}))\n"
-            "     (type \"vfat\"))\n"
-        )
-    else:
-        bootloader = (
-            "  (bootloader (bootloader-configuration\n"
-            "                (bootloader grub-bootloader)\n"
-            f"                (targets (list {_scheme_string(selection.disk)}))))\n"
-        )
-        extra_file_system = ""
-
-    source = plan["source_report"]
-    return (
-        ";; Generated by the WSM Guix deployment adapter. Do not edit by hand.\n"
-        f";; adapter={ADAPTER_VERSION} plan_sha256={plan['plan_sha256']}\n"
-        f";; report_id={source['report_id']} report_sha256={source['sha256']}\n"
-        "\n"
-        "(use-modules (gnu))\n"
-        "(use-service-modules networking ssh)\n"
-        "\n"
-        "(operating-system\n"
-        f"  (host-name {_scheme_string(selection.hostname)})\n"
-        f"  (timezone {_scheme_string(selection.timezone)})\n"
-        f"  (locale {_scheme_string(selection.locale)})\n"
-        f"  (keyboard-layout (keyboard-layout {_scheme_string(selection.keyboard_layout)}))\n"
-        "\n"
-        f"{bootloader}"
-        "\n"
-        "  (file-systems\n"
-        "   (cons*\n"
-        "    (file-system\n"
-        "     (mount-point \"/\")\n"
-        f"     (device (file-system-label {_scheme_string(selection.root_label)}))\n"
-        "     (type \"ext4\"))\n"
-        f"{extra_file_system}"
-        "    %base-file-systems))\n"
-        "\n"
-        "  (users\n"
-        "   (cons* (user-account\n"
-        f"           (name {_scheme_string(selection.username)})\n"
-        f"           (comment {_scheme_string(selection.full_name)})\n"
-        "           (group \"users\")\n"
-        "           (supplementary-groups '(\"wheel\" \"netdev\" \"audio\" \"video\"))\n"
-        f"           (home-directory {_scheme_string('/home/' + selection.username)}))\n"
-        "          %base-user-accounts))\n"
-        "\n"
-        "  (services\n"
-        "   (cons* (service openssh-service-type)\n"
-        "          %base-services)))\n"
-    )
-
-
-def build_argv(configuration_path: str, target_mountpoint: str) -> tuple[str, ...]:
-    """Return the deployment argv as a typed list, never a shell string.
-
-    ``guix system init`` is the only deployment command this adapter can
-    produce. The caller runs it, and only after revalidating the target.
-    """
-    _require(
-        configuration_path == GUIX_CONFIGURATION_PATH,
-        "argv.config_path",
-        f"configuration path must be the installer-owned path {GUIX_CONFIGURATION_PATH!r}",
-    )
-    _require(
-        target_mountpoint == GUIX_TARGET_MOUNTPOINT,
-        "argv.mountpoint",
-        f"target mountpoint must be the installer-owned mount root {GUIX_TARGET_MOUNTPOINT!r}",
-    )
-    return (GUIX_PROGRAM, *GUIX_SUBCOMMAND, configuration_path, target_mountpoint)
-
-
-def prepare(
-    plan: dict[str, Any],
-    selection: TargetSelection,
-    *,
-    confirmed_plan_sha256: str,
-    confirmed_target_digest: str,
-    external_bootloader_job: bool = False,
-    configuration_path: str = "/run/wsm/system.scm",
-    target_mountpoint: str = "/mnt",
-) -> GuixHandoff:
-    """Validate everything and return the handoff. Nothing is executed or written."""
-    _require(
-        not external_bootloader_job,
-        "handoff.bootloader_owner",
-        "the generated configuration owns the bootloader; a second bootloader job "
-        "would give one system two owners",
-    )
-    validate_plan(plan)
-    validate_selection(selection)
-
-    _require(
-        confirmed_plan_sha256 == plan["plan_sha256"],
-        "handoff.plan_changed",
-        "the plan changed after confirmation; the confirmation is void",
-    )
-    _require(
-        confirmed_target_digest == selection.digest(),
-        "handoff.target_changed",
-        "the target selection changed after confirmation; the confirmation is void",
-    )
-
-    configuration = render_configuration(plan, selection)
-    return GuixHandoff(
-        backend_id=BACKEND_ID,
-        adapter_version=ADAPTER_VERSION,
-        configuration=configuration,
-        configuration_sha256=hashlib.sha256(configuration.encode("utf-8")).hexdigest(),
-        argv=build_argv(configuration_path, target_mountpoint),
-        target_digest=selection.digest(),
-        plan_sha256=plan["plan_sha256"],
-    )
