@@ -18,7 +18,7 @@ The project is in **pre-alpha**. There is no supported installation image yet. T
 - [ ] Hardware compatibility testing
 - [ ] First public preview image
 
-See [the roadmap](docs/ROADMAP.md) for milestones and acceptance criteria.
+See [the roadmap](docs/ROADMAP.md) for milestones and acceptance criteria. The current Calamares 3.4.2 assessment is in [docs/CALAMARES-FEASIBILITY.md](docs/CALAMARES-FEASIBILITY.md).
 
 ## Technology
 
