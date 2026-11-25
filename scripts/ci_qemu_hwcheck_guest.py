@@ -366,7 +366,15 @@ def main() -> int:
         work = Path(directory)
         initramfs, dependency_count = _build_initramfs(work)
         kernel_copy = work / "guest-kernel"
-        shutil.copy2(_find_runner_kernel(), kernel_copy)
+        # Runner kernels in /boot are root-readable; copy them read-only into
+        # the disposable workspace without changing the source or host boot state.
+        with kernel_copy.open("wb") as kernel_output:
+            subprocess.run(
+                ["sudo", "cat", str(_find_runner_kernel())],
+                check=True,
+                stdout=kernel_output,
+                timeout=30,
+            )
         kernel_copy.chmod(0o644)
 
         command = [
