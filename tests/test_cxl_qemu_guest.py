@@ -6,6 +6,7 @@ from __future__ import annotations
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -52,7 +53,7 @@ class QemuCxlGuestTests(unittest.TestCase):
                 parse_insmod_plan(f"insmod {module}", root)
 
     def test_capture_and_initramfs_have_explicit_limits(self) -> None:
-        source = (ROOT / "scripts" / "ci_qemu_cxl_guest.py").read_text(encoding="utf-8")
+        source = (ROOT / "scripts" / "ci_cxl_qemu_guest.py").read_text(encoding="utf-8")
         self.assertIn("run_bounded_process", source)
         self.assertIn("MAX_INITRAMFS_BYTES", source)
         self.assertIn("MAX_MODULE_TOTAL_BYTES", source)
