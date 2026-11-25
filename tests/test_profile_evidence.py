@@ -132,6 +132,15 @@ class ArtifactTests(unittest.TestCase):
             problems = validate(document, artifact_root=evidence.parent)
             self.assertTrue(any("safe relative path" in problem for problem in problems))
 
+    def test_artifact_path_with_dot_segment_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            evidence = write_profile(root)
+            document = json.loads(evidence.read_text(encoding="utf-8"))
+            document["artifacts"][0]["path"] = "./artifacts/dmesg.txt"
+            problems = validate(document, artifact_root=evidence.parent)
+            self.assertTrue(any("safe relative path" in problem for problem in problems))
+
     def test_missing_artifact_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
