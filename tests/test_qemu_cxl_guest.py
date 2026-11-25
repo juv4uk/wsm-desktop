@@ -90,11 +90,11 @@ class QemuCxlGuestTests(unittest.TestCase):
 
     def test_port_devtype_parser_accepts_only_kernel_allowlisted_values(self) -> None:
         serial = (
-            "WSM_CXL_DEVTYPE=port1=endpoint\\n"
-            "WSM_CXL_DEVTYPE=port2=switch-downstream\\n"
-            "WSM_CXL_DEVTYPE=port3=arbitrary\\n"
-            "WSM_CXL_DEVTYPE=0000:00:01.0=endpoint\\n"
-            "WSM_CXL_DEVTYPE=port4=endpoint\\x1b[31m"
+            "WSM_CXL_DEVTYPE=port1=endpoint\n"
+            "WSM_CXL_DEVTYPE=port2=switch-downstream\n"
+            "WSM_CXL_DEVTYPE=port3=arbitrary\n"
+            "WSM_CXL_DEVTYPE=0000:00:01.0=endpoint\n"
+            "WSM_CXL_DEVTYPE=port4=endpoint\x1b[31m"
         )
         self.assertEqual(
             extract_port_devtypes(serial),
