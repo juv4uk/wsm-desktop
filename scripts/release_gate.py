@@ -42,7 +42,7 @@ def run(command: list[str], timeout: int = 900) -> tuple[int, str]:
             command, capture_output=True, text=True, check=False, cwd=ROOT, timeout=timeout
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        return 127, f"could not run {command[0]}: {exc}"
+        return -1, f"could not complete {command[0]}: {exc}"
     output = (completed.stdout + completed.stderr).strip().splitlines()
     tail = output[-1] if output else "no output"
     return completed.returncode, tail[:300]
@@ -53,7 +53,7 @@ def criterion(identifier: str, status: str, detail: str) -> dict[str, str]:
 
 
 def from_exit(identifier: str, code: int, detail: str) -> dict[str, str]:
-    if code == 127:
+    if code == -1:
         return criterion(identifier, "not-run", detail)
     return criterion(identifier, "pass" if code == 0 else "fail", detail)
 
@@ -67,6 +67,8 @@ def check_channels() -> dict[str, str]:
     """Check Free always; treat an absent optional Compatibility lock explicitly."""
     checker = [sys.executable, "scripts/check_channels.py"]
     free_lock = ROOT / "channels.lock.scm"
+    if not free_lock.is_file():
+        return criterion("channels", "fail", f"required Free lock is missing: {free_lock.name}")
     free_code, free_detail = run(
         [*checker, "--policy", "free", "--lock", str(free_lock)]
     )
@@ -113,7 +115,7 @@ def check_tests() -> dict[str, str]:
         [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"],
         timeout=900,
     )
-    if code == 127:
+    if code == -1:
         return criterion("tests", "not-run", detail)
     if code != 0:
         return criterion("tests", "fail", detail)
