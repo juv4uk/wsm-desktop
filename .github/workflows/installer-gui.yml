@@ -1,0 +1,67 @@
+name: Installer GUI build
+
+on:
+  pull_request:
+    paths:
+      - "installer/gui/**"
+      - "wsm/packages/installer.scm"
+      - "wsm/packages/wsm.scm"
+      - "wsm_hwcheck/**"
+      - "wsm_install/**"
+      - "schemas/hardware-report.schema.json"
+      - ".github/workflows/installer-gui.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "installer/gui/**"
+      - "wsm/packages/installer.scm"
+      - "wsm/packages/wsm.scm"
+      - "wsm_hwcheck/**"
+      - "wsm_install/**"
+      - "schemas/hardware-report.schema.json"
+      - ".github/workflows/installer-gui.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: installer-gui-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  qt6-build-and-qml-smoke:
+    name: Qt 6 build and offscreen QML smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Qt 6 build and runtime modules
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            cmake g++ \
+            qt6-base-dev \
+            qt6-declarative-dev \
+            qt6-declarative-dev-tools \
+            qml6-module-qtquick-controls \
+            qml6-module-qtquick-layouts \
+            qt6-qpa-plugins
+
+      - name: Configure Qt application
+        run: |
+          cmake -S installer/gui -B build/wsm-installer \
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Compile C++ and QML resources
+        run: cmake --build build/wsm-installer --parallel 2
+
+      - name: Verify QML application loads offscreen
+        shell: bash
+        run: |
+          QT_QPA_PLATFORM=offscreen \
+          QT_QUICK_CONTROLS_STYLE=Basic \
+            build/wsm-installer/wsm-installer --smoke-test

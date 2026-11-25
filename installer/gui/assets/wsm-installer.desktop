@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=WSM Installer
+Name[uk]=Інсталятор WSM
+GenericName=System Installer
+GenericName[uk]=Інсталятор системи
+Comment=Read-only WSM hardware preflight and installation preview
+Comment[uk]=Лише читання: перевірка обладнання та перегляд параметрів WSM
+Icon=wsm-installer
+Exec=wsm-installer
+TryExec=wsm-installer
+Terminal=false
+Categories=System;Settings;
+StartupNotify=true
