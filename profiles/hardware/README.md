@@ -46,4 +46,4 @@ python3 scripts/check_profile_evidence.py --dir /path/to/hardware-profiles
 
 ## Межі
 
-Наявність валідного bundle не означає, що всі функції перевірені: `not_assessed` має залишатися непорожнім. QEMU, Windows і WSL результати не можуть підміняти native Linux перевірку фізичного обладнання. Формат не доводить, що інсталятор уже застосовує цей gate у runtime.
+Наявність валідного bundle не означає, що всі функції перевірені: `not_assessed` має залишатися непорожнім. QEMU, Windows і WSL результати не можуть підміняти native Linux перевірку фізичного обладнання. `wsm_install.plan.build_plan()` уже застосовує спільний gate, коли викликач передає `profile_evidence` і `profile_evidence_root`. Qt GUI поки не має власного вибору профілю й автоматичного передавання bundle.
