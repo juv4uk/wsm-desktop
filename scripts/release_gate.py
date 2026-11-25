@@ -65,13 +65,13 @@ def check_channels() -> dict[str, str]:
     )
     for policy, lock in policies:
         if not lock.is_file():
-            results.append(
-                criterion(
-                    f"channels-{policy}",
-                    "not-run",
-                    f"{lock.name} NOT_CONFIGURED; no fallback to another product lock",
-                )
+            missing_status = "fail" if policy == "free" else "not-run"
+            detail = (
+                f"required {lock.name} is missing"
+                if policy == "free"
+                else f"{lock.name} NOT_CONFIGURED; no fallback to another product lock"
             )
+            results.append(criterion(f"channels-{policy}", missing_status, detail))
             continue
         code, detail = run(
             [
@@ -100,14 +100,15 @@ def check_tests() -> dict[str, str]:
     tests = sorted((ROOT / "tests").glob("test_*.py"))
     if not tests:
         return criterion("tests", "not-run", "no test files found")
-    failures: list[str] = []
-    for path in tests:
-        code, detail = run([sys.executable, str(path)])
-        if code != 0:
-            failures.append(f"{path.name}: {detail}")
-    if failures:
-        return criterion("tests", "fail", "; ".join(failures)[:300])
-    return criterion("tests", "pass", f"{len(tests)} test files green")
+    code, detail = run(
+        [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"],
+        timeout=900,
+    )
+    if code == -1:
+        return criterion("tests", "not-run", detail)
+    if code != 0:
+        return criterion("tests", "fail", detail)
+    return criterion("tests", "pass", f"unittest discovery passed across {len(tests)} test modules")
 
 
 def check_evidence() -> dict[str, str]:
