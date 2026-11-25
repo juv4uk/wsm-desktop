@@ -129,6 +129,12 @@ class DraftTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             draft({"devices": []}, "ASUS", "H170-PRO", "asus/h170-pro", b'{"devices": []}')
 
+    def test_report_without_collection_date_is_refused(self) -> None:
+        source = report()
+        del source["collected_at"]
+        with self.assertRaises(SystemExit):
+            draft(source, "ASUS", "H170-PRO", "asus/h170-pro", json.dumps(source).encode())
+
 
 class CliTests(unittest.TestCase):
     def test_cli_writes_v2_evidence_and_exact_source_artifact(self) -> None:
