@@ -27,6 +27,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from jsonschema import Draft202012Validator, FormatChecker
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -155,6 +157,24 @@ def draft(
     return bundle
 
 
+def validate_hardware_report(report: Any) -> list[str]:
+    """Apply the published hardware-report schema, including its privacy constants."""
+    try:
+        schema = json.loads(
+            (ROOT / "schemas" / "hardware-report.schema.json").read_text(encoding="utf-8")
+        )
+        Draft202012Validator.check_schema(schema)
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
+        return [f"cannot load hardware report schema: {exc}"]
+
+    validator = Draft202012Validator(schema, format_checker=FormatChecker())
+    errors = sorted(validator.iter_errors(report), key=lambda item: list(item.absolute_path))
+    return [
+        f"{'/'.join(str(part) for part in error.absolute_path) or '<root>'}: {error.message}"
+        for error in errors
+    ]
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="draft-profile-evidence",
@@ -185,6 +205,17 @@ def main(argv: list[str] | None = None) -> int:
         report = json.loads(report_bytes)
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         print(f"draft-profile-evidence: cannot read report: {exc}", file=sys.stderr)
+        return 2
+
+    report_problems = validate_hardware_report(report)
+    if report_problems:
+        for problem in report_problems[:20]:
+            print(f"draft-profile-evidence: invalid hardware report: {problem}", file=sys.stderr)
+        if len(report_problems) > 20:
+            print(
+                f"draft-profile-evidence: {len(report_problems) - 20} additional schema errors omitted",
+                file=sys.stderr,
+            )
         return 2
 
     try:
