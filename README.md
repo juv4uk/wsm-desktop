@@ -1,10 +1,40 @@
 # WSM Desktop
 
+[![Repository checks](https://github.com/juv4uk/wsm-desktop/actions/workflows/checks.yml/badge.svg)](https://github.com/juv4uk/wsm-desktop/actions/workflows/checks.yml)
+[![Code license: GPL-3.0-or-later](https://img.shields.io/badge/code-GPL--3.0--or--later-blue.svg)](LICENSE)
+[![Docs license: CC-BY-SA-4.0](https://img.shields.io/badge/docs-CC--BY--SA--4.0-lightgrey.svg)](LICENSES/CC-BY-SA-4.0.txt)
+
 > Hardware-oriented desktop Linux project exploring Nix and GNU Guix as declarative system foundations.
 
 **WSM Desktop** is an independent, hardware-oriented project to build a comfortable, reproducible desktop Linux system with a graphical installer. Its central purpose is to select and integrate proven upstream kernels, drivers, firmware and hardware tools for concrete hardware configurations, while making compatibility evidence understandable before installation. GNU Guix System is the selected system backend for the first release; Nix/NixOS is deferred, not rejected. The project does not merge their package stores or system managers.
 
-The project is in **pre-alpha**. There is no supported installation image yet. The repository currently defines the project architecture and development foundations; it must not be used to install or modify a real system.
+## Try it now
+
+The hardware collector is the one part of this repository that runs today. It reads
+sysfs and procfs only: no network, no writes, no root, no installation.
+
+```console
+$ git clone https://github.com/juv4uk/wsm-desktop.git
+$ cd wsm-desktop
+$ python3 -m wsm_hwcheck --compact            # JSON report to stdout
+$ python3 -m wsm_hwcheck --output hw.json     # or to a file
+```
+
+The report validates against a versioned schema and states `unknown` where the
+evidence is missing instead of guessing:
+
+```console
+$ pip install 'jsonschema[format]==4.26.0'
+$ python3 -m wsm_install --preflight --report hw.json --backend guix --dry-run
+```
+
+The `wsm_install` command prints a diagnostic plan for this machine. It is a draft by
+design: it refuses to become an installable plan until a storage target is chosen
+and the required device roles are observed.
+
+> **Status: pre-alpha.** There is no supported installation image. The repository
+> defines the project architecture and development foundations; it must not be used
+> to install or modify a real system. The collector above is read-only and safe to run.
 
 ## Project status
 
@@ -18,7 +48,7 @@ The project is in **pre-alpha**. There is no supported installation image yet. T
 - [ ] Hardware compatibility testing
 - [ ] First public preview image
 
-See [the roadmap](docs/ROADMAP.md) for milestones and acceptance criteria. The installer frontend is being evaluated in [issue #10](https://github.com/juv4uk/wsm-desktop/issues/10); Calamares is not a locked dependency. The hardware-first/upstream-first direction is explored through [the hardware preflight](docs/hardware/HWCHECK.md) and the [upstream tooling assessment](docs/hardware/UPSTREAM-TOOLING.md). The proposed dual-backend direction is recorded in [ADR 0004](docs/decisions/0004-nix-guix-backend-strategy.md) and is not yet ratified. The current Calamares 3.4.2 assessment is in [docs/CALAMARES-FEASIBILITY.md](docs/CALAMARES-FEASIBILITY.md).
+See [the roadmap](docs/ROADMAP.md) for milestones and acceptance criteria. The installer frontend is being evaluated in [issue #10](https://github.com/juv4uk/wsm-desktop/issues/10); Calamares is not a locked dependency. The hardware-first/upstream-first direction is explored through [the hardware preflight](docs/hardware/HWCHECK.md) and the [upstream tooling assessment](docs/hardware/UPSTREAM-TOOLING.md). [ADR 0004](docs/decisions/0004-nix-guix-backend-strategy.md) records the ratified backend decision: GNU Guix first, Nix deferred. The current Calamares 3.4.2 assessment is in [docs/CALAMARES-FEASIBILITY.md](docs/CALAMARES-FEASIBILITY.md).
 
 ## Technology
 
@@ -60,17 +90,20 @@ Selected WSM installer frontend (not selected yet)
     +--> WSM-specific configuration and preflight
               |
               v
-       WSM backend adapter
+       WSM backend adapter (wsm_install/backend_guix.py)
               |
-              +--> Nix/NixOS deployment path
+              +--> GNU Guix deployment path  (selected, ADR 0004)
               |
-              +--> GNU Guix deployment path
+              +--> Nix/NixOS deployment path (deferred, not built)
               |
               v
        installed WSM Desktop system
 ```
 
-This is a design target, not a working installer yet. Nix and Guix deployment must remain separate backend implementations until comparative tests justify a supported release model.
+This is a design target, not a working installer yet. The adapter renders a Guix
+`operating-system` declaration from a confirmed plan and returns an allow-listed
+argv; running it is still unimplemented. The Nix path is deferred rather than
+removed, and no installation may have two backends.
 
 ### Backend ownership
 
