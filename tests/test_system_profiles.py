@@ -165,6 +165,7 @@ class IsoScriptTests(unittest.TestCase):
             "printf '\\nPWD=%s\\nGUIX_PACKAGE_PATH=%s\\n' \"$PWD\" \"$GUIX_PACKAGE_PATH\" >> \"$WSM_TEST_GUIX_ARGS\"\n"
             "if [ \"$1\" = '--version' ]; then echo 'guix (GNU Guix) 1.5.0-test'; exit 0; fi\n"
             "if [ \"$5\" = 'describe' ]; then\n"
+            "  if [ \"${WSM_TEST_AUTH_DISABLED:-0}\" = '1' ]; then echo 'channel authentication disabled' >&2; fi\n"
             "  printf '%s\\n' '(list (channel (name \'guix\') (commit \'test\')))'\n"
             "  exit 0\n"
             "fi\n"
@@ -266,6 +267,44 @@ class IsoScriptTests(unittest.TestCase):
             self.assertEqual(again.returncode, 3)
             self.assertEqual(args_log.read_text(encoding="utf-8"), previous_log)
             self.assertEqual(expected.resolve(), fake_image)
+
+    def test_builder_fails_closed_when_channel_authentication_is_disabled(self) -> None:
+        script = ROOT / "scripts" / "build_iso.sh"
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_root = Path(temporary)
+            bin_dir = temporary_root / "bin"
+            output_dir = temporary_root / "out"
+            bin_dir.mkdir()
+            output_dir.mkdir()
+            fake_image = temporary_root / "guix-store-image.iso"
+            fake_image.write_bytes(b"image must not be published")
+            args_log = temporary_root / "guix-args.txt"
+            self._fake_guix(bin_dir)
+
+            environment = os.environ.copy()
+            environment["PATH"] = str(bin_dir) + os.pathsep + os.defpath
+            environment["WSM_ISO_DIR"] = str(output_dir)
+            environment["WSM_TEST_GUIX_ARGS"] = str(args_log)
+            environment["WSM_TEST_IMAGE"] = str(fake_image)
+            environment["WSM_TEST_AUTH_DISABLED"] = "1"
+            environment.pop("GUIX_PACKAGE_PATH", None)
+
+            result = subprocess.run(
+                ["/bin/sh", str(script)],
+                cwd=temporary_root,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 7, result.stderr)
+            self.assertIn("channel authentication is disabled", result.stderr)
+            calls = args_log.read_text(encoding="utf-8")
+            self.assertIn("CALL|time-machine|-C|", calls)
+            self.assertNotIn("|--|system|image", calls)
+            self.assertFalse((output_dir / "wsm-desktop-live.iso").exists())
+            self.assertFalse((output_dir / "manifest.json").exists())
 
     def test_script_refuses_to_run_without_guix(self) -> None:
         text = (ROOT / "scripts" / "build_iso.sh").read_text(encoding="utf-8")
