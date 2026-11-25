@@ -10,7 +10,7 @@
 
 The `wsm-install` prototype validates a local hardware evidence report, presents observed facts, and emits a deterministic backend-specific draft plan. It does not deploy a system, invoke Guix or Nix, open block devices, partition disks, or change bootloader state.
 
-The first increment is CLI-only. It deliberately does not select or embed an installer frontend. A graphical/TUI layer can later consume the same report summary and plan functions.
+The CLI remains the canonical validator and diagnostic-plan producer. A WSM-owned Qt 6/QML frontend now lives in `installer/gui/` and consumes the same Python report and plan contracts. Its first slice is read-only: hardware evidence, `lsblk` inventory, local configuration preview and diagnostic-only summary. It does not authorize APPLY and is not yet integrated into a verified live ISO.
 
 ## Usage
 
@@ -56,9 +56,9 @@ A draft plan is not a deployment authorization. A future apply path must indepen
 
 ## Safety boundary
 
-- No subprocess is invoked.
+- The `wsm-install` CLI does not invoke subprocesses. The separate Qt frontend starts only `python3 -m wsm_hwcheck`, `python3 -m wsm_install`, and read-only `lsblk` through `QProcess` argument vectors; it does not use a shell.
 - No network API or upload is used.
-- No disk discovery or block-device access is performed by `wsm-install`.
+- No disk discovery or block-device access is performed by `wsm-install`. The Qt frontend's separate `lsblk` call reads block-device inventory only and does not open targets for writing.
 - No package installation, firmware update, module load, or bootloader action is performed.
 - The only optional write is the user-requested JSON plan file.
 - Plan output must be a regular file in an existing directory; symlinks, block/character devices, `/dev`, `/proc`, and `/sys` destinations are refused.
