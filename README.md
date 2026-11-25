@@ -1,7 +1,7 @@
 # WSM Desktop
 
 [![Перевірки репозиторію](https://github.com/juv4uk/wsm-desktop/actions/workflows/checks.yml/badge.svg)](https://github.com/juv4uk/wsm-desktop/actions/workflows/checks.yml)
-[![Ліцензія коду: GPL-3.0-or-later](https://img.shields.io/badge/code-GPL--3.0-or-later-blue.svg)](LICENSE)
+[![Ліцензія коду: GPL-3.0-or-later](https://img.shields.io/badge/code-GPL--3.0--or--later-blue.svg)](LICENSE)
 [![Ліцензія документації: CC-BY-SA-4.0](https://img.shields.io/badge/docs-CC--BY--SA-4.0-lightgrey.svg)](LICENSES/CC-BY-SA-4.0.txt)
 
 > Апаратно-орієнтований десктопний Linux на основі GNU Guix System.
