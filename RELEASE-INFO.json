@@ -1,0 +1,29 @@
+{
+  "schema": "wsm-release-info/1",
+  "release_id": "wsm-desktop-hardware-preview",
+  "version": "0.1.0-rc1",
+  "display_name": "WSM Desktop Hardware Preview RC1",
+  "status": "pre-release",
+  "date": "2026-11-25",
+  "scope": [
+    "read-only hardware evidence report (wsm-hwcheck 0.2.0, report schema 1.0.0)",
+    "diagnostic-only draft plan for the ratified Guix backend; the Nix plan is research-only (wsm-install 0.1.0)",
+    "authenticated free-only Guix channel lock",
+    "reproducible source bundle with checksums and build manifest"
+  ],
+  "excluded": [
+    "supported installation image or USB installer",
+    "any write to a block device, partition table or bootloader",
+    "Nonguix or nonfree firmware in the release channel lock",
+    "a second supported backend: ADR 0004 is ratified for GNU Guix; Nix/NixOS remains research (#55)"
+  ],
+  "requirements": {
+    "python": ">=3.10",
+    "jsonschema": "4.26.0"
+  },
+  "artifacts": [
+    "wsm-desktop-0.1.0-rc1-source.tar.gz",
+    "SHA256SUMS",
+    "release-manifest.json"
+  ]
+}

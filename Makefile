@@ -3,9 +3,9 @@
 PYTHON ?= python3
 GUIX ?= guix
 
-.PHONY: check check-docs check-hardware-schema check-hwcheck check-installer check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system
+.PHONY: check check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle
 
-check: check-docs check-hardware-schema check-hwcheck check-installer check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy
+check: check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy
 
 check-docs:
 	$(PYTHON) scripts/check_docs.py
@@ -15,6 +15,9 @@ check-system:
 
 vm-system:
 	$(GUIX) system vm systems/minimal.scm
+
+vm-system-serial:
+	$(GUIX) system vm --no-graphic systems/minimal.scm
 
 check-hardware-schema:
 	$(PYTHON) tests/test_hardware_report.py
@@ -44,3 +47,15 @@ check-minimal-system:
 
 check-uefi-preboot-policy:
 	$(PYTHON) tests/test_uefi_preboot_probe_policy.py
+
+check-release:
+	$(PYTHON) tests/test_release_artifacts.py
+
+describe-lock:
+	$(GUIX) time-machine -C channels.lock.scm -- describe -f channels
+
+check-locked-system:
+	$(GUIX) time-machine -C channels.lock.scm -- system build systems/minimal.scm
+
+release-bundle: check
+	$(PYTHON) scripts/build_release_bundle.py
