@@ -81,12 +81,13 @@ class MakefileCoverageTests(unittest.TestCase):
             (root / "Makefile").write_text(self.text, encoding="utf-8")
             fake_python = root / "fake-python"
             call_log = root / "calls.txt"
-            fake_python.write_text(
-                "#!/bin/sh\\n"
-                "printf '%s\\\\n' \\\"$*\\\" >> \\\"$CALL_LOG\\\"\\n"
-                "exit 0\\n",
-                encoding="utf-8",
-            )
+            script = chr(10).join([
+                "#!/bin/sh",
+                "printf '%s" + chr(92) + "n' " + chr(34) + "$*" + chr(34) + " >> " + chr(34) + "$CALL_LOG" + chr(34),
+                "exit 0",
+                "",
+            ])
+            fake_python.write_text(script, encoding="utf-8")
             fake_python.chmod(0o755)
             if compatibility_lock:
                 (root / "channels.compatibility.lock.scm").write_text("fixture\\n", encoding="utf-8")
