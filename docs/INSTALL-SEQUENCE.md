@@ -75,6 +75,14 @@ partition table. Тому install sequence включає `sgdisk`-операц�
 `/mnt/boot/efi`, не в live-систему. BIOS layout має `bios_grub` і не
 створює ESP/FAT filesystem.
 
+**Один власник partition/format operations.** Цей WSM sequence зараз
+описує один можливий argv-план для GPT та форматування, але нічого не виконує
+і не означає, що frontend або partition engine уже обраний. Якщо майбутній
+WSM UI використовує KPMcore/Calamares для запису partition table чи форматування,
+його результат має стати єдиним джерелом partition/mount facts для Guix handoff;
+WSM `sgdisk`/`mkfs` кроки тоді не виконуються. Заборонено запускати обидва
+шляхи для одного target disk. Один підтверджений plan, один mutating owner.
+
 ## Чому зараз лише ext4
 
 Поточний Guix renderer генерує root filesystem як ext4. Тому planner також
