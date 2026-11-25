@@ -343,7 +343,7 @@ Frontend реалізація може змінюватися (Calamares, інш
 **Реалізовано** — standalone CLI `wsm_install/guix_deploy.py`: 
 
 - `python3 -m wsm_install.guix_deploy --plan PLAN.json --selection TARGET.json --show-confirmation` перевіряє обидва входи й показує точні SHA-256 плану та вибору цілі; файл конфігурації не створюється;
-- другий виклик вимагає обидва digest-и через `--confirm-plan-sha256` і `--confirm-target-digest`, після чого створює новий абсолютний `.scm` файл з режимом `0600`;
+- другий виклик вимагає обидва digest-и через `--confirm-plan-sha256` і `--confirm-target-digest`, після чого створює новий абсолютний `.scm` файл з режимом `0600` поза target mountpoint; CLI дозволяє лише `/mnt` або підкаталог без symlink-компонентів і відхиляє output усередині цільової файлової системи;
 - CLI друкує JSON із allow-listed `argv`, але ніколи не виконує його; відхиляє symlink/не regular input, duplicate JSON keys, змінені чи diagnostic-only plans, неузгоджені підтвердження та перезапис наявного output;
 - `make check-installer` запускає окремі backend і CLI safety tests.
 
@@ -351,4 +351,4 @@ Frontend реалізація може змінюватися (Calamares, інш
 
 **Не реалізовано** — кроки `REALIZE` та `APPLY`: адаптер не виконує `guix system init`, не монтує цільовий диск і не перевіряє його ідентичність перед записом. Це наступний крок і він потребує середовища з Guix.
 
-Тести: `tests/test_backend_guix.py` (20 тестів) перевіряють backend guardrails; `tests/test_guix_deploy_cli.py` (13 тестів) — standalone CLI, файлову безпеку та двофазне підтвердження. Вони не потребують Guix і не торкаються дисків.
+Тести: `tests/test_backend_guix.py` (20 тестів) перевіряють backend guardrails; `tests/test_guix_deploy_cli.py` (16 тестів) — standalone CLI, файлову безпеку та двофазне підтвердження. Вони не потребують Guix і не торкаються дисків.
