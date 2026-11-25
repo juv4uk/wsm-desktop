@@ -38,6 +38,17 @@ AMD SMI є наступником ROCm SMI та надає API для GPU/device
 
 Джерела: [AMD SMI 27.2.0, документація ROCm 10.2.0](https://rocm.docs.amd.com/projects/amdsmi/en/docs-10.2.0/), [AMD SMI CLI guidance 27.2.0](https://rocm.docs.amd.com/projects/amdsmi/en/docs-10.2.0/how-to/amdsmi-cli-tool.html), [AMD SMI topology output 27.2.0](https://rocm.docs.amd.com/projects/amdsmi/en/docs-10.2.0/how-to/amdsmi-cli-tool.html#amd-smi-topology).
 
+Для `amdsmi_get_link_topology()` не перетворювати поля на прості verdict-и:
+- `num_hops` — абстрактні кроки топології (обмежені 255), а не кількість фізичних xGMI links;
+- `link_status` описує API status enum, але AMD окремо застерігає, що це **не link-health і не P2P-access status**; успішні bare-metal виклики наразі можуть повертати `ENABLED` навіть коли CLI перевірка доступності P2P дає інший результат;
+- `fb_sharing = 0` означає «недоступний або запит не вдався», тому не можна записувати це як доведене `P2P=false` без додаткового статусу/причини;
+- API виконує послідовні запити, тому результати різних пар можуть належати до трохи різних моментів часу; зберігати timestamp кожного спостереження або спільний короткий collection window;
+- `amdsmi_init()` за замовчуванням ініціалізує GPU. CPU initialization — окрема опція й потребує `amd_hsmp` та HSMP, увімкненого в BIOS; за відсутності цього шляху не позначати AMD GPU provider як failed і не робити CPU telemetry обов'язковою.
+
+Джерело точних полів та обмежень: [AMD SMI 27.2.0 Python API reference](https://rocm.docs.amd.com/projects/amdsmi/en/docs-10.2.0/reference/amdsmi-py-api.html), функція `amdsmi_get_link_topology` і розділ `amdsmi_init`.
+
+Джерела: [AMD SMI 27.2.0, документація ROCm 10.2.0](https://rocm.docs.amd.com/projects/amdsmi/en/docs-10.2.0/), [AMD SMI CLI guidance 27.2.0](https://rocm.docs.amd.com/projects/amdsmi/en/docs-10.2.0/how-to/amdsmi-cli-tool.html), [AMD SMI topology output 27.2.0](https://rocm.docs.amd.com/projects/amdsmi/en/docs-10.2.0/how-to/amdsmi-cli-tool.html#amd-smi-topology).
+
 ### CXL sysfs — типізована fabric topology та memory locality
 
 Linux kernel експонує CXL fabric у `/sys/bus/cxl/devices/`: root/port/endpoint objects, decoders, memory devices (`memX`), regions і DAX regions. Це важливий майбутній source для workstation/server-class memory topology, яку плоский PCI inventory не описує.
