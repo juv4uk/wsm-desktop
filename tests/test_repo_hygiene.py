@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""Rules learned from Omarchy, enforced instead of promised.
+"""Repository hygiene rules learned from Omarchy, tested at behavior boundaries.
 
-See docs/LESSONS-FROM-OMARCHY.md. The short version: a project whose glue layer
-grows as untested shell scripts ends up with nobody able to say whether it
-works, and installing by piping a download into a shell is not an installer.
+See docs/LESSONS-FROM-OMARCHY.md. Static checks protect narrow safety policies;
+shell behavior is covered by focused tests or the CI workflow that executes it.
+A filename appearing in a test is not evidence that the script works.
 """
 
 from __future__ import annotations
@@ -11,18 +11,31 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import sys
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
-TESTS = ROOT / "tests"
 
-# curl ... | sh, wget ... | bash, and the eval-the-download variants.
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(SCRIPTS))
+
+# curl ... | sh, wget ... | bash, including a shell line continuation.
 PIPE_TO_SHELL = re.compile(
-    r"(curl|wget)[^\n|]*\|\s*(sudo\s+)?(ba)?sh\b",
+    r"(?:curl|wget)\b[^|;\n]*\|\s*(?:sudo\s+)?(?:ba)?sh\b",
     re.IGNORECASE,
 )
+
+
+def find_pipe_to_shell(source: str) -> list[str]:
+    """Return unsafe download-to-shell command fragments.
+
+    A backslash-newline is a shell continuation, so normalize it before
+    matching. An ordinary newline is not joined: it starts a new command.
+    """
+    normalized = re.sub(r"\\\r?\n[ \t]*", " ", source)
+    return [match.group(0) for match in PIPE_TO_SHELL.finditer(normalized)]
 
 
 def documentation_files() -> list[Path]:
@@ -32,59 +45,58 @@ def documentation_files() -> list[Path]:
     ]
 
 
-class NoPipeToShellTests(unittest.TestCase):
+class PipeToShellPolicyTests(unittest.TestCase):
     def test_documentation_never_pipes_a_download_into_a_shell(self) -> None:
         offenders: list[str] = []
         for path in documentation_files():
-            for match in PIPE_TO_SHELL.finditer(path.read_text(encoding="utf-8", errors="replace")):
-                offenders.append(f"{path.relative_to(ROOT)}: {match.group(0).strip()}")
+            matches = find_pipe_to_shell(
+                path.read_text(encoding="utf-8", errors="replace")
+            )
+            offenders.extend(
+                f"{path.relative_to(ROOT)}: {match}" for match in matches
+            )
         self.assertEqual(offenders, [], "pipe-to-shell found: " + "; ".join(offenders))
 
     def test_scripts_never_pipe_a_download_into_a_shell(self) -> None:
         offenders: list[str] = []
-        for path in SCRIPTS.iterdir():
+        for path in SCRIPTS.rglob("*"):
             if not path.is_file():
                 continue
-            text = path.read_text(encoding="utf-8", errors="replace")
-            for match in PIPE_TO_SHELL.finditer(text):
-                offenders.append(f"{path.name}: {match.group(0).strip()}")
+            matches = find_pipe_to_shell(
+                path.read_text(encoding="utf-8", errors="replace")
+            )
+            offenders.extend(f"{path.relative_to(ROOT)}: {match}" for match in matches)
         self.assertEqual(offenders, [], "pipe-to-shell found: " + "; ".join(offenders))
 
-
-class ScriptCoverageTests(unittest.TestCase):
-    def test_every_script_is_referenced_by_a_test(self) -> None:
-        """A script nobody tests is a script nobody can vouch for."""
-        corpus = "\n".join(
-            path.read_text(encoding="utf-8", errors="replace")
-            for path in TESTS.glob("*.py")
+    def test_multiline_download_pipe_to_shell_is_detected(self) -> None:
+        source = (
+            "curl --fail --location https://example.invalid/install.sh \\\n"
+            "  | sudo bash"
         )
-        uncovered = sorted(
-            path.name for path in SCRIPTS.iterdir()
-            if path.is_file() and path.stem not in corpus
-        )
-        self.assertEqual(uncovered, [], f"no test mentions: {uncovered}")
+        self.assertEqual(len(find_pipe_to_shell(source)), 1)
 
+    def test_download_to_file_can_be_inspected_before_execution(self) -> None:
+        source = (
+            "curl --fail --location --output install.sh https://example.invalid/install.sh\n"
+            "sha256sum install.sh\n"
+            "sed -n '1,120p' install.sh\n"
+            "bash install.sh"
+        )
+        self.assertEqual(find_pipe_to_shell(source), [])
+
+
+class ShellSyntaxTests(unittest.TestCase):
     def test_every_shell_script_parses(self) -> None:
-        for path in sorted(SCRIPTS.glob("*.sh")):
-            with self.subTest(script=path.name):
+        """Syntax validation is real; it is not a claim of runtime correctness."""
+        for path in sorted(SCRIPTS.rglob("*.sh")):
+            with self.subTest(script=path.relative_to(ROOT)):
                 completed = subprocess.run(
-                    ["bash", "-n", str(path)], capture_output=True, text=True, check=False
+                    ["bash", "-n", str(path)],
+                    capture_output=True,
+                    text=True,
+                    check=False,
                 )
                 self.assertEqual(completed.returncode, 0, completed.stderr)
-
-
-class CiOnlyScriptTests(unittest.TestCase):
-    """scripts/ci_qemu_guest_smoke.sh runs only inside CI, so it is checked here.
-
-    It is the exact shape Omarchy was criticised for: glue that nobody can run
-    locally. Naming it in a test at least guarantees it parses and that its
-    safety flags are present.
-    """
-
-    def test_ci_qemu_guest_smoke_declares_strict_mode(self) -> None:
-        text = (SCRIPTS / "ci_qemu_guest_smoke.sh").read_text(encoding="utf-8")
-        self.assertIn("set -Eeuo pipefail", text)
-        self.assertIn("MARKER=", text)
 
 
 class VersionedArtifactTests(unittest.TestCase):
@@ -106,17 +118,14 @@ class VersionedArtifactTests(unittest.TestCase):
                     f"{path.name} does not pin schema or schema_version with a const",
                 )
 
-    def test_runtime_artifacts_share_the_same_version_convention(self) -> None:
-        """The Python producers must use the same <name>/<major> shape as the schemas."""
-        producers = {
-            "wsm_hwcheck/isa.py": "wsm-cpu-isa/1",
-            "scripts/measure_baseline.py": "wsm-perf-baseline/1",
-            "scripts/verify_live_release.py": "wsm-release-verdict/1",
-        }
-        for relative, expected in producers.items():
-            with self.subTest(producer=relative):
-                text = (ROOT / relative).read_text(encoding="utf-8")
-                self.assertIn(expected, text)
+    def test_runtime_producers_publish_the_schema_version_they_own(self) -> None:
+        from measure_baseline import SCHEMA as PERF_SCHEMA
+        from verify_live_release import SCHEMA as RELEASE_SCHEMA
+        from wsm_hwcheck.isa import SCHEMA as CPU_ISA_SCHEMA
+
+        self.assertEqual(CPU_ISA_SCHEMA, "wsm-cpu-isa/1")
+        self.assertEqual(PERF_SCHEMA, "wsm-perf-baseline/1")
+        self.assertEqual(RELEASE_SCHEMA, "wsm-release-verdict/1")
 
 
 if __name__ == "__main__":
