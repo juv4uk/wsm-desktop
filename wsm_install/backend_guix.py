@@ -35,6 +35,8 @@ DEVICE_PATTERN = re.compile(r"/dev/[a-zA-Z0-9][a-zA-Z0-9._-]*")
 HOSTNAME_PATTERN = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")
 ACCOUNT_PATTERN = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
 LABEL_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,16}$")
+REPORT_ID_PATTERN = re.compile(r"[A-Za-z0-9_-]{16,80}")
+REPORT_SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 LOCALE_PATTERN = re.compile(r"^[a-z]{2,3}_[A-Z]{2}\.[A-Za-z0-9-]+$")
 TIMEZONE_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_+-]*(/[A-Za-z0-9_+-]+)*$")
 KEYBOARD_PATTERN = re.compile(r"^[a-z]{2}(-[a-z0-9]+)?$")
@@ -171,11 +173,22 @@ def validate_plan(plan: dict[str, Any]) -> None:
         "plan.digest_mismatch",
         "plan contents do not match plan_sha256; refusing stale or modified plan data",
     )
-    source = plan.get("source_report") or {}
+    source_value = plan.get("source_report")
     _require(
-        bool(source.get("sha256")) and bool(source.get("report_id")),
+        isinstance(source_value, dict),
         "plan.provenance",
-        "plan does not reference the report it was derived from",
+        "source_report must be an object containing report identity and digest",
+    )
+    source = source_value if isinstance(source_value, dict) else {}
+    _require(
+        _matches(REPORT_ID_PATTERN, source.get("report_id")),
+        "plan.report_id",
+        "source_report.report_id must be 16-80 ASCII letters, digits, underscore or dash",
+    )
+    _require(
+        _matches(REPORT_SHA256_PATTERN, source.get("sha256")),
+        "plan.report_sha256",
+        "source_report.sha256 must be exactly 64 lowercase hexadecimal characters",
     )
 
 
