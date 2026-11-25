@@ -27,7 +27,7 @@
              (guix gexp)
              ((guix licenses) #:prefix license:)
              (guix packages))
-(use-service-modules desktop sddm networking xorg)
+(use-service-modules base desktop sddm networking xorg)
 
 ;; Локальні інструменти з цього ж репозиторію. Відносний local-file Guix
 ;; розв'язує від каталогу цього файлу, тобто ".." — корінь репозиторію.
@@ -124,8 +124,8 @@
                  (name "wsm")
                  (comment "WSM live user")
                  (group "users")
-                 (password "wsm")
-                 (supplementary-groups '("wheel" "audio" "video" "netdev")))
+                 (password #f)
+                 (supplementary-groups '("audio" "video" "netdev")))
                %base-user-accounts))
   (packages (cons* wsm-live-tools screen %base-packages))
   (services
@@ -139,4 +139,10 @@
                      (theme "breeze")
                      (auto-login-user "wsm")
                      (auto-login-session "plasma"))))
-    %base-services)))
+    (modify-services %base-services
+      ;; Guix allows empty passwords by default for initial system setup.
+      ;; A live image must reject empty console logins, including ttyS0.
+      (login-service-type config =>
+        (login-configuration
+         (inherit config)
+         (allow-empty-passwords? #f))))))
