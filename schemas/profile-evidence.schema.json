@@ -10,11 +10,13 @@
     "profile",
     "report_id",
     "report_schema_version",
+    "isa_level",
     "verified_on",
     "verified_by",
     "verified_functions",
     "known_limitations",
-    "not_assessed"
+    "not_assessed",
+    "artifacts"
   ],
   "properties": {
     "schema": {"const": "wsm-profile-evidence/1"},
@@ -45,8 +47,8 @@
     "verified_on": {"type": "string", "format": "date"},
     "verified_by": {
       "type": "string",
-      "minLength": 1,
-      "description": "Who ran the verification. Personal names and e-mail addresses are not accepted."
+      "enum": ["автори проєкту", "local agent", "web agent"],
+      "description": "Role label only; personal names and e-mail addresses are not accepted."
     },
     "verified_functions": {
       "type": "array",
@@ -74,12 +76,18 @@
     },
     "artifacts": {
       "type": "array",
+      "minItems": 1,
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["kind", "sha256"],
+        "required": ["kind", "path", "sha256"],
         "properties": {
           "kind": {"type": "string", "minLength": 1},
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Portable path relative to the directory containing evidence.json."
+          },
           "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
           "note": {"type": "string"}
         }
