@@ -11,7 +11,7 @@
 
 GitHub-hosted Ubuntu runner готує тимчасовий initramfs із runner kernel, BusyBox та CPython runtime. Усередині QEMU-гостя виконується реальний код `python -m wsm_hwcheck`. Гість читає власні `/sys` і `/proc`, формує Hardware Evidence Report v1.0.0 та передає стислий звіт через serial. Host runner розпаковує payload і перевіряє його офіційною JSON Schema.
 
-Після collector-а гість окремо запускає справжній `python -m wsm_install --preflight --report ... --backend guix --dry-run --quiet` на синтетичному `desktop-observed.json` fixture з цього repository commit. Це **не** план для фактичного guest hardware: fixture навмисно використовується для перевірки стабільного CLI contract і формування diagnostic-only результату. Гість перевіряє schema, backend alias, canonical plan digest та всі non-mutating execution flags.
+Одразу після collector-а гість запускає справжній `python -m wsm_install --preflight --report /tmp/hardware-report.json --backend guix --dry-run --quiet` на тому самому report, який `wsm_hwcheck` щойно створив із власних `/sys` і `/proc`. Єдина змінна `WSM_HWCHECK_REPORT` задає шлях і для collector-а, і для installer-а; перед передачею через serial гість перевіряє, що `source_report.sha256` відповідає точним байтам цього файла. Синтетичний fixture до initramfs більше не копіюється. Це доводить зв'язок реального guest report → installer plan, але не є перевіркою фізичного ПК: джерелом залишається QEMU-emulated hardware.
 
 Для guest CLI smoke в initramfs додається лише runtime closure `jsonschema[format]`, уже встановлений host workflow з `requirements-dev.txt`; базова версія `jsonschema` фіксується на 4.26.0. Список потрібних distributions явний, їхні фактичні версії друкуються в CI log, а ELF dependencies скануються через `ldd` і копіюються до тимчасового rootfs. У гості немає pip, package manager або мережі — нічого не завантажується зсередини VM.
 
@@ -24,7 +24,7 @@ GitHub-hosted Ubuntu runner готує тимчасовий initramfs із runne
 - `disk_access_performed=false`;
 - report digest і plan digest відповідають точним байтам та canonical JSON.
 
-Це доводить, що сам CLI у guest може сформувати безпечний dry-run plan на синтетичному report. Це **не** Guix/Nix backend invocation, disk preparation, install або фактична оцінка сумісності fixture-пристроїв.
+Це доводить, що CLI у guest може сформувати безпечний dry-run plan на report, який щойно створив той самий guest collector, і що план криптографічно прив'язаний до цих байтів. Це **не** Guix/Nix backend invocation, disk preparation, install або оцінка сумісності фізичного ПК: QEMU-пристрої є синтетичною віртуальною платформою.
 
 ## Runtime CPython
 
@@ -48,7 +48,7 @@ GNU/Linux build не називається static. Runner перевіряє EL
 
 ## Acceptance та інтерпретація
 
-Успіх означає, що справжній guest kernel запустив `/init`, CPython імпортував потрібні модулі, `wsm_hwcheck` прочитав guest `/sys` і `/proc`, згенерував звіт, а host успішно перевірив schema v1.0.0 та privacy flags. Далі `wsm-install` у тому самому guest видав diagnostic-only/non-confirmable план на синтетичному fixture без subprocess/network APIs та без backend/disk flags.
+Успіх означає, що справжній guest kernel запустив `/init`, CPython імпортував потрібні модулі, `wsm_hwcheck` прочитав guest `/sys` і `/proc` та згенерував звіт. `wsm-install` у тому самому guest прочитав саме `/tmp/hardware-report.json`, сформував diagnostic-only/non-confirmable план, а host перевірив schema v1.0.0, точний SHA-256 source report і canonical plan digest. CLI smoke лишається без subprocess/network APIs, backend invocation та disk access.
 
 Inventory-only guest не повинен видавати functional test зі статусом passed. Unknown або відсутність functional tests залишаються невизначеністю, а не доказом несумісності чи позитивної працездатності.
 
