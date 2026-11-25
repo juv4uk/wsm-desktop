@@ -315,8 +315,8 @@ def build_qemu_command(
         if ovmf_code is None or ovmf_vars is None:
             raise ValueError("uefi boot needs both an OVMF code image and a variables file")
         firmware_args = [
-            "-drive", f"if=pflash,format=raw,readonly=on,file={ovmf_code}",
-            "-drive", f"if=pflash,format=raw,file={ovmf_vars}",
+            "-drive", f"if=pflash,format=raw,unit=0,readonly=on,file={ovmf_code}",
+            "-drive", f"if=pflash,format=raw,unit=1,file={ovmf_vars}",
         ]
 
     return [
@@ -427,10 +427,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.firmware == "uefi":
             # Keep CODE read-only and copy only the separate VARS template to
             # the private per-run writable NVRAM store.
-            ovmf_vars = copy_ovmf_vars_template(
-                ovmf_vars_template,
-                work / "OVMF_VARS.fd",
-            )
+            try:
+                ovmf_vars = copy_ovmf_vars_template(
+                    ovmf_vars_template,
+                    work / "OVMF_VARS.fd",
+                )
+            except (OSError, ValueError) as exc:
+                print(f"qemu-boot-smoke: cannot prepare private OVMF VARS: {exc}", file=sys.stderr)
+                return 3
         command = build_qemu_command(
             qemu, iso, qcow2, args.memory_mib, args.cpus,
             firmware=args.firmware,
