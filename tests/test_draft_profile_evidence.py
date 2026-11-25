@@ -141,7 +141,7 @@ class CliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             report_path = directory / "hw.json"
-            raw = json.dumps(report(), ensure_ascii=False).encode("utf-8")
+            raw = (ROOT / "tests" / "fixtures" / "hardware" / "desktop-observed.json").read_bytes()
             report_path.write_bytes(raw)
             profile_dir = directory / "asus" / "h170-pro"
             out = profile_dir / "evidence.json"
@@ -172,11 +172,40 @@ class CliTests(unittest.TestCase):
             self.assertTrue(all(item["status"] == "not-assessed" for item in written["verified_functions"]))
             self.assertTrue(any("no function passed" in item for item in validate(written, artifact_root=profile_dir)))
 
+    def test_cli_refuses_reports_with_sensitive_identifiers(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            report_value = json.loads(
+                (ROOT / "tests" / "fixtures" / "hardware" / "desktop-observed.json").read_text(encoding="utf-8")
+            )
+            report_value["privacy"]["sensitive_identifiers_included"] = True
+            report_path = directory / "hw-with-sensitive-data.json"
+            report_path.write_text(json.dumps(report_value), encoding="utf-8")
+            out = directory / "asus" / "h170-pro" / "evidence.json"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "draft_profile_evidence.py"),
+                    "--report", str(report_path),
+                    "--vendor", "ASUS",
+                    "--model", "H170-PRO",
+                    "--slug", "asus/h170-pro",
+                    "--out", str(out),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(completed.returncode, 2)
+            self.assertIn("sensitive_identifiers_included", completed.stderr)
+            self.assertFalse(out.exists())
+            self.assertFalse((out.parent / "artifacts" / "hardware-report.json").exists())
+
     def test_cli_refuses_to_overwrite_existing_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             report_path = directory / "hw.json"
-            report_path.write_text(json.dumps(report()), encoding="utf-8")
+            report_path.write_bytes((ROOT / "tests" / "fixtures" / "hardware" / "desktop-observed.json").read_bytes())
             profile_dir = directory / "asus" / "h170-pro"
             artifact = profile_dir / "artifacts" / "hardware-report.json"
             artifact.parent.mkdir(parents=True)
