@@ -121,7 +121,7 @@ def channels_of(form: Any) -> list[dict[str, Any]]:
             if not isinstance(field, list) or not field:
                 raise ParseError(f"malformed channel field: {field!r}")
             key = field[0]
-            if key not in REQUIRED_FIELDS:
+            if not isinstance(key, str) or key not in REQUIRED_FIELDS:
                 raise ParseError(f"unexpected channel field: {key!r}")
             if key in channel:
                 raise ParseError(f"duplicate channel field: {key!r}")
