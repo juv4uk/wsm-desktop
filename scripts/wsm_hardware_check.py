@@ -152,8 +152,15 @@ def prepare_output(raw: str) -> Path:
 
     try:
         os.chmod(output, 0o700)
-    except OSError:
-        pass
+        actual_mode = stat.S_IMODE(output.stat().st_mode)
+    except OSError as exc:
+        raise SystemExit(
+            f"wsm-hardware-check: cannot enforce output directory mode 0700: {exc}"
+        ) from exc
+    if actual_mode != 0o700:
+        raise SystemExit(
+            f"wsm-hardware-check: output directory mode is {actual_mode:o}, expected 700"
+        )
     return output
 
 

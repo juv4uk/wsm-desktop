@@ -21,13 +21,7 @@
 - `jsonschema[format]==4.26.0` — з `requirements-install.txt` або з системного пакета;
 - опційно `/lib/modules/<kernel>/` та `journalctl` або `dmesg` для багатшої діагностики.
 
-Підготовка залежності може потребувати мережі. Після встановлення сам RC1 працює offline. Встановлення залежності ізольовано в користувача (без sudo):
-
-```sh
-python3 -m pip install --user -r requirements-install.txt
-```
-
-Якщо ваш дистрибутив забороняє `pip install --user`, використайте віртуальне оточення:
+Підготовка залежності може потребувати мережі. Після встановлення сам RC1 працює offline. Щоб не змінювати системний Python і уникнути обмежень PEP 668, рекомендовано віртуальне оточення:
 
 ```sh
 python3 -m venv ~/.venvs/wsm-preview
@@ -45,7 +39,7 @@ python3 scripts/wsm_hardware_check.py \
   --out "$HOME/wsm-check-$(date -u +%Y%m%dT%H%M%SZ)"
 ```
 
-Скрипт сам створить каталог із режимом `0700` і відмовиться писати, якщо каталог уже існує й не порожній. Він відхиляє симлінк як кінцевий шлях або будь-який існуючий батьківський компонент, а також ніколи не приймає шлях під `/dev`, `/proc` або `/sys`.
+Скрипт сам створить каталог із режимом `0700` і відмовиться продовжувати, якщо не може встановити та перевірити цей приватний режим. Він відмовиться писати, якщо каталог уже існує й не порожній. Скрипт відхиляє симлінк як кінцевий шлях або будь-який існуючий батьківський компонент, а також ніколи не приймає шлях під `/dev`, `/proc` або `/sys`.
 
 Усі вихідні файли:
 
@@ -129,16 +123,15 @@ PY
 
 ## 6. Додаткова перевірка збірки (опційно)
 
-На машині з Guix і QEMU можна повторити VM-доказ із #1:
+На машині з Guix і QEMU можна провести окрему перевірку зафіксованого lock:
 
 ```sh
-make check
 make describe-lock
 make check-locked-system
-make vm-system-serial
+guix time-machine -C channels.lock.scm -- system vm --no-graphic systems/minimal.scm
 ```
 
-`describe-lock` і `check-locked-system` явно споживають автентифікований `channels.lock.scm`. `vm-system-serial` відповідає proofs-у з #1: disposable QEMU/TCG, серійний вивід і маркер `wsm-desktop login:`. Звичайний `make vm-system` такого маркера не перевіряє. `guix system vm --full-boot` показував `Welcome to GRUB!`, але до ядра не дійшов за 600 секунд, тому bootloader-шлях не вважається підтвердженим. Не запускайте `guix system init` на реальному диску. Зафіксовані результати — у [systems/README.md](../systems/README.md).
+Перші дві команди підтверджують опис каналу та збірку через `channels.lock.scm`; третя запускає VM через той самий lock. Станом на RC1 authenticated pull і `time-machine ... describe` завершилися успішно, але locked `system build` та locked VM ще не мають опублікованих результатів. `make vm-system-serial` запускає поточний Guix профіль без `channels.lock.scm` і тому не може використовуватися як locked proof. `guix system vm --full-boot` раніше показував `Welcome to GRUB!`, але до ядра не дійшов за 600 секунд; bootloader-шлях не вважається підтвердженим. Не запускайте `guix system init` на реальному диску. Попередній VM-експеримент, який не використовував lock, описаний у [systems/README.md](../systems/README.md).
 
 ## 7. Куди писати результати
 

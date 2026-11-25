@@ -9,7 +9,7 @@
 
 ## Try it now
 
-The working component available today is the hardware collector. It reads sysfs and procfs only. It does not modify block devices, partition tables, filesystems, or system state. By default, the report goes to stdout; `--output PATH` writes only the JSON report to the explicitly selected file.
+The working component available today is the hardware collector. Inventory uses sysfs and procfs; the collector also reads local kernel-module indexes from `/lib/modules/<kernel>/` and, when available, bounded kernel-log diagnostics through fixed read-only `journalctl -k -b` or `dmesg` commands. It does not modify block devices, partition tables, filesystems, or system state. By default, the report goes to stdout; `--output PATH` writes only the JSON report to the explicitly selected file.
 
 ```console
 $ git clone https://github.com/juv4uk/wsm-desktop.git
