@@ -123,6 +123,13 @@ EDID/DisplayID надходить від зовнішнього пристрою
 
 Публічні записи для upstream `libdisplay-info` вказують на вразливий код у версіях **through 0.4.0** ([112271](https://explore.alas.aws.amazon.com/CVE-2026-112271.html), [112272](https://explore.alas.aws.amazon.com/CVE-2026-112272.html)). Це не означає, що кожен downstream package з рядком версії `0.4.0` обов'язково уражений: vendor може вилучити DisplayID parser logic або backport-ити виправлення. Визначати affectedness треба за точним source/package revision та фактичним вмістом parser-а, а не лише за version string.
 
+Стан конкретних vendor advisory перевірено **2026-11-25**:
+- AWS ALAS для [CVE-2026-112271](https://explore.alas.aws.amazon.com/CVE-2026-112271.html) позначає `libdisplay-info` у Amazon Linux 2023 та Amazon Linux 2027 Preview як **Pending Fix**.
+- AWS ALAS для [CVE-2026-112272](https://explore.alas.aws.amazon.com/CVE-2026-112272.html) позначає ті самі downstream packages як **Not Affected**.
+- Для CVE-2026-112272 Red Hat окремо вказує, що RHEL releases не уражені, оскільки shipped packages не містять vulnerable DisplayID parser logic: [Red Hat advisory](https://access.redhat.com/security/cve/cve-2026-112272).
+
+Ці vendor statuses не суперечать upstream affected range: вони описують конкретні downstream package contents/patches. WSM має оцінювати саме джерельну ревізію та наявність vulnerable parser logic, а не переносити статус одного дистрибутива на інший.
+
 **Правило для WSM:** не додавати `libdisplay-info 0.4.0` як обов'язковий parser до privileged/live preflight. EDID/DisplayID parsing лишається optional і не запускається з підвищеними привілеями; перед його використанням перевіряти точну upstream/downstream revision на наявність відповідних виправлень. За відсутності такої перевірки використовувати read-only DRM/KMS properties, а parser-specific fields залишати `unknown/not-collected`. Спеціально сформований EDID слід вважати untrusted input.
 
 
