@@ -184,7 +184,7 @@ memdevs=0
 edges=0
 for entry in /sys/bus/cxl/devices/*; do
     [ -e "$entry" ] || continue
-    name=${entry##*/}
+    name=${{entry##*/}}
     case "$name" in
         root*|host*|port*|mem*|decoder*|endpoint*)
             echo "WSM_CXL_DEVICE=$name"
@@ -197,9 +197,9 @@ for entry in /sys/bus/cxl/devices/*; do
     esac
     for link in "$entry"/uport "$entry"/dport*; do
         [ -L "$link" ] || continue
-        link_name=${link##*/}
+        link_name=${{link##*/}}
         target=$(readlink "$link" 2>/dev/null || true)
-        target=${target##*/}
+        target=${{target##*/}}
         case "$target" in
             root*|host*|port*|mem*|decoder*|endpoint*)
                 echo "WSM_CXL_EDGE=$name.$link_name->$target"
