@@ -9,7 +9,7 @@ Runner script: `scripts/ci_qemu_guest_smoke.sh`
 
 ## What the experiment proves
 
-The GitHub-hosted Ubuntu runner supplies a Linux kernel. The workflow builds a tiny initramfs containing static BusyBox and a minimal `/init`, then boots that kernel as a guest under QEMU's TCG software emulator. The guest must print `WSM_QEMU_GUEST_INIT_OK` on its serial console and power off within a 45-second timeout.
+The GitHub-hosted Ubuntu runner installs the Ubuntu generic kernel package (the runner host kernel is not assumed to have a matching `/boot` image). The workflow builds a tiny initramfs containing a packaged Ubuntu guest kernel, static BusyBox and a minimal `/init`, then boots that kernel as a guest under QEMU's TCG software emulator. The guest must print `WSM_QEMU_GUEST_INIT_OK` on its serial console and power off within a 45-second timeout.
 
 Unlike command-construction unit tests, this executes a real guest kernel and guest init process.
 
