@@ -20,7 +20,7 @@ The collector should provide the following values in a versioned schema extensio
 - `boot_session_sha256`: SHA-256 over a domain-separated kernel boot ID. The raw boot ID is never included in the report. It changes on reboot and is stable during one boot.
 - `collected_monotonic_ns`: collection completion time from `CLOCK_BOOTTIME`, not wall-clock time. It is comparable only when boot-session digests match.
 - `architecture`, `kernel_release`, `boot_mode`: the exact collection environment.
-- `topology_sha256`: digest of a canonical, report-local list of device category, bus, discovery status, and non-sensitive hardware IDs. Do not include serial numbers, MAC addresses, host paths, UUIDs, hostnames, or raw EDID.
+- `topology_sha256`: the current prototype hashes a canonical, report-local **device inventory** list of category, bus, discovery status, and non-sensitive hardware IDs. It does not yet hash relationship edges (for example, controller/interface or GPU/DRM/connector links); until #18's relationship contract is ratified and included, this digest must not be described as a complete topology-graph fingerprint. Do not include serial numbers, MAC addresses, host paths, UUIDs, hostnames, or raw EDID.
 - Existing `collected_at` remains useful for human audit but is not the authoritative freshness clock.
 
 The session digest is not a persistent machine identifier. It permits comparison only within one boot session; it must not be reused as a cross-boot identity.
@@ -37,7 +37,7 @@ At plan confirmation, the consumer must perform a new read-only session/topology
 6. Require the canonical topology digest to match.
 7. Only then mark the report fresh and permit the user to continue to a separate confirmation step.
 
-The prototype evaluator is pure and does not read files, probe hardware, invoke a backend, or access disks. It returns a distinct status and a reason for each failure class.
+The prototype evaluator is pure and does not read files, probe hardware, invoke a backend, or access disks. The caller must hash the exact raw report bytes and supply that digest as `report_sha256`; the evaluator compares the supplied digest with the plan-bound value but does not open or hash a report file itself. It returns a distinct status and a reason for each failure class.
 
 ## Status semantics
 
