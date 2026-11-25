@@ -43,13 +43,13 @@ class ReportParsingTests(unittest.TestCase):
 class MatchingTests(unittest.TestCase):
     def test_all_mode_requires_every_id(self) -> None:
         machine = report("10de:1c82", "8086:a170")
-        matched, ambiguous, _ = match(machine, [bundle("asus/h170-pro", "10de:1c82", "8086:a170")])
-        self.assertEqual(matched, ["asus/h170-pro"])
+        matched, ambiguous, _ = match(machine, [bundle("test/fixture-board", "10de:1c82", "8086:a170")])
+        self.assertEqual(matched, ["test/fixture-board"])
         self.assertEqual(ambiguous, [])
 
     def test_partial_match_is_not_a_match(self) -> None:
         machine = report("10de:1c82")
-        matched, _, skipped = match(machine, [bundle("asus/h170-pro", "10de:1c82", "8086:a170")])
+        matched, _, skipped = match(machine, [bundle("test/fixture-board", "10de:1c82", "8086:a170")])
         self.assertEqual(matched, [])
         self.assertTrue(any("does not match" in reason for reason in skipped))
 
@@ -78,7 +78,7 @@ class MatchingTests(unittest.TestCase):
         self.assertEqual(sorted(ambiguous), ["a/first", "b/second"])
 
     def test_empty_report_matches_nothing(self) -> None:
-        matched, _, _ = match({"devices": []}, [bundle("asus/h170-pro", "10de:1c82")])
+        matched, _, _ = match({"devices": []}, [bundle("test/fixture-board", "10de:1c82")])
         self.assertEqual(matched, [])
 
 
