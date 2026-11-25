@@ -35,7 +35,10 @@
          (string-append "-DWSM_QML_IMPORT_PATH="
                         #$(file-append qtdeclarative "/lib/qt6/qml"))
          (string-append "-DWSM_GUIX_PYTHONPATH="
-                        (or (getenv "GUIX_PYTHONPATH") ""))
+                        #$(file-append wsm-tools
+                                       (string-append "/lib/python"
+                                         (version-major+minor (package-version python))
+                                         "/site-packages")))
          (string-append "-DWSM_LSBLK_EXECUTABLE="
                         #$(file-append util-linux "/bin/lsblk")))))
     (native-inputs (list cmake))
