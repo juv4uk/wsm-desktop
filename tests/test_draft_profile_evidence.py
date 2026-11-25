@@ -48,10 +48,16 @@ def report(**overrides) -> dict:
     return base
 
 
+PROFILE_SOURCE_BYTES = b";; synthetic profile source\n"
+
+
 def make_draft(root: Path, source_report: dict | None = None) -> tuple[dict, bytes]:
     source_report = report() if source_report is None else source_report
     raw = json.dumps(source_report, ensure_ascii=False, sort_keys=True).encode("utf-8")
-    bundle = draft(source_report, "ASUS", "H170-PRO", "asus/h170-pro", raw)
+    root.mkdir(parents=True, exist_ok=True)
+    profile_path = root / "profile.scm"
+    profile_path.write_bytes(PROFILE_SOURCE_BYTES)
+    bundle = draft(source_report, "ASUS", "H170-PRO", "asus/h170-pro", raw, PROFILE_SOURCE_BYTES)
     artifact = root / REPORT_ARTIFACT
     artifact.parent.mkdir(parents=True, exist_ok=True)
     artifact.write_bytes(raw)
@@ -121,13 +127,23 @@ class DraftTests(unittest.TestCase):
         self.assertEqual(artifact["kind"], "wsm-hwcheck-report")
         self.assertEqual(artifact["sha256"], hashlib.sha256(raw).hexdigest())
 
+    def test_profile_source_digest_is_bound_to_exact_profile_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle, _ = make_draft(root)
+            original = bundle["profile_source"]["sha256"]
+            (root / "profile.scm").write_bytes(b";; changed after test\n")
+            problems = validate(bundle, artifact_root=root)
+        self.assertTrue(any("profile_source/sha256 does not match" in item for item in problems))
+        self.assertEqual(len(original), 64)
+
     def test_report_without_id_is_refused(self) -> None:
         with self.assertRaises(SystemExit):
-            draft({"devices": [], "schema_version": "1.0.0", "collected_at": "2026-11-26"}, "ASUS", "H170-PRO", "asus/h170-pro", b"{}")
+            draft({"devices": [], "schema_version": "1.0.0", "collected_at": "2026-11-26"}, "ASUS", "H170-PRO", "asus/h170-pro", b"{}", b";; profile\n")
 
     def test_report_without_schema_version_is_refused(self) -> None:
         with self.assertRaises(SystemExit):
-            draft({"devices": [], "report_id": "report-123", "collected_at": "2026-11-26"}, "ASUS", "H170-PRO", "asus/h170-pro", b"{}")
+            draft({"devices": [], "report_id": "report-123", "collected_at": "2026-11-26"}, "ASUS", "H170-PRO", "asus/h170-pro", b"{}", b";; profile\n")
 
 
 class CliTests(unittest.TestCase):
@@ -138,6 +154,8 @@ class CliTests(unittest.TestCase):
             raw = json.dumps(report(), ensure_ascii=False).encode("utf-8")
             report_path.write_bytes(raw)
             profile_dir = directory / "profiles" / "asus" / "h170-pro"
+            profile_dir.mkdir(parents=True)
+            (profile_dir / "profile.scm").write_bytes(PROFILE_SOURCE_BYTES)
             out = profile_dir / "evidence.json"
             completed = subprocess.run(
                 [
@@ -163,6 +181,10 @@ class CliTests(unittest.TestCase):
                 written["artifacts"][0]["sha256"],
                 hashlib.sha256(raw).hexdigest(),
             )
+            self.assertEqual(
+                written["profile_source"]["sha256"],
+                hashlib.sha256((profile_dir / "profile.scm").read_bytes()).hexdigest(),
+            )
 
     def test_cli_refuses_to_overwrite_existing_evidence_or_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -170,6 +192,8 @@ class CliTests(unittest.TestCase):
             report_path = directory / "hw.json"
             report_path.write_text(json.dumps(report()), encoding="utf-8")
             profile_dir = directory / "profiles" / "asus" / "h170-pro"
+            profile_dir.mkdir(parents=True)
+            (profile_dir / "profile.scm").write_bytes(PROFILE_SOURCE_BYTES)
             out = profile_dir / "evidence.json"
             command = [
                 sys.executable,
@@ -192,7 +216,10 @@ class CliTests(unittest.TestCase):
             directory = Path(temporary)
             report_path = directory / "bad.json"
             report_path.write_bytes(b"\xff\xfe")
-            out = directory / "profile" / "evidence.json"
+            profile_dir = directory / "profile"
+            profile_dir.mkdir()
+            (profile_dir / "profile.scm").write_bytes(PROFILE_SOURCE_BYTES)
+            out = profile_dir / "evidence.json"
             completed = subprocess.run(
                 [
                     sys.executable,
