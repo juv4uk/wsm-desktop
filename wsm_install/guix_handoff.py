@@ -23,7 +23,7 @@ CONFIRMATION_KEYS = {"confirmed", "plan_sha256", "target_digest"}
 
 
 def _read_json_object(path: Path, *, label: str) -> dict[str, Any]:
-    """Read a bounded UTF-8 JSON object without following no data from network."""
+    """Read one bounded UTF-8 JSON object from a local file."""
     try:
         raw = path.read_bytes()
     except OSError as exc:
