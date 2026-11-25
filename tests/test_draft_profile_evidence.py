@@ -77,7 +77,16 @@ class DraftTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             bundle, _ = make_draft(root)
+            test_bytes = b"synthetic graphics test output\\n"
+            test_path = root / "artifacts" / "graphics-test.log"
+            test_path.write_bytes(test_bytes)
+            bundle["artifacts"].append({
+                "kind": "functional-test-log",
+                "path": "artifacts/graphics-test.log",
+                "sha256": hashlib.sha256(test_bytes).hexdigest(),
+            })
             bundle["verified_functions"][0]["status"] = "pass"
+            bundle["verified_functions"][0]["evidence"] = ["artifacts/graphics-test.log"]
             problems = validate(bundle, artifact_root=root)
         self.assertEqual(problems, [])
 
