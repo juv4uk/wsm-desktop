@@ -10,11 +10,15 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from wsm_install.cli import main
 from wsm_install.plan import build_plan, canonical_json
 
-ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures" / "hardware"
 
 
@@ -48,8 +52,9 @@ class InstallerPlanTests(unittest.TestCase):
     def test_required_firmware_error_on_critical_device_is_blocking(self) -> None:
         report, raw = load_fixture("missing-firmware.json")
         _, blockers, warnings = build_plan(report, raw, "guix")
-        self.assertTrue(any("required runtime firmware" in item for item in blockers))
-        self.assertFalse(warnings)
+        self.assertFalse(blockers)
+        self.assertTrue(any("required runtime firmware" in item for item in warnings))
+        self.assertTrue(any("offline installation may be required" in item for item in warnings))
 
     def test_cli_requires_explicit_dry_run_and_preflight(self) -> None:
         with self.assertRaises(SystemExit) as caught:
