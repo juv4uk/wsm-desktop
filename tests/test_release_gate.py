@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from release_gate import CHANNEL_LOCKS, check_channels, check_image, criterion, from_exit, verdict  # noqa: E402
+from release_gate import check_channels, check_image, criterion, from_exit, verdict  # noqa: E402
 
 
 class VerdictTests(unittest.TestCase):
@@ -74,8 +74,8 @@ class ChannelTests(unittest.TestCase):
             free_lock = root / "channels.lock.scm"
             compatibility_lock = root / "channels.compatibility.lock.scm"
             with patch(
-                "release_gate.default_lock",
-                side_effect=lambda policy: free_lock if policy == "free" else compatibility_lock,
+                "release_gate.CHANNEL_LOCKS",
+                new={"free": free_lock, "compatibility": compatibility_lock},
             ), patch("release_gate.run") as run_check:
                 result = check_channels()
         self.assertEqual(result["status"], "fail")
@@ -90,8 +90,8 @@ class ChannelTests(unittest.TestCase):
             free_lock.write_text("(list)", encoding="utf-8")
             compatibility_lock.write_text("(list)", encoding="utf-8")
             with patch(
-                "release_gate.default_lock",
-                side_effect=lambda policy: free_lock if policy == "free" else compatibility_lock,
+                "release_gate.CHANNEL_LOCKS",
+                new={"free": free_lock, "compatibility": compatibility_lock},
             ), patch(
                 "release_gate.run",
                 side_effect=[(0, "Free pass"), (0, "Compatibility pass")],
