@@ -104,7 +104,7 @@ def create_busybox_root(guest_root: Path) -> None:
     busybox = shutil.which("busybox")
     if not busybox:
         raise CxlGuestError("static BusyBox is unavailable")
-    applets = ("sh", "mount", "mkdir", "sleep", "poweroff", "insmod", "readlink", "ls", "dmesg")
+    applets = ("sh", "mount", "mkdir", "sleep", "poweroff", "insmod", "readlink")
     available = set(subprocess.run(
         [busybox, "--list"], capture_output=True, text=True, timeout=5, check=True
     ).stdout.splitlines())
@@ -218,8 +218,8 @@ if [ "$memdevs" -gt 0 ] && [ "$ports" -gt 0 ]; then
     echo "WSM_CXL_STATUS=type3-memdev-discovered"
 else
     echo "WSM_CXL_STATUS=cxl-sysfs-topology-incomplete"
-    ls -l /sys/bus/cxl/devices > /dev/console 2>&1 || true
-    dmesg | tail -n 60 > /dev/console 2>&1 || true
+    echo "WSM_CXL_SYSFS_INCOMPLETE=1"
+    echo "WSM_CXL_FAILURE_DIAGNOSTICS=redacted"
 fi
 echo "{GUEST_DONE_MARKER}" > /dev/console
 sleep 1
@@ -252,6 +252,8 @@ def create_initramfs(guest_root: Path, destination: Path) -> None:
 def build_qemu_command(qemu: str, kernel: Path, initramfs: Path) -> list[str]:
     return [
         qemu,
+        "-no-user-config",
+        "-nodefaults",
         "-machine", "q35,cxl=on",
         "-accel", "tcg",
         "-m", "1G,maxmem=2G,slots=8",
