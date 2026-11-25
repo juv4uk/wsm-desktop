@@ -44,6 +44,8 @@ COMMIT = re.compile(r"^[0-9a-f]{40}$")
 FINGERPRINT = re.compile(r"^[0-9A-F]{40}$")
 GUIX_INTRODUCTION_COMMIT = "9edb3f66fd807b096b48283debdcddccfea34bad"
 GUIX_INTRODUCTION_FINGERPRINT = "BBB02DDF2CEAF6A80D1DE643A2A06DF2A33A54FA"
+NONGUIX_INTRODUCTION_COMMIT = "897c1a470da759236cc11798f4e0a5f7d4d59fbc"
+NONGUIX_INTRODUCTION_FINGERPRINT = "2A393FFF68F4EF7A3D2912AF6F5120A022FBB2D5"
 REQUIRED_FIELDS = {"name", "url", "branch", "commit", "introduction"}
 
 
@@ -229,6 +231,11 @@ def _introduction_problems(name: str, value: Any) -> list[str]:
         or fingerprint != GUIX_INTRODUCTION_FINGERPRINT
     ):
         return [f"{prefix} does not match the canonical GNU Guix trust root"]
+    if name == "nonguix" and (
+        commit != NONGUIX_INTRODUCTION_COMMIT
+        or fingerprint != NONGUIX_INTRODUCTION_FINGERPRINT
+    ):
+        return [f"{prefix} does not match the canonical Nonguix trust root"]
     return []
 
 
