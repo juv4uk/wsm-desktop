@@ -53,9 +53,9 @@ JSON Schema перевіряє форму. Скрипт перевіряє те,
 Якщо є перевірений bundle, передайте його явно разом із тим самим звітом:
 
 ```sh
-python3 -m wsm_install --preflight \\
-  --report /path/to/hardware-report.json \\
-  --profile-evidence /path/to/evidence.json \\
+python3 -m wsm_install --preflight \
+  --report /path/to/hardware-report.json \
+  --profile-evidence /path/to/evidence.json \
   --backend guix --dry-run
 ```
 
