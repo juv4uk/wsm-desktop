@@ -66,6 +66,24 @@ class TestRunnerTests(unittest.TestCase):
         self.assertEqual(run_mock.call_args.kwargs["timeout"], 900)
 
 
+class TestRunnerTests(unittest.TestCase):
+    def test_test_suite_uses_one_bounded_unittest_discovery_process(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "tests").mkdir()
+            (root / "tests" / "test_sample.py").write_text("pass\n", encoding="utf-8")
+            with patch("release_gate.ROOT", root), patch(
+                "release_gate.run", return_value=(0, "OK")
+            ) as run_mock:
+                result = check_tests()
+        self.assertEqual(result["status"], "pass")
+        self.assertEqual(run_mock.call_count, 1)
+        command = run_mock.call_args.args[0]
+        self.assertEqual(command[1:6], ["-m", "unittest", "discover", "-s", "tests"])
+        self.assertIn("-v", command)
+        self.assertEqual(run_mock.call_args.kwargs["timeout"], 900)
+
+
 class ChannelGateTests(unittest.TestCase):
     def test_missing_compatibility_lock_is_not_configured_not_a_failure(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -124,27 +142,81 @@ class ChannelGateTests(unittest.TestCase):
 
 
 class ImageTests(unittest.TestCase):
+    IDS = ("checksum", "manifest", "iso-structure", "boot-bios", "boot-uefi")
+
+    @staticmethod
+    def payload(overall: str) -> dict:
+        status = {"pass": "pass", "fail": "fail", "incomplete": "not-run"}[overall]
+        return {
+            "schema": "wsm-release-verdict/1",
+            "artifact": "wsm.iso",
+            "overall": overall,
+            "criteria": [
+                {"id": item, "status": status, "detail": f"{item}: {status}"}
+                for item in ImageTests.IDS
+            ],
+        }
+
+    def run_nested(self, payload: dict, exit_code: int):
+        completed = subprocess.CompletedProcess(
+            args=["verify_live_release.py"],
+            returncode=exit_code,
+            stdout=json.dumps(payload),
+            stderr="",
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            iso = Path(temporary) / "wsm.iso"
+            iso.write_bytes(b"synthetic fixture")
+            with patch("release_gate.subprocess.run", return_value=completed):
+                return check_image(iso, boot=True)
+
     def test_no_iso_is_recorded_as_not_run(self) -> None:
-        result = check_image(None, boot=False)
-        self.assertEqual(result["status"], "not-run")
+        self.assertEqual(check_image(None, boot=False)["status"], "not-run")
 
     def test_missing_iso_file_fails(self) -> None:
-        result = check_image(Path("/nonexistent/image.iso"), boot=False)
+        self.assertEqual(check_image(Path("/nonexistent/image.iso"), boot=False)["status"], "fail")
+
+    def test_nested_incomplete_with_exit_zero_is_not_run(self) -> None:
+        result = self.run_nested(self.payload("incomplete"), 0)
+        self.assertEqual(result["status"], "not-run")
+        self.assertIn("boot-bios", result["detail"])
+
+    def test_nested_full_pass_requires_every_criterion(self) -> None:
+        result = self.run_nested(self.payload("pass"), 0)
+        self.assertEqual(result["status"], "pass")
+
+    def test_nested_fail_is_preserved(self) -> None:
+        result = self.run_nested(self.payload("fail"), 1)
         self.assertEqual(result["status"], "fail")
+
+    def test_nested_missing_criterion_fails_closed(self) -> None:
+        payload = self.payload("pass")
+        payload["criteria"].pop()
+        result = self.run_nested(payload, 0)
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("criteria mismatch", result["detail"])
+
+    def test_nested_malformed_status_fails_closed(self) -> None:
+        for malformed in ([], {}):
+            with self.subTest(malformed=malformed):
+                payload = self.payload("pass")
+                payload["criteria"][0]["status"] = malformed
+                result = self.run_nested(payload, 0)
+                self.assertEqual(result["status"], "fail")
+                self.assertIn("invalid status", result["detail"])
 
 
 class CliTests(unittest.TestCase):
-    def test_gate_emits_a_verdict_and_exits_zero_when_nothing_fails(self) -> None:
+    def test_gate_emits_a_verdict_and_returns_incomplete_exit_code(self) -> None:
         completed = subprocess.run(
             [sys.executable, str(ROOT / "scripts" / "release_gate.py"), "--skip-tests", "--compact"],
             capture_output=True, text=True, check=False, cwd=ROOT,
         )
         payload = json.loads(completed.stdout)
         self.assertEqual(payload["schema"], "wsm-release-gate/1")
-        # Without an ISO the verdict is incomplete, and the exit code stays 0:
-        # only a real failure is fatal.
+        # A missing check is not a successful release gate.
         self.assertEqual(payload["overall"], "incomplete")
-        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.returncode, 2)
         ids = {item["id"] for item in payload["criteria"]}
         self.assertIn("channels", ids)
         self.assertIn("image", ids)
