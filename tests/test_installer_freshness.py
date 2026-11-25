@@ -66,7 +66,7 @@ class InstallerFreshnessTests(unittest.TestCase):
     def test_matching_report_is_confirmable(self):
         decision = self.decide()
         self.assertEqual(decision.status, FreshnessStatus.FRESH)
-        self.assertTrue(decision.confirmable)
+        self.assertTrue(decision.freshness_gate_passed)
         self.assertEqual(decision.age_seconds, 30.0)
 
     def test_age_boundary_is_inclusive(self):
@@ -80,27 +80,27 @@ class InstallerFreshnessTests(unittest.TestCase):
             live_value=live(monotonic_now_ns=1_000_000_000 + (DEFAULT_MAX_AGE_SECONDS + 1) * 1_000_000_000)
         )
         self.assertEqual(decision.status, FreshnessStatus.STALE)
-        self.assertFalse(decision.confirmable)
+        self.assertFalse(decision.freshness_gate_passed)
 
     def test_previous_boot_report_is_rejected(self):
         decision = self.decide(report_value=report(boot_session_sha256=derive_boot_session_digest("old-boot")))
         self.assertEqual(decision.status, FreshnessStatus.SESSION_MISMATCH)
-        self.assertFalse(decision.confirmable)
+        self.assertFalse(decision.freshness_gate_passed)
 
     def test_missing_boot_identity_is_unverifiable(self):
         decision = self.decide(report_value=report(boot_session_sha256=None))
         self.assertEqual(decision.status, FreshnessStatus.UNVERIFIABLE)
-        self.assertFalse(decision.confirmable)
+        self.assertFalse(decision.freshness_gate_passed)
 
     def test_missing_monotonic_time_is_unverifiable(self):
         decision = self.decide(live_value=live(monotonic_now_ns=None))
         self.assertEqual(decision.status, FreshnessStatus.UNVERIFIABLE)
-        self.assertFalse(decision.confirmable)
+        self.assertFalse(decision.freshness_gate_passed)
 
     def test_monotonic_clock_regression_is_unverifiable(self):
         decision = self.decide(live_value=live(monotonic_now_ns=999_999_999))
         self.assertEqual(decision.status, FreshnessStatus.UNVERIFIABLE)
-        self.assertFalse(decision.confirmable)
+        self.assertFalse(decision.freshness_gate_passed)
 
     def test_plan_report_digest_mismatch_is_rejected(self):
         decision = evaluate_freshness(
@@ -110,7 +110,7 @@ class InstallerFreshnessTests(unittest.TestCase):
             expected_boot_session_sha256=BOOT_A,
         )
         self.assertEqual(decision.status, FreshnessStatus.REPORT_DIGEST_MISMATCH)
-        self.assertFalse(decision.confirmable)
+        self.assertFalse(decision.freshness_gate_passed)
 
 
     def test_plan_session_digest_mismatch_is_rejected(self):
@@ -121,7 +121,7 @@ class InstallerFreshnessTests(unittest.TestCase):
             expected_boot_session_sha256=derive_boot_session_digest("different-plan-boot"),
         )
         self.assertEqual(decision.status, FreshnessStatus.SESSION_MISMATCH)
-        self.assertFalse(decision.confirmable)
+        self.assertFalse(decision.freshness_gate_passed)
 
     def test_architecture_kernel_or_boot_mode_change_is_rejected(self):
         for field, value in (
@@ -132,22 +132,22 @@ class InstallerFreshnessTests(unittest.TestCase):
             with self.subTest(field=field):
                 decision = self.decide(live_value=live(**{field: value}))
                 self.assertEqual(decision.status, FreshnessStatus.ENVIRONMENT_MISMATCH)
-                self.assertFalse(decision.confirmable)
+                self.assertFalse(decision.freshness_gate_passed)
 
     def test_missing_environment_is_unverifiable(self):
         decision = self.decide(live_value=live(kernel_release=None))
         self.assertEqual(decision.status, FreshnessStatus.UNVERIFIABLE)
-        self.assertFalse(decision.confirmable)
+        self.assertFalse(decision.freshness_gate_passed)
 
     def test_topology_change_is_rejected(self):
         decision = self.decide(live_value=live(topology_sha256="d" * 64))
         self.assertEqual(decision.status, FreshnessStatus.TOPOLOGY_CHANGED)
-        self.assertFalse(decision.confirmable)
+        self.assertFalse(decision.freshness_gate_passed)
 
     def test_missing_topology_digest_is_unverifiable(self):
         decision = self.decide(live_value=live(topology_sha256=None))
         self.assertEqual(decision.status, FreshnessStatus.UNVERIFIABLE)
-        self.assertFalse(decision.confirmable)
+        self.assertFalse(decision.freshness_gate_passed)
 
     def test_boot_digest_is_domain_separated_and_deterministic(self):
         self.assertEqual(BOOT_A, derive_boot_session_digest("boot-id-a"))
@@ -188,7 +188,7 @@ class InstallerFreshnessTests(unittest.TestCase):
             with self.subTest(report_value=report_value, live_value=live_value):
                 decision = self.decide(report_value=report_value, live_value=live_value)
                 self.assertEqual(decision.status, FreshnessStatus.UNVERIFIABLE)
-                self.assertFalse(decision.confirmable)
+                self.assertFalse(decision.freshness_gate_passed)
 
 
 if __name__ == "__main__":
