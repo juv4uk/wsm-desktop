@@ -20,6 +20,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -29,7 +30,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-SCHEMA = "wsm-profile-evidence/1"
+SCHEMA = "wsm-profile-evidence/2"
 
 # Device category -> the function a user cares about. Several categories map to
 # one function on purpose: "graphics" covers gpu and display.
@@ -89,7 +90,13 @@ def problems_from(report: dict[str, Any]) -> list[str]:
     return found
 
 
-def draft(report: dict[str, Any], vendor: str, model: str, slug: str) -> dict[str, Any]:
+def draft(
+    report: dict[str, Any],
+    vendor: str,
+    model: str,
+    slug: str,
+    report_bytes: bytes,
+) -> dict[str, Any]:
     functions: list[dict[str, str]] = []
     seen: set[str] = set()
     for device in report.get("devices", []):
@@ -124,7 +131,14 @@ def draft(report: dict[str, Any], vendor: str, model: str, slug: str) -> dict[st
             "graphical session stability over time",
             "audio output and input",
         ],
-        "artifacts": [],
+        "artifacts": [
+            {
+                "kind": "hardware-report",
+                "path": "artifacts/hardware-report.json",
+                "sha256": hashlib.sha256(report_bytes).hexdigest(),
+                "note": "exact source bytes used to draft this evidence bundle",
+            }
+        ],
     }
 
     signature = pci_ids_from(report)
@@ -147,7 +161,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--vendor", required=True)
     parser.add_argument("--model", required=True)
     parser.add_argument("--slug", required=True, help="lowercase vendor/model, e.g. asus/h170-pro")
-    parser.add_argument("--out", type=Path, help="write here instead of stdout")
+    parser.add_argument(
+        "--out",
+        type=Path,
+        required=True,
+        help="write evidence.json and its source-report artifact under this profile directory",
+    )
     parser.add_argument("--compact", action="store_true")
     return parser
 
@@ -155,26 +174,56 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
-        report = json.loads(args.report.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        report_bytes = args.report.read_bytes()
+        report = json.loads(report_bytes)
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         print(f"draft-profile-evidence: cannot read report: {exc}", file=sys.stderr)
         return 2
 
-    bundle = draft(report, args.vendor, args.model, args.slug)
+    try:
+        bundle = draft(report, args.vendor, args.model, args.slug, report_bytes)
+    except (SystemExit, ValueError) as exc:
+        print(f"draft-profile-evidence: {exc}", file=sys.stderr)
+        return 2
     rendered = json.dumps(
         bundle, ensure_ascii=False, indent=None if args.compact else 2, sort_keys=True
     ) + "\n"
 
-    if args.out:
-        args.out.parent.mkdir(parents=True, exist_ok=True)
-        args.out.write_text(rendered, encoding="utf-8")
-        print(
-            "draft-profile-evidence: written. Every function is not-assessed: "
-            "record what you actually verified, then run make check-profile-evidence.",
-            file=sys.stderr,
-        )
-    else:
-        sys.stdout.write(rendered)
+    output = args.out
+    try:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output_parent = output.parent.resolve(strict=True)
+        if not output_parent.is_dir():
+            raise OSError(f"output parent is not a directory: {output_parent}")
+        output = output_parent / output.name
+        if output.is_symlink() or output.exists():
+            raise FileExistsError(f"refusing to overwrite existing evidence file: {output}")
+
+        artifact_path = output_parent / "artifacts" / "hardware-report.json"
+        artifact_dir = artifact_path.parent
+        if artifact_dir.is_symlink():
+            raise OSError(f"artifact directory must not be a symlink: {artifact_dir}")
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        if artifact_path.is_symlink() or artifact_path.exists():
+            raise FileExistsError(f"refusing to overwrite existing report artifact: {artifact_path}")
+
+        with artifact_path.open("xb") as stream:
+            stream.write(report_bytes)
+        try:
+            with output.open("x", encoding="utf-8") as stream:
+                stream.write(rendered)
+        except Exception:
+            artifact_path.unlink(missing_ok=True)
+            raise
+    except OSError as exc:
+        print(f"draft-profile-evidence: cannot write bundle: {exc}", file=sys.stderr)
+        return 2
+
+    print(
+        "draft-profile-evidence: written. Source report bytes are hashed; every function is not-assessed. "
+        "Record only real test results, then run make check-profile-evidence.",
+        file=sys.stderr,
+    )
     return 0
 
 
