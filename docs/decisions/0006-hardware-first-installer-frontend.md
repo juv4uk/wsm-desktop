@@ -34,7 +34,7 @@
 - [Textual documentation](https://textual.textualize.io/) — можливості, cross-platform та terminal/browser execution.
 
 
-Водночас #1 підтвердив, що мінімальна Guix System будується й запускається у disposable QEMU, а #55 зафіксував вимогу не називати build успішним boot без реального serial-доказу. Це знімає частину невизначеності щодо Guix-шляху, але не вирішує вибір primary backend у #2.
+Пакет доказів у [#1](https://github.com/juv4uk/wsm-desktop/issues/1#issuecomment-7172142987) підтвердив, що мінімальна Guix System будується й реально завантажується в disposable QEMU до login prompt із clean exit. Цей доказ задовольнив Guix boot gate #55 і підтримав уже ратифікований вибір GNU Guix System у ADR 0004. Nix/NixOS відкладено; його відсутність не відкриває повторно вибір backend-а першого preview і не блокує цей frontend ADR.
 
 ## Рішення
 
