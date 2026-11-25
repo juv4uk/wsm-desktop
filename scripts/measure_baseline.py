@@ -46,6 +46,7 @@ from wsm_hwcheck.isa import IsaError, build_evidence, read_cpuinfo_flags  # noqa
 SCHEMA = "wsm-perf-baseline/1"
 VERSION = "0.1.0"
 DEFAULT_REPETITIONS = 5
+SYNC_WRITE_BYTES = 64 * 1024 * 1024
 # Above this relative spread a run is not a measurement, it is noise.
 NOISE_THRESHOLD = 0.05
 MODES = ("physical", "qemu")
@@ -55,7 +56,8 @@ def median_and_spread(samples: list[float]) -> dict[str, float]:
     """Median, p90 and MAD - the issue asks for spread, not a mean of one run."""
     ordered = sorted(samples)
     median = statistics.median(ordered)
-    index = min(len(ordered) - 1, int(round(0.9 * (len(ordered) - 1))))
+    # Nearest-rank p90: the ceil(0.90 * n)-th ordered observation.
+    index = (9 * len(ordered) - 1) // 10
     p90 = ordered[index]
     mad = statistics.median([abs(value - median) for value in ordered])
     mad_relative = (mad / median) if median else 0.0
@@ -104,13 +106,22 @@ def _workload_hash() -> float:
 
 
 def _workload_write() -> float:
-    with tempfile.NamedTemporaryFile(delete=False) as handle:
-        path = Path(handle.name)
-        handle.write(b"\0" * (64 * 1024 * 1024))
-        handle.flush()
-        os.fsync(handle.fileno())
-    size = path.stat().st_size
-    path.unlink()
+    handle = tempfile.NamedTemporaryFile(delete=False)
+    path = Path(handle.name)
+    try:
+        with handle:
+            written = handle.write(b"\0" * SYNC_WRITE_BYTES)
+            if written != SYNC_WRITE_BYTES:
+                raise OSError(
+                    f"short synchronous write: {written} of {SYNC_WRITE_BYTES} bytes"
+                )
+            handle.flush()
+            os.fsync(handle.fileno())
+            size = handle.tell()
+    finally:
+        # Close the handle before unlinking: Windows does not allow removing an
+        # open temporary file. Also clean up when write, flush or fsync fails.
+        path.unlink(missing_ok=True)
     return float(size)
 
 
@@ -130,7 +141,10 @@ def _read_first(path: str) -> str:
         return "unknown"
 
 
-def environment(mode: str) -> dict[str, Any]:
+def environment(
+    mode: str,
+    cpuinfo_path: Path = Path("/proc/cpuinfo"),
+) -> dict[str, Any]:
     """Everything a reader needs to decide whether two numbers may be compared."""
     meminfo = {}
     try:
@@ -142,9 +156,11 @@ def environment(mode: str) -> dict[str, Any]:
         pass
 
     isa: dict[str, Any]
+    cpu_model = "unknown"
     try:
-        flags, fields = read_cpuinfo_flags(Path("/proc/cpuinfo"))
-        isa = build_evidence(flags, fields, platform.machine(), "procfs:/proc/cpuinfo")
+        flags, fields = read_cpuinfo_flags(cpuinfo_path)
+        cpu_model = fields.get("model name", "").strip() or "unknown"
+        isa = build_evidence(flags, fields, platform.machine(), f"procfs:{cpuinfo_path}")
     except IsaError as exc:
         isa = {"schema": None, "unavailable": exc.code, "message": exc.message}
 
@@ -153,7 +169,7 @@ def environment(mode: str) -> dict[str, Any]:
         "kernel_release": platform.release(),
         "machine": platform.machine(),
         "python": platform.python_version(),
-        "cpu_model": _read_first("/proc/cpuinfo").split("model name")[0] or "unknown",
+        "cpu_model": cpu_model,
         "isa_level": (isa.get("levels", {}) or {}).get("highest_supported", "unknown"),
         "memory": meminfo,
         "governor": _read_first(
