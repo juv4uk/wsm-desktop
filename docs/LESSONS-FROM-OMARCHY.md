@@ -106,7 +106,10 @@ JSON-масивом аргументів, який передається як `
 `/security` і команда, що розбирає звіти. У нас SECURITY.md описує процес, але
 не обіцяє строків.
 
-~~**Перевірки, що опублікований ISO не містить сторонніх каналів.**~~ —
-зроблено: `scripts/check_channels.py` читає форми `channels.lock.scm` (не
-коментарі) і відхиляє сторонній канал, `http://`, невідомий хост, гілку замість
-коміта й канал без introduction. Виконується в `make check`.
+**Структурна перевірка Free channel lock.** `scripts/check_channels.py`
+читає форми `channels.lock.scm` (не коментарі), вимагає єдиний офіційний Guix
+repository URL, рівно один `guix` channel, фіксований commit і канонічний
+introduction trust-root. Це лише structural policy guard, не криптографічна
+перевірка підпису: справжню channel authentication виконує Guix
+`time-machine` із увімкненою перевіркою підписів. Скрипт і тести входять до
+`make check`.
