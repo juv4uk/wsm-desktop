@@ -59,6 +59,18 @@ WSM варто будувати не навколо одного «детект�
 
 ### Display stack
 
+#### Безпека DisplayID parser-а
+
+EDID/DisplayID надходить від зовнішнього пристрою або з локального файла й має трактуватися як недовірений вхід. Для `libdisplay-info` оприлюднено два дефекти читання за межами buffer у DisplayID parser-ах:
+
+- [CVE-2026-112271](https://access.redhat.com/security/cve/cve-2026-112271) — DisplayID v1 parser може читати за межами секції, коли оголошена довжина data block перевищує її межі.
+- [CVE-2026-112272](https://access.redhat.com/security/cve/cve-2026-112272) — аналогічна помилка у parser DisplayID v2; Red Hat зазначає, що його RHEL-релізи не уражені, оскільки shipped packages не містять уразливої parser logic.
+
+Публічні записи для upstream `libdisplay-info` вказують на вразливий код у версіях **through 0.4.0** ([112271](https://explore.alas.aws.amazon.com/CVE-2026-112271.html), [112272](https://explore.alas.aws.amazon.com/CVE-2026-112272.html)). Це не означає, що кожен downstream package з рядком версії `0.4.0` обов'язково уражений: vendor може вилучити DisplayID parser logic або backport-ити виправлення. Визначати affectedness треба за точним source/package revision та фактичним вмістом parser-а, а не лише за version string.
+
+**Правило для WSM:** не додавати `libdisplay-info 0.4.0` як обов'язковий parser до privileged/live preflight. EDID/DisplayID parsing лишається optional і не запускається з підвищеними привілеями; перед його використанням перевіряти точну upstream/downstream revision на наявність відповідних виправлень. За відсутності такої перевірки використовувати read-only DRM/KMS properties, а parser-specific fields залишати `unknown/not-collected`. Спеціально сформований EDID слід вважати untrusted input.
+
+
 - Користуватися kernel DRM/KMS connector properties та active state як окремими джерелами.
 - `drm_info -j` та libdisplay-info — додаткові provider-и, output яких треба прив'язувати до exact tool version.
 - Не з'єднувати GPU і connector за іменем/порядком. Потрібен явний report-local relationship з provenance від #18.
