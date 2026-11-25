@@ -64,7 +64,7 @@ class QemuHwcheckGuestSafetyTests(unittest.TestCase):
 
         self.assertIn("guest_fail() {", rendered)
         self.assertIn("export LD_LIBRARY_PATH=/lib:/lib64:/opt/python/lib", rendered)
-        self.assertIn("guest report exceeds the 8 MiB report ceiling", rendered)
+        self.assertIn("guest report exceeds the 512 KiB report ceiling", rendered)
         self.assertNotIn("{ld_library_path}", rendered)
         self.assertNotIn("{max_report_bytes}", rendered)
 
@@ -163,12 +163,46 @@ class QemuHwcheckGuestSafetyTests(unittest.TestCase):
             guest._safe_extract_tar(archive, destination)
             self.assertEqual((destination / "python" / "README").read_bytes(), b"safe")
 
+    def test_report_transport_round_trips_crlf_serial_output(self) -> None:
+        import base64
+        import gzip
+        import json
+
+        expected = {"schema_version": "1.0.0", "devices": []}
+        encoded = base64.b64encode(
+            gzip.compress(json.dumps(expected).encode("utf-8"), mtime=0)
+        ).decode("ascii")
+        serial = "\\r\\n".join(
+            (
+                guest.REPORT_BEGIN,
+                guest.REPORT_PREFIX + encoded,
+                guest.REPORT_END,
+            )
+        )
+        self.assertEqual(guest._decode_guest_report(serial), expected)
+
+    def test_report_decoder_rejects_gzip_expansion_over_the_limit(self) -> None:
+        import base64
+        import gzip
+
+        oversized = b"x" * (guest.MAX_REPORT_BYTES + 1)
+        encoded = base64.b64encode(gzip.compress(oversized, mtime=0)).decode("ascii")
+        serial = "\\n".join(
+            (
+                guest.REPORT_BEGIN,
+                guest.REPORT_PREFIX + encoded,
+                guest.REPORT_END,
+            )
+        )
+        with self.assertRaisesRegex(RuntimeError, "512 KiB"):
+            guest._decode_guest_report(serial)
+
     def test_guest_size_limits_are_explicit(self) -> None:
         self.assertEqual(guest.MAX_PYTHON_ARCHIVE_BYTES, 40 * 1024 * 1024)
         self.assertEqual(guest.MAX_TAR_MEMBERS, 50_000)
         self.assertEqual(guest.MAX_TAR_EXPANDED_BYTES, 256 * 1024 * 1024)
         self.assertEqual(guest.MAX_INITRAMFS_BYTES, 256 * 1024 * 1024)
-        self.assertEqual(guest.MAX_REPORT_BYTES, 8 * 1024 * 1024)
+        self.assertEqual(guest.MAX_REPORT_BYTES, 512 * 1024)
 
 
 if __name__ == "__main__":
