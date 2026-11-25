@@ -6,12 +6,28 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-import unittest
 import tempfile
-from unittest.mock import patch
+import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
+
+LIVE_VERDICT_IDS = ("checksum", "manifest", "iso-structure", "boot-bios", "boot-uefi")
+
+
+def verifier_payload(overrides: dict[str, str] | None = None) -> dict:
+    overrides = overrides or {}
+    return {
+        "schema": "wsm-release-verdict/1",
+        "overall": "incomplete" if "not-run" in overrides.values()
+        else "fail" if "fail" in overrides.values() else "pass",
+        "criteria": [
+            {"id": identifier, "status": overrides.get(identifier, "pass"), "detail": ""}
+            for identifier in LIVE_VERDICT_IDS
+        ],
+    }
+
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from release_gate import check_channels, check_image, criterion, from_exit, verdict  # noqa: E402
@@ -115,13 +131,8 @@ class ImageTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             iso = Path(temporary) / "live.iso"
             iso.write_bytes(b"placeholder")
-            payload = {
-                "overall": "incomplete",
-                "criteria": [
-                    {"id": "checksum", "status": "pass", "detail": "ok"},
-                    {"id": "boot-bios", "status": "not-run", "detail": "QEMU unavailable"},
-                ],
-            }
+            payload = verifier_payload({"boot-bios": "not-run"})
+            payload["criteria"][3]["detail"] = "QEMU unavailable"
             completed = subprocess.CompletedProcess(
                 args=[], returncode=2, stdout=json.dumps(payload), stderr=""
             )
@@ -134,7 +145,7 @@ class ImageTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             iso = Path(temporary) / "live.iso"
             iso.write_bytes(b"placeholder")
-            payload = {"overall": "pass", "criteria": []}
+            payload = verifier_payload()
             completed = subprocess.CompletedProcess(
                 args=[], returncode=0, stdout=json.dumps(payload), stderr=""
             )
@@ -142,14 +153,40 @@ class ImageTests(unittest.TestCase):
                 result = check_image(iso, boot=False)
         self.assertEqual(result["status"], "pass")
 
+
+    def test_verifier_empty_criteria_cannot_claim_a_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            iso = Path(temporary) / "live.iso"
+            iso.write_bytes(b"placeholder")
+            payload = {"schema": "wsm-release-verdict/1", "overall": "pass", "criteria": []}
+            completed = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=json.dumps(payload), stderr=""
+            )
+            with patch("release_gate.subprocess.run", return_value=completed):
+                result = check_image(iso, boot=False)
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("no criteria", result["detail"])
+
+    def test_verifier_duplicate_or_missing_criteria_are_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            iso = Path(temporary) / "live.iso"
+            iso.write_bytes(b"placeholder")
+            payload = verifier_payload()
+            payload["criteria"].pop()
+            completed = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=json.dumps(payload), stderr=""
+            )
+            with patch("release_gate.subprocess.run", return_value=completed):
+                result = check_image(iso, boot=False)
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("required set", result["detail"])
+
     def test_verifier_failure_remains_failure(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             iso = Path(temporary) / "live.iso"
             iso.write_bytes(b"placeholder")
-            payload = {
-                "overall": "fail",
-                "criteria": [{"id": "iso-structure", "status": "fail", "detail": "bad PVD"}],
-            }
+            payload = verifier_payload({"iso-structure": "fail"})
+            payload["criteria"][2]["detail"] = "bad PVD"
             completed = subprocess.CompletedProcess(
                 args=[], returncode=1, stdout=json.dumps(payload), stderr=""
             )
