@@ -49,6 +49,17 @@ WSM варто будувати не навколо одного «детект�
 - Не з'єднувати GPU і connector за іменем/порядком. Потрібен явний report-local relationship з provenance від #18.
 - Не вважати EDID/DisplayID advertised timings функціонально перевіреними режимами.
 
+## Guix System VM: актуальні upstream зміни
+
+У Guix upstream 2026-11-14 були злиті дві зміни, які слід врахувати під час bring-up WSM:
+
+- Commit `42d2543dd2985a904ab5f16a1c8b2abb354aa923` змінює `guix system vm`, щоб launcher і disk image використовували ту саму OS derivation після трансформацій image (зокрема UUID assignment). Це усуває ситуацію, коли VM могла посилатися на відмінну derivation від тієї, що зареєстрована всередині образу.
+- Commit `528ba9a3069a8767506f1fe6b7badeeb57a02542` додає writable store у VM за замовчуванням; раніше VM із shared read-only store не дозволяла запускати `guix-daemon` і виконувати Guix build усередині guest.
+
+Ці зміни не є доказом, що їх містить поточний WSM Guix environment. Перевіряти їх на фактичному `guix describe`/автентифікованому channel snapshot після #39. Для базового boot smoke достатньо перевірити досягнення guest console; окремим наступним тестом можна перевірити writable store і запуск `guix-daemon` усередині VM.
+
+Джерела: [Guix VM: single operating-system derivation](https://www.mail-archive.com/guix-commits%40gnu.org/msg405644.html), [Guix VM: writable store by default](https://www.mail-archive.com/guix-commits%40gnu.org/msg405638.html).
+
 ## QEMU як окремий інструмент CI/VM-перевірок
 
 QEMU не є hardware-discovery provider і не має бути обов'язковою залежністю live preflight. Це контрольоване середовище для integration tests:
