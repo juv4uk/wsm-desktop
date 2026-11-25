@@ -3,9 +3,9 @@
 PYTHON ?= python3
 GUIX ?= guix
 
-.PHONY: check check-docs check-hardware-schema check-hwcheck check-installer check-qemu-harness check-system vm-system
+.PHONY: check check-docs check-hardware-schema check-hwcheck check-installer check-qemu-harness check-validation-protocols check-system vm-system
 
-check: check-docs check-hardware-schema check-hwcheck check-installer check-qemu-harness
+check: check-docs check-hardware-schema check-hwcheck check-installer check-qemu-harness check-validation-protocols
 
 check-docs:
 	$(PYTHON) scripts/check_docs.py
