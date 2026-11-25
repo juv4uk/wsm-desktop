@@ -18,7 +18,7 @@
 2. **Installer frontend** перевіряє звіт, пояснює користувачеві стан пристроїв і формує план інсталяції.
 3. **Рівно один native backend** перевіряє та виконує підтверджений план відповідно до власної моделі системи.
 
-Контракт не обирає Calamares, Nix чи Guix як остаточну реалізацію. Він не є кодом інсталятора і не дозволяє запис на диск. Перша реалізація в межах #13 має залишатися read-only та завершуватися створенням draft plan.
+Контракт не обирає installer frontend (Calamares, власний GUI або TUI): це окреме рішення #10. Системний backend першого preview уже визначений ADR 0004 — GNU Guix System; Nix/NixOS відкладено. Документ не є кодом інсталятора й не дозволяє запис на диск. Прототип #13 має залишатися read-only та завершуватися створенням diagnostic-only draft plan.
 
 **Базовий принцип:** WSM не переписує системні пакетні менеджери, драйверні бази або механізми розгортання. Він повторно використовує upstream-інструменти, нормалізує докази й передає підтриманий намір користувача штатному backend-у.
 
@@ -112,7 +112,7 @@ Installer не змінює та не дописує hardware report. Він с�
 | `plan_id` | Випадковий ідентифікатор цього плану, не host ID |
 | `created_at` | Час формування плану |
 | `source_report` | `schema_version`, `report_id`, SHA-256 точних байтів звіту |
-| `backend.id` | Рівно одне значення: `guix-system` або `nixos` |
+| `backend.id` | Для першого preview — лише `guix-system`; майбутнє розширення потребуватиме окремої версії контракту й рішення за ADR 0004 |
 | `backend.revision` | Точна ревізія каналів/inputs або явне `unlocked` для суто експериментального dry-run |
 | `user_intent` | Підтримані locale, timezone, keyboard, profile та інші вибрані користувачем параметри |
 | `storage` | Явно обраний диск, mount plan, filesystem plan та boot target |
@@ -135,7 +135,7 @@ CLI contract v0.1:
 
 - `--preflight` і `--dry-run` обов'язкові.
 - `--report PATH` обов'язковий; CLI не викликає `wsm_hwcheck` і не читає collector stdout напряму.
-- `--backend` приймає лише alias `guix` або `nix`; вони відображаються на plan IDs `guix-system` та `nixos`.
+- `--backend` приймає лише alias `guix`, що відображається на plan ID `guix-system`. Alias `nix` у v0.1 не підтримується; можливе майбутнє розширення не належить до першого preview.
 - JSON plan надходить у stdout за замовчуванням; optional file output задається як `--plan-output PATH`. Опції `--output` немає.
 - `--quiet` приглушує human-readable summary у stderr і не змінює JSON plan.
 - `--version` виводить `wsm-install 0.1.0`.
@@ -310,13 +310,13 @@ Temporary files у live environment дозволені лише для звіт�
 | #12 | Цей документ | Узгоджений handoff contract, acceptance assertions |
 | #13 | Installer prototype | Draft plan та dry-run UI/CLI без виклику backend apply |
 | #14 | QEMU integration harness | Доказ порядку фаз у disposable VM |
-| #2 | Backend strategy | Вибір primary backend або двох окремих редакцій після доказів |
+| #2 | Backend strategy | GNU Guix — backend першого preview; Nix/NixOS відкладено за ADR 0004 |
 
 Frontend реалізація може змінюватися (Calamares, інший GUI або TUI), але ці межі залишаються стабільними. Backend-specific конфігурація, команди й політики залишаються в окремому adapter-і.
 
 ## 10. Що не входить у цей контракт
 
-- Вибір переможця між Guix і NixOS.
+- Повторний вибір backend-а першого preview. Можливий другий backend розглядається окремо за умовами ADR 0004.
 - Остаточний вибір installer frontend.
 - Підтримка фізичного обладнання або сертифікація пристроїв.
 - Автоматична установка proprietary firmware чи drivers.
