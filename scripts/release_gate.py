@@ -22,7 +22,6 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -108,19 +107,15 @@ def check_tests() -> dict[str, str]:
     tests = sorted((ROOT / "tests").glob("test_*.py"))
     if not tests:
         return criterion("tests", "not-run", "no test files found")
-    failures: list[str] = []
-    not_run: list[str] = []
-    for path in tests:
-        code, detail = run([sys.executable, str(path)])
-        if code == 127:
-            not_run.append(f"{path.name}: {detail}")
-        elif code != 0:
-            failures.append(f"{path.name}: {detail}")
-    if failures:
-        return criterion("tests", "fail", "; ".join(failures)[:300])
-    if not_run:
-        return criterion("tests", "not-run", "; ".join(not_run)[:300])
-    return criterion("tests", "pass", f"{len(tests)} test files green")
+    code, detail = run(
+        [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"],
+        timeout=900,
+    )
+    if code == 127:
+        return criterion("tests", "not-run", detail)
+    if code != 0:
+        return criterion("tests", "fail", detail)
+    return criterion("tests", "pass", f"unittest discovery passed across {len(tests)} test modules")
 
 
 def check_evidence() -> dict[str, str]:
