@@ -45,6 +45,9 @@ FINGERPRINT = re.compile(r"^[0-9A-F]{40}$")
 GUIX_INTRODUCTION_COMMIT = "9edb3f66fd807b096b48283debdcddccfea34bad"
 GUIX_INTRODUCTION_FINGERPRINT = "BBB02DDF2CEAF6A80D1DE643A2A06DF2A33A54FA"
 NONGUIX_INTRODUCTION_COMMIT = "897c1a470da759236cc11798f4e0a5f7d4d59fbc"
+# Canonical Nonguix introduction from the upstream README; structural pin only.
+# This does not prove the selected channel commit's signature is valid.
+# Source: https://gitlab.com/nonguix/nonguix/-/blob/master/README.org
 NONGUIX_INTRODUCTION_FINGERPRINT = "2A393FFF68F4EF7A3D2912AF6F5120A022FBB2D5"
 REQUIRED_FIELDS = {"name", "url", "branch", "commit", "introduction"}
 
