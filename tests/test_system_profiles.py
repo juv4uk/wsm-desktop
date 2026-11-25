@@ -144,6 +144,22 @@ class DesktopProfileTests(unittest.TestCase):
                 self.assertNotIn("channel", code)
 
 
+class KnownPitfallTests(unittest.TestCase):
+    def test_sddm_is_not_set_to_wayland(self) -> None:
+        """Guix bug#68939: display-server "wayland" leaves a black screen.
+
+        The value is documented but the service does not support it; a later
+        patch makes the service ignore it. Setting it would produce a system
+        that boots to a blank display and looks like a broken image.
+        """
+        text = profile("desktop.scm")
+        self.assertNotIn('(display-server "wayland")', text)
+
+    def test_bluetooth_is_not_auto_enabled(self) -> None:
+        text = profile("desktop.scm")
+        self.assertIn("(auto-enable? #f)", text)
+
+
 class LiveProfileTests(unittest.TestCase):
     def test_live_profile_inherits_the_desktop_profile(self) -> None:
         text = profile("live.scm")

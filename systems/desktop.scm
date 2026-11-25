@@ -82,9 +82,13 @@
 
      ;; Один графічний вхід. GDM із %desktop-services прибираємо нижче,
      ;; інакше два дисплейні менеджери борються за один seat.
-     (service sddm-service-type
-              (sddm-configuration
-               (display-server "wayland")))
+     ;; display-server навмисно НЕ задано: у Guix значення "wayland" для
+     ;; sddm-service-type відоме як зламане — екран лишається чорним, бо
+     ;; greeter не налаштований під wayland. Помилку зафіксовано в Guix
+     ;; (bug#68939), а патч bug#70527 змушує службу ігнорувати це значення й
+     ;; усе одно використовувати x11. Тримаємо типовий x11, доки служба не
+     ;; почне підтримувати wayland по-справжньому.
+     (service sddm-service-type (sddm-configuration))
 
      ;; Звук.
      (service pulseaudio-service-type)

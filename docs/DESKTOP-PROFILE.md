@@ -104,8 +104,8 @@ python3 scripts/qemu_boot_smoke.py --iso build/wsm-desktop.iso \
 
 Ці місця найімовірніше не збігатимуться з реальним Guix, і кожне ламає збірку:
 
-1. `sddm-configuration` з полем `display-server` — звірити з посібником тієї ревізії, яку фіксує `channels.lock.scm`.
-2. `bluetooth-configuration` з полем `auto-enable?`.
+1. ~~`sddm-configuration` з полем `display-server`~~ — **перевірено й виправлено.** У Guix значення `"wayland"` для `sddm-service-type` відоме як зламане: екран лишається чорним (Guix bug#68939), а патч bug#70527 змушує службу ігнорувати це значення й використовувати x11. У профілі тепер типовий x11 без явного поля.
+2. ~~`bluetooth-configuration` з полем `auto-enable?`~~ — **перевірено.** Поле існує, типове значення `#f`, що збігається з наміром профілю: радіо не вмикається без потреби.
 3. `plasma-desktop-service-type` і модуль `(gnu packages kde-plasma)` — назви могли змінитися.
 4. `(include "desktop.scm")` у `live.scm` — шлях відносний до файлу; перевірити, що Guix його знаходить.
 5. `(local-file "../.." ...)` у `wsm/packages/wsm.scm` — залежить від того, звідки викликають `guix build -f`.
