@@ -57,6 +57,8 @@ class QemuCxlGuestTests(unittest.TestCase):
         self.assertIn("run_bounded_process", source)
         self.assertIn("MAX_INITRAMFS_BYTES", source)
         self.assertIn("MAX_MODULE_TOTAL_BYTES", source)
+        self.assertIn("max_stdout_bytes=MAX_SERIAL_BYTES", source)
+        self.assertIn("max_stdout_bytes=64 * 1024", source)
 
     def test_failure_path_does_not_emit_raw_dmesg_or_sysfs_listing(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -66,6 +68,7 @@ class QemuCxlGuestTests(unittest.TestCase):
         self.assertNotIn("dmesg", init)
         self.assertNotIn("ls -l /sys/bus/cxl/devices", init)
         self.assertIn("WSM_CXL_FAILURE_DIAGNOSTICS=redacted", init)
+
     def test_failure_summary_does_not_echo_raw_console_or_pci_addresses(self) -> None:
         raw = (
             "PCI: 0000:00:1f.0 EDID parser failure\n"
@@ -91,7 +94,7 @@ class QemuCxlGuestTests(unittest.TestCase):
         self.assertNotIn("secret", untrusted)
 
     def test_sysfs_report_uses_synthetic_names_not_host_addresses(self) -> None:
-        source = (ROOT / "scripts" / "ci_qemu_cxl_guest.py").read_text(encoding="utf-8")
+        source = (ROOT / "scripts" / "ci_cxl_qemu_guest.py").read_text(encoding="utf-8")
         self.assertIn("device_pattern.fullmatch", source)
         self.assertIn("edge_pattern.fullmatch", source)
         self.assertNotIn("HPA", source)
