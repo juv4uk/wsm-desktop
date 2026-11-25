@@ -6,13 +6,15 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from release_gate import check_image, criterion, from_exit, verdict  # noqa: E402
+from release_gate import check_channels, check_image, criterion, from_exit, verdict  # noqa: E402
 
 
 class VerdictTests(unittest.TestCase):
@@ -44,6 +46,63 @@ class ExitMappingTests(unittest.TestCase):
 
     def test_nonzero_is_fail(self) -> None:
         self.assertEqual(from_exit("x", 1, "")["status"], "fail")
+
+
+class ChannelGateTests(unittest.TestCase):
+    def test_missing_compatibility_lock_is_not_configured_not_a_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with patch("release_gate.ROOT", root), patch(
+                "release_gate.run", return_value=(0, "Free structural policy passed")
+            ) as run_check:
+                result = check_channels()
+        self.assertEqual(result["status"], "pass")
+        self.assertIn("Compatibility: NOT_CONFIGURED", result["detail"])
+        self.assertIn("no Compatibility product claim", result["detail"])
+        run_check.assert_called_once()
+
+    def test_invalid_configured_compatibility_lock_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "channels.compatibility.lock.scm").write_text(
+                "(list)", encoding="utf-8"
+            )
+            with patch("release_gate.ROOT", root), patch(
+                "release_gate.run",
+                side_effect=[
+                    (0, "Free structural policy passed"),
+                    (1, "Compatibility lock violates structural policy"),
+                ],
+            ) as run_check:
+                result = check_channels()
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("Compatibility lock violates structural policy", result["detail"])
+        self.assertEqual(run_check.call_count, 2)
+
+    def test_free_lock_failure_fails_before_optional_compatibility(self) -> None:
+        with patch("release_gate.run", return_value=(1, "Free lock is invalid")) as run_check:
+            result = check_channels()
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("Free lock is invalid", result["detail"])
+        run_check.assert_called_once()
+
+    def test_configured_compatibility_lock_is_checked(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "channels.compatibility.lock.scm").write_text(
+                "(list)", encoding="utf-8"
+            )
+            with patch("release_gate.ROOT", root), patch(
+                "release_gate.run",
+                side_effect=[
+                    (0, "Free structural policy passed"),
+                    (0, "Compatibility structural policy passed"),
+                ],
+            ) as run_check:
+                result = check_channels()
+        self.assertEqual(result["status"], "pass")
+        self.assertIn("configured Compatibility", result["detail"])
+        self.assertEqual(run_check.call_count, 2)
 
 
 class ImageTests(unittest.TestCase):
