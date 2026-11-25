@@ -198,7 +198,7 @@ def probe(qemu_override: str | None = None) -> dict[str, object]:
         "diagnostic": "qemu-system-x86_64 was not found.",
     }
     if qemu:
-            try:
+        try:
             version = subprocess.run(
                 [qemu, "--version"],
                 capture_output=True,
@@ -209,15 +209,14 @@ def probe(qemu_override: str | None = None) -> dict[str, object]:
             )
             qemu_version = (version.stdout or version.stderr).splitlines()[0:1]
         except (OSError, subprocess.TimeoutExpired) as exc:
-            qemu_version = None
             qemu_result = {
                 "status": "version-probe-failed",
                 "exit_code": None,
                 "devices_seen": [],
                 "diagnostic": f"{type(exc).__name__}: {exc}",
             }
-            qemu = None
-        qemu_result = run_qemu_topology_probe(qemu)
+        else:
+            qemu_result = run_qemu_topology_probe(qemu)
 
     return {
         "probe_version": "0.1.0",
