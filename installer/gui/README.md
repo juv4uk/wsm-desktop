@@ -22,6 +22,7 @@
 cmake -S installer/gui -B build/wsm-installer -DCMAKE_BUILD_TYPE=Release
 cmake --build build/wsm-installer
 cmake --install build/wsm-installer --prefix /usr/local
+QT_QPA_PLATFORM=offscreen qmltestrunner -input installer/gui/tests
 ```
 
 У dev runtime PATH мають бути `python3`, `lsblk`, а активне Python-середовище має бачити пакети `wsm_hwcheck`, `wsm_install` і залежність `jsonschema[format]`. У Guix package ці шляхи задаються через `WSM_PYTHON_EXECUTABLE`, `GUIX_PYTHONPATH` і точний `WSM_LSBLK_EXECUTABLE` з store; перевірка цього closure залишається обов’язковим exact-lock build.
