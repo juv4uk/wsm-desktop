@@ -44,11 +44,14 @@ firmware в live rootfs/initrd; жоден functional test не позначен
 
 Фізичний профіль із juv4uk/wsm-os/docs/OWNER-HARDWARE-PROFILE.md, повторно перевірений 2026-09-02, описує Gigabyte H170-Gaming 3 / Intel Core i5-6400 / Intel HD Graphics 530 / NVIDIA GTX 1050 Ti Pascal / Killer E2200 / Kingston NVMe / Samsung SATA / HDA audio.
 
-Профіль джерела є Windows-observed. Для NVIDIA GeForce GTX 1050 Ti Windows PnP зафіксував vendor:device ID `10de:1c82` (`VEN_10DE DEV_1C82`, subsystem `SUBSYS_33511462`); це є доказом ідентичності пристрою у Windows, але не Linux driver binding. BDF `00000000:01:00.0` — лише адреса пристрою на шині й не є PCI ID. Для інших адаптерів PCI IDs не вигадуються та залишаються порожніми до read-only Linux inventory на фізичній машині. Wi-Fi та Bluetooth не підтверджені й залишаються `unobserved`. Windows identity сама по собі не доводить наявність Linux-модуля, firmware у rootfs/initrd, runtime binding чи функціональність.
+Профіль джерела є Windows-observed і закріплений на [wsm-os@40ef00079d478d43fa496ec066bb96ac4c0850a3](https://github.com/juv4uk/wsm-os/blob/40ef00079d478d43fa496ec066bb96ac4c0850a3/docs/OWNER-HARDWARE-PROFILE.md). Для NVIDIA GeForce GTX 1050 Ti Windows PnP зафіксував vendor:device ID `10de:1c82` (`VEN_10DE DEV_1C82`, subsystem `SUBSYS_33511462`); це є доказом ідентичності пристрою у Windows, але не Linux driver binding. BDF `00000000:01:00.0` — лише адреса пристрою на шині й не є PCI ID. Для інших адаптерів PCI IDs не вигадуються та залишаються порожніми до read-only Linux inventory на фізичній машині. Wi-Fi та Bluetooth не підтверджені й залишаються `unobserved`. Windows identity сама по собі не доводить наявність Linux-модуля, firmware у rootfs/initrd, runtime binding чи функціональність.
 
-## Guix provenance
+## Provenance джерел і каналів
 
-Обидва JSON профілі прив'язані до commit 4e5195be20d9b124df8a8bb69213412236e4668e з channels.lock.scm. У коментарі зазначено authenticated pull, але побудову пакунків/образу на цьому commit ще не виконано. Це не evidence, що модуль існує в ядрі, пакет присутній у rootfs або firmware включено до initrd.
+- **Free:** `channels.lock.scm` фіксує лише офіційний Guix channel `4e5195be20d9b124df8a8bb69213412236e4668e`. Для нього записано authenticated pull/channel introduction, але package query, system evaluation, build та ISO не виконані.
+- **Compatibility:** `channels/compatibility.lock.scm` окремо фіксує Guix `4e5195be20d9b124df8a8bb69213412236e4668e` і Nonguix `6b8897cd6f3223b158c070cdc9cc638279f8c337`. Структурна наявність цих revisions у lock не є доказом криптографічної автентифікації: її ще треба виконати через pinned `guix time-machine`; тому маніфест чесно ставить `channel_authentication_evidence: not-evaluated`.
+- **Owner hardware evidence:** обидва профілі посилаються на незмінний snapshot [`wsm-os@40ef00079d478d43fa496ec066bb96ac4c0850a3`](https://github.com/juv4uk/wsm-os/blob/40ef00079d478d43fa496ec066bb96ac4c0850a3/docs/OWNER-HARDWARE-PROFILE.md). У ньому BIOS F22e та UEFI спостережені у Windows; Secure Boot лишається `unknown`.
+- Channel revisions — лише identity inputs. Вони не доводять package resolution, kernel configuration, firmware у rootfs/initrd, runtime binding чи функціональність.
 
 
 ## Оновлені upstream-орієнтири для GTX 1050 Ti (2026-11-26)
@@ -75,4 +78,4 @@ firmware в live rootfs/initrd; жоден functional test не позначен
 
 ## Наявний system-level Compatibility профіль
 
-`systems/compatibility.scm` тепер існує в `main` як окремий opt-in рецепт Nonguix/NVIDIA `nvda-580`. Це не робить H170 compatibility manifest buildable: наявний `channels.lock.scm` фіксує лише офіційний Guix, а recipe потребує `(nonguix transformations)` і `(nongnu packages ...)`. Поки немає окремого authenticated `channels.compatibility.lock.scm` з точними Guix + Nonguix commits та введенням ключів, статус package resolution/build/redistribution у H170 compatibility лишається `not-assessed`/`unknown`. Free profile та основний `systems/live.scm` не повинні імпортувати Compatibility чи Nonguix.
+`systems/compatibility.scm` тепер існує в `main` як окремий opt-in рецепт Nonguix/NVIDIA `nvda-580`. Це не робить H170 compatibility manifest buildable: наявний `channels.lock.scm` фіксує лише офіційний Guix, а recipe потребує `(nonguix transformations)` і `(nongnu packages ...)`. Окремий `channels/compatibility.lock.scm` уже фіксує Guix + Nonguix commits та introduction fingerprints, але його криптографічну автентифікацію ще не виконано. Тому package resolution/build/redistribution у H170 Compatibility лишаються `not-assessed`/`unknown`. Free profile та основний `systems/live.scm` не повинні імпортувати Compatibility чи Nonguix.

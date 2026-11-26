@@ -20,7 +20,7 @@
   ],
   "properties": {
     "schema_version": {
-      "const": "1.1.0"
+      "const": "1.2.0"
     },
     "profile_id": {
       "type": "string",
@@ -41,7 +41,8 @@
       ]
     },
     "enabled_by_default": {
-      "type": "boolean"
+      "type": "boolean",
+      "description": "Policy intent for a future explicit profile consumer; this does not mean the current installer selects or applies this manifest."
     },
     "base_profile": {
       "type": [
@@ -113,7 +114,7 @@
         "repository",
         "source_commit",
         "channel_lock_file",
-        "channel_commit",
+        "channel_revisions",
         "channel_authentication_evidence",
         "notes"
       ],
@@ -129,10 +130,11 @@
           "pattern": "^[0-9a-f]{40}$"
         },
         "channel_lock_file": {
-          "const": "channels.lock.scm"
-        },
-        "channel_commit": {
-          "const": "4e5195be20d9b124df8a8bb69213412236e4668e"
+          "enum": [
+            "channels.lock.scm",
+            "channels/compatibility.lock.scm"
+          ],
+          "description": "Exact repository-relative channel lock used by this profile."
         },
         "channel_authentication_evidence": {
           "enum": [
@@ -144,6 +146,37 @@
         },
         "notes": {
           "type": "string"
+        },
+        "channel_revisions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "All channels used by package definitions in this profile; an additional channel must never be hidden behind the Guix revision.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "url",
+              "commit"
+            ],
+            "properties": {
+              "name": {
+                "enum": [
+                  "guix",
+                  "nonguix"
+                ]
+              },
+              "url": {
+                "type": "string",
+                "format": "uri"
+              },
+              "commit": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              }
+            }
+          }
         }
       }
     },

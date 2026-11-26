@@ -13,7 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = ROOT / "drivers" / "schema" / "profile.schema.json"
 PROFILE_DIR = ROOT / "drivers" / "profiles"
 LOCKED_GUIX_COMMIT = "4e5195be20d9b124df8a8bb69213412236e4668e"
-OWNER_PROFILE = "https://github.com/juv4uk/wsm-os/blob/main/docs/OWNER-HARDWARE-PROFILE.md"
+LOCKED_NONGUIX_COMMIT = "6b8897cd6f3223b158c070cdc9cc638279f8c337"
+OWNER_PROFILE = "https://github.com/juv4uk/wsm-os/blob/40ef00079d478d43fa496ec066bb96ac4c0850a3/docs/OWNER-HARDWARE-PROFILE.md"
 
 
 class DriverProfileManifestTests(unittest.TestCase):
@@ -44,35 +45,58 @@ class DriverProfileManifestTests(unittest.TestCase):
         self.assertValidProfile(self.compat)
 
     def test_manifest_schema_version_is_explicit_and_current(self) -> None:
-        self.assertEqual(self.schema["properties"]["schema_version"]["const"], "1.1.0")
-        self.assertEqual(self.free["schema_version"], "1.1.0")
-        self.assertEqual(self.compat["schema_version"], "1.1.0")
+        self.assertEqual(self.schema["properties"]["schema_version"]["const"], "1.2.0")
+        self.assertEqual(self.free["schema_version"], "1.2.0")
+        self.assertEqual(self.compat["schema_version"], "1.2.0")
         notes = self.schema["$defs"]["candidate"]["properties"]["notes"]
         self.assertEqual(notes["type"], "array")
         self.assertEqual(notes["items"]["type"], "string")
 
-    def test_channel_commit_matches_the_current_authenticated_free_lock(self) -> None:
-        lock = (ROOT / "channels.lock.scm").read_text(encoding="utf-8")
-        self.assertIn(f'(commit "{LOCKED_GUIX_COMMIT}")', lock)
-        self.assertIn("Authenticated Guix channel lock", lock)
-        # The lock establishes input identity, not package resolution/build.
-        for profile in (self.free, self.compat):
-            self.assertEqual(profile["source"]["channel_commit"], LOCKED_GUIX_COMMIT)
-            self.assertEqual(
-                profile["source"]["channel_authentication_evidence"],
-                "authenticated-pull-recorded-build-not-evaluated",
-            )
+    def test_free_and_compatibility_profiles_reference_separate_complete_locks(self) -> None:
+        free_lock = (ROOT / "channels.lock.scm").read_text(encoding="utf-8")
+        compatibility_lock = (ROOT / "channels" / "compatibility.lock.scm").read_text(encoding="utf-8")
+
+        self.assertEqual(self.free["source"]["channel_lock_file"], "channels.lock.scm")
+        self.assertEqual(
+            self.free["source"]["channel_revisions"],
+            [{"name": "guix", "url": "https://git.guix.gnu.org/guix.git", "commit": LOCKED_GUIX_COMMIT}],
+        )
+        self.assertIn(f'(commit "{LOCKED_GUIX_COMMIT}")', free_lock)
+        self.assertIn("Authenticated Guix channel lock", free_lock)
+        self.assertNotIn("(name 'nonguix)", free_lock)
+        self.assertEqual(
+            self.free["source"]["channel_authentication_evidence"],
+            "authenticated-pull-recorded-build-not-evaluated",
+        )
+
+        self.assertEqual(
+            self.compat["source"]["channel_lock_file"],
+            "channels/compatibility.lock.scm",
+        )
+        self.assertEqual(
+            self.compat["source"]["channel_revisions"],
+            [
+                {"name": "guix", "url": "https://git.guix.gnu.org/guix.git", "commit": LOCKED_GUIX_COMMIT},
+                {"name": "nonguix", "url": "https://gitlab.com/nonguix/nonguix", "commit": LOCKED_NONGUIX_COMMIT},
+            ],
+        )
+        self.assertIn(f'(commit "{LOCKED_GUIX_COMMIT}")', compatibility_lock)
+        self.assertIn(f'(commit "{LOCKED_NONGUIX_COMMIT}")', compatibility_lock)
+        self.assertIn("(name 'nonguix)", compatibility_lock)
+        self.assertEqual(self.compat["source"]["channel_authentication_evidence"], "not-evaluated")
+
 
     def test_profiles_are_explicitly_draft_and_not_build_evidence(self) -> None:
         for profile in (self.free, self.compat):
             with self.subTest(profile=profile["profile_id"]):
                 self.assertEqual(profile["profile_status"], "draft")
                 self.assertIsNone(profile["source"]["source_commit"])
-                self.assertEqual(profile["source"]["channel_commit"], LOCKED_GUIX_COMMIT)
-                self.assertEqual(
-                    profile["source"]["channel_authentication_evidence"],
-                    "authenticated-pull-recorded-build-not-evaluated",
-                )
+                self.assertIn(profile["source"]["channel_lock_file"], {"channels.lock.scm", "channels/compatibility.lock.scm"})
+                self.assertTrue(profile["source"]["channel_revisions"])
+                if profile["profile_class"] == "free":
+                    self.assertEqual(profile["source"]["channel_authentication_evidence"], "authenticated-pull-recorded-build-not-evaluated")
+                else:
+                    self.assertEqual(profile["source"]["channel_authentication_evidence"], "not-evaluated")
 
     def test_free_profile_never_claims_nonfree_or_functional_support(self) -> None:
         self.assertEqual(self.free["profile_class"], "free")
@@ -157,10 +181,13 @@ class DriverProfileManifestTests(unittest.TestCase):
             self.assertIn("wifi", profile["unobserved_device_classes"])
             self.assertIn("bluetooth", profile["unobserved_device_classes"])
 
-    def test_owner_profile_is_the_physical_inventory_source(self) -> None:
-        self.assertEqual(self.free["target"]["evidence_source"], OWNER_PROFILE)
-        self.assertEqual(self.compat["target"]["evidence_source"], OWNER_PROFILE)
+    def test_owner_profile_is_an_immutable_uefi_inventory_source(self) -> None:
         for profile in (self.free, self.compat):
+            self.assertEqual(profile["target"]["evidence_source"], OWNER_PROFILE)
+            self.assertEqual(profile["target"]["evidence_date"], "2026-09-02")
+            self.assertEqual(profile["target"]["firmware_version"], "F22e")
+            self.assertEqual(profile["target"]["boot_mode"], "uefi")
+            self.assertEqual(profile["target"]["secure_boot"], "unknown")
             self.assertFalse(profile["policy"]["automatic_firmware_updates"])
             self.assertFalse(profile["policy"]["host_disk_writes"])
 
