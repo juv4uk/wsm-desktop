@@ -176,7 +176,7 @@ class PressureTelemetryTests(unittest.TestCase):
         )
         self.assertNotIn("/dev/nvme0n1p3", str(snapshot))
 
-    def test_zram_snapshot_is_partial_when_configuration_is_unavailable(self) -> None:
+    def test_zram_snapshot_is_partial_when_both_config_sources_are_unavailable(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             device = root / "zram0"
