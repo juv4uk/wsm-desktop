@@ -96,7 +96,7 @@ class QemuHwcheckGuestSafetyTests(unittest.TestCase):
 
     def test_guest_validator_requires_matching_cpython_abi(self) -> None:
         guest._require_guest_validation_abi("cpython-311")
-        with self.assertRaisesRegex(RuntimeError, "requires host ABI cpython-311"):
+        with self.assertRaisesRegex(RuntimeError, "host ABI cpython-311"):
             guest._require_guest_validation_abi("cpython-312")
 
     def test_guest_validator_dependency_allowlist_is_explicit(self) -> None:
