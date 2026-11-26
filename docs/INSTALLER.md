@@ -4,15 +4,18 @@
 
 > Цей документ описує початковий Guix-oriented deployment design. Nix/NixOS backend потребуватиме окремого adapter design; Guix-specific кроки не можна переносити до нього.
 
-## Два входи, один бекенд
+## Чотири frontend-и, один read-only planner
 
-| Вхід | Кому | Чому |
+| Вхід | Роль | Поточна межа |
 | --- | --- | --- |
-| **`wsm-install` (CLI)** | типово, і єдиний на слабкому залізі | не тягне Qt/KDE, працює послідовною консоллю, потребує мінімум пам'яті |
-| Calamares | опційно, для тих, кому потрібен графічний майстер | готовий UI, локалізація, екран розбиття |
+| **wsm-install CLI** | основний non-graphical entrypoint | read-only preflight і preview; APPLY вимкнено |
+| wsm-install --guided | консольний майстер | вибір диска та preview; немає install callback |
+| wsm-install --tui | псевдографічний майстер | клавіатурна навігація і preview; немає install callback |
+| Calamares | опційний graphical frontend | Python jobmodule; real deployment не підтверджено, APPLY вимкнено |
 
-Обидва викликають **той самий бекенд**: `partition.py`, `install_steps.py`,
-`executor.py`. Це не два інсталятори, а два обличчя одного.
+Усі чотири frontend-и використовують спільні partition.py та install_steps.py.
+executor.py наразі лише формує preview і відхиляє dry_run=False. Жоден
+frontend не запускає розмітку, mkfs, mount або guix system init.
 
 ### Чому CLI первинний
 
@@ -42,9 +45,9 @@ Calamares лишається як зручність для тих, кому в�
 
 | Ризик графічного майстра | Наша компенсація |
 | --- | --- |
-| Випадково обрано не той диск | CLI/guided показує явний target і вимагає повторно ввести його шлях лише для підтвердження preview; це не дозвіл на запис |
-| Диск підмінили між планом і записом | **ще не виявляється**: `--target-size-bytes` — введена оцінка, не прочитана властивість пристрою |
-| Помилка посеред розбиття | APPLY вимкнено, тому зараз жодного кроку запису не запускається |
+| Випадково обрано не той диск | CLI/guided/TUI показує target і повторно просить його шлях лише для preview; це не дозвіл на запис |
+| Диск підмінили між планом і записом | **не виявляється**: `--target-size-bytes` — введена оцінка, не прочитана властивість пристрою |
+| Помилка посеред розбиття | APPLY вимкнено; жодного кроку запису не запускається |
 | «Зелена» галочка на несправному кроці | preview показує argv і намір, але не заявляє, що команда запускалась або postcondition виконано |
 
 ## Поточна межа безпеки інсталятора
@@ -103,16 +106,17 @@ Calamares розрізняє user-visible view modules та job modules. View mo
 2. Мова та клавіатура.
 3. Часовий пояс.
 4. Вибір профілю Free або Compatibility з поясненням наслідків.
-5. Розмітка диска та монтування перевіреним модулем Calamares.
-6. WSM configuration summary: диск, partition plan, mount points, profile, boot mode.
-7. Явне підтвердження незворотних дій.
-8. WSM preflight.
-9. Генерація конфігурації Guix.
-10. Guix system build / перевірка конфігурації.
-11. Guix system init.
-12. Перевірка завершення та звіт.
+5. WSM environment preflight: read-only перевірка tools, Guix, root, mount point, system file, report та ISA.
+6. Read-only hardware evidence і перевірка цільового пристрою.
+7. Побудова partition layout, filesystem та mount plan як даних; жодних записів.
+8. WSM configuration summary: цільовий диск, повний partition diff, mount points, profile, boot mode та provenance evidence.
+9. Явне підтвердження, пов'язане з immutable target identity і digest повного плану.
+10. Єдиний partition executor виконує розмітку, форматування та mount лише після consent. Цей етап не реалізовано: поточний executor preview-only.
+11. Генерація конфігурації Guix із того самого typed plan і перевірка guix system build.
+12. guix system init лише після окремого accepted APPLY contract і перевірених postconditions.
+13. Перевірка результату та звіт.
 
-Порядок буде уточнено після тестування обраної версії Calamares та її модулів.
+Це цільова архітектура, а не твердження про реалізований APPLY. Нині всі frontend-и завершуються на read-only preview; consent gate ще не під'єднана до реального disk executor.
 
 ## Що не можна просто взяти зі стандартного Calamares
 
@@ -130,7 +134,7 @@ Guix configuration має бути єдиним джерелом істини д
 
 ## Межі WSM deployment adapter
 
-Рекомендована перша форма — Python job module Calamares, якщо її API та потрібні права доступу підтверджені для вибраної версії. Модуль повинен:
+Майбутній Python job module Calamares, якщо його API та потрібні права доступу підтверджені для вибраної версії, повинен:
 - читати лише визначені ключі з Calamares global storage;
 - перевіряти, що target root і EFI mount points очікувані;
 - відмовлятися працювати з неоднозначним або неповним partition plan;
