@@ -49,6 +49,15 @@ def write_tar(path: Path, members: list[tuple[str, bytes]]) -> None:
 
 
 class QemuHwcheckGuestSafetyTests(unittest.TestCase):
+    def test_qemu_job_host_python_minor_matches_guest_runtime(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        qemu_job = workflow.split("  qemu-acceptance:", 1)[1].split(
+            "\n  acceptance-gates:", 1
+        )[0]
+        guest_minor = ".".join(guest.PYTHON_ASSET.removeprefix("cpython-").split(".")[:2])
+        self.assertEqual(guest_minor, "3.11")
+        self.assertIn(f'python-version: "{guest_minor}"', qemu_job)
+
     def test_guest_init_template_renders_all_stages_without_placeholders(self) -> None:
         rendered = guest.render_guest_init("/lib:/lib64:/opt/python/lib")
 
