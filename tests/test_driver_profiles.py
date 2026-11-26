@@ -43,6 +43,18 @@ class DriverProfileManifestTests(unittest.TestCase):
         self.assertValidProfile(self.free)
         self.assertValidProfile(self.compat)
 
+    def test_channel_commit_matches_the_current_authenticated_free_lock(self) -> None:
+        lock = (ROOT / "channels.lock.scm").read_text(encoding="utf-8")
+        self.assertIn(f'(commit "{LOCKED_GUIX_COMMIT}")', lock)
+        self.assertIn("Authenticated Guix channel lock", lock)
+        # The lock establishes input identity, not package resolution/build.
+        for profile in (self.free, self.compat):
+            self.assertEqual(profile["source"]["channel_commit"], LOCKED_GUIX_COMMIT)
+            self.assertEqual(
+                profile["source"]["channel_authentication_evidence"],
+                "authenticated-pull-recorded-build-not-evaluated",
+            )
+
     def test_profiles_are_explicitly_draft_and_not_build_evidence(self) -> None:
         for profile in (self.free, self.compat):
             with self.subTest(profile=profile["profile_id"]):
