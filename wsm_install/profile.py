@@ -10,6 +10,8 @@ from typing import Any
 
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schemas" / "profile-evidence.schema.json"
 
+SUPPORTED_SCHEMA = "wsm-profile-evidence/2"
+
 
 class EvidenceUnavailable(Exception):
     """The bundle or a required validator dependency could not be read."""
@@ -138,6 +140,13 @@ def problems(
     containing evidence.json; this makes it impossible for the installer to
     accept a digest that has not been checked against actual bytes.
     """
+    version = document.get("schema") if isinstance(document, dict) else None
+    if version != SUPPORTED_SCHEMA:
+        return [
+            f"schema-version: {version!r} is not {SUPPORTED_SCHEMA!r}; "
+            "this reader does not upgrade an unknown bundle version"
+        ]
+
     # Report path-safety violations before JSON Schema shape errors so callers
     # receive the actionable filesystem reason (absolute path / traversal).
     early_path_problems: list[str] = []

@@ -200,7 +200,7 @@ JSON-масивом аргументів, який передається як `
 | `root=` втрачено під час kernel/package transaction (Omarchy #6951) | bootloader-конфіг генерує Guix System; WSM не пише `root=` сам | немає — WSM не має власного boot-кроку | `out-of-scope` | — |
 | LUKS recovery slot видалено при зміні ключа (Omarchy #14874) | шифрування не реалізоване | немає коду, який чіпає slots | `out-of-scope` | — |
 | Legacy/CSM multi-disk boot-order hand-off (Omarchy #20178) | BIOS layout створює `bios_grub`, але preview не доводить, що firmware після майбутнього встановлення стартує з цільового диска | немає двохдискового Legacy/CSM QEMU або physical acceptance | `not-covered` | — |
-| Міграція власних артефактів (`wsm-profile-evidence/1` → `/2`) | плану міграції немає | немає | `not-covered` | — |
+| Міграція власних артефактів (`wsm-profile-evidence/2` → `/3`) | читач відмовляє на невідомій версії за іменем; плану міграції поки немає | тест: кожен наявний читач відмовляє на версії +1 і приймає поточну | `partial` | `tests/test_artifact_version_refusal.py::test_next_version_is_refused_by_name` |
 
 `out-of-scope` не означає «вирішено»: це означає, що коду, який міг би зламатися
 саме так, у WSM поки немає. Щойно з'явиться власний boot-крок, шифрування,
