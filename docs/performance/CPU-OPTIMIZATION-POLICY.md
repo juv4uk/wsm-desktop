@@ -1,6 +1,6 @@
 # Політика продуктивності та CPU-оптимізацій WSM
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 - Статус: **початкова архітектурна політика; реалізація поетапна**
 - Критичний шлях до Hardware Preview RC1: **ні**
