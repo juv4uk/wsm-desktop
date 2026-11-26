@@ -1,147 +1,152 @@
-# Hardware preflight: upstream tooling assessment
+# Апаратний preflight: оцінка upstream-інструментів
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Research snapshot: **2026-11-25**
-- Scope: pre-install discovery and evidence collection for WSM Desktop
-- Status: **initial assessment; not a dependency lock or final adoption decision**
-- Critical path: **no** — research input, not a blocker for the first preview image
-- Parent: [Issue #3](https://github.com/juv4uk/wsm-desktop/issues/3)
-- Detailed audit task: [Issue #4](https://github.com/juv4uk/wsm-desktop/issues/4)
+- Зріз дослідження: **2026-11-25**
+- Обсяг: виявлення пристроїв і збір доказів до встановлення для WSM Desktop
+- Статус: **початкова оцінка; не фіксація залежностей і не остаточне рішення про впровадження**
+- Критичний шлях: **ні** — дослідницькі вхідні дані, не блокер для першого preview-образу
+- Батьківське завдання: [#3](https://github.com/juv4uk/wsm-desktop/issues/3)
+- Завдання детального аудиту: [#4](https://github.com/juv4uk/wsm-desktop/issues/4)
 
-## Design rule
+## Правило дизайну
 
-**Reuse the community's mature tools; make WSM responsible for orchestration, evidence semantics, privacy defaults, and a clear installer decision.**
+**Використовувати зрілі інструменти спільноти; WSM відповідає за оркестрацію, семантику доказів, типові налаштування приватності й чітке рішення інсталятора.**
 
-WSM must not reimplement PCI/USB enumeration, kernel driver matching, firmware update protocols, EDID parsing, or generic hardware probing unless an upstream capability is demonstrably unavailable or unsuitable. Each fact in a WSM report must carry its source and evidence level.
+WSM не повинен переписувати перелічення PCI/USB, зіставлення драйверів ядра, протоколи оновлення firmware, розбір EDID або загальне зондування обладнання, якщо тільки upstream-можливість не є доведено недоступною чи непридатною. Кожен факт у звіті WSM мусить нести своє джерело й рівень доказовості.
 
-The preflight must work offline, must not write to target disks, and must not upload machine data by default.
+Preflight мусить працювати офлайн, не писати на цільові диски і не вивантажувати дані машини за замовчуванням.
 
-## Important distinction: five different kinds of evidence
+## Важливе розрізнення: п'ять різних видів доказів
 
-These states must not be collapsed into a single "Linux supports this device" claim:
+Ці стани не можна згортати в одне твердження «Linux підтримує цей пристрій»:
 
-1. **Discovered** — the kernel or a probe tool enumerated a device and supplied an identifier.
-2. **Driver candidate known** — a matching driver/module appears to exist for an identified kernel/configuration.
-3. **Driver bound** — a driver is actually attached to the device in the running live environment.
-4. **Firmware loaded** — required runtime firmware was available and the kernel did not report a load failure. This is distinct from device firmware update support.
-5. **Function tested** — a meaningful function-specific test passed (e.g. link established, display mode active, audio endpoint enumerated and exercised).
+1. **Виявлено** — ядро або інструмент зондування перелічив пристрій і надав ідентифікатор.
+2. **Кандидатний драйвер відомий** — для ідентифікованого ядра/конфігурації, схоже, існує відповідний драйвер/модуль.
+3. **Драйвер прив'язаний** — драйвер справді приєднаний до пристрою в запущеному live-середовищі.
+4. **Firmware завантажено** — потрібний runtime firmware був доступний, і ядро не повідомило про помилку завантаження. Це відрізняється від підтримки оновлення firmware пристрою.
+5. **Функцію перевірено** — пройшов змістовний тест конкретної функції (наприклад, встановлено лінк, активний режим дисплея, аудіо-ендпоінт перелічено й перевірено).
 
-A real-hardware report from another machine is a sixth, external evidence type. It supports confidence but does not prove that the current machine works.
+Звіт із реального заліза з іншої машини — це шостий, зовнішній тип доказів. Він підвищує впевненість, але не доводить, що поточна машина працює.
 
-## Candidate inventory
+## Інвентар кандидатів
 
-| Candidate | What it contributes | Limitations / risks | Initial WSM position |
+| Кандидат | Що дає | Обмеження / ризики | Початкова позиція WSM |
 | --- | --- | --- | --- |
-| [hw-probe](https://github.com/linuxhw/hw-probe) | Full hardware snapshot, collected logs, analysis of operability, suggestions for kernel versions/drivers via Linux Hardware Database and LKDDb. Supports a local probe workflow and several packaging formats. | The documented upload flow is explicit (-upload) but collection can include sensitive machine details. Its own privacy text says redaction is best-effort and uploads salted hashes of selected identifiers. The optional -check path runs benchmarks/sanity tests (dd, hdparm, memtester, glxgears); these are not suitable as an automatic installer preflight. Its status analysis is not equivalent to WSM's per-function validation. | **Strong optional integration candidate** for local diagnostics / saved report, after a privacy and offline audit. Never invoke upload or the benchmark checks by default. |
-| [openSUSE hwinfo / libhd](https://github.com/openSUSE/hwinfo) | Mature hardware probing library and CLI; used by YaST and emits detailed bus/device information including IDs, sysfs paths, module aliases and driver status. GPL-2.0. | Detailed human-readable output is not automatically a stable WSM API. Need to validate output modes, build footprint and whether linking libhd is preferable to consuming its CLI output. | **Strong inventory candidate**; compare its structured output/API against reading sysfs directly before selecting. |
-| [lshw](https://ezix.org/project/wiki/HardwareLiSter) | Broad hardware inventory arranged as a tree; provides text, HTML, XML and JSON output and can combine platform, bus, storage, network and memory descriptions. | Root privileges provide more detail. JSON may include sensitive identifiers (serials, MACs); output needs strict redaction. Inventory labels such as UNCLAIMED are hints, not proof of a missing driver or a broken device. | **Optional cross-check / support-bundle source**; do not make it the canonical schema or require it in the minimal live image. |
-| [inxi](https://codeberg.org/smxi/inxi) | Human-readable overview of Linux/BSD platform, hardware and runtime details; useful for support workflows. | Presentation-oriented output is not a stable machine contract and may be distro/version-sensitive. | **Human-readable diagnostic fallback only**, not the primary collector. |
-| Linux kernel sysfs, PCI/USB IDs, modaliases and driver symlinks | The running kernel's authoritative view of currently enumerated devices and actual driver binding; available without an online database. | Does not by itself explain all capabilities or guarantee that the device's higher-level function works. Device enumeration depends on the current kernel and boot environment. | **Required baseline** for WSM's own read-only collector. Prefer kernel interfaces over fragile parsing of lspci prose where possible. |
-| [systemd hwdb](https://www.freedesktop.org/software/systemd/man/latest/hwdb.html) / systemd-hwdb | A local key/value database matching modalias-like keys to udev properties; can enrich device identity. | It is not a complete kernel driver-support database and does not prove driver binding or functionality. The compiled database and command are tied to the systemd/udev environment; WSM must not assume the same tool is present in every backend/live image. | **Optional enrichment source** when available. Keep the normalized WSM model independent of systemd. |
-| [Linux FWCTL](https://docs.kernel.org/userspace-api/fwctl/index.html) | Kernel-mediated, per-device firmware RPC transport; sysfs discovery and `FWCTL_INFO` can describe available firmware interface metadata. Vendor tools can expose selected device queries without legacy raw PCI or `/dev/mem` paths. | RPC formats and effects remain driver/device-specific. Scopes include configuration/flash access and debug writes; some operations can taint the kernel or require `CAP_SYS_RAWIO`. Presence or a query result does not establish general compatibility. | **Optional expert/service integration only** after a per-RPC allowlist and explicit consent. No FWCTL RPC in automatic preflight. |
-| [LKDDb](https://github.com/cateee/lkddb) | Database generated from Linux kernel source describing hardware IDs, relevant kernel config symbols, driver names and kernel versions. Text output can be processed automatically. Repository contains GPL-2.0 and GPL-3.0 licensing material. | A kernel-source/config mapping is not proof that the running kernel enabled the driver, that a module is packaged, or that firmware/functionality works. Data must be pinned and its license/provenance reviewed before redistribution. | **Reference/index candidate** for driver-candidate explanations. Preserve source revision and distinguish its evidence from live observations. |
-| [Linux Community Hardware TestDays](https://github.com/linuxhw/TestDays) | Community collection of hardware probes associated with released and upcoming distributions; repository is CC-BY-4.0 and includes real hardware reports. | Coverage is voluntary, uneven and time-dependent. A report for a similar device or distro is not a guaranteed match for the exact board revision, kernel, firmware or peripheral combination. | **External evidence source** for confidence and research links; do not turn absence of a report into incompatibility. Attribute reused data and observe the license. |
-| [fwupd](https://github.com/fwupd/fwupd) + [LVFS](https://lvfs.readthedocs.io/en/latest/intro.html) | Identifies devices supported by fwupd plugins and provides signed metadata/cabinet distribution for non-volatile device firmware updates. LVFS requires explicit user consent for applying updates. | Not a universal hardware-support database and not the source for firmware blobs loaded by Linux drivers at runtime. Firmware updates may stage data in the EFI System Partition and reboot into an update path. | **Optional post-install firmware-management integration**. Preflight may read device/update availability; never perform updates during installation. |
-| [libdisplay-info](https://gitlab.freedesktop.org/emersion/libdisplay-info), [edid-decode](https://git.linuxtv.org/v4l-utils.git/about/) and DRM/KMS sysfs | libdisplay-info 0.4.0 adds DisplayID v1 Type IV timings and DisplayID v2 CTA-861 blocks; edid-decode remains a useful reference/diagnostic CLI; DRM/KMS supplies live connector and mode state. | CVE-2026-112271 and CVE-2026-112272 document out-of-bounds reads in DisplayID v1/v2 parsing through 0.4.0, with possible DoS. edid-decode output format is not guaranteed stable. EDID is advertised capability, not functional pass. | **Parser adoption is conditional on verified fix/backport**; keep it optional and unprivileged. Inspect drm_info's linked libdisplay-info version, and sanitize EDID/base64 fields. Preserve KMS facts separately. |
-| [Debian Installer firmware detection](https://d-i.debian.org/doc/installation-guide/nb.amd64/ch02s02.html) | Good installer precedent: missing firmware can be inferred from kernel logs and modalias information; matching firmware packages can be discovered on installation media or loaded from removable media. | Debian-specific implementation and package names cannot be copied as a WSM backend-neutral mechanism. | **Architecture reference** for offline firmware lookup and removable-media recovery. |
-| [h-node](https://h-node.org/) | Community catalogue relevant to hardware freedom and whether devices work with free software. | Its purpose and evidence model differ from live driver/firmware/function diagnostics. Data reuse and machine-readable interface/terms need review. | **Policy/reference-only candidate** until its data model, licensing and integration path are verified. |
+| [hw-probe](https://github.com/linuxhw/hw-probe) | Повний знімок обладнання, зібрані логи, аналіз працездатності, підказки щодо версій ядра/драйверів через Linux Hardware Database і LKDDb. Підтримує локальний робочий процес і кілька форматів пакування. | Задокументований потік вивантаження явний (-upload), але збір може містити чутливі дані машини. Його власний текст про приватність каже, що редагування — best-effort, а вивантаження містить солені хеші окремих ідентифікаторів. Необов'язковий шлях -check запускає бенчмарки й перевірки на кшталт dd, hdparm, memtester, glxgears; вони не придатні як автоматичний preflight інсталятора. Його аналіз стану не еквівалентний пофункційній валідації WSM. | **Сильний кандидат на необов'язкову інтеграцію** для локальної діагностики й збереженого звіту — після аудиту приватності й офлайновості. Ніколи не викликати вивантаження чи перевірки-бенчмарки за замовчуванням. |
+| [openSUSE hwinfo / libhd](https://github.com/openSUSE/hwinfo) | Зріла бібліотека й CLI зондування обладнання; використовується YaST і видає детальну інформацію про шини й пристрої, включно з ідентифікаторами, шляхами sysfs, аліасами модулів і станом драйвера. GPL-2.0. | Детальний людиночитний вивід автоматично не є стабільним API WSM. Треба перевірити режими виводу, розмір збірки і те, чи краще лінкувати libhd, ніж споживати вивід CLI. | **Сильний кандидат на інвентаризацію**; порівняти його структурований вивід/API із прямим читанням sysfs перед вибором. |
+| [lshw](https://ezix.org/project/wiki/HardwareLiSter) | Широка інвентаризація обладнання у вигляді дерева; дає текстовий, HTML, XML і JSON вивід і може поєднувати опис платформи, шин, носіїв, мережі й пам'яті. | Привілеї root дають більше деталей. JSON може містити чутливі ідентифікатори (серійні номери, MAC); вивід потребує строгого редагування. Мітки на кшталт UNCLAIMED — це підказки, а не доказ відсутнього драйвера чи зламаного пристрою. | **Необов'язкова перехресна перевірка / джерело support-bundle**; не робити його канонічною схемою і не вимагати в мінімальному live-образі. |
+| [inxi](https://codeberg.org/smxi/inxi) | Людиночитний огляд платформи, обладнання й runtime-деталей Linux/BSD; корисний для підтримки. | Вивід, орієнтований на презентацію, не є стабільним машинним контрактом і може залежати від дистрибутива й версії. | **Лише людиночитний діагностичний запасний варіант**, не основний колектор. |
+| Ядро Linux: sysfs, PCI/USB IDs, modaliases і символьні посилання драйверів | Авторитетний погляд запущеного ядра на поточні пристрої й фактичну прив'язку драйверів; доступний без онлайн-бази. | Сам по собі не пояснює всі можливості й не гарантує, що вища функція пристрою працює. Перелічення пристроїв залежить від поточного ядра й середовища завантаження. | **Обов'язковий базовий рівень** для власного read-only колектора WSM. Де можливо, надавати перевагу інтерфейсам ядра над крихким розбором тексту lspci. |
+| [systemd hwdb](https://www.freedesktop.org/software/systemd/man/latest/hwdb.html) / systemd-hwdb | Локальна база ключ/значення, що зіставляє ключі на кшталт modalias із властивостями udev; може збагатити ідентичність пристрою. | Це не повна база підтримки драйверів ядра і не доказ прив'язки драйвера чи працездатності. Скомпільована база й команда прив'язані до середовища systemd/udev; WSM не має припускати, що той самий інструмент є в кожному backend-і чи live-образі. | **Необов'язкове джерело збагачення**, коли доступне. Нормалізована модель WSM мусить лишатися незалежною від systemd. |
+| [Linux FWCTL](https://docs.kernel.org/userspace-api/fwctl/index.html) | Опосередкований ядром, по-пристроєвий транспорт firmware-RPC; виявлення через sysfs і `FWCTL_INFO` можуть описати доступні метадані інтерфейсу firmware. Вендорські інструменти можуть відкривати окремі запити до пристрою без застарілих шляхів сирого PCI чи `/dev/mem`. | Формати RPC і ефекти лишаються специфічними для драйвера й пристрою. Обсяги включають доступ до конфігурації й флешу та debug-записи; окремі операції можуть «забруднювати» ядро (taint) або вимагати `CAP_SYS_RAWIO`. Наявність чи результат запиту не встановлює загальну сумісність. | **Лише необов'язкова експертна/сервісна інтеграція** після allowlist на рівні RPC і явної згоди. Жодного FWCTL RPC в автоматичному preflight. |
+| [LKDDb](https://github.com/cateee/lkddb) | База, згенерована з джерел ядра Linux, що описує ідентифікатори обладнання, відповідні символи конфігурації ядра, назви драйверів і версії ядра. Текстовий вивід можна обробляти автоматично. Репозиторій містить матеріали під GPL-2.0 і GPL-3.0. | Зіставлення джерела/конфігурації ядра не є доказом, що запущене ядро увімкнуло драйвер, що модуль спаковано або що firmware/функція працює. Дані треба фіксувати, а їхню ліцензію й походження перевіряти перед розповсюдженням. | **Кандидат на довідник/індекс** для пояснення кандидатних драйверів. Зберігати ревізію джерела й відрізняти його докази від живих спостережень. |
+| [Linux Community Hardware TestDays](https://github.com/linuxhw/TestDays) | Спільнотна збірка апаратних зондів, пов'язаних із випущеними й майбутніми дистрибутивами; репозиторій під CC-BY-4.0 і містить звіти з реального заліза. | Покриття добровільне, нерівномірне й залежить від часу. Звіт для схожого пристрою чи дистрибутива не є гарантованим збігом для конкретної ревізії плати, ядра, firmware чи комбінації периферії. | **Зовнішнє джерело доказів** для впевненості й дослідницьких посилань; не перетворювати відсутність звіту на несумісність. Зазначати авторство використаних даних і дотримуватися ліцензії. |
+| [fwupd](https://github.com/fwupd/fwupd) + [LVFS](https://lvfs.readthedocs.io/en/latest/intro.html) | Визначає пристрої, які підтримують плагіни fwupd, і надає підписану метадану/розповсюдження cabinet для оновлення енергонезалежного firmware пристроїв. LVFS вимагає явної згоди користувача на застосування оновлень. | Це не універсальна база підтримки обладнання і не джерело firmware-блобів, які драйвери Linux завантажують у runtime. Оновлення firmware можуть розміщувати дані в EFI System Partition і перезавантажуватися в шлях оновлення. | **Необов'язкова інтеграція керування firmware після встановлення**. Preflight може читати доступність пристрою/оновлення; ніколи не виконувати оновлення під час встановлення. |
+| [libdisplay-info](https://gitlab.freedesktop.org/emersion/libdisplay-info), [edid-decode](https://git.linuxtv.org/v4l-utils.git/about/) і DRM/KMS sysfs | libdisplay-info 0.4.0 додає таймінги DisplayID v1 Type IV і блоки DisplayID v2 CTA-861; edid-decode лишається корисним довідковим/діагностичним CLI; DRM/KMS дає живий стан роз'ємів і режимів. | CVE-2026-112271 і CVE-2026-112272 документують читання за межами буфера в розборі DisplayID v1/v2 до 0.4.0 включно, з можливим DoS. Формат виводу edid-decode не гарантовано стабільний. EDID — це заявлена можливість, а не пройдена функція. | **Впровадження парсера умовне — лише після перевіреного виправлення чи бекпорту**; тримати його необов'язковим і непривілейованим. Перевіряти, яку версію libdisplay-info лінкує drm_info, і санітизувати поля EDID/base64. Факти KMS зберігати окремо. |
+| [Виявлення firmware в інсталяторі Debian](https://d-i.debian.org/doc/installation-guide/nb.amd64/ch02s02.html) | Добрий прецедент для інсталятора: відсутність firmware можна вивести з логів ядра й інформації modalias; відповідні пакунки firmware можна знайти на носії встановлення або завантажити зі змінного носія. | Реалізація й назви пакунків специфічні для Debian і не можуть бути скопійовані як backend-нейтральний механізм WSM. | **Архітектурний орієнтир** для офлайнового пошуку firmware і відновлення зі змінного носія. |
+| [h-node](https://h-node.org/) | Спільнотний каталог, дотичний до свободи обладнання й до того, чи працюють пристрої з вільним програмним забезпеченням. | Його призначення й модель доказів відрізняються від живих діагностик драйвера/firmware/функції. Повторне використання даних, машинно-читаний інтерфейс і умови потребують перевірки. | **Лише кандидат для політики/довідки**, доки не перевірені модель даних, ліцензування й шлях інтеграції. |
 
 ## Найновіше українське доповнення
 
-Актуальні upstream-джерела станом на 25.11.2026, включно з hwloc 2.16.0, libdisplay-info 0.4.0, drm_info 2.10.0, PCIe AER counters, devlink health та межами VKMS/IGT, зібрані в окремому [українському доповненні](UPSTREAM-TOOLING-ADDENDUM-2026-11-25.md). Воно також фіксує privacy, read-only межі та вимогу не заявляти наявність пакунків у WSM closure до перевірки за pinned channel lock (#39).
+Актуальні upstream-джерела станом на 25.11.2026, включно з hwloc 2.16.0, libdisplay-info 0.4.0, drm_info 2.10.0, лічильниками PCIe AER, devlink health і межами VKMS/IGT, зібрані в окремому [українському доповненні](UPSTREAM-TOOLING-ADDENDUM-2026-11-25.md). Воно також фіксує приватність, read-only межі й вимогу не заявляти наявність пакунків у closure WSM до перевірки за pinned channel lock ([#39](https://github.com/juv4uk/wsm-desktop/issues/39)).
 
-## Key findings that affect implementation
+## Ключові висновки, що впливають на реалізацію
 
-### hw-probe should be optional and privacy-gated
+### hw-probe має бути необов'язковим і під контролем приватності
 
-The upstream README documents version **1.6.6** in the inspected snapshot and supports local collection as well as upload. The upload flow explicitly uses -upload; WSM must not pass that option implicitly. The README states that redaction is best-effort, so WSM must inspect and sanitize a local report independently before allowing any export. Its optional -check path includes performance/sanity tests; do not call it from the installer preflight.
+Upstream README у перевіреному зрізі документує версію **1.6.6** і підтримує як локальний збір, так і вивантаження. Потік вивантаження явно використовує -upload; WSM не повинен передавати цю опцію неявно. README зазначає, що редагування чутливих даних — best-effort, тому WSM мусить самостійно оглянути й санітизувати локальний звіт, перш ніж дозволити будь-який експорт. Його необов'язковий шлях -check містить тести продуктивності й перевірки; не викликати його з preflight інсталятора.
 
-Upstream license expression in the inspected README: **LGPL-2.1-or-later OR BSD-4-Clause**. A packaging/adoption decision must record which license path WSM relies on and preserve the required notices.
+Вираз ліцензії в перевіреному README: **LGPL-2.1-or-later OR BSD-4-Clause**. Рішення про пакування чи впровадження мусить зафіксувати, на який саме ліцензійний шлях спирається WSM, і зберегти потрібні повідомлення.
 
-### Prefer live kernel facts over a web lookup
+### Надавати перевагу живим фактам ядра над веб-пошуком
 
-For the current machine, the running kernel's sysfs view can establish what it discovered, which driver is bound, and which module alias is exposed. A database such as LKDDb can explain whether a driver may exist in a given kernel source/version, but cannot override contradictory live evidence.
+Для поточної машини погляд запущеного ядра через sysfs може встановити, що воно виявило, який драйвер прив'язаний і який аліас модуля доступний. База на кшталт LKDDb може пояснити, чи може існувати драйвер у певному джерелі/версії ядра, але не може переважити суперечливі живі докази.
 
-### Firmware has two different meanings
+### Firmware має два різні значення
 
-- **Runtime driver firmware**: blobs such as files loaded from the system firmware search paths while a kernel driver initializes. Preflight checks availability and kernel log errors; package naming and redistribution policy are backend-specific.
-- **Device firmware update**: new firmware written into non-volatile device memory, often via fwupd/LVFS. This is a separate maintenance workflow and must never run automatically during OS installation.
+- **Runtime firmware драйвера**: блоби, як-от файли, що завантажуються з системних шляхів пошуку firmware під час ініціалізації драйвера ядра. Preflight перевіряє доступність і помилки в логах ядра; назви пакунків і політика розповсюдження залежать від backend-а.
+- **Оновлення firmware пристрою**: новий firmware, записаний в енергонезалежну пам'ять пристрою, часто через fwupd/LVFS. Це окремий робочий процес обслуговування, і він ніколи не повинен запускатися автоматично під час встановлення ОС.
 
-### Display compatibility is a combination
+### Сумісність дисплея — це комбінація
 
-WSM should capture at least:
-- GPU device identity and the bound DRM driver;
-- active DRM connectors and connected/disconnected state;
-- EDID identity and advertised modes;
-- current active mode, when available;
-- which GPU/connector is driving the display.
+WSM має фіксувати щонайменше:
 
-An EDID mode list alone is not proof that the whole GPU-output-cable-monitor path works at the requested refresh rate.
+- ідентичність GPU-пристрою й прив'язаний DRM-драйвер;
+- активні DRM-роз'єми та стан підключення;
+- ідентичність з EDID і заявлені режими;
+- поточний активний режим, коли доступний;
+- який GPU/роз'єм керує дисплеєм.
 
-## Proposed first live-image toolset
+Сам лише список режимів з EDID не є доказом, що весь шлях GPU—вихід—кабель—монітор працює на заявленій частоті оновлення.
 
-This is a **candidate set to validate**, not an adopted package manifest:
+## Пропонований перший набір інструментів live-образу
 
-1. **Kernel sysfs + udev/modalias** as the baseline observation layer.
-2. **One full inventory tool**: compare hwinfo with direct sysfs parsing; avoid maintaining two competing hardware identities.
-3. **lspci and lsusb** as familiar diagnostics/fallbacks, not the canonical schema source.
-4. **edid-decode** for monitor EDID details, paired with DRM/KMS state.
-5. **A read-only kernel-log collector** for firmware/driver initialization failures, with strict redaction.
-6. **Optional hw-probe integration** for a richer local support bundle, with upload and additional tests disabled.
-7. **Pinned LKDDb/TestDays references** for additional evidence, with licenses and freshness recorded.
-8. **Optional fwupd query** only for identifying device firmware-management capability, not flashing.
+Це **набір кандидатів для перевірки**, а не прийнятий маніфест пакунків:
 
-The smallest baseline must still function without Internet access and without any optional tool installed. The WSM report should record unavailable collectors as not-available, not fail the entire preflight.
+1. **sysfs ядра + udev/modalias** як базовий рівень спостереження.
+2. **Один інструмент повної інвентаризації**: порівняти hwinfo з прямим розбором sysfs; уникати підтримки двох конкуруючих ідентичностей обладнання.
+3. **lspci і lsusb** як звичні діагностики/запасні варіанти, а не джерело канонічної схеми.
+4. **edid-decode** для деталей EDID монітора в парі зі станом DRM/KMS.
+5. **Read-only колектор логів ядра** для збоїв ініціалізації firmware/драйверів зі строгим редагуванням.
+6. **Необов'язкова інтеграція hw-probe** для багатшого локального support-bundle з вимкненим вивантаженням і додатковими тестами.
+7. **Зафіксовані посилання LKDDb/TestDays** для додаткових доказів із записаними ліцензіями й свіжістю.
+8. **Необов'язковий запит fwupd** лише для визначення здатності керувати firmware пристрою, не для прошивання.
 
-## Backend packaging status
+Найменший базовий рівень мусить працювати без доступу до інтернету і без жодного необов'язкового інструмента. Звіт WSM має записувати недоступні колектори як `not-available`, а не провалювати весь preflight.
 
-### Nixpkgs — preliminary package-index evidence
+## Стан пакування в backend-ах
 
-A third-party Nixpkgs package index snapshot generated on **2026-10-17** reports:
+### Nixpkgs — попередні докази з індексу пакунків
 
-- `hwinfo` 26.0, GPL-2.0-only, from `pkgs/by-name/hw/hwinfo/package.nix`.
-- `hw-probe` 1.6.6, license options LGPL-2.1 and BSD-4-Clause, from `pkgs/tools/system/hw-probe/default.nix`.
-- The indexed `hw-probe` derivation has a broad runtime/input set (39 dependencies in that snapshot), including `hwinfo` and a number of optional diagnostic utilities. This reinforces the need to test its live-image footprint and avoid invoking all checks automatically.
+Знімок стороннього індексу пакунків Nixpkgs, згенерований **2026-10-17**, повідомляє:
 
-These are package-index observations, not a build result. The index identifies a shortened nixpkgs revision (`e7fccb1ad3ed`); the exact derivation and substituter/build result must be checked against the Nixpkgs revision actually pinned by the local experiment. Sources: [hwinfo package index](https://mynixos.com/nixpkgs/package/hwinfo), [hw-probe package index](https://nixpkgs.fyi/package/hw-probe), [Nixpkgs search guidance](https://wiki.nixos.org/wiki/Searching_packages).
+- `hwinfo` 26.0, GPL-2.0-only, з `pkgs/by-name/hw/hwinfo/package.nix`.
+- `hw-probe` 1.6.6, варіанти ліцензії LGPL-2.1 і BSD-4-Clause, з `pkgs/tools/system/hw-probe/default.nix`.
+- Проіндексована деривація `hw-probe` має широкий runtime/input набір (39 залежностей у тому знімку), включно з `hwinfo` і низкою необов'язкових діагностичних утиліт. Це підсилює потребу перевірити її вагу в live-образі й не викликати всі перевірки автоматично.
 
-### GNU Guix — unresolved
+Це спостереження з індексу пакунків, а не результат збірки. Індекс вказує скорочену ревізію nixpkgs (`e7fccb1ad3ed`); точну деривацію й результат збірки/підстановки треба перевіряти проти тієї ревізії Nixpkgs, яку реально фіксує локальний експеримент. Джерела: [індекс пакунка hwinfo](https://mynixos.com/nixpkgs/package/hwinfo), [індекс пакунка hw-probe](https://nixpkgs.fyi/package/hw-probe), [поради щодо пошуку в Nixpkgs](https://wiki.nixos.org/wiki/Searching_packages).
 
-No authoritative package presence/build result has been established in this research pass. Do not infer that a package is absent merely because an indexed web search did not return it. The local experiment should check the exact pinned Guix channel using its own package index and report package name/version/build status.
+### GNU Guix — не визначено
 
-Issue [#4](https://github.com/juv4uk/wsm-desktop/issues/4) tracks the exact per-backend package audit. The local Nix/Guix experiment should report its actual pinned revisions and package results there rather than changing the current environment.
+У цьому проході дослідження не встановлено авторитетної наявності пакунка чи результату збірки. Не робіть висновок, що пакунок відсутній, лише тому що проіндексований веб-пошук його не повернув. Локальний експеримент має перевірити точний зафіксований канал Guix за допомогою власного індексу пакунків і повідомити назву/версію/стан збірки.
 
-## Privacy defaults for WSM
+Завдання [#4](https://github.com/juv4uk/wsm-desktop/issues/4) відстежує точний по-бекендний аудит пакунків. Локальний експеримент Nix/Guix має повідомляти там свої фактичні зафіксовані ревізії й результати пакунків, а не змінювати поточне середовище.
 
-- No hardware report upload by default.
-- No automatic publication of serial numbers, MAC addresses, UUIDs, hostnames, usernames, IP addresses or storage identifiers.
-- Separate a private local report from a deliberately sanitized export.
-- Explain before export exactly what categories of information will be sent.
-- Do not assume upstream redaction covers every identifier or every log format.
-- Keep reports local unless the user explicitly opts in.
+## Типові налаштування приватності WSM
 
-## Sources inspected
+- Жодного вивантаження звіту про обладнання за замовчуванням.
+- Жодної автоматичної публікації серійних номерів, MAC-адрес, UUID, імен хостів, імен користувачів, IP-адрес чи ідентифікаторів носіїв.
+- Відокремлювати приватний локальний звіт від навмисно санітизованого експорту.
+- Перед експортом пояснювати, які саме категорії інформації буде надіслано.
+- Не припускати, що upstream-редагування покриває кожен ідентифікатор чи кожен формат логів.
+- Тримати звіти локально, доки користувач явно не погодиться.
 
-- [hw-probe README](https://github.com/linuxhw/hw-probe) — scope, version 1.6.6 in inspected page, operability states, check behavior, privacy and license.
-- [openSUSE hwinfo README](https://github.com/openSUSE/hwinfo) — libhd/CLI, YaST use, device fields and GPL-2.0.
-- [LKDDb repository](https://github.com/cateee/lkddb) — hardware IDs, Kconfig symbols, driver names, kernel versions and license files.
-- [Linux Hardware TestDays](https://github.com/linuxhw/TestDays) — real-machine scope, supported distro report structure and CC-BY-4.0 license.
-- [systemd hwdb](https://www.freedesktop.org/software/systemd/man/latest/hwdb.html) — modalias-like matching and local database semantics.
-- [systemd-hwdb](https://www.freedesktop.org/software/systemd/man/latest/systemd-hwdb.html) — query/update interface.
-- [libdisplay-info](https://gitlab.freedesktop.org/emersion/libdisplay-info) — EDID/DisplayID library; its public API is explicitly not yet stable. Also see the 2026 DisplayID parser advisories [CVE-2026-112271](https://access.redhat.com/security/cve/cve-2026-112271) and [CVE-2026-112272](https://access.redhat.com/security/cve/cve-2026-112272); do not add vulnerable 0.4.0 without a verified fix/backport.
-- [v4l-utils edid-decode](https://git.linuxtv.org/v4l-utils.git/about/) — current upstream location after the standalone repository was retired in November 2024.
-- [Debian Installer: devices requiring firmware](https://d-i.debian.org/doc/installation-guide/nb.amd64/ch02s02.html) — kernel-log/modalias detection and removable-media handling.
-- [LVFS introduction](https://lvfs.readthedocs.io/en/latest/intro.html) and [offline firmware](https://lvfs.readthedocs.io/en/latest/offline.html) — user-authorized device firmware updates and offline distribution options.
-- [Nixpkgs package search guidance](https://wiki.nixos.org/wiki/Searching_packages) — package availability must be checked against a selected branch/revision, not assumed from an unpinned web index.
+## Перевірені джерела
 
-## Open questions
+- [hw-probe README](https://github.com/linuxhw/hw-probe) — обсяг, версія 1.6.6 у перевіреній сторінці, стани працездатності, поведінка перевірок, приватність і ліцензія.
+- [openSUSE hwinfo README](https://github.com/openSUSE/hwinfo) — libhd/CLI, використання в YaST, поля пристроїв і GPL-2.0.
+- [Репозиторій LKDDb](https://github.com/cateee/lkddb) — ідентифікатори обладнання, символи Kconfig, назви драйверів, версії ядра й файли ліцензій.
+- [Linux Hardware TestDays](https://github.com/linuxhw/TestDays) — обсяг реальних машин, структура звітів підтримуваних дистрибутивів і ліцензія CC-BY-4.0.
+- [systemd hwdb](https://www.freedesktop.org/software/systemd/man/latest/hwdb.html) — зіставлення на кшталт modalias і семантика локальної бази.
+- [systemd-hwdb](https://www.freedesktop.org/software/systemd/man/latest/systemd-hwdb.html) — інтерфейс запитів/оновлення.
+- [libdisplay-info](https://gitlab.freedesktop.org/emersion/libdisplay-info) — бібліотека EDID/DisplayID; її публічний API явно ще не стабільний. Також див. попередження 2026 року про парсер DisplayID [CVE-2026-112271](https://access.redhat.com/security/cve/cve-2026-112271) і [CVE-2026-112272](https://access.redhat.com/security/cve/cve-2026-112272); не додавати вразливу 0.4.0 без перевіреного виправлення чи бекпорту.
+- [v4l-utils edid-decode](https://git.linuxtv.org/v4l-utils.git/about/) — поточне upstream-розташування після виведення окремого репозиторію в листопаді 2024.
+- [Debian Installer: пристрої, що потребують firmware](https://d-i.debian.org/doc/installation-guide/nb.amd64/ch02s02.html) — виявлення через логи ядра й modalias та робота зі змінним носієм.
+- [Вступ до LVFS](https://lvfs.readthedocs.io/en/latest/intro.html) і [офлайновий firmware](https://lvfs.readthedocs.io/en/latest/offline.html) — оновлення firmware пристроїв із згоди користувача й варіанти офлайнового розповсюдження.
+- [Поради щодо пошуку пакунків Nixpkgs](https://wiki.nixos.org/wiki/Searching_packages) — наявність пакунка треба перевіряти проти вибраної гілки/ревізії, а не припускати з незафіксованого веб-індексу.
 
-1. Which inventory source has the best structured output and smallest runtime footprint for the selected live image?
-2. Should libdisplay-info be the WSM EDID adapter despite its currently unstable public API, or should v1 preserve raw EDID and keep parsed fields optional?
-3. Can lshw provide useful cross-checks without excessive live-image size or sensitive-data exposure?
-4. Can hwinfo/libhd be packaged without dragging in an unsuitable dependency stack?
-5. Does a usable offline form of LKDDb data exist with a redistribution-compatible license and manageable size?
-6. Which TestDays data can WSM reference without copying it, and how should dated reports be matched to exact device IDs and kernel versions?
-7. What exact packages and versions are available in pinned Nixpkgs and Guix revisions used by the experiments?
-8. Which hardware functions can be safely tested in a live installer without stress, writes, firmware updates or user disruption?
+## Відкриті питання
+
+1. Яке джерело інвентаризації має найкращий структурований вивід і найменшу вагу в runtime для вибраного live-образу?
+2. Чи має libdisplay-info бути адаптером EDID у WSM попри нестабільний публічний API, чи v1 має зберігати сирий EDID і тримати розібрані поля необов'язковими?
+3. Чи може lshw дати корисні перехресні перевірки без надмірного розміру live-образу й без розкриття чутливих даних?
+4. Чи можна спакувати hwinfo/libhd, не втягнувши непридатний стек залежностей?
+5. Чи існує придатна офлайнова форма даних LKDDb із ліцензією, сумісною з розповсюдженням, і керованим розміром?
+6. Які дані TestDays WSM може цитувати без копіювання, і як зіставляти датовані звіти з точними ідентифікаторами пристроїв і версіями ядра?
+7. Які саме пакунки й версії доступні в зафіксованих ревізіях Nixpkgs і Guix, що їх використовують експерименти?
+8. Які апаратні функції можна безпечно перевірити в live-інсталяторі без стрес-тестів, записів, оновлень firmware чи перешкод користувачеві?
+
+---
+
+Англійський переклад цього документа: [UPSTREAM-TOOLING.en.md](UPSTREAM-TOOLING.en.md). Канонічною є українська версія.
