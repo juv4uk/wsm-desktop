@@ -22,11 +22,11 @@ STEPS = [
 
 
 class DryRunTests(unittest.TestCase):
-    def test_dry_run_returns_skipped_results_and_prints_intent_only(self) -> None:
+    def test_dry_run_returns_not_run_results_and_prints_intent_only(self) -> None:
         output: list[str] = []
         results = execute(STEPS, "/dev/nvme0n1", dry_run=True, out=output.append)
         self.assertEqual(len(results), len(STEPS))
-        self.assertTrue(all(result.status == "skipped" for result in results))
+        self.assertTrue(all(result.status == "not-run" for result in results))
         self.assertTrue(all("not executed" in result.detail for result in results))
         self.assertEqual(len(output), len(STEPS))
         self.assertTrue(any("DESTRUCTIVE" in line for line in output))
@@ -39,7 +39,7 @@ class DryRunTests(unittest.TestCase):
         output: list[str] = []
         arbitrary = [Step(["/bin/sh", "-c", "touch /tmp/not-run"], "untrusted preview")]
         results = execute(arbitrary, "/dev/nvme0n1", dry_run=True, out=output.append)
-        self.assertEqual(results[0].status, "skipped")
+        self.assertEqual(results[0].status, "not-run")
         self.assertIn("/bin/sh", output[0])
 
 
@@ -85,7 +85,7 @@ class PreviewValidationTests(unittest.TestCase):
     def test_sata_partition_naming_matches_target_disk(self) -> None:
         sata_step = [Step(["/usr/bin/mount", "/dev/sda1", "/mnt"], "mount root")]
         results = execute(sata_step, "/dev/sda", dry_run=True, out=lambda _: None)
-        self.assertEqual(results[0].status, "skipped")
+        self.assertEqual(results[0].status, "not-run")
 
     def test_non_step_item_is_rejected(self) -> None:
         with self.assertRaises(ExecutorError) as caught:
