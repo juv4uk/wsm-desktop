@@ -26,9 +26,11 @@
 ;;
 (use-modules (gnu)
              (gnu services shepherd)
+             ((gnu packages linux) #:prefix gnu-linux:)
              (gnu packages python)
              (gnu packages python-xyz)
              (gnu packages screen)
+             (gnu packages xorg)
              (guix build-system trivial)
              (guix gexp)
              ((guix licenses) #:prefix license:)
@@ -219,9 +221,31 @@
        (replace "nvidia-driver" nvidia-driver-580-fixed)))
     (properties `((driver . ,nvidia-driver-580-fixed)))))
 
+;; Ядро під конкретне залізо: починаємо з повного Nonguix linux 7.3.5, але
+;; `make localmodconfig LSMOD=...` вимикає всі in-tree модулі, яких немає у
+;; whitelist. Це прибирає nouveau/gma500/i915/SCSI-драйвери, які раніше
+;; з'їдали понад дві години компіляції, і лишає лише AHCI/NVMe/USB, Killer
+;; E2200 (alx), Realtek HDA, NVIDIA DRM-базу та virtio для QEMU TCG.
+;; Архітектура залишається x86-64 generic: ми не блокуємо завантаження на
+;; інших CPU, а невідоме залізо чесно потрапляє у verdict Unknown.
+(define wsm-linux-gp107
+  (gnu-linux:customize-linux
+   #:name "linux-wsm-gp107"
+   #:linux linux
+   #:modconfig (local-file "wsm-gp107.modconfig")
+   #:configs '()))
+
 (operating-system
   ;; Proprietary NVIDIA modules require the non-libre Linux kernel.
-  (kernel linux)
+  (kernel wsm-linux-gp107)
+  ;; Guix base-initrd hard-codes a generic module list (hid-apple, isci, ...).
+  ;; localmodconfig intentionally drops those, so name only modules that this
+  ;; hardware-targeted kernel actually ships. NVMe and ext4 are built in.
+  (initrd-modules
+   (list "ahci" "usb-storage" "uas" "usbhid" "hid-generic"
+         "virtio_pci" "virtio_balloon" "virtio_blk" "virtio_net"
+         "virtio_console" "virtio_scsi" "isofs" "squashfs"
+         "overlay" "nls_utf8" "alx"))
   (host-name "wsm-kde")
   (timezone "Europe/Kyiv")
   (locale "en_US.utf8")
@@ -229,7 +253,9 @@
   (bootloader (bootloader-configuration
                 (bootloader grub-bootloader)
                 (targets '("/dev/sdX"))))
-  (kernel-arguments (list "console=ttyS0,115200"))
+  (kernel-arguments (list "console=ttyS0,115200"
+                          "modprobe.blacklist=nouveau"
+                          "nvidia-drm.modeset=1"))
   (file-systems (cons (file-system
                         (device (file-system-label "my-root"))
                         (mount-point "/")

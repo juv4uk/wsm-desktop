@@ -114,4 +114,6 @@
            (auto-login "wsm"))
           config))))
 
-  (kernel-arguments '("console=ttyS0,115200" "console=tty1")))
+  ;; Linux routes /dev/console to the last console= entry. Keep serial last:
+  ;; boot smoke captures ttyS0, while kernel output still reaches tty1 as well.
+  (kernel-arguments '("console=tty1" "console=ttyS0,115200")))
