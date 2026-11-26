@@ -64,7 +64,7 @@ class ReleaseMetadataContractTests(unittest.TestCase):
         self.assertIn("no installation has completed", excluded)
         self.assertIn("verified bootable iso", excluded)
         self.assertIn("не доводить, що відповідний образ зібрано", RELEASE_NOTES)
-        self.assertIn("не є доказом повного wsm installer boot/install", RELEASE_NOTES.lower())
+        self.assertIn("не є доказом повного завантаження wsm installer або встановлення системи", RELEASE_NOTES.lower())
 
 
     def test_previous_iso_artifact_evidence_is_scoped_and_does_not_claim_boot(self) -> None:
