@@ -22,6 +22,24 @@
 
 not-assessed означає, що перевірки ще не було. unknown означає, що наявних даних недостатньо. Ні те, ні інше не означає ані успіх, ані помилку.
 
+## Зв'язок із evidence bundle WSM
+
+Цей manifest — каталог кандидатів і стадій інтеграції драйвера; він не є
+підтвердженням функціональної сумісності. Загальний контракт
+[`wsm-profile-evidence/2`](../HARDWARE-PROFILE-EVIDENCE.md) має іншу
+роль: прив'язує точні bytes hardware report і `profile.scm`, а кожен
+функціональний `pass`/`fail` — до окремого hashed functional-test
+artifact. Не зливайте ці схеми в одну й не підвищуйте статус manifest
+через сам факт наявності evidence bundle.
+
+Поточні H170 manifests навмисно лишаються `profile_status: draft`:
+channel lock не доводить package resolution/build; Windows PCI identity
+не доводить Linux binding; перелік candidate packages не доводить
+firmware в live rootfs/initrd; жоден functional test не позначений
+`pass`. Інтеграція з installer можлива лише після окремої реалізації
+та acceptance policy, що споживає обидва контракти.
+
+
 ## Початковий H170 target
 
 Фізичний профіль із juv4uk/wsm-os/docs/OWNER-HARDWARE-PROFILE.md, повторно перевірений 2026-09-02, описує Gigabyte H170-Gaming 3 / Intel Core i5-6400 / Intel HD Graphics 530 / NVIDIA GTX 1050 Ti Pascal / Killer E2200 / Kingston NVMe / Samsung SATA / HDA audio.
