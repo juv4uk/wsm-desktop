@@ -19,8 +19,8 @@
         "pulseaudio",
         "font-dejavu",
         "font-liberation",
-        "font-noto",
-        "font-noto-cjk"
+        "font-google-noto",
+        "font-google-noto-sans-cjk"
       ],
       "user_packages": []
     },

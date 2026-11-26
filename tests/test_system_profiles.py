@@ -123,15 +123,25 @@ class DesktopProfileTests(unittest.TestCase):
 
     def test_has_exactly_one_display_manager(self) -> None:
         self.assertIn("sddm-service-type", self.text)
+        self.assertIn("(gnu services xorg)", self.text)
         self.assertIn("(delete gdm-service-type)", self.text)
 
     def test_has_a_desktop_environment(self) -> None:
         self.assertIn("plasma-desktop-service-type", self.text)
 
-    def test_has_cyrillic_fonts(self) -> None:
-        for font in ("font-dejavu", "font-liberation", "font-noto"):
+    def test_has_cyrillic_fonts_from_the_locked_guix_font_api(self) -> None:
+        # These variable names are exported by gnu/packages/fonts.scm at the
+        # Guix commit pinned in channels.lock.scm.
+        for font in (
+            "font-dejavu",
+            "font-liberation",
+            "font-google-noto",
+            "font-google-noto-sans-cjk",
+        ):
             with self.subTest(font=font):
                 self.assertIn(font, self.text)
+        self.assertNotIn("font-noto-cjk", self.text)
+        self.assertNotIn("font-noto", self.text)
 
     def test_has_ukrainian_locale(self) -> None:
         self.assertIn("uk_UA.utf8", self.text)
@@ -193,6 +203,11 @@ class LiveProfileTests(unittest.TestCase):
         self.assertIn("wsm-tools", profile("live.scm"))
         self.assertIn("wsm-tools", (ROOT / "wsm" / "packages" / "wsm.scm").read_text(encoding="utf-8"))
 
+    def test_live_profile_uses_a_font_name_exported_by_the_locked_guix(self) -> None:
+        text = profile("live.scm")
+        self.assertIn("font-google-noto", text)
+        self.assertNotIn("font-noto", text)
+
 
 class PerformanceServicesTests(unittest.TestCase):
     def test_desktop_profile_pulls_the_performance_services(self) -> None:
@@ -221,6 +236,7 @@ class DesktopCompletenessTests(unittest.TestCase):
 
     def test_printing_is_configured(self) -> None:
         text = profile("desktop.scm")
+        self.assertIn("(gnu services cups)", text)
         self.assertIn("cups-service-type", text)
         # Without the web interface there is no way to add a network printer:
         # Guix configuration files are read-only, so cupsctl cannot help.
@@ -460,6 +476,8 @@ class HomeEnvironmentTests(unittest.TestCase):
         text = (ROOT / "systems" / "home.scm").read_text(encoding="utf-8")
         self.assertNotIn("home-pulseaudio-rtp", text)
         self.assertNotIn("pulseaudio-service-type", text)
+
+
     def test_home_profile_installs_the_kde_phase_two_marker(self) -> None:
         text = (ROOT / "systems" / "home.scm").read_text(encoding="utf-8")
         self.assertIn("(wsm packages wsm)", text)
