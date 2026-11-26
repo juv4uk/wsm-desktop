@@ -1,3 +1,5 @@
 # Один непорожній рядок із tag запитує одну збірку; рядки з # є коментарями.
 0.1.0-rc3-minimal-live
-# Повторна збірка після виправлення передачі локальних модулів у locked Guix inferior (PR #416).
+# Повторна RC3-збірка після load-path на обох рівнях і locale import (#439), read-back перевірка assets — #438.
+# Retry Minimal Live after #461: NetworkManager now owns DHCP; the removed Guix dhcp-client-service-type is no longer referenced.
+

@@ -62,7 +62,44 @@ firmware в live rootfs/initrd; жоден functional test не позначен
 
 - **Compatibility-шлях NVIDIA:** NVIDIA визначає Linux 580.x як останню Unix-гілку для Pascal ([строки підтримки](https://nvidia.custhelp.com/app/answers/detail/a_id/3142/kw/windows%20supported/related/1)). Для Pascal потрібен proprietary kernel-module flavor; відкриті NVIDIA kernel modules доступні лише для Turing і новіших поколінь ([офіційний посібник](https://docs.nvidia.com/datacenter/tesla/driver-installation-guide/610/kernel-modules.html)). Не підміняти цю залежність open-module пакетом.
 
+Станом на 2026-11-26 офіційна сторінка Linux 580.196.11 (реліз 23.11.2026) прямо перелічує GeForce GTX 1050 Ti у Supported Products: [NVIDIA 580.196.11](https://www.nvidia.com/en-us/drivers/details/285683/). Це лише product-list evidence; pinned Nonguix revision не означає, що package version дорівнює 580.196.11.
+
 Це лише upstream references. У профілях навмисно залишаються `package_resolution: not-assessed`, `kernel_config: not-assessed`, `runtime_binding: unknown`, `functional_validation: not-run` та невизначені license/redistribution. Наступний доказ — точний Guix package/closure і ABI на зафіксованому channel; після цього окремо потрібні image/rootfs/initrd inspection та фактичний тест. Не використовувати developer override як production acceptance.
+
+## Окремий шлях оцінювання та збірки Compatibility
+
+Compatibility не можна перевіряти через Free lock. Для нього є окремі Make targets,
+які завжди передають `channels/compatibility.lock.scm` до `guix time-machine`:
+
+| Команда | Що доводить | Чого не доводить |
+| --- | --- | --- |
+| `make describe-compatibility-lock` | Guix може розв'язати pinned Guix + Nonguix channels із перевіркою автентичності за замовчуванням | package resolution, build або роботу пристрою |
+| `make check-compatibility-eval` | structural lock policy, channel resolution та успішний `guix system build ... --dry-run` для `systems/live-compat.scm` | що derivations побудовані або образ завантажується |
+| `make build-compatibility-system` | повну побудову system derivation у Guix store | ISO image, BIOS/UEFI boot чи фізичну роботу NVIDIA |
+| `make image-live-compat` | побудову Compatibility ISO через той самий lock-aware `scripts/build_iso.sh`, із manifest та SHA-256 | BIOS/UEFI/QEMU acceptance або фізичну функціональність GPU |
+
+Приклад послідовності після commit у чистому checkout:
+
+```sh
+make describe-compatibility-lock
+make check-compatibility-eval
+make build-compatibility-system
+WSM_ISO_DIR="$PWD/build/compatibility-$(git rev-parse --short HEAD)" make image-live-compat
+```
+
+`scripts/build_iso.sh` відмовляється працювати з dirty worktree, повторно
+використовувати попередні output files або вимикати channel authentication.
+Для наступної спроби задавайте новий порожній `WSM_ISO_DIR`; не видаляйте
+попередні build logs до розбору результату.
+
+Ці targets навмисно **не входять** до `make check`, Free Minimal release workflow
+або default image target. Вони потребують Guix, часу та дискового місця для
+окремого opt-in Compatibility closure. Навіть успішний `build-compatibility-system`
+чи `image-live-compat` не змінює manifest status на functional pass:
+після build окремо потрібні BIOS/UEFI QEMU smoke, перевірка rootfs/initrd,
+а для твердження про GTX 1050 Ti — дозволена фізична перевірка на H170.
+Жодна з цих команд не запускає `guix system init`, не змінює фізичний диск,
+EFI/NVRAM або firmware хоста.
 
 ## Валідація
 

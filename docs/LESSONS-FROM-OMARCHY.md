@@ -201,8 +201,11 @@ JSON-масивом аргументів, який передається як `
 | Нерегулярні lock paths та runtime-directory validation (Omarchy #19998) | перед появою host-side lock API він мусить відхиляти symlink/FIFO/directory lock targets і перевіряти ownership та mode runtime directory; окремого WSM lock-file manager поки не виявлено | відповідного lock lifecycle та тестів наразі немає | `out-of-scope` | — |
 | `root=` втрачено під час kernel/package transaction (Omarchy #6951) | bootloader-конфіг генерує Guix System; WSM не пише `root=` сам | немає — WSM не має власного boot-кроку | `out-of-scope` | — |
 | LUKS recovery slot видалено при зміні ключа (Omarchy #14874) | шифрування не реалізоване | немає коду, який чіпає slots | `out-of-scope` | — |
+| Omarchy rollcall (#20107): функціональна перевірка не дорівнює інвентаризації | WSM збирає bus/sysfs inventory, driver binding та runtime-firmware facts; звіт локальний і не містить чутливих host identifiers | `functional_tests` навмисно порожній: немає незалежних Wi-Fi/Bluetooth/audio/mic/panel/backlight/touchpad/GPU-render/battery/service pass/fail/skip перевірок або розрізнення user-disabled skip | `partial` | `tests/test_hwcheck.py::test_inventory_separates_driver_binding_and_functional_tests`; `tests/test_hwcheck.py::test_report_is_local_and_does_not_include_sensitive_identifiers` |
+| Перехід simpledrm → апаратний DRM до запуску SDDM (Omarchy #20059) | У WSM desktop/live використовується GNU Shepherd; не копіювати systemd drop-in. Перед SDDM потрібен лише обґрунтований bounded readiness gate для DRM/udev, без фіксованого sleep і глобального `udevadm settle` | QEMU late-KMS і фізичний acceptance для стабільності seat, SDDM та first-boot autologin ще не виконані | `not-covered` | — |
 | Legacy/CSM multi-disk boot-order hand-off (Omarchy #20178) | BIOS layout створює `bios_grub`, але preview не доводить, що firmware після майбутнього встановлення стартує з цільового диска | немає двохдискового Legacy/CSM QEMU або physical acceptance | `not-covered` | — |
 | Міграція власних артефактів (`wsm-profile-evidence/2` → `/3`) | читач відмовляє на невідомій версії за іменем; плану міграції поки немає | тест: кожен наявний читач відмовляє на версії +1 і приймає поточну | `partial` | `tests/test_artifact_version_refusal.py::test_next_version_is_refused_by_name` |
+| Частково завантажені або змінені release assets (Omarchy #516) | реліз лишається draft до read-back перевірки точного набору файлів і SHA-256 | verifier відхиляє missing/extra/corrupt/path traversal/symlink assets | `covered` | `tests/test_verify_release_assets.py::test_valid_download_matches_local_bundle` |
 
 `out-of-scope` не означає «вирішено»: це означає, що коду, який міг би зламатися
 саме так, у WSM поки немає. Щойно з'явиться власний boot-крок, шифрування,
@@ -220,3 +223,116 @@ JSON-масивом аргументів, який передається як `
 [update process](https://github.com/omacom/omarchy/blob/quattro/docs/update-process.md),
 [migration guide](https://github.com/omacom/omarchy/blob/quattro/agents/skills/migrations.md),
 [Omarchy 4.0.1 security release](https://github.com/omacom/omarchy/releases/tag/v4.0.1).
+
+
+## Оновлення: Omarchy ISO pipeline, 24 листопада 2026
+
+У merge `omacom/omarchy-iso#516` команда зберегла повне стиснення, але
+розділила staging root image і фінальне пакування: root image готується в
+некомпресованому дереві, його копіювання у compressed btrfs volume
+паралелізується, а побудова root image перекривається в часі з live ISO.
+Переіндексація offline mirror повторно використовує вже синхронізовані package
+databases; initramfs та image packing використовують кілька потоків, а
+паралельні завантаження зросли з 5 до 16.
+
+Важливіше за прискорення — два дефекти, знайдені review-ботом і виправлені до
+merge: невдалий запуск потоку міг порушити cleanup, а шляхи з архіву могли
+вийти за межі тимчасового каталогу. Для WSM це окремі regression-вимоги:
+cleanup мусить працювати після часткової ініціалізації, а розпаковані шляхи
+мають залишатися всередині приватного temp root.
+
+**Що переносимо в WSM:** GitHub release спочатку створюється як draft,
+потім усі assets завантажуються назад із release, звіряються точна множина
+файлів і SHA-256, і лише після успішної перевірки draft публікується. Повторний
+запуск може відновити тільки draft, прив'язаний до того самого source commit;
+попередні assets цього draft спершу видаляються, щоб повторне завантаження не
+залишило зайвих файлів. Вже опублікований release або draft з іншим commit
+відхиляється. Так публічний tag не отримує часткових або неперевірених assets.
+
+**Що не переносимо буквально:** Arch/btrfs staging, mkarchiso та їхні
+compression flags. Guix має content-addressed store і derivation graph;
+паралелізація має спиратися на Guix dependency closure і вимірювання. До
+першого успішного image build не додаємо ще один шар конкурентного пакування:
+спершу потрібні baseline, однакові inputs, точний manifest і BIOS/UEFI
+acceptance.
+
+Джерела: [Omarchy upstream report, 24.11.2026](https://omarchyupstream.com/2026-11-24/iso-builds-parallelized-while-keeping-full-compression-6446f3c31fa1/),
+[omarchy-iso#516](https://github.com/omacom/omarchy-iso/pull/516),
+[GNU Guix time-machine manual](https://guix.gnu.org/manual/devel/en/guix.pdf).
+
+## Оновлення: Omarchy DRM hand-off перед SDDM, 25 листопада 2026
+
+Upstream PR [omacom/omarchy#20059](https://github.com/omacom/omarchy/pull/20059)
+було злито 25 листопада. Він описує race на системах без early KMS: SDDM
+може стартувати під час переходу від `simpledrm` до драйвера реальної GPU.
+Коли DRM-пристрій зникає і з'являється повторно, `CanGraphical` у logind
+короткочасно змінюється; SDDM може витратити одноразовий first-boot autologin,
+завершити helper і показати greeter замість автоматичного входу.
+
+Upstream виправлення використовує обмежене очікування з подіями udev:
+спершу чекає від'єднання simple-framebuffer, потім — появи й ініціалізації
+DRM card; коли вузла ще немає, слухає DRM udev events. Таймаути обмежують
+затримку на системах, де лишається simpledrm або немає робочого KMS. Це
+краще за фіксований sleep чи глобальний `udevadm settle`, який може чекати
+на сторонні coldplug-пристрої.
+
+**Що це означає для WSM:** наші desktop/live профілі запускають SDDM, але
+системний менеджер служб — GNU Shepherd, а не systemd. Тому systemd drop-in
+і shell helper з Omarchy переносити буквально не можна. Спочатку потрібен
+окремий acceptance-сценарій для late-KMS: перевірити, чи справді наш порядок
+запуску допускає гонку, чи стабільні DRM node та seat, і чи зберігається
+first-boot autologin. Якщо проблема відтворюється, реалізація має бути
+Shepherd-native, подієвою та bounded; відсутність апаратного драйвера мусить
+залишати працездатний консольний fallback.
+
+**Статус WSM — `not-covered`, не «дефект знайдено».** Поточні тести не
+відтворюють simpledrm → native DRM hand-off, а QEMU boot marker доводить лише
+досягнення системою marker service, не готовність графічного seat або SDDM.
+Для зміни статусу потрібні окремі behavioral/VM тести та перевірка на
+конфігурації з пізнім KMS; це не можна вивести з наявності SDDM чи DRM
+драйвера у package closure.
+
+## Оновлення: Omarchy rollcall і межа між inventory та функціональною перевіркою, 25 листопада 2026
+
+Upstream PR [omacom/omarchy#20107](https://github.com/omacom/omarchy/pull/20107)
+додало команду `omarchy rollcall`: локальний read-only звіт для Wi-Fi, Bluetooth,
+аудіовиходу, вбудованого мікрофона, панелі й підсвічування, touchpad, GPU
+rendering, батареї та невдалих системних служб. Кожна перевірка має окремий
+результат `pass`, `fail` або `skip` із причиною; відсутнє обладнання не є
+помилкою, а вимкнене користувачем радіо або відсутня на цьому типі машини
+функція не перетворюється на негативний verdict.
+
+Ключовий прийом — визначати присутність із bus/device topology, а не з
+інтерфейсу, який з'являється лише після успішного завантаження драйвера.
+Наприклад, Wi-Fi адаптер без мережевого інтерфейсу все одно є присутнім
+пристроєм і може бути позначений як несправний, а не відсутній. Команда не
+потребує root, не змінює стан пристроїв, виводить JSON і редагує host name,
+username та MAC-адреси. У PR окремо відкладені повторні перевірки після
+suspend/resume та централізоване збирання звітів.
+
+**Що WSM уже має:** `wsm-hwcheck` читає sysfs/procfs, перелічує PCI/USB,
+storage та display devices, окремо фіксує driver binding, module/alias
+кандидатів і runtime firmware facts. Звіт локальний; тести забороняють
+мережеве вивантаження та чутливі host identifiers.
+
+**Чого WSM не має:** поточний collector не виконує functional checks
+аудіо, мікрофона, Wi-Fi connectivity, Bluetooth input, touchpad,
+backlight, battery discharge або GPU rendering. Для спостережених
+пристроїв `functional_tests` лишається порожнім. Це правильна межа
+інвентаризаційного preflight, а не доказ того, що функція працює.
+
+**Що запозичуємо:** у майбутньому окремий `wsm-rollcall`/diagnostic mode
+може запускати лише явно запитані read-only функціональні checks і повертати
+для кожної пари «функція × пристрій» `pass/fail/skip` із причиною. Наявність
+треба визначати незалежно від працездатного інтерфейсу; відсутнє обладнання
+та user-disabled стан — це `skip`, а не `fail`. Жодного автоматичного
+вмикання радіо, програвання тестового звуку, зміни яскравості, запуску
+suspend, мережевого upload чи privilege escalation за замовчуванням.
+
+**Статус WSM — `partial`.** Наявний evidence inventory не можна підвищувати
+до `certified` або називати функціональною сумісністю. Functional-test logs
+мають лишатися окремим артефактом і бути прив'язані до конкретної функції
+та пристрою; сам факт driver binding або запис у `wsm-hwcheck` цього не
+замінює.
+
+Джерело: [Omarchy rollcall upstream report, 25.11.2026](https://omarchyupstream.com/2026-11-25/omarchy-rollcall-adds-a-read-only-hardware-report-for-bug-reports-5699273a8ca8/).

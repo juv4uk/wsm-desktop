@@ -30,8 +30,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--preflight", action="store_true", help="run report preflight")
     parser.add_argument("--report", required=True, metavar="PATH", help="hardware report JSON")
     parser.add_argument(
-        "--backend", required=True, choices=("guix", "nix"),
-        help="backend alias: guix -> guix-system; nix -> nixos",
+        "--backend", required=True, choices=("guix",),
+        help="only supported first-preview backend: guix -> guix-system",
     )
     parser.add_argument("--dry-run", action="store_true", help="required; never deploys or writes disks")
     parser.add_argument("--schema", type=Path, default=DEFAULT_SCHEMA, help=argparse.SUPPRESS)
@@ -63,6 +63,8 @@ def build_parser() -> argparse.ArgumentParser:
                          help="disabled; real APPLY requires a separately reviewed target-bound executor")
     install.add_argument("--guided", action="store_true",
                          help="choose a target and show a read-only preview in the console")
+    install.add_argument("--classify", action="store_true",
+                         help="print a read-only evidence summary; does not decide install readiness")
     install.add_argument("--check-env", action="store_true",
                          help="verify this machine can install at all, then stop")
     install.add_argument("--write-plan", metavar="PATH",
@@ -259,7 +261,18 @@ def _run_guided(args: argparse.Namespace) -> int:
     )
 
 
-def _run_install(args: argparse.Namespace) -> int:
+def _run_classification(report: dict[str, Any]) -> dict:
+    """Summarize report evidence only; scenario policy is evaluated elsewhere."""
+    from wsm_install.classification import classify
+
+    return classify(report)
+
+
+def _run_install(
+    args: argparse.Namespace,
+    report: dict[str, Any],
+    report_bytes: bytes,
+) -> int:
     """Build and render a disk plan; real APPLY is disabled."""
     if args.execute:
         print(
@@ -283,6 +296,22 @@ def _run_install(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
+
+    # A subsystem summary is diagnostic, not an installation policy. Reuse the
+    # existing report planner for its explicit critical-role and firmware
+    # blockers; do not derive stop/warn/proceed from a global subsystem label.
+    _plan, blockers, warnings = build_plan(report, report_bytes, args.backend)
+    if blockers:
+        for blocker in blockers:
+            print(f"wsm-install: plan.blocked: {blocker}", file=sys.stderr)
+        print(
+            "wsm-install: no preview plan emitted because required critical evidence is unresolved",
+            file=sys.stderr,
+        )
+        return 3
+    if not args.quiet:
+        for warning in warnings:
+            print(f"WARNING: {warning}", file=sys.stderr)
 
     disk = Disk(
         path=args.target_disk,
@@ -411,7 +440,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     if args.profile_evidence is not None and (
-        args.check_env or args.install or args.guided or args.tui
+        args.classify or args.check_env or args.install or args.guided or args.tui
     ):
         print(
             "wsm-install: --profile-evidence is accepted only by the read-only preflight planner",
@@ -419,6 +448,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
+    if args.classify:
+        print(json.dumps(_run_classification(report), ensure_ascii=False, indent=2, sort_keys=True))
+        return 0
     if args.check_env:
         return _run_env_check(args)
     if args.tui:
@@ -426,7 +458,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.guided:
         return _run_guided(args)
     if args.install:
-        return _run_install(args)
+        assert raw is not None
+        return _run_install(args, report, raw)
 
     assert raw is not None
     profile_evidence = None

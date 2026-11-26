@@ -180,6 +180,50 @@ GPL-3.0-or-later, і жодна частина цього репозиторію
   необхідно перевірити на reference hardware; відсутність X11 fallback не
   можна компенсувати припущенням про сумісність.
 
+### GCD 009: Guix Bootspec (прийнято; upstream implementation ще не змерджено)
+
+Guix переробляє підсистему завантажувача. Нинішній інтерфейс формально загальний,
+але його семантика й потік даних значною мірою сформовані навколо GRUB:
+конфігураційні файли, menu entries та відновлення політики bootloader-а
+протікають крізь абстракцію. GCD 009 вводить *Guix Bootspec* як версійований
+проміжний контракт між реалізованим поколінням системи та інструментами, які
+публікують його для конкретного bootloader-а. Ідея — відокремити вимоги
+покоління до запуску від політики bootloader-а й deployment environment,
+а backend-ам залишити перетворення цього опису у власний формат.
+
+**Результат консенсусу:** deliberation завершилася 18.11.2026. Участь взяли
+23 з 83 учасників команди: 7 голосів `I support`, 16 — `I accept`,
+0 disapprovals. Автор оголосив GCD прийнятим 20.11.2026. Це вже не draft
+без рішення. Водночас Codeberg PR [#15](https://codeberg.org/guix/guix-consensus-documents/pulls/15)
+на момент цієї перевірки все ще відкритий і очікує upstream merge; прийняття
+консенсусного документа не означає, що реалізація вже потрапила до Guix main.
+
+**Що це означає для WSM:**
+- Поточний Guix pin у `channels.lock.scm` —
+  `4e5195be20d9b124df8a8bb69213412236e4668e` (25.11.2026). У перевіреному
+  `gnu/bootloader.scm` він усе ще експонує GRUB-shaped `bootloader-configuration`
+  та `menu-entry` API; в `gnu/system.scm` і `gnu/bootloader.scm` немає
+  Bootspec migration. Не приписувати цьому snapshot новий контракт лише тому,
+  що GCD вже прийнятий.
+- WSM ще не виконує встановлення/оновлення bootloader-а й не керує
+  міжпоколінною політикою. Тому зараз не переписуємо installer, не створюємо
+  власний Bootspec writer/reader і не додаємо припущень про новий Scheme API:
+  точні backend records/procedures залишені upstream implementation-у.
+- Тримаємо bootloader boundary ізольованою. Коли Guix implementation потрапить
+  до каналу, який ми реально розглядаємо для WSM, окремо перевірити: версію та
+  serialization Bootspec, сумісність legacy generations через compatibility
+  reader, backend preflight для core/extensions/resources, відокремлення
+  bootloader policy від generation history та поведінку `guix system image`
+  для несумісної root filesystem.
+- До такої перевірки наші profile/installer contracts залишаються прив'язаними
+  до фактичного pinned Guix API. GCD — прийнятий upstream direction, але ще не
+  runtime/build evidence для WSM.
+
+Джерела: [GCD 009 proposal та статус](https://codeberg.org/guix/guix-consensus-documents/pulls/15),
+[офіційний запис про прийняття: 23/83, 7 support, 16 accept, 0 disapprovals
+(20.11.2026)](https://codeberg.org/guix/guix-consensus-documents/pulls/15#issuecomment-28116399),
+[оголошення початку deliberation](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00074.html).
+
 ### GNU Shepherd (init system Guix System)
 
 - Shepherd — це init і менеджер служб Guix System, написаний і конфігурований
@@ -219,6 +263,32 @@ GPL-3.0-or-later, і жодна частина цього репозиторію
 - [`gnu/services/shepherd.scm` — default `shepherd-1.0`](https://git.savannah.gnu.org/cgit/guix.git/tree/gnu/services/shepherd.scm?id=4e5195be20d9b124df8a8bb69213412236e4668e)
 - [`gnu/packages/admin.scm` — Shepherd 1.0.9 package definition](https://git.savannah.gnu.org/cgit/guix.git/tree/gnu/packages/admin.scm?id=4e5195be20d9b124df8a8bb69213412236e4668e)
 
+### UKI і Secure Boot: два факти, які змінюють дизайн
+
+Unified Kernel Image — один PE-файл, у який складені stub, ядро, initramfs і
+командний рядок; його підписують цілком для Secure Boot, і systemd-boot знаходить
+його в ESP без окремого boot entry. Для WSM це майбутній шлях, а не поточний: ми
+не маємо ні UKI, ні власного підписувача.
+
+Два факти, які варто знати **до** того, як хтось почне будувати цей шлях:
+
+1. **Під Secure Boot вбудований `.cmdline` перемагає.** Параметри, передані через
+   boot entry або вручну, ігноруються, якщо вони вже є в UKI. Без Secure Boot
+   передані параметри, навпаки, перекривають вбудовані. Тобто «додамо `root=` при
+   завантаженні» — не універсальне припущення: воно залежить від стану Secure
+   Boot, і саме тому наш bootloader-контракт не повинен покладатися на ручні
+   параметри.
+2. **Оновлення bootloader-а або UKI змінює TPM-вимірювання.** Саме тому Fedora
+   зробила окремий мінімальний UKI-only GRUB для конфіденційних VM: кожне
+   оновлення завантажувача змінює PCR, і політика атестації, яка чекає стабільних
+   значень, ламається. Для нас це означає: якщо колись з'явиться attestation-
+   політика, оновлення завантажувача стає подією, а не рутиною.
+
+Обидва факти — вхідні дані для рядка реєстру про boot-артефакти
+([LESSONS-FROM-OMARCHY.md](LESSONS-FROM-OMARCHY.md), Omarchy #15435), який зараз
+позначений `out-of-scope` саме тому, що власного updater-а й підписувача в нас
+немає.
+
 ### SBOM із `guix graph`
 
 - З Guix **1.5.0** `guix graph` має бекенди `graphml` і `cyclonedx-json`, тобто
@@ -247,8 +317,11 @@ GPL-3.0-or-later, і жодна частина цього репозиторію
 - [Guix 1.6.0 release meeting notes, 15.11.2026](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00088.html)
 - [Guix toolchain/transition freeze, 10.11.2026](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00039.html)
 - [Guix 1.6.0 release schedule, 15.11.2026](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00091.html)
-- [GCD 009 deliberation notice](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00074.html)
+- [GCD 009 deliberation notice](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00074.html) and [acceptance record](https://codeberg.org/guix/guix-consensus-documents/pulls/15#issuecomment-28116399)
 - [Guix repository on Codeberg](https://codeberg.org/guix/guix/)
+- [GCD 009 — Guix Bootspec (deliberation)](https://codeberg.org/guix/guix-consensus-documents/pulls/15)
+- [ArchWiki: Unified kernel image](https://wiki.archlinux.org/title/Unified_kernel_image)
+- [LWN: Fedora approves a smaller GRUB (UKI, TPM PCR stability)](https://lwn.net/Articles/1085609/)
 - [The Shepherd 1.0.0 released](https://shepherding.services/news/2024/12/the-shepherd-1.0.0-released/)
 - [GNU Shepherd 1.0.9 released (fixes the stop/unmount bug)](https://lists.libreplanet.org/archive/html/guix-devel/2025-12/msg00032.html)
 - [guix graph: CycloneDX backend, PR #2405](https://codeberg.org/guix/guix/pulls/2405)

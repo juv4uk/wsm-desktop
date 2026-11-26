@@ -13,21 +13,30 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 GIB = 1024 ** 3
 
-FIXTURE = ROOT / "tests" / "fixtures" / "hardware" / "desktop-observed.json"
+FIXTURE = ROOT / "tests" / "fixtures" / "hardware" / "complete-machine.json"
+PARTIAL = ROOT / "tests" / "fixtures" / "hardware" / "desktop-observed.json"
 
 
-def run_cli(*extra: str) -> subprocess.CompletedProcess:
+def run_cli(*extra: str, backend: str = "guix") -> subprocess.CompletedProcess:
     with tempfile.TemporaryDirectory() as temporary:
         report = Path(temporary) / "report.json"
         report.write_text(FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
         return subprocess.run(
             [sys.executable, "-m", "wsm_install", "--preflight", "--dry-run",
-             "--report", str(report), "--backend", "guix", *extra],
+             "--report", str(report), "--backend", backend, *extra],
             capture_output=True, text=True, check=False, cwd=ROOT,
         )
 
 
 class InstallModeTests(unittest.TestCase):
+    def test_deferred_backends_are_rejected_by_cli(self) -> None:
+        for backend in ("nix", "nixos"):
+            with self.subTest(backend=backend):
+                result = run_cli(backend=backend)
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("invalid choice", result.stderr)
+                self.assertNotIn("plan_sha256", result.stdout)
+
     def test_dry_run_plans_without_executing(self) -> None:
         result = run_cli(
             "--install", "--target-disk", "/dev/nvme0n1",
@@ -162,6 +171,56 @@ class InstallModeTests(unittest.TestCase):
         result = run_cli("--tui", "--execute", "--quiet")
         self.assertEqual(result.returncode, 2)
         self.assertIn("execute.apply-disabled", result.stderr)
+
+
+class ClassificationSummaryTests(unittest.TestCase):
+    """The three-level view is diagnostic; install gates use report-plan evidence."""
+
+    def build(self, *extra: str, report: Path | None = None) -> subprocess.CompletedProcess:
+        return run_cli(
+            "--report", str(report or PARTIAL),
+            "--install",
+            "--target-disk", "/dev/nvme0n1",
+            "--target-size-bytes", str(256 * GIB),
+            "--acknowledge-disk", "/dev/nvme0n1",
+            *extra,
+        )
+
+    def test_classify_flag_prints_a_diagnostic_summary(self) -> None:
+        result = run_cli("--classify")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["schema"], "wsm-hardware-classification/2")
+        self.assertNotIn("decision", payload)
+        self.assertEqual(payload["counts"]["certified"], 0)
+        self.assertTrue(all(item["coverage"] == "unknown" for item in payload["subsystems"]))
+
+    def test_absent_storage_record_is_not_a_global_install_stop(self) -> None:
+        """The partial report has no storage record; that is not not-detected."""
+        result = self.build()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("classification.stop", result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["mode"], "dry-run")
+        self.assertTrue(all(step["status"] == "not-run" for step in payload["steps"]))
+
+    def test_report_declared_unknown_critical_role_blocks_preview_plan(self) -> None:
+        """The plan gate consumes a report-declared critical role, not a subsystem label."""
+        value = json.loads(FIXTURE.read_text(encoding="utf-8"))
+        value["devices"][0]["criticality"] = ["boot-path"]
+        value["devices"][0]["discovery_status"] = "unknown"
+        with tempfile.TemporaryDirectory() as temporary:
+            report = Path(temporary) / "report.json"
+            report.write_text(json.dumps(value), encoding="utf-8")
+            result = self.build(report=report)
+        self.assertEqual(result.returncode, 3, result.stderr)
+        self.assertIn("plan.blocked", result.stderr)
+        self.assertIn("required critical device discovery is unknown", result.stderr)
+
+    def test_read_only_classification_does_not_accept_profile_evidence(self) -> None:
+        result = run_cli("--classify", "--profile-evidence", str(ROOT / "missing-evidence.json"))
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--profile-evidence is accepted only", result.stderr)
 
 
 if __name__ == "__main__":

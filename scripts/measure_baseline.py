@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: LicenseRef-Volnist
 """Measured performance baseline for WSM (issue #151).
 
@@ -39,11 +38,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 ROOT = Path(__file__).resolve().parents[1]
-PACKAGED_SITE = ROOT / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages"
-if (ROOT / "wsm_perf").is_dir():
+if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-elif PACKAGED_SITE.is_dir():
-    sys.path.insert(0, str(PACKAGED_SITE))
 
 from wsm_hwcheck.collector import collect_report  # noqa: E402
 from wsm_perf.pressure import compare_pressure_snapshots, read_pressure_snapshot  # noqa: E402

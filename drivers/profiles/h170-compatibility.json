@@ -84,6 +84,20 @@
               "source_url": "https://docs.nvidia.com/datacenter/tesla/driver-installation-guide/610/kernel-modules.html",
               "observed_at": "2026-11-26",
               "summary": "NVIDIA documents the proprietary kernel-module flavor as required for Maxwell, Pascal and Volta; open-source NVIDIA kernel modules are limited to Turing and newer. The GTX 1050 Ti Pascal candidate must not be paired with the open kernel-module flavor."
+            },
+            {
+              "kind": "upstream-reference",
+              "source": "NVIDIA Linux 580.126.09 Supported GPU Products",
+              "source_url": "https://download.nvidia.com/XFree86/Linux-x86_64/580.126.09/README/supportedchips.html",
+              "observed_at": "2026-11-26",
+              "summary": "NVIDIA's supported-product list for Linux driver 580.126.09 explicitly includes GeForce GTX 1050 Ti with device ID 1C82. This confirms that this published 580.126.09 release lists the observed GPU ID; it does not prove that the pinned Guix/Nonguix package resolves to this exact release, builds for the selected kernel, loads, or functions on the H170 machine."
+            },
+            {
+              "kind": "upstream-reference",
+              "source": "NVIDIA Linux 580.196.11 Supported Products",
+              "source_url": "https://www.nvidia.com/en-us/drivers/details/285683/",
+              "observed_at": "2026-11-26",
+              "summary": "NVIDIA's official Linux driver page for 580.196.11 (released 2026-11-23) explicitly lists GeForce GTX 1050 Ti among Supported Products. This is current upstream product-list evidence for the model family; the page does not expose the PCI ID in this summary and does not prove the exact pinned Guix/Nonguix package version, kernel build, runtime binding, or function on the H170 machine."
             }
           ],
           "notes": [

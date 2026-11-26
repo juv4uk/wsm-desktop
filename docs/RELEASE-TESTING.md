@@ -47,13 +47,10 @@ python3 scripts/wsm_hardware_check.py \
 
 ```text
 report.json               сирий hardware evidence report (schema 1.0.0)
-plan-guix.json            diagnostic-only draft plan для guix-system
-plan-nix.json             diagnostic-only draft plan для nixos
+plan-guix.json            єдиний diagnostic-only draft plan для guix-system
 manifest.json             версія, commit, exit codes, argv-команди, перевірки безпеки
 install-guix.stdout.log   стандартний вивід preflight (зазвичай порожній)
 install-guix.stderr.log   людський summary + warnings/blockers
-install-nix.stdout.log    стандартний вивід preflight (зазвичай порожній)
-install-nix.stderr.log    те саме для nixos
 hwcheck.*.log             з'являються лише якщо звіт збирається, а не подається через --report
 SHA256SUMS                checksum усіх попередніх файлів
 ```
@@ -76,8 +73,8 @@ PY
 
 Очікувані значення:
 
-- `overall: "pass"` — обидва плани видано й перевірено;
-- `overall: "preflight-blocked"` — звіт зібрано, але один/обидва backend-и зупинилися з exit=3, порожнім stdout і маркером `no plan emitted because required critical evidence is unresolved` у stderr. Це **безпечний результат**, а не помилка скрипта;
+- `overall: "pass"` — єдиний Guix-план видано й перевірено;
+- `overall: "preflight-blocked"` — звіт зібрано, але Guix preflight зупинився з exit=3, порожнім stdout і маркером `no plan emitted because required critical evidence is unresolved` у stderr. Це **безпечний результат**, а не помилка скрипта;
 - `status: "verified-diagnostic"` для кожного виданого плану;
 - `safe_execution_flags: true`, `plan_sha256_matches: true`, `source_report_sha256_matches: true`, `backend_id_matches_request: true`, `confirmable_false: true`.
 
@@ -91,7 +88,7 @@ sha256sum -c SHA256SUMS
 
 ## 4. Що план не означає
 
-- `plan-guix.json` / `plan-nix.json` — не інсталяційні плани й не дозвіл на запис.
+- `plan-guix.json` — діагностична чернетка, а не інсталяційний план і не дозвіл на запис.
 - `plan_readiness.confirmable` завжди `false`.
 - `execution.mutations_authorized`, `backend_invoked`, `disk_access_performed` завжди `false`.
 - `blockers: []` означає лише «не знайдено critical evidence, яке б зупинило dry-run у цій версії», а не «обладнання повністю сумісне».
@@ -117,7 +114,7 @@ PY
 Надсилайте публічно лише:
 
 - версію з `manifest.json`; якщо `source_commit` має значення `null` (звичайний розпакований tarball поза його власним Git work tree, зокрема всередині іншого git-репо), беріть commit із `release-manifest.json`;
-- `overall` і статуси `guix`/`nix`;
+- `overall` і статус Guix-плану;
 - стислий human-readable summary зі stderr;
 - модель/категорію пристрою й опис проблеми.
 

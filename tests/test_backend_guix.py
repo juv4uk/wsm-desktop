@@ -45,11 +45,11 @@ def selection(**overrides: str) -> TargetSelection:
     return TargetSelection(**values)
 
 
-def confirmed_plan(backend: str = "guix") -> dict:
-    """A plan as the frontend would hand it over after the user's selections."""
+def confirmed_plan() -> dict:
+    """A Guix plan as the frontend would hand it over after the user's selections."""
     report_bytes = FIXTURE.read_bytes()
     report = json.loads(report_bytes)
-    plan, _, _ = build_plan(report, report_bytes, backend)
+    plan, _, _ = build_plan(report, report_bytes, "guix")
     plan = copy.deepcopy(plan)
     plan["blockers"] = []
     plan["plan_readiness"]["confirmable"] = True
@@ -263,8 +263,10 @@ class HandoffRefusalTests(unittest.TestCase):
         refresh_plan_hash(plan)
         self.assert_refused("plan.blockers", plan, selection())
 
-    def test_other_backend_is_refused(self) -> None:
-        plan = confirmed_plan(backend="nix")
+    def test_deferred_backend_id_is_refused(self) -> None:
+        plan = confirmed_plan()
+        plan["backend"]["id"] = "nixos"
+        refresh_plan_hash(plan)
         self.assert_refused("plan.backend", plan, selection())
 
     def test_disk_access_already_performed_is_refused(self) -> None:

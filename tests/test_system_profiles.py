@@ -135,6 +135,7 @@ class DesktopProfileTests(unittest.TestCase):
 
     def test_has_ukrainian_locale(self) -> None:
         self.assertIn("uk_UA.utf8", self.text)
+        self.assertIn("(gnu system locale)", self.text)
 
     def test_free_profile_does_not_reference_nonguix(self) -> None:
         for name in ("desktop.scm", "live.scm"):
@@ -184,6 +185,7 @@ class SourceResolutionTests(unittest.TestCase):
 class LiveProfileTests(unittest.TestCase):
     def test_live_profile_inherits_the_desktop_profile(self) -> None:
         text = profile("live.scm")
+        self.assertIn("(gnu system locale)", text)
         self.assertIn('"/desktop.scm"', text)
         self.assertIn("(inherit base-os)", text)
 
@@ -259,6 +261,67 @@ class PublishedIsoTests(unittest.TestCase):
         self.assertIn("wsm-live-tools", profile("live-iso.scm"))
 
 
+class CompatibilityBuildTargetTests(unittest.TestCase):
+    """Make targets must keep Compatibility on its own authenticated lock."""
+
+    def make_dry_run(self, target: str) -> str:
+        result = subprocess.run(
+            ["make", "--no-print-directory", "-n", target],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + chr(10) + result.stderr)
+        return result.stdout
+
+    def test_compatibility_evaluation_uses_its_lock_and_real_profile(self) -> None:
+        output = self.make_dry_run("check-compatibility-eval")
+        self.assertIn(
+            "scripts/check_channels.py --policy compatibility --lock channels/compatibility.lock.scm",
+            output,
+        )
+        self.assertIn(
+            "guix time-machine -C channels/compatibility.lock.scm -L . -- describe -f channels",
+            output,
+        )
+        self.assertIn(
+            "guix time-machine -C channels/compatibility.lock.scm -L . -- system -L . build systems/live-compat.scm --dry-run",
+            output,
+        )
+        self.assertNotIn(" -C channels.lock.scm ", output)
+        self.assertNotIn("--disable-authentication", output)
+
+    def test_compatibility_store_build_is_not_a_dry_run(self) -> None:
+        output = self.make_dry_run("build-compatibility-system")
+        self.assertIn(
+            "guix time-machine -C channels/compatibility.lock.scm -L . -- system -L . build systems/live-compat.scm",
+            output,
+        )
+        self.assertNotIn("--dry-run", output)
+        self.assertNotIn("channels.lock.scm", output)
+
+    def test_compatibility_image_target_passes_both_profile_and_lock(self) -> None:
+        output = self.make_dry_run("image-live-compat")
+        self.assertIn(
+            "WSM_LIVE_PROFILE=systems/live-compat.scm WSM_CHANNEL_LOCK=channels/compatibility.lock.scm sh ./scripts/build_iso.sh",
+            output,
+        )
+        self.assertNotIn("WSM_LIVE_PROFILE=systems/live-minimal.scm", output)
+
+    def test_free_minimal_image_target_stays_on_free_builder_defaults(self) -> None:
+        output = self.make_dry_run("image-live-minimal")
+        self.assertIn(
+            "WSM_LIVE_PROFILE=systems/live-minimal.scm sh ./scripts/build_iso.sh",
+            output,
+        )
+        self.assertNotIn("channels/compatibility.lock.scm", output)
+
+    def test_general_guix_evaluation_delegates_to_the_separate_compatibility_gate(self) -> None:
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        self.assertIn("$(MAKE) check-compatibility-eval", makefile)
+
+
 class CompatibilityImageTests(unittest.TestCase):
     """The NVIDIA image needs its own lock; the free one cannot resolve (nongnu ...)."""
 
@@ -283,6 +346,41 @@ class CompatibilityImageTests(unittest.TestCase):
         commits = re.findall(r'\(commit\s+"([0-9a-f]{40})"\)', text)
         self.assertEqual(names, {"guix", "nonguix"})
         self.assertEqual(len(commits), 2)
+
+
+class RemovedServiceTests(unittest.TestCase):
+    """Services Guix deleted must not be referenced by any profile.
+
+    The first image build failed with "dhcp-client-service-type: unbound
+    variable": ISC DHCP reached end-of-life in 2022, the service was deprecated
+    in 2025 and removed afterwards. A profile that still names it cannot be
+    evaluated at all - the failure is at read time, not at build time.
+    """
+
+    def test_profiles_do_not_reference_removed_services(self) -> None:
+        removed = ("dhcp-client-service-type",)
+        offenders: list[str] = []
+        for path in sorted((ROOT / "systems").glob("*.scm")):
+            text = path.read_text(encoding="utf-8")
+            for name in removed:
+                # Mentions in comments are documentation, not configuration.
+                for line in text.splitlines():
+                    stripped = line.strip()
+                    if stripped.startswith(";") or stripped.startswith("#"):
+                        continue
+                    if name in stripped:
+                        offenders.append(f"{path.name}: {name}")
+        self.assertEqual(offenders, [], f"references a service Guix removed: {offenders}")
+
+    def test_network_manager_is_the_only_dhcp_client(self) -> None:
+        """Two DHCP clients fight over the same interface."""
+        text = profile("live-minimal.scm")
+        self.assertIn("network-manager-service-type", text)
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith(";"):
+                continue
+            self.assertNotIn("dhcpcd-service-type", stripped)
 
 
 class AudioConflictTests(unittest.TestCase):
@@ -320,6 +418,7 @@ class MinimalLiveTests(unittest.TestCase):
 
     def test_minimal_live_defaults_to_ukrainian_with_us_fallback(self) -> None:
         text = profile("live-minimal.scm")
+        self.assertIn("(gnu system locale)", text)
         self.assertIn('(locale "uk_UA.utf8")', text)
         self.assertIn('(keyboard-layout "us,ua" #:options \'("grp:alt_shift_toggle"))', text)
         self.assertNotIn("locale-definitions", text)
@@ -361,27 +460,6 @@ class HomeEnvironmentTests(unittest.TestCase):
         text = (ROOT / "systems" / "home.scm").read_text(encoding="utf-8")
         self.assertNotIn("home-pulseaudio-rtp", text)
         self.assertNotIn("pulseaudio-service-type", text)
-
-    def test_home_profile_installs_the_kde_phase_two_marker(self) -> None:
-        text = (ROOT / "systems" / "home.scm").read_text(encoding="utf-8")
-        self.assertIn("(wsm packages wsm)", text)
-        self.assertIn("wsm-tools", text)
-        self.assertIn("home-xdg-configuration-files-service-type", text)
-        self.assertIn("autostart/wsm-session-readiness.desktop", text)
-        self.assertIn("(mixed-text-file", text)
-        self.assertIn('"Exec=" (file-append python "/bin/python3") " " wsm-tools "/bin/wsm-session-marker\\n"', text)
-        self.assertIn('"X-KDE-autostart-phase=2\\n"', text)
-        self.assertIn('"OnlyShowIn=KDE;\\n"', text)
-
-    def test_wsm_tools_package_contains_performance_modules_and_collectors(self) -> None:
-        text = (ROOT / "wsm" / "packages" / "wsm.scm").read_text(encoding="utf-8")
-        self.assertIn('(copy-recursively "wsm_perf"', text)
-        for name in ("measure_baseline.py", "collect_boot_profile.py", "collect_session_readiness.py"):
-            with self.subTest(script=name):
-                self.assertIn(f'(copy-file "scripts/{name}"', text)
-        self.assertIn('"wsm-session-marker"', text)
-        self.assertIn('"wsm-perf-baseline"', text)
-        self.assertIn('"wsm-boot-profile"', text)
 
 
 class CompatibilityProfileTests(unittest.TestCase):
@@ -453,7 +531,7 @@ case " $* " in
         fi
         printf '%s\\n' '(list (channel (name guix) (commit test)))'
         exit 0 ;;
-    *" -L $WSM_TEST_LOAD_PATH -- system image "*)
+    *" -L $WSM_TEST_LOAD_PATH -- system -L $WSM_TEST_LOAD_PATH image "*)
         for argument in "$@"; do
             case "$argument" in --root=*) root=${argument#--root=} ;; esac
         done
@@ -505,7 +583,10 @@ exit 8
             lock = ROOT / "channels.lock.scm"
             self.assertIn(f"CALL|time-machine|-C|{lock}|-L|{ROOT}|--|--version", calls)
             self.assertIn(f"CALL|time-machine|-C|{lock}|-L|{ROOT}|--|describe|-f|channels", calls)
-            self.assertIn(f"CALL|time-machine|-C|{lock}|-L|{ROOT}|--|system|image", calls)
+            self.assertIn(
+                f"CALL|time-machine|-C|{lock}|-L|{ROOT}|--|system|-L|{ROOT}|image",
+                calls,
+            )
             self.assertIn(f"--root={expected}", calls)
             self.assertIn("--no-grafts", calls)
             self.assertIn("--image-type=iso9660", calls)
@@ -535,7 +616,7 @@ exit 8
                 manifest["build"]["command"],
                 [
                     "guix", "time-machine", "-C", str(lock), "-L", str(ROOT), "--",
-                    "system", "image",
+                    "system", "-L", str(ROOT), "image",
                     "--no-grafts", f"--root={expected}", "--image-type=iso9660",
                     "--system=x86_64-linux", str(ROOT / "systems" / "live.scm"),
                 ],

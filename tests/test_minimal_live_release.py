@@ -23,6 +23,7 @@ class MinimalLiveProfileTests(unittest.TestCase):
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
         self.assertIn("image-live-minimal:", makefile)
         self.assertIn("WSM_LIVE_PROFILE=systems/live-minimal.scm", makefile)
+        self.assertIn("WSM_LIVE_PROFILE=systems/live-minimal.scm sh ./scripts/build_iso.sh", makefile)
 
     def test_profile_has_a_dedicated_unprivileged_console_login(self) -> None:
         profile = (ROOT / "systems" / "live-minimal.scm").read_text(encoding="utf-8")
@@ -51,20 +52,54 @@ class MinimalLiveProfileTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
         self.assertIn("branches: [main]", workflow)
 
-    def test_locked_guix_load_path_is_a_time_machine_option(self) -> None:
+    def test_locked_guix_load_path_is_applied_at_both_cli_levels(self) -> None:
         builder = (ROOT / "scripts" / "build_iso.sh").read_text(encoding="utf-8")
-        self.assertIn('guix time-machine -C "$LOCK" -L "$ROOT" -- system image', builder)
-        self.assertNotIn('guix time-machine -C "$LOCK" -- -L "$ROOT"', builder)
-        self.assertIn('"guix", "time-machine", "-C", str(lock), "-L", str(repo_root), "--", "system", "image"', builder)
+        normalized_builder = " ".join(builder.split())
+        self.assertIn(
+            'guix time-machine -C "$LOCK" -L "$ROOT" -- system -L "$ROOT" image',
+            normalized_builder,
+        )
+        self.assertIn(
+            'guix time-machine -C "$LOCK" -L "$ROOT" -- describe -f channels',
+            normalized_builder,
+        )
+        self.assertNotIn('guix time-machine -C "$LOCK" -- -L "$ROOT"', normalized_builder)
+        self.assertIn(
+            '"guix", "time-machine", "-C", str(lock), "-L", str(repo_root), "--", '
+            '"system", "-L", str(repo_root), "image"',
+            normalized_builder,
+        )
         self.assertIn('WSM_REPO_ROOT="$ROOT"', builder)
         self.assertIn('repo_root = Path(os.environ["WSM_REPO_ROOT"])', builder)
 
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
         evaluation = makefile.split("check-guix-eval:", 1)[1].split("\n\n", 1)[0]
-        self.assertIn("-C channels.lock.scm -L . -- system build systems/live-minimal.scm --dry-run", evaluation)
-        self.assertIn("-C channels.lock.scm -L . -- system build systems/desktop.scm --dry-run", evaluation)
-        self.assertIn("-C channels.lock.scm -L . -- home build systems/home.scm --dry-run", evaluation)
-        self.assertIn("-C channels/compatibility.lock.scm -L . -- system build systems/live-compat.scm --dry-run", evaluation)
+        self.assertIn(
+            "-C channels.lock.scm -L . -- system -L . build systems/live-minimal.scm --dry-run",
+            evaluation,
+        )
+        self.assertIn(
+            "-C channels.lock.scm -L . -- system -L . build systems/desktop.scm --dry-run",
+            evaluation,
+        )
+        self.assertIn(
+            "-C channels.lock.scm -L . -- home -L . build systems/home.scm --dry-run",
+            evaluation,
+        )
+        self.assertIn("$(MAKE) check-compatibility-eval", evaluation)
+        compatibility = makefile.split("check-compatibility-eval:", 1)[1].split("\n\n", 1)[0]
+        self.assertIn(
+            "-C channels/compatibility.lock.scm -L . -- system -L . build systems/live-compat.scm --dry-run",
+            compatibility,
+        )
+        self.assertIn("(gnu system locale)", (ROOT / "systems" / "live-minimal.scm").read_text(encoding="utf-8"))
+
+    def test_release_workflow_uses_current_node24_actions(self) -> None:
+        workflow = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
+        self.assertIn("actions/checkout@v7", workflow)
+        self.assertIn("actions/setup-python@v7", workflow)
+        self.assertNotIn("actions/checkout@v4", workflow)
+        self.assertNotIn("actions/setup-python@v5", workflow)
 
     def test_release_request_pins_one_tag_and_ignores_comments(self) -> None:
         lines = (ROOT / "RELEASE-REQUEST.txt").read_text(encoding="utf-8").splitlines()
@@ -78,6 +113,41 @@ class MinimalLiveProfileTests(unittest.TestCase):
         self.assertIn('${#REQUEST_TAGS[@]}', workflow)
         self.assertIn("sed -e 's/[[:space:]]*#.*$//'", workflow)
 
+
+    def test_release_assets_are_verified_before_draft_publication(self) -> None:
+        workflow = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
+        create_step = workflow.index("name: Створити чернетку релізу та завантажити assets")
+        verify_step = workflow.index("name: Перевірити завантажені assets до публікації")
+        publish_step = workflow.index("name: Опублікувати перевірений GitHub pre-release")
+        cleanup = workflow.index("gh release delete-asset")
+        upload = workflow.index("gh release upload")
+        download = workflow.index("gh release download")
+        verify = workflow.index("scripts/verify_release_assets.py")
+        publish = workflow.index("gh release edit")
+        self.assertLess(create_step, verify_step)
+        self.assertLess(verify_step, publish_step)
+        self.assertLess(cleanup, upload)
+        self.assertLess(upload, download)
+        self.assertLess(download, verify)
+        self.assertLess(verify, publish)
+        self.assertIn("--draft --prerelease", workflow)
+        self.assertIn("--draft=false", workflow)
+        self.assertIn('RELEASE_EXISTS=true', workflow)
+        self.assertIn('[ "$TARGET_COMMIT" != "$GITHUB_SHA" ]', workflow)
+        self.assertIn('[ "$IS_DRAFT" != "true" ]', workflow)
+        self.assertIn("--json assets --jq '.assets[].name'", workflow)
+        self.assertIn("Повідомити причину збою", workflow)
+
+    def test_release_manifest_heredoc_closes_before_asset_upload_steps(self) -> None:
+        workflow = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
+        manifest_start = workflow.index("name: Маніфест і контрольні суми")
+        draft_start = workflow.index("name: Створити чернетку релізу та завантажити assets")
+        manifest_step = workflow[manifest_start:draft_start]
+        self.assertIn('build_manifest_sha256":sha(bp)', manifest_step)
+        self.assertIn('(root/"release-manifest.json").write_text', manifest_step)
+        self.assertIn('(root/"SHA256SUMS").write_text', manifest_step)
+        self.assertIn("\n          PY\n", manifest_step)
+        self.assertIn('sha256sum -c SHA256SUMS', manifest_step)
 
 class LiveInstallerLauncherTests(unittest.TestCase):
     def test_launcher_runs_preflight_and_tui_then_cleans_private_report(self) -> None:

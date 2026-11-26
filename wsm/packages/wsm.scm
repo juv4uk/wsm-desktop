@@ -5,7 +5,7 @@
 ;; СТАТУС: не зібрано й не перевірено (у середовищі написання немає Guix).
 ;; Перед використанням: guix build -f wsm/packages/wsm.scm
 ;;
-;; Пакет ставить модулі wsm_hwcheck, wsm_install і wsm_perf у site-packages разом зі
+;; Пакет ставить модулі wsm_hwcheck і wsm_install у site-packages разом зі
 ;; схемою звіту. Це необхідно, бо wsm_install/cli.py шукає схему відносно
 ;; батьківського каталогу модуля: у site-packages це означає schemas/ поруч
 ;; із пакетами, а не в корені репозиторію.
@@ -19,6 +19,13 @@
   #:use-module (gnu packages python)
   #:use-module (gnu packages python-xyz)
   #:use-module (guix licenses)
+  ;; version-major+minor lives here; without it the module fails to load.
+  #:use-module (guix utils)
+  ;; `any` comes from SRFI-1 and `string-contains` from SRFI-13. Both are used
+  ;; in the source select? predicate below; without these two imports the module
+  ;; does not load at all, and the failure appears only when Guix evaluates it.
+  #:use-module (srfi srfi-1)
+  #:use-module (srfi srfi-13)
   #:export (wsm-tools))
 
 (define-public wsm-tools
@@ -56,8 +63,6 @@
                                   (string-append site "/wsm_hwcheck"))
                 (copy-recursively "wsm_install"
                                   (string-append site "/wsm_install"))
-                (copy-recursively "wsm_perf"
-                                  (string-append site "/wsm_perf"))
                 (copy-recursively "schemas"
                                   (string-append site "/schemas"))
                 (mkdir-p bin)
@@ -67,24 +72,16 @@
                            (string-append bin "/wsm-install"))
                 (copy-file "scripts/wsm-install-live.sh"
                            (string-append bin "/wsm-install-live"))
-                (copy-file "scripts/measure_baseline.py"
-                           (string-append bin "/wsm-perf-baseline"))
-                (copy-file "scripts/collect_boot_profile.py"
-                           (string-append bin "/wsm-boot-profile"))
-                (copy-file "scripts/collect_session_readiness.py"
-                           (string-append bin "/wsm-session-marker"))
                 ;; copy-file does not promise to preserve executable bits.
                 (for-each (lambda (name)
                             (chmod (string-append bin "/" name) #o555))
-                          '("wsm-hwcheck" "wsm-install" "wsm-install-live"
-                            "wsm-perf-baseline" "wsm-boot-profile"
-                            "wsm-session-marker"))))))))
+                          '("wsm-hwcheck" "wsm-install" "wsm-install-live"))))))))
     (propagated-inputs (list python python-jsonschema))
-    (synopsis "Hardware, installation and performance evidence tools for WSM Desktop")
+    (synopsis "Read-only hardware evidence tools for WSM Desktop")
     (description
-     "Collects read-only hardware, boot, session-readiness and performance evidence,
-validates hardware reports against a versioned schema, and drafts a
-diagnostic-only installation plan for the GNU Guix backend.  Nothing in this
-package writes to a block device, invokes a system backend, or requires root.")
+     "Collects a read-only hardware report from sysfs and procfs, validates it
+against a versioned schema, and drafts a diagnostic-only installation plan for
+the GNU Guix backend.  Nothing in this package writes to a block device, invokes
+a system backend, or requires root.")
     (home-page "https://github.com/juv4uk/wsm-desktop")
     (license gpl3+)))

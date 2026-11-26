@@ -5,15 +5,20 @@ QEMU_PYTHON ?= python3.11
 GUIX ?= guix
 PRODUCT ?= free
 
-.PHONY: check-driver-profiles check check-ci-policy qemu-acceptance-manual check-guix-eval release-gate check-docs check-doc-ownership check-regression-register check-release-info check-artifact-versions check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle check-profiles check-agent check-calamares check-channels check-cli-install check-env-preflight check-evidence-drafter check-executor check-guided check-hygiene check-install-steps check-isa check-journal check-live-acceptance check-makefile check-observation check-partition check-perf-baseline check-boot-profile check-session-readiness check-profile-evidence check-profile-match check-profiles-matrix check-release-verdict check-state check-syntax check-tui check-licences image-live-minimal check-temp-paths check-test-registration
 
-check: check-ci-policy check-docs check-doc-ownership check-regression-register check-release-info check-artifact-versions check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa check-live-acceptance check-profiles-matrix check-perf-baseline check-boot-profile check-session-readiness check-profile-evidence check-driver-profiles check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-hygiene check-channels check-executor check-cli-install check-calamares check-guided check-tui check-agent check-journal check-env-preflight check-observation check-licences check-temp-paths check-test-registration
+.PHONY: check-driver-profiles check check-ci-policy qemu-acceptance-manual check-guix-eval check-compatibility-eval release-gate describe-compatibility-lock build-compatibility-system image-live-compat check-docs check-doc-ownership check-regression-register check-release-info check-artifact-versions check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle check-profiles check-agent check-calamares check-channels check-cli-install check-env-preflight check-evidence-drafter check-executor check-guided check-hygiene check-install-steps check-isa check-journal check-live-acceptance check-makefile check-observation check-partition check-perf-baseline check-boot-profile check-profile-evidence check-profile-match check-profiles-matrix check-release-verdict check-state check-syntax check-tui check-licences image-live-minimal check-temp-paths check-test-registration check-release-assets check-classification check-classification-policy check-readme-stage check-classification-schema check-ci-parity check-scheme-imports
+
+check: check-ci-policy check-docs check-doc-ownership check-regression-register check-release-info check-artifact-versions check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa check-live-acceptance check-profiles-matrix check-perf-baseline check-boot-profile check-profile-evidence check-driver-profiles check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-hygiene check-channels check-executor check-cli-install check-calamares check-guided check-tui check-agent check-journal check-env-preflight check-observation check-licences check-temp-paths check-test-registration check-release-assets check-classification check-classification-policy check-readme-stage check-classification-schema check-ci-parity check-scheme-imports
 
 check-profiles:
 	$(PYTHON) tests/test_system_profiles.py
 
 check-syntax:
 	$(PYTHON) tests/test_python_syntax.py
+
+check-scheme-imports:
+	$(PYTHON) scripts/check_scheme_imports.py
+	$(PYTHON) tests/test_scheme_imports.py
 
 check-state:
 	$(PYTHON) tests/test_state_ownership.py
@@ -30,9 +35,6 @@ check-perf-baseline:
 check-boot-profile:
 	$(PYTHON) tests/test_boot_profile.py
 
-check-session-readiness:
-	$(PYTHON) tests/test_session_readiness.py
-
 check-profile-evidence:
 	$(PYTHON) tests/test_profile_evidence.py
 	$(PYTHON) scripts/check_profile_evidence.py
@@ -45,6 +47,9 @@ check-profile-match:
 
 check-release-verdict:
 	$(PYTHON) tests/test_verify_live_release.py
+
+check-release-assets:
+	$(PYTHON) tests/test_verify_release_assets.py
 
 check-makefile:
 	$(PYTHON) tests/test_makefile_coverage.py
@@ -73,6 +78,9 @@ check-guided:
 check-tui:
 	$(PYTHON) tests/test_tui.py
 
+check-classification:
+	$(PYTHON) tests/test_classification.py
+
 check-ci-policy:
 	$(PYTHON) tests/test_ci_acceptance_policy.py
 
@@ -94,12 +102,29 @@ check-licences:
 # Manual, needs Guix: evaluates the Scheme without building anything.
 # Not part of `check` on purpose - a contributor without Guix must still pass.
 check-guix-eval:
-	$(GUIX) time-machine -C channels.lock.scm -L . -- system build systems/minimal.scm --dry-run
-	$(GUIX) time-machine -C channels.lock.scm -L . -- system build systems/desktop.scm --dry-run
-	$(GUIX) time-machine -C channels.lock.scm -L . -- system build systems/live.scm --dry-run
-	$(GUIX) time-machine -C channels.lock.scm -L . -- system build systems/live-minimal.scm --dry-run
-	$(GUIX) time-machine -C channels/compatibility.lock.scm -L . -- system build systems/live-compat.scm --dry-run
-	$(GUIX) time-machine -C channels.lock.scm -L . -- home build systems/home.scm --dry-run
+	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/minimal.scm --dry-run
+	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/desktop.scm --dry-run
+	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/live.scm --dry-run
+	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/live-minimal.scm --dry-run
+	$(MAKE) check-compatibility-eval
+	$(GUIX) time-machine -C channels.lock.scm -L . -- home -L . build systems/home.scm --dry-run
+
+# Compatibility is opt-in and always uses its own authenticated Guix + Nonguix lock.
+# This target resolves the lock and evaluates the full system graph without building it.
+describe-compatibility-lock:
+	$(GUIX) time-machine -C channels/compatibility.lock.scm -L . -- describe -f channels
+
+check-compatibility-eval:
+	$(PYTHON) scripts/check_channels.py --policy compatibility --lock channels/compatibility.lock.scm
+	$(GUIX) time-machine -C channels/compatibility.lock.scm -L . -- describe -f channels
+	$(GUIX) time-machine -C channels/compatibility.lock.scm -L . -- system -L . build systems/live-compat.scm --dry-run
+
+# These two targets build local store outputs only; they do not install or write to physical disks.
+build-compatibility-system:
+	$(GUIX) time-machine -C channels/compatibility.lock.scm -L . -- system -L . build systems/live-compat.scm
+
+image-live-compat:
+	WSM_LIVE_PROFILE=systems/live-compat.scm WSM_CHANNEL_LOCK=channels/compatibility.lock.scm sh ./scripts/build_iso.sh
 
 check-hygiene:
 	$(PYTHON) tests/test_repo_hygiene.py
@@ -183,11 +208,11 @@ describe-lock:
 	$(GUIX) time-machine -C channels.lock.scm -- describe -f channels
 
 check-locked-system:
-	$(GUIX) time-machine -C channels.lock.scm -L . -- system build systems/minimal.scm
+	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/minimal.scm
 
 # Компактний консольний live-носій із WSM CLI/TUI.
 image-live-minimal:
-	WSM_LIVE_PROFILE=systems/live-minimal.scm ./scripts/build_iso.sh
+	WSM_LIVE_PROFILE=systems/live-minimal.scm sh ./scripts/build_iso.sh
 
 # Повні QEMU runtime checks запускаються лише вручну, не в `make check` і не в CI.
 qemu-acceptance-manual:
@@ -208,3 +233,17 @@ check-temp-paths:
 
 check-test-registration:
 	$(PYTHON) tests/test_test_registration.py
+
+check-classification-policy:
+	$(PYTHON) tests/test_classification_policy.py
+
+check-readme-stage:
+	$(PYTHON) tests/test_readme_stage.py
+
+check-classification-schema:
+	$(PYTHON) tests/test_classification_schema.py
+	$(PYTHON) tests/test_artifact_version_refusal.py
+
+check-ci-parity:
+	$(PYTHON) tests/test_ci_parity.py
+
