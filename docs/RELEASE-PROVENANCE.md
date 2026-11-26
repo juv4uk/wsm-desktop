@@ -110,8 +110,9 @@ gh attestation trusted-root > trusted_root.jsonl
 ```sh
 gh attestation verify path/to/wsm-desktop-live.iso \
   --repo juv4uk/wsm-desktop \
-  --bundle path/to/sha256:<digest>.jsonl \
-  --custom-trusted-root trusted_root.jsonl
+  --bundle path/to/attestation-bundle.jsonl \
+  --custom-trusted-root trusted_root.jsonl \
+  --signer-workflow juv4uk/wsm-desktop/.github/workflows/release-minimal-live.yml
 ```
 
 Для автоматизованої перевірки очікуваного GitHub repository ID використовувати JSON-вивід:
@@ -119,8 +120,9 @@ gh attestation verify path/to/wsm-desktop-live.iso \
 ```sh
 gh attestation verify path/to/wsm-desktop-live.iso \
   --repo juv4uk/wsm-desktop \
-  --bundle path/to/sha256:<digest>.jsonl \
+  --bundle path/to/attestation-bundle.jsonl \
   --custom-trusted-root trusted_root.jsonl \
+  --signer-workflow juv4uk/wsm-desktop/.github/workflows/release-minimal-live.yml \
   --format json \
   --jq '.[].verificationResult.signature.certificate.sourceRepositoryIdentifier'
 ```
