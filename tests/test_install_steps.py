@@ -122,11 +122,27 @@ class PathHijackTests(unittest.TestCase):
 
 
 class FilesystemChoiceTests(unittest.TestCase):
-    def test_btrfs_is_available_and_uses_force(self) -> None:
-        steps = plan_steps(layout(), filesystem="btrfs")
-        mkfs = [step for step in steps if tool(step) == "mkfs.btrfs"]
-        self.assertEqual(len(mkfs), 1)
-        self.assertIn("-f", mkfs[0].command)
+    def test_btrfs_and_xfs_are_refused_until_guix_config_matches(self) -> None:
+        for filesystem in ("btrfs", "xfs"):
+            with self.subTest(filesystem=filesystem):
+                with self.assertRaises(Refused) as caught:
+                    plan_steps(layout(), filesystem=filesystem)
+                self.assertEqual(caught.exception.code, "filesystem.unsupported")
+
+    def test_supported_filesystem_matches_guix_root_declaration(self) -> None:
+        import re
+
+        from wsm_install.install_steps import FILESYSTEMS, ROOT_FILESYSTEM
+
+        scheme = (ROOT / "systems" / "desktop.scm").read_text(encoding="utf-8")
+        root = re.search(
+            r'\\(file-system\\s+\\(mount-point "/").*?\\(type "([^"]+)"\\)',
+            scheme,
+            flags=re.DOTALL,
+        )
+        self.assertIsNotNone(root, "desktop Guix system must declare a root filesystem")
+        self.assertEqual(ROOT_FILESYSTEM, root.group(1))
+        self.assertEqual(set(FILESYSTEMS), {root.group(1)})
 
     def test_unknown_filesystem_is_refused(self) -> None:
         with self.assertRaises(Refused) as caught:
