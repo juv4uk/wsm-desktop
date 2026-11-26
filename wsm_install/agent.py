@@ -134,6 +134,13 @@ def run_plan(
     runner: Callable = default_runner,
     verifier: Callable = default_verifier,
 ) -> int:
+    if dry_run is not True:
+        raise AgentError(
+            "agent.apply-disabled",
+            "real APPLY is disabled until the immutable plan is bound to a verified "
+            "block-device identity and every destructive boundary is revalidated",
+        )
+
     disk = document.get("disk")
     if not isinstance(disk, str) or not disk.startswith("/dev/"):
         raise AgentError("agent.bad-disk", f"the plan names no block device: {disk!r}")
