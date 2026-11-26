@@ -167,12 +167,24 @@ developer documentation перенесені на
   Це метадані, опубліковані Debian у підписаному source-package notice; перед
   використанням у Guix треба незалежно отримати Codeberg tag/tarball, перевірити
   підпис і перерахувати SHA-256 саме з отриманих байтів.
+- Сторінка релізів Codeberg показує **v3.4.3 Stable** з датою 2026-09-10, підпис
+  `adridg` (GPG key ID `14B6CC381BC256D6`), tarball `calamares-3.4.3.tar.gz`,
+  SHA-256 `144cbbf6bdcebfb21685950db4f0777218519df095f62f4aa392f28348110d18`.
+  Release notes називають дві зміни, що стосуються нас прямо: набір bugfixes і
+  дрібних покращень у `partition` module та виправлення введення з клавіатури
+  для QML-модулів під Wayland. Перше — наш обов'язковий модуль, друге — наш
+  GUI-шлях; обидва є причиною переоцінити 3.4.2 як baseline.
+- SHA-256 upstream tarball (`144cbbf6…`) і Debian `orig.tar.xz` (`b6283226…`)
+  **різні**, бо Debian перепаковує джерело. Тому хеш для Guix-рецепта береться
+  лише з артефакту, який ми самі завантажили й перевірили, а не з чужого
+  package metadata.
 - Nixpkgs snapshot, перевірений 17–20.11.2026, ще пакував 3.4.2; bump до 3.4.3
   перебував у черзі. Це корисна ознака package-maintenance lag, але не доказ
   про Guix і не причина копіювати Nix patches.
 
 Джерела:
 - [Офіційний Calamares portal і Codeberg migration](https://calamares.codeberg.page/)
+- [Codeberg releases: v3.4.3 Stable, 2026-09-10](https://codeberg.org/Calamares/calamares/releases/)
 - [Debian #1148139: archive/migration notice та 3.4.3-1 source checksums](https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1148139)
 - [Debian sid package 3.4.3-1](https://packages.debian.org/unstable/utils/calamares)
 - [Nixpkgs Calamares package status](https://maintainermode.org/p/calamares)
