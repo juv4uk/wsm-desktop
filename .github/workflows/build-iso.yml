@@ -27,6 +27,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Free disk space
+        run: |
+          set -euo pipefail
+          # A Guix System image needs the store plus the image itself; the stock
+          # runner image carries ~14 GB free, which is not enough and fails late,
+          # after half an hour of work. These toolchains are not used here.
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          sudo apt-get clean
+          df -h /
+
       - name: Install Guix from the release tarball
         run: |
           set -euo pipefail
