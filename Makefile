@@ -91,12 +91,12 @@ check-licences:
 # Manual, needs Guix: evaluates the Scheme without building anything.
 # Not part of `check` on purpose - a contributor without Guix must still pass.
 check-guix-eval:
-	$(GUIX) time-machine -C channels.lock.scm -- -L . system build systems/minimal.scm --dry-run
-	$(GUIX) time-machine -C channels.lock.scm -- -L . system build systems/desktop.scm --dry-run
-	$(GUIX) time-machine -C channels.lock.scm -- -L . system build systems/live.scm --dry-run
-	$(GUIX) time-machine -C channels.lock.scm -- -L . system build systems/live-minimal.scm --dry-run
-	$(GUIX) time-machine -C channels/compatibility.lock.scm -- -L . system build systems/live-compat.scm --dry-run
-	$(GUIX) time-machine -C channels.lock.scm -- -L . home build systems/home.scm --dry-run
+	$(GUIX) time-machine -C channels.lock.scm -L . -- system build systems/minimal.scm --dry-run
+	$(GUIX) time-machine -C channels.lock.scm -L . -- system build systems/desktop.scm --dry-run
+	$(GUIX) time-machine -C channels.lock.scm -L . -- system build systems/live.scm --dry-run
+	$(GUIX) time-machine -C channels.lock.scm -L . -- system build systems/live-minimal.scm --dry-run
+	$(GUIX) time-machine -C channels/compatibility.lock.scm -L . -- system build systems/live-compat.scm --dry-run
+	$(GUIX) time-machine -C channels.lock.scm -L . -- home build systems/home.scm --dry-run
 
 check-hygiene:
 	$(PYTHON) tests/test_repo_hygiene.py
@@ -180,7 +180,7 @@ describe-lock:
 	$(GUIX) time-machine -C channels.lock.scm -- describe -f channels
 
 check-locked-system:
-	$(GUIX) time-machine -C channels.lock.scm -- -L . system build systems/minimal.scm
+	$(GUIX) time-machine -C channels.lock.scm -L . -- system build systems/minimal.scm
 
 # Компактний консольний live-носій із WSM CLI/TUI.
 image-live-minimal:
