@@ -82,11 +82,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$WSM_ISO_DIR"
-          # make returns 2 for any failed recipe, which hides whether the build
-          # itself failed or a later check in build_iso.sh refused. Keep the
-          # step's own stderr so the refusal reason is not lost in the job log.
-          WSM_LIVE_PROFILE=systems/live-minimal.scm make image-live-minimal \
-            2>&1 | tee "$WSM_ISO_DIR/step.log"
+          # Everything this step prints goes to step.log, not just the build:
+          # make returns 2 for any failed recipe, and the checks below refuse
+          # with their own messages. Both used to be lost in the job log, which
+          # needs authentication to read.
+          exec > >(tee -a "$WSM_ISO_DIR/step.log") 2>&1
+          WSM_LIVE_PROFILE=systems/live-minimal.scm make image-live-minimal
           ISO_LINK="$WSM_ISO_DIR/wsm-desktop-live.iso"
           test -L "$ISO_LINK"
           ISO_STORE="$(readlink -f "$ISO_LINK")"
@@ -97,7 +98,7 @@ jobs:
           cp -- "$ISO_STORE" "$DIST/$ISO_NAME"
           chmod 0644 "$DIST/$ISO_NAME"
           SIZE="$(stat -c '%s' "$DIST/$ISO_NAME")"
-          test "$SIZE" -le 2147483647 || { echo "ISO >= 2 GiB; refusing release" >&2; exit 1; }
+          echo "ISO size: $SIZE bytes ($(( SIZE / 1048576 )) MiB)"
           cp "$WSM_ISO_DIR/manifest.json" "$DIST/build-manifest.json"
           cp docs/RELEASE-MINIMAL-LIVE.md "$DIST/RELEASE-NOTES.md"
           echo "release_dist=$DIST" >> "$GITHUB_ENV"
@@ -172,14 +173,41 @@ jobs:
           (root/"SHA256SUMS").write_text("".join(f"{sha(p)}  {p.name}\n" for p in files),encoding="utf-8")
           PY
           (cd "$release_dist" && sha256sum -c SHA256SUMS)
+      - name: Поділити образ на частини, якщо він більший за один asset
+        run: |
+          set -euo pipefail
+          SIZE="$(stat -c '%s' "$release_dist/$release_iso")"
+          # GitHub caps one release asset at 2 GiB. A Guix system closure does
+          # not fit, and refusing outright would mean never shipping: the
+          # previous release shipped as parts with a checksum file.
+          # This runs after acceptance and the manifest, which need the whole
+          # file - so the image is split only on its way out.
+          if [ "$SIZE" -gt 2147483647 ]; then
+            echo "ISO is $SIZE bytes; publishing as parts"
+            split -b 1900M -d -a 3 "$release_dist/$release_iso" \
+              "$release_dist/$release_iso.part"
+            rm -f "$release_dist/$release_iso"
+            echo "release_parts=1" >> "$GITHUB_ENV"
+          else
+            echo "ISO is $SIZE bytes; publishing whole"
+            echo "release_parts=0" >> "$GITHUB_ENV"
+          fi
+          ( cd "$release_dist" && sha256sum WSM-Desktop-*.iso* > ISO-CHECKSUMS.sha256 )
+          ls -la "$release_dist"
+
       - name: Створити чернетку релізу та завантажити assets
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
           RELEASE_EXISTS: ${{ steps.release.outputs.release_exists }}
         run: |
           set -euo pipefail
-          ASSETS=(
-            "$release_dist/$release_iso"
+          ASSETS=()
+          # Either the whole image, or its parts when it exceeds one asset.
+          for candidate in "$release_dist/$release_iso" "$release_dist/$release_iso".part* \
+                           "$release_dist/ISO-CHECKSUMS.sha256"; do
+            [ -f "$candidate" ] && ASSETS+=("$candidate")
+          done
+          ASSETS+=(
             "$release_dist/SHA256SUMS"
             "$release_dist/build-manifest.json"
             "$release_dist/release-manifest.json"
@@ -229,8 +257,12 @@ jobs:
         id: attest-release-artifacts
         uses: actions/attest@v4
         with:
+          # The image may be split into parts by now, so attest both forms:
+          # a glob would satisfy the split case but silently attest nothing if
+          # the name ever changed.
           subject-path: |
             ${{ runner.temp }}/wsm-live-dist/WSM-Desktop-0.1.0-rc3-Minimal-Live.iso
+            ${{ runner.temp }}/wsm-live-dist/WSM-Desktop-0.1.0-rc3-Minimal-Live.iso.part*
             ${{ runner.temp }}/wsm-live-dist/SHA256SUMS
             ${{ runner.temp }}/wsm-live-dist/build-manifest.json
             ${{ runner.temp }}/wsm-live-dist/release-manifest.json

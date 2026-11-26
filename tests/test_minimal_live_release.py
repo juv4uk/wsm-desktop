@@ -294,6 +294,35 @@ class FailureReporterTests(unittest.TestCase):
         self.assertIn("/commits/$GITHUB_SHA/comments", text)
         self.assertIn("if: failure()", text)
 
+class SplitAssetTests(unittest.TestCase):
+    """A Guix closure does not fit one GitHub asset, and refusing means never shipping."""
+
+    def setUp(self) -> None:
+        self.text = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
+
+    def test_split_runs_after_acceptance_and_manifest(self) -> None:
+        """Acceptance boots the image; it must exist as one file when it runs."""
+        split = self.text.index("Поділити образ на частини")
+        self.assertGreater(split, self.text.index("BIOS boot acceptance"))
+        self.assertGreater(split, self.text.index("UEFI boot acceptance"))
+        self.assertGreater(split, self.text.index("Маніфест і контрольні суми"))
+
+    def test_split_happens_before_the_upload(self) -> None:
+        self.assertLess(
+            self.text.index("Поділити образ на частини"),
+            self.text.index("Створити чернетку релізу"),
+        )
+
+    def test_parts_are_listed_as_assets(self) -> None:
+        self.assertIn('"$release_dist/$release_iso".part*', self.text)
+
+    def test_whole_step_output_is_captured(self) -> None:
+        """The refusal used to print to the job log, which needs authentication."""
+        self.assertIn('exec > >(tee -a "$WSM_ISO_DIR/step.log")', self.text)
+
+    def test_iso_size_is_reported_before_any_decision(self) -> None:
+        self.assertIn("ISO size:", self.text)
+
 
 
 if __name__ == "__main__":
