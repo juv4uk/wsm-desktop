@@ -175,6 +175,7 @@ JSON-масивом аргументів, який передається як `
   не повинна отримувати completion marker; merged.
 - [#20178](https://github.com/omacom/omarchy/issues/20178) — open issue про
   Legacy/CSM multi-disk install без перевіреного boot-order handoff.
+- [#15435](https://github.com/omacom/omarchy/issues/15435) — звіт про update, який завершувався без перевірки свіжості initramfs/UKI, підписів EFI та ідентичності ESP, куди записано boot artifacts; upstream закрив issue як `not planned`.
 
 ## Реєстр регресійних класів WSM
 
@@ -195,6 +196,7 @@ JSON-масивом аргументів, який передається як `
 | USB device metadata виконується як Hyprland Lua (Omarchy #8129) | WSM не реалізує Hyprland device-toggle або генерацію Lua з USB descriptors | відповідної інтеграції в WSM немає | `out-of-scope` | — |
 | FIDO2 migration передчасно позначається завершеною без виконання precondition (Omarchy #16421) | майбутній WSM migration runner має лишати невирішені preconditions у pending; власного FIDO2 migration runner поки немає | відповідну migration-підсистему WSM не реалізовано | `out-of-scope` | — |
 | Видалення чужих boot entries на shared ESP (Omarchy #14949) | ESP монтується всередину цілі; чужий ESP не форматується | частково: тест перевіряє mountpoint, а не вміст ESP | `partial` | `tests/test_install_steps.py::test_esp_is_mounted_inside_the_target_not_outside` |
+| Stale або unsigned boot artifacts / запис на не-booted ESP під час update (Omarchy #15435) | Власного system updater, UKI signer і ESP writer у WSM поки немає; майбутній updater мусить прив'язувати target до identity firmware-boot ESP, а не лише mount path | немає update/boot-artifact lifecycle, який можна перевірити | `out-of-scope` | — |
 | `root=` втрачено під час kernel/package transaction (Omarchy #6951) | bootloader-конфіг генерує Guix System; WSM не пише `root=` сам | немає — WSM не має власного boot-кроку | `out-of-scope` | — |
 | LUKS recovery slot видалено при зміні ключа (Omarchy #14874) | шифрування не реалізоване | немає коду, який чіпає slots | `out-of-scope` | — |
 | Legacy/CSM multi-disk boot-order hand-off (Omarchy #20178) | BIOS layout створює `bios_grub`, але preview не доводить, що firmware після майбутнього встановлення стартує з цільового диска | немає двохдискового Legacy/CSM QEMU або physical acceptance | `not-covered` | — |
@@ -202,12 +204,14 @@ JSON-масивом аргументів, який передається як `
 
 `out-of-scope` не означає «вирішено»: це означає, що коду, який міг би зламатися
 саме так, у WSM поки немає. Щойно з'явиться власний boot-крок, шифрування,
-механізм встановлення сторонніх тем/плагінів або друга версія артефакту —
-відповідний рядок переходить у `not-covered` і отримує тест. Це також стосується майбутнього FIDO2 або іншого системного migration workflow.
+механізм встановлення сторонніх тем/плагінів, updater/ESP lifecycle або друга
+версія артефакту — відповідний рядок переходить у `not-covered` і отримує тест.
+Це також стосується майбутнього FIDO2 або іншого системного migration workflow.
 
 Ці upstream reports — не докази дефектів у WSM або на конкретному обладнанні.
 Це джерела для regression fixtures та acceptance вимог; кожен сценарій має
-окремий prevent/detect rule і статус власної перевірки.
+окремий prevent/detect rule і статус власної перевірки. Звіт Omarchy #15435
+не означає, що WSM має такий дефект: він фіксує вимогу до майбутнього updater-а.
 
 Джерела: [Omarchy 4.5 announcement](https://omarchy.org/news/2026/11/omarchy-4-5/),
 [official v4.5.0 release](https://github.com/omacom/omarchy/releases/tag/v4.5.0),
