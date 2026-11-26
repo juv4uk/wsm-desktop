@@ -83,7 +83,13 @@ def _read_report() -> tuple[dict | None, bytes | None, str | None]:
 
 
 def _deploy(dry_run: bool) -> tuple[str, str] | None:
-    """Run the plan. Returns a Calamares failure tuple, or None on success."""
+    """Build a read-only preview; this helper never performs or claims APPLY."""
+    if dry_run is not True:
+        return (
+            "WSM APPLY is disabled",
+            "The deployment helper only accepts a literal dry_run=True preview.",
+        )
+
     from wsm_install.executor import ExecutorError, execute
     from wsm_install.install_steps import backend_command, plan_steps, render
     from wsm_install.partition import Disk, Refused, plan as plan_layout
@@ -128,7 +134,7 @@ def _deploy(dry_run: bool) -> tuple[str, str] | None:
         layout = plan_layout(
             Disk(path=str(disk_path), size_bytes=int(size), has_existing_data=True),
             firmware,
-            acknowledgement=str(disk_path) if not dry_run else str(disk_path),
+            acknowledgement=str(disk_path),
             expected_size_bytes=int(size),
         )
         steps = plan_steps(layout)
