@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import redirect_stdout
+import io
 import json
 import os
 import stat
@@ -186,20 +188,23 @@ def _hardware_note(args: argparse.Namespace) -> str:
 def _installer_preview_callback(args: argparse.Namespace):
     """Build the only allowed callback: a read-only install-plan preview."""
     def preview(disk_path: str, size: int, firmware: str) -> int:
-        return _run_install(argparse.Namespace(
-            target_disk=disk_path,
-            target_size_bytes=size,
-            firmware=firmware,
-            filesystem=args.filesystem,
-            mount_point=args.mount_point,
-            system_file=args.system_file,
-            acknowledge_disk=disk_path,
-            execute=False,
-            write_plan=None,
-            report=args.report,
-            schema=args.schema,
-            quiet=True,
-        ))
+        # The frontend owns the screen; suppress the machine-readable JSON
+        # payload from _run_install while preserving stderr diagnostics.
+        with redirect_stdout(io.StringIO()):
+            return _run_install(argparse.Namespace(
+                target_disk=disk_path,
+                target_size_bytes=size,
+                firmware=firmware,
+                filesystem=args.filesystem,
+                mount_point=args.mount_point,
+                system_file=args.system_file,
+                acknowledge_disk=disk_path,
+                execute=False,
+                write_plan=None,
+                report=args.report,
+                schema=args.schema,
+                quiet=True,
+            ))
 
     return preview
 
