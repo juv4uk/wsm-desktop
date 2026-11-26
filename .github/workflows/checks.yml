@@ -9,11 +9,11 @@ on:
   pull_request:
   workflow_dispatch:
 
-# One run per ref: a newer push cancels the run it supersedes instead of
-# queueing behind it.
+# A new commit supersedes only an older run for the same pull request.
+# Pushes and manual runs are keyed by commit SHA and are never cancelled.
 concurrency:
-  group: checks-${{ github.ref }}
-  cancel-in-progress: true
+  group: checks-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
