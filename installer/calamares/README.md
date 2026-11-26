@@ -43,13 +43,17 @@ identity та destructive acceptance на одноразових QEMU-диска
 невирішений блокер, невалідні докази, відсутній диск або розмір — усе це кортеж
 з поясненням.
 
+Усі frontend-и зараз завершуються read-only preview. Розмір у globalstorage
+використовується для розрахунку макета, а не для підтвердження фактичної
+місткості пристрою: модуль не читає block-device identity або sysfs topology.
+
 ## Ключі globalstorage, які читає модуль
 
 | Ключ | Звідки | Навіщо |
 | --- | --- | --- |
 | `wsmReportPath` | крок preflight | звіт `wsm-hwcheck` |
 | `wsmTargetDisk` | Calamares | цільовий диск; WSM ніколи не обирає сам |
-| `wsmTargetSizeBytes` | Calamares | розмір — те, чим ловиться підмінений диск |
+| `wsmTargetSizeBytes` | Calamares | введена оцінка для побудови layout; не вимірює block device |
 | `wsmProfileEvidence` | крок вибору профілю | bundle доказів заліза |
 | `wsmSystemFile` | крок вибору профілю | який `.scm` віддати Guix |
 | `wsmDryRun` | налаштування | прогін без запису |
