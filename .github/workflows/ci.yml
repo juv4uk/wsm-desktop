@@ -98,3 +98,11 @@ jobs:
         run: |
           /usr/local/bin/guix time-machine -C channels.lock.scm -- \
             home build systems/home.scm --dry-run
+
+      - name: Authenticate Compatibility channel and evaluate its system
+        # Guix time-machine authenticates fetched channel commits by default.
+        # This must never fall back to the Free lock if the Compatibility lock is absent.
+        run: |
+          test -f channels/compatibility.lock.scm
+          /usr/local/bin/guix time-machine -C channels/compatibility.lock.scm -- \
+            system build systems/live-compat.scm --dry-run
