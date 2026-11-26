@@ -111,6 +111,14 @@ GPL-3.0-or-later, і жодна частина цього репозиторію
   **заплановано на 26.11.2026**; до цього, з 10.11.2026, на `master` уже діяв
   toolchain/transition freeze. Після заморозки на `master` ідуть лише виправлення
   блокерів і security updates, а решта змін живе в team-гілках.
+- За планом релізної команди (лист 15.11.2026): тиждень 49 (30.11–06.12) —
+  створення й тегування release-гілки; тиждень 50 (07.12–13.12) — hard freeze і
+  release candidate; **21.12.2026 — цільова дата фінального релізу**. Це план, а
+  не обіцянка, і саме так його треба читати.
+- Практичний наслідок для піна каналу: між 30.11 і 21.12 зріз `master` може
+  змінюватися під реліз, тому пін, зроблений у цьому вікні, фіксує проміжний
+  стан. Вибір «пін до 30.11» чи «пін на тег 1.6.0 після 21.12» — окреме рішення
+  з власним ADR, а не побічний ефект релізу Guix.
 - Наслідок для [#39](https://github.com/juv4uk/wsm-desktop/issues/39) і
   [#210](https://github.com/juv4uk/wsm-desktop/issues/210): доказом
   відтворюваності лишається **точний commit** у `channels/*.lock.scm`, а не
@@ -162,6 +170,7 @@ GPL-3.0-or-later, і жодна частина цього репозиторію
 Джерела:
 - [Guix 1.6.0 release meeting notes, 15.11.2026](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00088.html)
 - [Guix toolchain/transition freeze, 10.11.2026](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00039.html)
+- [Guix 1.6.0 release schedule, 15.11.2026](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00091.html)
 - [GCD 009 deliberation notice](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00074.html)
 - [Guix repository on Codeberg](https://codeberg.org/guix/guix/)
 - [KDE Plasma 6.8.3, 10.11.2026](https://kde.org/announcements/plasma/6/6.8.3/)
