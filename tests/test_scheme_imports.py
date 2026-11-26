@@ -71,6 +71,27 @@ class ImportTests(unittest.TestCase):
         """Documentation that names a helper must not fail the check."""
         self.assertEqual(check(write(COMMENT_ONLY)), [])
 
+    def test_a_missing_root_is_reported_not_skipped(self) -> None:
+        """Scanning nothing must not look like scanning everything."""
+        completed = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "check_scheme_imports.py"),
+             str(ROOT / "systems-does-not-exist")],
+            capture_output=True,
+            text=True,
+            cwd=ROOT,
+        )
+        self.assertEqual(completed.returncode, 1, completed.stdout + completed.stderr)
+        self.assertIn("root does not exist", completed.stderr)
+
+    def test_the_repository_scan_is_not_empty(self) -> None:
+        """If the default roots stopped matching, the pass would be vacuous."""
+        scanned = [
+            path
+            for root in (ROOT / "systems", ROOT / "wsm")
+            for path in root.rglob("*.scm")
+        ]
+        self.assertGreaterEqual(len(scanned), 10, [str(path) for path in scanned])
+
     def test_the_repository_itself_passes(self) -> None:
         result = subprocess.run(
             [sys.executable, "scripts/check_scheme_imports.py"],
