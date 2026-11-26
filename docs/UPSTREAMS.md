@@ -198,6 +198,27 @@ GPL-3.0-or-later, і жодна частина цього репозиторію
 - Дрібниця, корисна для релізної довіри: tarball Shepherd 1.0.0 заявлений як
   bit-for-bit відтворюваний із відповідного git-тегу.
 
+**Точна прив'язка до WSM Guix lock (перевірено 26.11.2026).** У зафіксованому
+`channels.lock.scm` коміті Guix
+`4e5195be20d9b124df8a8bb69213412236e4668e` вихідний код має такий контракт:
+
+- `gnu/services/shepherd.scm` задає `shepherd-1.0` як стандартне значення
+  поля `shepherd` у `shepherd-configuration`;
+- `gnu/packages/admin.scm` визначає `shepherd-1.0` версією **1.0.9** та
+  джерелом `shepherd-1.0.9.tar.gz`; Guix base32 hash джерела:
+  `1mh080060lnycys8yq6kkiy363wif8dsip3nyklgd3a1r22wb274`.
+
+Отже, default system Shepherd у source definitions саме нашого Free lock — 1.0.9.
+Це сильніше за твердження «upstream уже має виправлення»: виправлена версія
+входить у зафіксований пакетний опис WSM backend-а. Але це **ще не** свідчення,
+що конкретний WSM ISO зібраний із цим пакетом або що Shepherd 1.0.9 фактично
+завантажився в QEMU/на фізичному ПК. Для цього потрібні окремі Guix closure/build
+та runtime boot checks.
+
+Джерела з точного pinned commit:
+- [`gnu/services/shepherd.scm` — default `shepherd-1.0`](https://git.savannah.gnu.org/cgit/guix.git/tree/gnu/services/shepherd.scm?id=4e5195be20d9b124df8a8bb69213412236e4668e)
+- [`gnu/packages/admin.scm` — Shepherd 1.0.9 package definition](https://git.savannah.gnu.org/cgit/guix.git/tree/gnu/packages/admin.scm?id=4e5195be20d9b124df8a8bb69213412236e4668e)
+
 ### SBOM із `guix graph`
 
 - З Guix **1.5.0** `guix graph` має бекенди `graphml` і `cyclonedx-json`, тобто

@@ -1,0 +1,137 @@
+{
+  "schema_version": "1.2.0",
+  "profile_id": "h170-compatibility-nvidia-pascal",
+  "profile_class": "compatibility",
+  "profile_status": "draft",
+  "enabled_by_default": false,
+  "base_profile": "h170-free",
+  "target": {
+    "target_id": "h170-gaming-3-owner-reference",
+    "board_vendor": "Gigabyte Technology Co., Ltd.",
+    "board_model": "H170-Gaming 3",
+    "firmware_vendor": "American Megatrends Inc.",
+    "firmware_version": "F22e",
+    "boot_mode": "uefi",
+    "secure_boot": "unknown",
+    "evidence_source": "https://github.com/juv4uk/wsm-os/blob/40ef00079d478d43fa496ec066bb96ac4c0850a3/docs/OWNER-HARDWARE-PROFILE.md",
+    "evidence_date": "2026-09-02"
+  },
+  "source": {
+    "repository": "juv4uk/wsm-desktop",
+    "source_commit": null,
+    "channel_lock_file": "channels/compatibility.lock.scm",
+    "channel_authentication_evidence": "not-evaluated",
+    "notes": "The separate Compatibility lock records exact Guix and Nonguix revisions, but its cryptographic channel authentication has not yet been run. This is not package resolution, build, firmware or redistribution evidence.",
+    "channel_revisions": [
+      {
+        "name": "guix",
+        "url": "https://git.guix.gnu.org/guix.git",
+        "commit": "4e5195be20d9b124df8a8bb69213412236e4668e"
+      },
+      {
+        "name": "nonguix",
+        "url": "https://gitlab.com/nonguix/nonguix",
+        "commit": "6b8897cd6f3223b158c070cdc9cc638279f8c337"
+      }
+    ]
+  },
+  "kernel": {
+    "package_candidate": "linux-libre (candidate only; exact package and closure not evaluated)",
+    "version": null,
+    "configuration_status": "not-assessed",
+    "notes": "Kernel package/configuration, modules and initrd contents must be evaluated against the pinned channel before image integration."
+  },
+  "unobserved_device_classes": [
+    "wifi",
+    "bluetooth",
+    "thunderbolt",
+    "webcam"
+  ],
+  "devices": [
+    {
+      "device_id": "nvidia-gtx-1050-ti-compat",
+      "device_class": "graphics",
+      "model": "NVIDIA GeForce GTX 1050 Ti (Pascal, sm_61)",
+      "evidence_class": "windows-observed",
+      "observed_bdf": "00000000:01:00.0",
+      "pci_ids": [
+        "10de:1c82"
+      ],
+      "driver_candidates": [
+        {
+          "candidate_id": "nvidia-linux-580",
+          "name": "NVIDIA Linux legacy driver 580.x (остання лінія для Pascal; лише кандидат)",
+          "kernel_module": "nvidia",
+          "userspace_candidates": [
+            "NVIDIA proprietary userspace stack (exact package unresolved)"
+          ],
+          "package_candidates": [],
+          "package_resolution": "not-assessed",
+          "kernel_config": "not-assessed",
+          "runtime_binding": "unknown",
+          "source_license": "unknown",
+          "evidence": [
+            {
+              "kind": "upstream-reference",
+              "source": "NVIDIA Unix legacy GPU support timeframes",
+              "source_url": "https://nvidia.custhelp.com/app/answers/detail/a_id/3142/kw/windows%20supported/related/1",
+              "observed_at": "2026-11-26",
+              "summary": "NVIDIA states that Linux 580.x is the last legacy driver series supporting Maxwell, Pascal and Volta GPUs. This confirms the candidate branch family only; it does not establish an exact Guix package, ABI match, redistribution permission or runtime binding."
+            },
+            {
+              "kind": "upstream-reference",
+              "source": "NVIDIA Linux driver kernel-module installation guide",
+              "source_url": "https://docs.nvidia.com/datacenter/tesla/driver-installation-guide/610/kernel-modules.html",
+              "observed_at": "2026-11-26",
+              "summary": "NVIDIA documents the proprietary kernel-module flavor as required for Maxwell, Pascal and Volta; open-source NVIDIA kernel modules are limited to Turing and newer. The GTX 1050 Ti Pascal candidate must not be paired with the open kernel-module flavor."
+            }
+          ],
+          "notes": [
+            "Optional opt-in compatibility research only. NVIDIA identifies Linux 580.x as the last Unix driver series supporting Pascal; the Windows driver version 582.66 does not establish a Linux 580.x package or ABI match.",
+            "Pascal requires NVIDIA's proprietary kernel-module flavor; NVIDIA's open kernel modules are supported only on Turing and newer. Do not select the open kernel-module flavor for PCI ID 10de:1c82.",
+            "Before integration, verify exact Guix package source, kernel ABI, module build/signing requirements, redistribution terms, runtime dependencies and firmware."
+          ]
+        }
+      ],
+      "firmware": {
+        "requirement": "unknown",
+        "package_candidates": [],
+        "package_resolution": "not-assessed",
+        "live_rootfs": "not-assessed",
+        "initrd": "not-assessed",
+        "installed_rootfs": "not-assessed",
+        "runtime_load": "not-assessed",
+        "redistribution": "unknown",
+        "evidence": []
+      },
+      "functional_validation": {
+        "status": "not-run",
+        "environment": "none",
+        "evidence": []
+      },
+      "notes": [
+        "Optional opt-in compatibility research only. The Windows driver version 582.66 does not establish a Linux 580.x package or ABI match.",
+        "Before integration, verify exact Guix package source, kernel ABI, module build/signing requirements, redistribution terms, runtime dependencies and firmware."
+      ],
+      "identity_evidence": [
+        {
+          "kind": "owner-hardware-profile",
+          "source": "Owner-shared Windows PowerShell Get-PnpDevice -Class Display inventory",
+          "observed_at": "2026-09-02",
+          "summary": "VEN_10DE DEV_1C82 SUBSYS_33511462 REV_A1. The separately observed BDF 00000000:01:00.0 is a bus address, not a vendor:device identifier."
+        }
+      ]
+    }
+  ],
+  "policy": {
+    "nonfree_components_included": false,
+    "automatic_firmware_updates": false,
+    "host_disk_writes": false,
+    "unknown_must_remain_unknown": true,
+    "notes": [
+      "Not enabled by default. This manifest records a candidate, not an included or distributable binary.",
+      "No NVIDIA driver, proprietary firmware or license permission is claimed as available.",
+      "Compatibility cannot be promoted until source, license/redistribution review, pinned package closure and hardware validation exist."
+    ]
+  }
+}

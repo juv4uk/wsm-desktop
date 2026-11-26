@@ -51,19 +51,20 @@ class MinimalLiveProfileTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
         self.assertIn("branches: [main]", workflow)
 
-    def test_locked_guix_load_path_reaches_the_inferior_command(self) -> None:
+    def test_locked_guix_load_path_is_a_time_machine_option(self) -> None:
         builder = (ROOT / "scripts" / "build_iso.sh").read_text(encoding="utf-8")
-        self.assertIn('guix time-machine -C "$LOCK" -- -L "$ROOT" system image', builder)
-        self.assertNotIn('guix time-machine -C "$LOCK" -L "$ROOT" -- system image', builder)
-        self.assertIn('"--", "-L", str(repo_root), "system", "image"', builder)
+        self.assertIn('guix time-machine -C "$LOCK" -L "$ROOT" -- system image', builder)
+        self.assertNotIn('guix time-machine -C "$LOCK" -- -L "$ROOT"', builder)
+        self.assertIn('"guix", "time-machine", "-C", str(lock), "-L", str(repo_root), "--", "system", "image"', builder)
         self.assertIn('WSM_REPO_ROOT="$ROOT"', builder)
         self.assertIn('repo_root = Path(os.environ["WSM_REPO_ROOT"])', builder)
 
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
         evaluation = makefile.split("check-guix-eval:", 1)[1].split("\n\n", 1)[0]
-        self.assertIn("-- -L . system build systems/live-minimal.scm --dry-run", evaluation)
-        self.assertIn("-- -L . system build systems/desktop.scm --dry-run", evaluation)
-        self.assertIn("-- -L . home build systems/home.scm --dry-run", evaluation)
+        self.assertIn("-C channels.lock.scm -L . -- system build systems/live-minimal.scm --dry-run", evaluation)
+        self.assertIn("-C channels.lock.scm -L . -- system build systems/desktop.scm --dry-run", evaluation)
+        self.assertIn("-C channels.lock.scm -L . -- home build systems/home.scm --dry-run", evaluation)
+        self.assertIn("-C channels/compatibility.lock.scm -L . -- system build systems/live-compat.scm --dry-run", evaluation)
 
     def test_release_request_pins_one_tag_and_ignores_comments(self) -> None:
         lines = (ROOT / "RELEASE-REQUEST.txt").read_text(encoding="utf-8").splitlines()
