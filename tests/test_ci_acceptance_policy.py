@@ -49,7 +49,7 @@ class CiAcceptancePolicyTests(unittest.TestCase):
         command = gate.get("run", "")
         self.assertIn("--product free", command)
         self.assertIn("--skip-tests --compact", command)
-        self.assertIn('status -ne 2', command)
+        self.assertRegex(command, r'\[\s*"\$status"\s+-ne\s+2\s*\]')
         self.assertNotIn("exit 0", command)
 
     def test_qemu_job_runs_all_guest_acceptance_layers(self) -> None:
