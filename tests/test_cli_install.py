@@ -13,7 +13,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 GIB = 1024 ** 3
 
-FIXTURE = ROOT / "tests" / "fixtures" / "hardware" / "desktop-observed.json"
+FIXTURE = ROOT / "tests" / "fixtures" / "hardware" / "complete-machine.json"
+PARTIAL = ROOT / "tests" / "fixtures" / "hardware" / "desktop-observed.json"
 
 
 def run_cli(*extra: str, backend: str = "guix") -> subprocess.CompletedProcess:
@@ -171,6 +172,38 @@ class InstallModeTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("execute.apply-disabled", result.stderr)
 
+
+class ClassificationGateTests(unittest.TestCase):
+    """The installer must not reach a disk when the machine is not understood."""
+
+    def build(self, *extra: str, report: Path | None = None) -> subprocess.CompletedProcess:
+        return run_cli(
+            "--report", str(report or PARTIAL),
+            "--install",
+            "--target-disk", "/dev/nvme0n1",
+            "--target-size-bytes", str(256 * GIB),
+            "--acknowledge-disk", "/dev/nvme0n1",
+            *extra,
+        )
+
+    def test_stop_refuses_before_the_plan(self) -> None:
+        """The shipped fixture is a two-device report: storage was never assessed."""
+        result = self.build()
+        self.assertEqual(result.returncode, 3, result.stderr)
+        self.assertIn("classification.stop", result.stderr)
+
+    def test_stop_is_not_overridable(self) -> None:
+        """--accept-degraded is for warnings, not for a missing boot path."""
+        result = self.build("--accept-degraded")
+        self.assertEqual(result.returncode, 3)
+        self.assertIn("classification.stop", result.stderr)
+
+    def test_classify_flag_prints_the_verdict(self) -> None:
+        result = run_cli("--classify")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["schema"], "wsm-hardware-classification/1")
+        self.assertIn(payload["decision"], {"stop", "warn", "proceed"})
 
 if __name__ == "__main__":
     unittest.main()

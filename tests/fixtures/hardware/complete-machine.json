@@ -1,0 +1,452 @@
+{
+  "schema_version": "1.0.0",
+  "report_id": "fixture-complete-machine-20261126",
+  "collected_at": "2026-11-25T13:45:00Z",
+  "environment": {
+    "architecture": "x86_64",
+    "kernel_release": "6.12.0-example",
+    "boot_mode": "uefi",
+    "virtualization": "none-detected",
+    "platform": {
+      "system_vendor": "Example Vendor",
+      "product_name": "Example Desktop",
+      "board_vendor": "Example Board Co.",
+      "board_name": "Example H170 Board",
+      "board_version": "1.0"
+    }
+  },
+  "collectors": [
+    {
+      "name": "wsm-sysfs",
+      "version": "0.1.0",
+      "available": true,
+      "scope": "unprivileged-read-only",
+      "exit_code": 0
+    }
+  ],
+  "devices": [
+    {
+      "device_id": "cpu-0",
+      "category": "cpu",
+      "discovery_status": "discovered",
+      "bus": "pci",
+      "identity": {
+        "manufacturer": "Test",
+        "model": "Fixture"
+      },
+      "driver": {
+        "status": "bound",
+        "module": "fixture-driver"
+      },
+      "evidence": [
+        {
+          "kind": "live-observation",
+          "confidence": "confirmed",
+          "source": "procfs:/cpuinfo",
+          "observed_at": "2026-11-26T00:00:00Z",
+          "summary": "fixture entry"
+        }
+      ],
+      "functional_tests": [],
+      "recommendations": [],
+      "firmware": {
+        "requirement": "not-required",
+        "runtime_status": "not-needed"
+      }
+    },
+    {
+      "device_id": "mb-0",
+      "category": "motherboard",
+      "discovery_status": "discovered",
+      "bus": "pci",
+      "identity": {
+        "manufacturer": "Test",
+        "model": "Fixture"
+      },
+      "driver": {
+        "status": "bound",
+        "module": "fixture-driver"
+      },
+      "evidence": [
+        {
+          "kind": "live-observation",
+          "confidence": "confirmed",
+          "source": "procfs:/cpuinfo",
+          "observed_at": "2026-11-26T00:00:00Z",
+          "summary": "fixture entry"
+        }
+      ],
+      "functional_tests": [],
+      "recommendations": [],
+      "firmware": {
+        "requirement": "not-required",
+        "runtime_status": "not-needed"
+      }
+    },
+    {
+      "device_id": "mem-0",
+      "category": "memory",
+      "discovery_status": "discovered",
+      "bus": "pci",
+      "identity": {
+        "manufacturer": "Test",
+        "model": "Fixture"
+      },
+      "driver": {
+        "status": "bound",
+        "module": "fixture-driver"
+      },
+      "evidence": [
+        {
+          "kind": "live-observation",
+          "confidence": "confirmed",
+          "source": "procfs:/cpuinfo",
+          "observed_at": "2026-11-26T00:00:00Z",
+          "summary": "fixture entry"
+        }
+      ],
+      "functional_tests": [],
+      "recommendations": [],
+      "firmware": {
+        "requirement": "not-required",
+        "runtime_status": "not-needed"
+      }
+    },
+    {
+      "device_id": "nvme-0",
+      "category": "storage-device",
+      "discovery_status": "discovered",
+      "bus": "pci",
+      "identity": {
+        "manufacturer": "Test",
+        "model": "Fixture"
+      },
+      "driver": {
+        "status": "bound",
+        "module": "fixture-driver"
+      },
+      "evidence": [
+        {
+          "kind": "live-observation",
+          "confidence": "confirmed",
+          "source": "procfs:/cpuinfo",
+          "observed_at": "2026-11-26T00:00:00Z",
+          "summary": "fixture entry"
+        }
+      ],
+      "functional_tests": [],
+      "recommendations": [],
+      "firmware": {
+        "requirement": "not-required",
+        "runtime_status": "not-needed"
+      }
+    },
+    {
+      "device_id": "sata-0",
+      "category": "storage-controller",
+      "discovery_status": "discovered",
+      "bus": "pci",
+      "identity": {
+        "manufacturer": "Test",
+        "model": "Fixture"
+      },
+      "driver": {
+        "status": "bound",
+        "module": "fixture-driver"
+      },
+      "evidence": [
+        {
+          "kind": "live-observation",
+          "confidence": "confirmed",
+          "source": "procfs:/cpuinfo",
+          "observed_at": "2026-11-26T00:00:00Z",
+          "summary": "fixture entry"
+        }
+      ],
+      "functional_tests": [],
+      "recommendations": [],
+      "firmware": {
+        "requirement": "not-required",
+        "runtime_status": "not-needed"
+      }
+    },
+    {
+      "device_id": "nic-0",
+      "category": "network",
+      "discovery_status": "discovered",
+      "bus": "pci",
+      "identity": {
+        "manufacturer": "Test",
+        "model": "Fixture"
+      },
+      "driver": {
+        "status": "bound",
+        "module": "fixture-driver"
+      },
+      "evidence": [
+        {
+          "kind": "live-observation",
+          "confidence": "confirmed",
+          "source": "procfs:/cpuinfo",
+          "observed_at": "2026-11-26T00:00:00Z",
+          "summary": "fixture entry"
+        }
+      ],
+      "functional_tests": [],
+      "recommendations": [],
+      "firmware": {
+        "requirement": "not-required",
+        "runtime_status": "not-needed"
+      }
+    },
+    {
+      "device_id": "gpu-0",
+      "category": "gpu",
+      "discovery_status": "discovered",
+      "bus": "pci",
+      "identity": {
+        "manufacturer": "Test",
+        "model": "Fixture"
+      },
+      "driver": {
+        "status": "bound",
+        "module": "fixture-driver"
+      },
+      "evidence": [
+        {
+          "kind": "live-observation",
+          "confidence": "confirmed",
+          "source": "procfs:/cpuinfo",
+          "observed_at": "2026-11-26T00:00:00Z",
+          "summary": "fixture entry"
+        }
+      ],
+      "functional_tests": [],
+      "recommendations": [],
+      "firmware": {
+        "requirement": "not-required",
+        "runtime_status": "not-needed"
+      }
+    },
+    {
+      "device_id": "disp-0",
+      "category": "display",
+      "discovery_status": "discovered",
+      "bus": "pci",
+      "identity": {
+        "manufacturer": "Test",
+        "model": "Fixture"
+      },
+      "driver": {
+        "status": "bound",
+        "module": "fixture-driver"
+      },
+      "evidence": [
+        {
+          "kind": "live-observation",
+          "confidence": "confirmed",
+          "source": "procfs:/cpuinfo",
+          "observed_at": "2026-11-26T00:00:00Z",
+          "summary": "fixture entry"
+        }
+      ],
+      "functional_tests": [],
+      "recommendations": [],
+      "firmware": {
+        "requirement": "not-required",
+        "runtime_status": "not-needed"
+      }
+    },
+    {
+      "device_id": "audio-0",
+      "category": "audio",
+      "discovery_status": "discovered",
+      "bus": "pci",
+      "identity": {
+        "manufacturer": "Test",
+        "model": "Fixture"
+      },
+      "driver": {
+        "status": "bound",
+        "module": "fixture-driver"
+      },
+      "evidence": [
+        {
+          "kind": "live-observation",
+          "confidence": "confirmed",
+          "source": "procfs:/cpuinfo",
+          "observed_at": "2026-11-26T00:00:00Z",
+          "summary": "fixture entry"
+        }
+      ],
+      "functional_tests": [],
+      "recommendations": [],
+      "firmware": {
+        "requirement": "not-required",
+        "runtime_status": "not-needed"
+      }
+    },
+    {
+      "device_id": "bt-0",
+      "category": "bluetooth",
+      "discovery_status": "discovered",
+      "bus": "pci",
+      "identity": {
+        "manufacturer": "Test",
+        "model": "Fixture"
+      },
+      "driver": {
+        "status": "bound",
+        "module": "fixture-driver"
+      },
+      "evidence": [
+        {
+          "kind": "live-observation",
+          "confidence": "confirmed",
+          "source": "procfs:/cpuinfo",
+          "observed_at": "2026-11-26T00:00:00Z",
+          "summary": "fixture entry"
+        }
+      ],
+      "functional_tests": [],
+      "recommendations": [],
+      "firmware": {
+        "requirement": "not-required",
+        "runtime_status": "not-needed"
+      }
+    },
+    {
+      "device_id": "kbd-0",
+      "category": "input",
+      "discovery_status": "discovered",
+      "bus": "pci",
+      "identity": {
+        "manufacturer": "Test",
+        "model": "Fixture"
+      },
+      "driver": {
+        "status": "bound",
+        "module": "fixture-driver"
+      },
+      "evidence": [
+        {
+          "kind": "live-observation",
+          "confidence": "confirmed",
+          "source": "procfs:/cpuinfo",
+          "observed_at": "2026-11-26T00:00:00Z",
+          "summary": "fixture entry"
+        }
+      ],
+      "functional_tests": [],
+      "recommendations": [],
+      "firmware": {
+        "requirement": "not-required",
+        "runtime_status": "not-needed"
+      }
+    },
+    {
+      "device_id": "usb-0",
+      "category": "usb-controller",
+      "discovery_status": "discovered",
+      "bus": "pci",
+      "identity": {
+        "manufacturer": "Test",
+        "model": "Fixture"
+      },
+      "driver": {
+        "status": "bound",
+        "module": "fixture-driver"
+      },
+      "evidence": [
+        {
+          "kind": "live-observation",
+          "confidence": "confirmed",
+          "source": "procfs:/cpuinfo",
+          "observed_at": "2026-11-26T00:00:00Z",
+          "summary": "fixture entry"
+        }
+      ],
+      "functional_tests": [],
+      "recommendations": [],
+      "firmware": {
+        "requirement": "not-required",
+        "runtime_status": "not-needed"
+      }
+    },
+    {
+      "device_id": "cam-0",
+      "category": "camera",
+      "discovery_status": "discovered",
+      "bus": "pci",
+      "identity": {
+        "manufacturer": "Test",
+        "model": "Fixture"
+      },
+      "driver": {
+        "status": "bound",
+        "module": "fixture-driver"
+      },
+      "evidence": [
+        {
+          "kind": "live-observation",
+          "confidence": "confirmed",
+          "source": "procfs:/cpuinfo",
+          "observed_at": "2026-11-26T00:00:00Z",
+          "summary": "fixture entry"
+        }
+      ],
+      "functional_tests": [],
+      "recommendations": [],
+      "firmware": {
+        "requirement": "not-required",
+        "runtime_status": "not-needed"
+      }
+    },
+    {
+      "device_id": "other-0",
+      "category": "other",
+      "discovery_status": "discovered",
+      "bus": "pci",
+      "identity": {
+        "manufacturer": "Test",
+        "model": "Fixture"
+      },
+      "driver": {
+        "status": "bound",
+        "module": "fixture-driver"
+      },
+      "evidence": [
+        {
+          "kind": "live-observation",
+          "confidence": "confirmed",
+          "source": "procfs:/cpuinfo",
+          "observed_at": "2026-11-26T00:00:00Z",
+          "summary": "fixture entry"
+        }
+      ],
+      "functional_tests": [],
+      "recommendations": [],
+      "firmware": {
+        "requirement": "not-required",
+        "runtime_status": "not-needed"
+      }
+    }
+  ],
+  "warnings": [],
+  "limitations": [
+    "Illustrative fixture only; values are not a real user probe.",
+    "Connector state and active mode are observations, not functional display-test results; EDID identity and GPU relationship are not represented."
+  ],
+  "privacy": {
+    "profile": "strict-local",
+    "network_upload_performed": false,
+    "sensitive_identifiers_included": false,
+    "redactions_applied": [
+      "serial-number",
+      "mac-address",
+      "uuid",
+      "hostname"
+    ],
+    "network_requests_performed": false
+  }
+}
