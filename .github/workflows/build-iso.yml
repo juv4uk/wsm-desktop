@@ -25,26 +25,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Guix
+      - name: Install Guix from the release tarball
         run: |
-          # wget exit code 8 means the server refused the request. Savannah's
-          # cgit does that to automated clients, so take the script from the
-          # official GitHub mirror and fall back to the release tarball.
-          wget -q https://raw.githubusercontent.com/guix-mirror/guix/master/etc/guix-install.sh \
-            || wget -q https://git.savannah.gnu.org/cgit/guix.git/plain/etc/guix-install.sh \
-            || { echo "::error::cannot fetch guix-install.sh"; exit 1; }
-          chmod +x guix-install.sh
-          # Empty answers accept every default. The output is captured and echoed
-          # as ::error:: lines, because the job log is not reachable through the
-          # API available here - annotations are.
-          yes '' | sudo ./guix-install.sh > install.log 2>&1
-          status=$?
-          echo "installer exit: $status"
-          while IFS= read -r line; do printf '::error::INSTALLER %s\n' "$line"; done < <(tail -40 install.log)
-          ls -la /usr/local/bin/guix || true
-          sudo systemctl is-active guix-daemon || sudo systemctl start guix-daemon || true
-          /usr/local/bin/guix --version || true
-          exit 0
+          set -euo pipefail
+          # guix-install.sh is served by Savannah cgit, which refuses automated
+          # clients (wget exit 8), and the GitHub mirror path 404s. The release
+          # tarball is the documented manual install and has no such dependency.
+          VERSION=1.5.0
+          wget -q "https://ftp.gnu.org/gnu/guix/guix-binary-${VERSION}.x86_64-linux.tar.xz"
+          tar -xf "guix-binary-${VERSION}.x86_64-linux.tar.xz"
+
+          sudo mkdir -p /var/guix /gnu
+          sudo mv var/guix/* /var/guix/
+          sudo mv gnu/* /gnu/
+
+          sudo groupadd --system guixbuild || true
+          for i in $(seq -w 1 10); do
+            sudo useradd -g guixbuild -G guixbuild -d /var/empty -s "$(command -v nologin)" \
+              -c "Guix build user $i" --system "guixbuilder$i" || true
+          done
+
+          sudo ln -sf /var/guix/profiles/per-user/root/current-guix/bin/guix /usr/local/bin/guix
+          sudo /usr/local/bin/guix archive --authorize \
+            < /var/guix/profiles/per-user/root/current-guix/share/guix/ci.guix.gnu.org.pub
+
+          sudo /var/guix/profiles/per-user/root/current-guix/bin/guix-daemon \
+            --build-users-group=guixbuild --disable-chroot &
+          sleep 5
+          guix --version
 
       - name: Install QEMU and OVMF
         run: |
