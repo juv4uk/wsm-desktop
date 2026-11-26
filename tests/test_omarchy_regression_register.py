@@ -139,6 +139,7 @@ class OmarchyRegisterTest(unittest.TestCase):
         self.assertIn("bounded", row[1])
         self.assertEqual(row[3].strip("`"), "not-covered")
         self.assertEqual(row[4], "—")
+
     def test_boot_update_esp_identity_is_not_claimed_covered_without_updater(self) -> None:
         row = self._row_for_source("Omarchy #15435")
         self.assertIn("не-booted ESP", row[0])
