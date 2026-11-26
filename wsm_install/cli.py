@@ -39,25 +39,25 @@ def build_parser() -> argparse.ArgumentParser:
 
     install = parser.add_argument_group(
         "install path",
-        "Plan a disk layout and the steps that would install onto it. Dry run "
-        "unless --execute is given together with --acknowledge-disk.",
+        "Plan a disk layout and preview install steps. Real APPLY is disabled "
+        "until target identity and digest-bound authorization are implemented.",
     )
     install.add_argument("--install", action="store_true",
                          help="plan disk layout and install steps for --target-disk")
     install.add_argument("--target-disk", metavar="PATH", help="whole block device, e.g. /dev/nvme0n1")
     install.add_argument("--target-size-bytes", type=int,
-                         help="size reported for the disk; drift above 2 percent is refused")
+                         help="user-supplied planning estimate; the block device is not probed")
     install.add_argument("--firmware", choices=("uefi", "bios"), default="uefi")
     install.add_argument("--filesystem", choices=("ext4", "btrfs", "xfs"), default="ext4")
     install.add_argument("--mount-point", default="/mnt")
     install.add_argument("--system-file", default="systems/desktop.scm",
                          help="Guix system file handed to guix system init")
     install.add_argument("--execute", action="store_true",
-                         help="actually run the steps; requires --acknowledge-disk")
+                         help="request real APPLY (currently refused; no disk commands are run)")
     install.add_argument("--guided", action="store_true",
-                         help="walk through the install in a console, no flags required")
+                         help="walk through disk selection and a read-only install preview")
     install.add_argument("--acknowledge-disk", metavar="PATH",
-                         help="must repeat --target-disk exactly; there is no --yes")
+                         help="planner acknowledgement only; repeat --target-disk exactly; not APPLY authorization")
     return parser
 
 
@@ -195,20 +195,7 @@ def _run_guided(args: argparse.Namespace) -> int:
             quiet=True,
         ))
 
-    def install(disk_path: str, size: int, firmware: str) -> None:
-        _run_install(argparse.Namespace(
-            target_disk=disk_path,
-            target_size_bytes=size,
-            firmware=firmware,
-            filesystem=args.filesystem,
-            mount_point=args.mount_point,
-            system_file=args.system_file,
-            acknowledge_disk=disk_path,
-            execute=True,
-            quiet=True,
-        ))
-
-    return run_guided(_Console(), candidates, plan, install, evidence_note)
+    return run_guided(_Console(), candidates, plan, evidence_note)
 
 
 def _run_install(args: argparse.Namespace) -> int:
@@ -216,6 +203,14 @@ def _run_install(args: argparse.Namespace) -> int:
     from wsm_install.executor import ExecutorError, execute
     from wsm_install.install_steps import backend_command, plan_steps, render
     from wsm_install.partition import Disk, Refused, plan as plan_layout
+
+    if args.execute:
+        print(
+            "wsm-install: execute.apply-disabled: real APPLY is disabled until "
+            "target identity, immutable-plan consent and verified postconditions exist",
+            file=sys.stderr,
+        )
+        return 2
 
     if not args.target_disk:
         print("wsm-install: --install requires --target-disk", file=sys.stderr)
@@ -253,8 +248,7 @@ def _run_install(args: argparse.Namespace) -> int:
         results = execute(
             steps,
             disk=disk.path,
-            acknowledgement=args.acknowledge_disk,
-            dry_run=not args.execute,
+            dry_run=True,
         )
     except ExecutorError as exc:
         print(f"wsm-install: {exc.code}: {exc.message}", file=sys.stderr)
@@ -262,8 +256,9 @@ def _run_install(args: argparse.Namespace) -> int:
 
     print(json.dumps(
         {
-            "mode": "execute" if args.execute else "dry-run",
+            "mode": "dry-run",
             "disk": disk.path,
+            "target_size_source": "user-supplied planning estimate; not read from the block device",
             "firmware": args.firmware,
             "filesystem": args.filesystem,
             "steps": [result.as_dict() for result in results],
@@ -279,6 +274,13 @@ def _run_install(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.execute:
+        print(
+            "wsm-install: execute.apply-disabled: real APPLY is disabled until "
+            "target identity, immutable-plan consent and verified postconditions exist",
+            file=sys.stderr,
+        )
+        return 2
     if not args.preflight:
         parser.error("--preflight is required")
     if not args.dry_run:
