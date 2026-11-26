@@ -10,7 +10,7 @@
     "one shared installer plan and preview contract exposed through the CLI, Guided, TUI and Calamares entrypoints",
     "privileged agent validates and previews plans only; APPLY is disabled, every planned step is not-run, and no installation command is launched",
     "journal and recovery-report utilities; preview mode does not perform or journal real disk mutations",
-    "read-only environment preflight; no target disk is touched by this release",
+    "read-only environment preflight; preview performs no block-device or filesystem mutation",
     "pinned Free Guix channel snapshot with authentication evidence recorded in issue #39; the separate Compatibility lock pins Nonguix but its structural check alone is not cryptographic authentication or a successful build",
     "source bundle generated from the exact Git commit with SHA-256 checksums and a release manifest",
     "KDE Plasma desktop profile, a minimal console live profile and a live-ISO recipe shipped as source; this release metadata does not claim those desktop recipes were built into a verified ISO"
