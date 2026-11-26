@@ -227,21 +227,31 @@ def _counter_deltas(before: dict[str, Any], after: dict[str, Any]) -> dict[str, 
     left = before.get("fields", {})
     right = after.get("fields", {})
     input_partial = before.get("status") != "available" or after.get("status") != "available"
+    missing_before = sorted(set(right) - set(left))
+    missing_after = sorted(set(left) - set(right))
+    field_set_changed = bool(missing_before or missing_after)
     deltas: dict[str, int | None] = {}
     for key in sorted(set(left) & set(right)):
-        start, end = left[key], right[key]
-        deltas[key] = end - start if end >= start else None
+        start_value, end_value = left[key], right[key]
+        deltas[key] = end_value - start_value if end_value >= start_value else None
     if not deltas:
         return {"status": "unknown", "reason": "counter-fields-unavailable", "fields": {}}
+    reset_detected = any(value is None for value in deltas.values())
     return {
-        "status": "available" if not input_partial and all(value is not None for value in deltas.values()) else "partial",
+        "status": (
+            "available"
+            if not input_partial and not field_set_changed and not reset_detected
+            else "partial"
+        ),
         "reason": (
-            "counter-reset" if any(value is None for value in deltas.values()) else
+            "counter-reset" if reset_detected else
+            "field-set-changed" if field_set_changed else
             "partial-source" if input_partial else None
         ),
         "fields": deltas,
+        "missing_before_fields": missing_before,
+        "missing_after_fields": missing_after,
     }
-
 
 def compare_pressure_snapshots(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
     """Summarize counter deltas; values are system-wide, not process attribution."""
@@ -299,9 +309,21 @@ def compare_pressure_snapshots(before: dict[str, Any], after: dict[str, Any]) ->
             )
         mm_before = left_stats.get("mm_stat", {"status": "unknown"})
         mm_after = right_stats.get("mm_stat", {"status": "unknown"})
+        config_before = left.get("config", {"status": "unknown"})
+        config_after = right.get("config", {"status": "unknown"})
+        config_values_match = (
+            config_before.get("active_compressor") == config_after.get("active_compressor")
+            and config_before.get("backing_device") == config_after.get("backing_device")
+        )
+        config_stable = (
+            config_before.get("status") == "available"
+            and config_after.get("status") == "available"
+            and config_values_match
+        )
         complete = (
             left.get("status") == "available"
             and right.get("status") == "available"
+            and config_stable
             and all(delta.get("status") == "available" for delta in deltas.values())
             and mm_before.get("status") == "available"
             and mm_after.get("status") == "available"
@@ -310,6 +332,12 @@ def compare_pressure_snapshots(before: dict[str, Any], after: dict[str, Any]) ->
             "status": "available" if complete else "partial",
             "before": left,
             "after": right,
+            "config": {
+                "status": "available" if config_stable else "partial",
+                "changed": not config_values_match,
+                "before": config_before,
+                "after": config_after,
+            },
             # mm_stat mixes byte-valued sizes with page fields; preserve raw snapshots.
             "mm_stat": {"before": mm_before, "after": mm_after},
             "counter_delta": deltas,
