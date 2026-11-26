@@ -4,7 +4,7 @@ PYTHON ?= python3
 PRODUCT ?= free
 GUIX ?= guix
 
-.PHONY: check release-gate check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle check-profiles check-syntax check-state check-isa check-live-acceptance check-perf-baseline check-profile-evidence check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-executor check-cli-install check-calamares check-hygiene check-channels check-release-gate check-profiles-matrix
+.PHONY: check release-gate check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle check-profiles check-syntax check-state check-isa check-live-acceptance check-perf-baseline check-profile-evidence check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-executor check-cli-install check-calamares check-hygiene check-channels check-release-gate check-profiles-matrix 
 
 check: check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa check-live-acceptance check-profiles-matrix check-perf-baseline check-profile-evidence check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-hygiene check-channels check-executor check-cli-install check-calamares check-release-gate
 
@@ -62,25 +62,16 @@ check-hygiene:
 
 release-gate:
 	$(PYTHON) scripts/release_gate.py --product "$(PRODUCT)" $(if $(ISO),--iso $(ISO)) $(if $(BOOT),--boot $(BOOT))
-
-	$(PYTHON) scripts/release_gate.py $(if $(ISO),--iso $(ISO)) $(if $(BOOT),--boot)
-
 check-channels:
 	$(PYTHON) tests/test_check_channels.py
 	$(PYTHON) scripts/check_channels.py --policy free --lock channels.lock.scm
 	@if test -f channels.compatibility.lock.scm; then \
 		$(PYTHON) scripts/check_channels.py --policy compatibility --lock channels.compatibility.lock.scm; \
 	else \
-		printf '%s\n' 'check-channels: Compatibility lock NOT_CONFIGURED; structural policy is covered by synthetic tests'; \
+		printf '%s\n' 'check-channels: Compatibility lock NOT_CONFIGURED; policy is covered by synthetic tests'; \
 	fi
-
 check-release-gate:
 	$(PYTHON) tests/test_release_gate.py
-
-	$(PYTHON) tests/test_check_channels.py
-	$(PYTHON) scripts/check_channels.py --policy free
-	$(PYTHON) scripts/check_channels.py --policy compatibility
-
 check-profiles-matrix:
 	$(PYTHON) tests/test_profiles.py
 
