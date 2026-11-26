@@ -6,6 +6,7 @@
 - Код: [`wsm_install/classification.py`](../wsm_install/classification.py)
 - Тести: `tests/test_classification.py` (15)
 - Словник: [OBSERVATION-PRINCIPLES.md](OBSERVATION-PRINCIPLES.md)
+- **Канонічна політика станів: [HARDWARE-COMPATIBILITY-VERDICTS.md](HARDWARE-COMPATIBILITY-VERDICTS.md)** (власник — [#22](https://github.com/juv4uk/wsm-desktop/issues/22)). Три рівні нижче — це стислий виклад тих самих станів, а не друга політика.
 
 ## Питання
 
@@ -14,6 +15,20 @@ WSM ставлять на те, що вже є, і заздалегідь нев
 
 Тому «залізоорієнтованість» тут означає не «ми знаємо, на чому працюємо», а
 **«ми вміємо виявити, класифікувати й чесно поводитися з невідомим»**.
+
+## Три рівні — це стислий виклад, а не друга політика
+
+У репозиторії вже є канонічна політика станів доказів
+([HARDWARE-COMPATIBILITY-VERDICTS.md](HARDWARE-COMPATIBILITY-VERDICTS.md)) із сімома
+станами. Цей модуль **не вигадує власний словник**: він виводить трирівневий
+підсумок із тих самих станів, щоб людина бачила коротке рішення, а машина
+зберігала повний стан.
+
+| Канонічний стан | Рівень |
+| --- | --- |
+| `supported-tested` | certified |
+| `driver-bound-not-tested` | known |
+| `candidate-only`, `known-problem`, `not-detected`, `not-tested`, `unknown`, `not-collected` | unknown |
 
 ## Три рівні
 

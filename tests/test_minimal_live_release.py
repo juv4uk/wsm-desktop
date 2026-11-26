@@ -79,6 +79,41 @@ class MinimalLiveProfileTests(unittest.TestCase):
         self.assertIn("sed -e 's/[[:space:]]*#.*$//'", workflow)
 
 
+    def test_release_assets_are_verified_before_draft_publication(self) -> None:
+        workflow = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
+        create_step = workflow.index("name: Створити чернетку релізу та завантажити assets")
+        verify_step = workflow.index("name: Перевірити завантажені assets до публікації")
+        publish_step = workflow.index("name: Опублікувати перевірений GitHub pre-release")
+        cleanup = workflow.index("gh release delete-asset")
+        upload = workflow.index("gh release upload")
+        download = workflow.index("gh release download")
+        verify = workflow.index("scripts/verify_release_assets.py")
+        publish = workflow.index("gh release edit")
+        self.assertLess(create_step, verify_step)
+        self.assertLess(verify_step, publish_step)
+        self.assertLess(cleanup, upload)
+        self.assertLess(upload, download)
+        self.assertLess(download, verify)
+        self.assertLess(verify, publish)
+        self.assertIn("--draft --prerelease", workflow)
+        self.assertIn("--draft=false", workflow)
+        self.assertIn('RELEASE_EXISTS=true', workflow)
+        self.assertIn('[ "$TARGET_COMMIT" != "$GITHUB_SHA" ]', workflow)
+        self.assertIn('[ "$IS_DRAFT" != "true" ]', workflow)
+        self.assertIn("--json assets --jq '.assets[].name'", workflow)
+        self.assertIn("Повідомити причину збою", workflow)
+
+    def test_release_manifest_heredoc_closes_before_asset_upload_steps(self) -> None:
+        workflow = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
+        manifest_start = workflow.index("name: Маніфест і контрольні суми")
+        draft_start = workflow.index("name: Створити чернетку релізу та завантажити assets")
+        manifest_step = workflow[manifest_start:draft_start]
+        self.assertIn('build_manifest_sha256":sha(bp)', manifest_step)
+        self.assertIn('(root/"release-manifest.json").write_text', manifest_step)
+        self.assertIn('(root/"SHA256SUMS").write_text', manifest_step)
+        self.assertIn("\n          PY\n", manifest_step)
+        self.assertIn('sha256sum -c SHA256SUMS', manifest_step)
+
 class LiveInstallerLauncherTests(unittest.TestCase):
     def test_launcher_runs_preflight_and_tui_then_cleans_private_report(self) -> None:
         launcher = ROOT / "scripts/wsm-install-live.sh"

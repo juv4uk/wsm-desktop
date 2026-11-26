@@ -173,8 +173,6 @@ class RenderTests(unittest.TestCase):
         self.assertIn("guix system init", text)
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class ForeignDataTests(unittest.TestCase):
@@ -213,3 +211,7 @@ class ForeignDataTests(unittest.TestCase):
             tools & {"efibootmgr", "bootctl", "grub-install", "grub2-install"},
             f"unexpected boot-order tooling: {sorted(tools)}",
         )
+
+
+if __name__ == "__main__":
+    unittest.main()

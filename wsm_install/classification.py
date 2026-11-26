@@ -30,9 +30,45 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
+# The canonical vocabulary lives in docs/HARDWARE-COMPATIBILITY-VERDICTS.md and
+# is owned by issue #22. This module does not invent a second one: it derives the
+# three-level summary from those evidence states, so a reader who knows the
+# policy recognises every value here.
+EVIDENCE_TO_LEVEL = {
+    "supported-tested": "certified",
+    "driver-bound-not-tested": "known",
+    "candidate-only": "unknown",
+    "known-problem": "unknown",
+    "not-detected": "unknown",
+    "not-tested": "unknown",
+    "unknown": "unknown",
+    "not-collected": "unknown",
+}
+
 CERTIFIED = "certified"
 KNOWN = "known"
 UNKNOWN = "unknown"
+
+
+def evidence_state_for(device: dict[str, Any]) -> str:
+    """Derive the canonical evidence state for one device from the report."""
+    tests = [test for test in device.get("functional_tests") or [] if isinstance(test, dict)]
+    if any(str(test.get("status")) == "failed" for test in tests):
+        return "known-problem"
+    if any(str(test.get("status")) == "passed" for test in tests):
+        return "supported-tested"
+
+    status = str(device.get("discovery_status", "unknown"))
+    driver = device.get("driver") or {}
+    bound = bool(str(driver.get("name") or driver.get("module") or "").strip())
+
+    if status == "not-detected":
+        return "not-detected"
+    if status == "unknown":
+        return "unknown"
+    if bound:
+        return "driver-bound-not-tested"
+    return "not-tested"
 
 STOP = "stop"
 WARN = "warn"
@@ -74,6 +110,7 @@ class SubsystemVerdict:
     devices: list[str] = field(default_factory=list)
     reasons: list[str] = field(default_factory=list)
     assessed: bool = True
+    evidence_states: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -82,6 +119,7 @@ class SubsystemVerdict:
             "devices": list(self.devices),
             "reasons": list(self.reasons),
             "assessed": self.assessed,
+            "evidence_states": list(self.evidence_states),
         }
 
 
@@ -131,26 +169,20 @@ def classify_subsystem(
     if cover.get(subsystem) in {"fail", "not-assessed"}:
         verdict.reasons.append(f"evidence exists but records this function as {cover[subsystem]}")
 
-    discovered: list[str] = []
-    undriven: list[str] = []
+    states: list[str] = []
     for device in devices:
-        status = str(device.get("discovery_status", "unknown"))
-        driver = device.get("driver") or {}
-        driver_name = str(driver.get("name") or driver.get("module") or "").strip()
-        if status in {"unknown", "not-detected"}:
-            undriven.append(f"{device.get('device_id', '?')}: discovery is {status}")
-        elif not driver_name:
-            undriven.append(f"{device.get('device_id', '?')}: discovered but no driver is bound")
-        else:
-            discovered.append(f"{device.get('device_id', '?')}: {driver_name}")
+        state = evidence_state_for(device)
+        states.append(state)
+        verdict.reasons.append(f"{device.get('device_id', '?')}: {state}")
 
-    if discovered and not undriven:
+    levels = {EVIDENCE_TO_LEVEL.get(state, UNKNOWN) for state in states}
+    if CERTIFIED in levels and levels == {CERTIFIED}:
+        verdict.level = CERTIFIED
+    elif levels <= {CERTIFIED, KNOWN}:
         verdict.level = KNOWN
-        verdict.reasons.extend(discovered)
     else:
         verdict.level = UNKNOWN
-        verdict.reasons.extend(undriven)
-        verdict.reasons.extend(discovered)
+    verdict.evidence_states = states
     return verdict
 
 
@@ -191,10 +223,12 @@ def classify(
         "stop_because": unknown_critical,
         "warn_because": unknown_degrading,
         "not_assessed": not_assessed,
+        "vocabulary": "docs/HARDWARE-COMPATIBILITY-VERDICTS.md (owned by issue #22)",
         "note": (
             "unknown is not a failure: it means this machine's behaviour was not "
             "verified here. A decision to stop is about consequences, not about "
-            "how much we like the hardware."
+            "how much we like the hardware. The three levels are a summary of the "
+            "canonical evidence states, not a replacement for them."
         ),
     }
 

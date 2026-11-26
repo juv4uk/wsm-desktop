@@ -67,7 +67,7 @@ class LevelTests(unittest.TestCase):
     def test_discovered_without_driver_is_unknown(self) -> None:
         verdict = classify_subsystem(report(device("d1", "gpu", driver=None)), "graphics")
         self.assertEqual(verdict.level, UNKNOWN)
-        self.assertTrue(any("no driver" in reason for reason in verdict.reasons))
+        self.assertIn("not-tested", verdict.evidence_states)
 
     def test_undiscovered_device_is_unknown(self) -> None:
         verdict = classify_subsystem(report(device("d1", "gpu", status="unknown")), "graphics")
@@ -78,6 +78,31 @@ class LevelTests(unittest.TestCase):
         self.assertEqual(verdict.level, UNKNOWN)
         self.assertFalse(verdict.assessed)
         self.assertTrue(any("does not assess" in reason for reason in verdict.reasons))
+
+
+class VocabularyTests(unittest.TestCase):
+    """The levels are a summary of docs/HARDWARE-COMPATIBILITY-VERDICTS.md."""
+
+    def test_passed_functional_test_maps_to_supported_tested(self) -> None:
+        entry = device("d1", "storage-device")
+        entry["functional_tests"] = [{"capability": "read-write", "status": "passed"}]
+        verdict = classify_subsystem(report(entry), "storage")
+        self.assertIn("supported-tested", verdict.evidence_states)
+
+    def test_failed_functional_test_maps_to_known_problem(self) -> None:
+        entry = device("d1", "gpu")
+        entry["functional_tests"] = [{"capability": "modeset", "status": "failed"}]
+        verdict = classify_subsystem(report(entry), "graphics")
+        self.assertIn("known-problem", verdict.evidence_states)
+        self.assertEqual(verdict.level, UNKNOWN)
+
+    def test_bound_driver_maps_to_driver_bound_not_tested(self) -> None:
+        verdict = classify_subsystem(report(device("d1", "network")), "network")
+        self.assertIn("driver-bound-not-tested", verdict.evidence_states)
+
+    def test_result_names_the_owning_document(self) -> None:
+        result = classify(report())
+        self.assertIn("HARDWARE-COMPATIBILITY-VERDICTS.md", result["vocabulary"])
 
 
 class DecisionTests(unittest.TestCase):
