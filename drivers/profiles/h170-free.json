@@ -1,0 +1,397 @@
+{
+  "schema_version": "1.2.0",
+  "profile_id": "h170-free",
+  "profile_class": "free",
+  "profile_status": "draft",
+  "enabled_by_default": true,
+  "base_profile": null,
+  "target": {
+    "target_id": "h170-gaming-3-owner-reference",
+    "board_vendor": "Gigabyte Technology Co., Ltd.",
+    "board_model": "H170-Gaming 3",
+    "firmware_vendor": "American Megatrends Inc.",
+    "firmware_version": "F22e",
+    "boot_mode": "uefi",
+    "secure_boot": "unknown",
+    "evidence_source": "https://github.com/juv4uk/wsm-os/blob/40ef00079d478d43fa496ec066bb96ac4c0850a3/docs/OWNER-HARDWARE-PROFILE.md",
+    "evidence_date": "2026-09-02"
+  },
+  "source": {
+    "repository": "juv4uk/wsm-desktop",
+    "source_commit": null,
+    "channel_lock_file": "channels.lock.scm",
+    "channel_authentication_evidence": "authenticated-pull-recorded-build-not-evaluated",
+    "notes": "Authenticated Guix pull/channel introduction was recorded for this pinned Free channel. This profile has not been evaluated or built on the channel; the lock is not package or firmware evidence.",
+    "channel_revisions": [
+      {
+        "name": "guix",
+        "url": "https://git.guix.gnu.org/guix.git",
+        "commit": "4e5195be20d9b124df8a8bb69213412236e4668e"
+      }
+    ]
+  },
+  "kernel": {
+    "package_candidate": "linux-libre (candidate only; exact package and closure not evaluated)",
+    "version": null,
+    "configuration_status": "not-assessed",
+    "notes": "Kernel package/configuration, modules and initrd contents must be evaluated against the pinned channel before image integration."
+  },
+  "unobserved_device_classes": [
+    "wifi",
+    "bluetooth",
+    "thunderbolt",
+    "webcam"
+  ],
+  "devices": [
+    {
+      "device_id": "h170-board",
+      "device_class": "platform",
+      "model": "Gigabyte H170-Gaming 3",
+      "evidence_class": "windows-observed",
+      "observed_bdf": null,
+      "pci_ids": [],
+      "driver_candidates": [],
+      "firmware": {
+        "requirement": "unknown",
+        "package_candidates": [],
+        "package_resolution": "not-assessed",
+        "live_rootfs": "not-assessed",
+        "initrd": "not-assessed",
+        "installed_rootfs": "not-assessed",
+        "runtime_load": "not-assessed",
+        "redistribution": "unknown",
+        "evidence": []
+      },
+      "functional_validation": {
+        "status": "not-run",
+        "environment": "none",
+        "evidence": []
+      },
+      "notes": [
+        "Board model and BIOS F22e are Windows-observed. Secure Boot state remains unknown.",
+        "No chipset or board driver requirement is inferred from the model name."
+      ],
+      "identity_evidence": []
+    },
+    {
+      "device_id": "skylake-i5-6400",
+      "device_class": "cpu",
+      "model": "Intel Core i5-6400 (Skylake)",
+      "evidence_class": "windows-observed",
+      "observed_bdf": null,
+      "pci_ids": [],
+      "driver_candidates": [],
+      "firmware": {
+        "requirement": "unknown",
+        "package_candidates": [],
+        "package_resolution": "not-assessed",
+        "live_rootfs": "not-assessed",
+        "initrd": "not-assessed",
+        "installed_rootfs": "not-assessed",
+        "runtime_load": "not-assessed",
+        "redistribution": "unknown",
+        "evidence": []
+      },
+      "functional_validation": {
+        "status": "not-run",
+        "environment": "none",
+        "evidence": []
+      },
+      "notes": [
+        "CPU identification is Windows-observed. This profile makes no claim about microcode package inclusion."
+      ],
+      "identity_evidence": []
+    },
+    {
+      "device_id": "intel-hd-530",
+      "device_class": "graphics",
+      "model": "Intel HD Graphics 530",
+      "evidence_class": "windows-observed",
+      "observed_bdf": null,
+      "pci_ids": [],
+      "driver_candidates": [
+        {
+          "candidate_id": "i915-mesa",
+          "name": "Intel i915 + Mesa graphics stack",
+          "kernel_module": "i915",
+          "userspace_candidates": [
+            "Mesa Intel userspace"
+          ],
+          "package_candidates": [],
+          "package_resolution": "not-assessed",
+          "kernel_config": "not-assessed",
+          "runtime_binding": "unknown",
+          "source_license": "unknown",
+          "evidence": []
+        }
+      ],
+      "firmware": {
+        "requirement": "unknown",
+        "package_candidates": [],
+        "package_resolution": "not-assessed",
+        "live_rootfs": "not-assessed",
+        "initrd": "not-assessed",
+        "installed_rootfs": "not-assessed",
+        "runtime_load": "not-assessed",
+        "redistribution": "unknown",
+        "evidence": []
+      },
+      "functional_validation": {
+        "status": "not-run",
+        "environment": "none",
+        "evidence": []
+      },
+      "notes": [
+        "Candidate free graphics path only. DRM/KMS, firmware needs, Guix package closure and Plasma session have not been tested on this target."
+      ],
+      "identity_evidence": []
+    },
+    {
+      "device_id": "nvidia-gtx-1050-ti",
+      "device_class": "graphics",
+      "model": "NVIDIA GeForce GTX 1050 Ti (Pascal, sm_61)",
+      "evidence_class": "windows-observed",
+      "observed_bdf": "00000000:01:00.0",
+      "pci_ids": [
+        "10de:1c82"
+      ],
+      "driver_candidates": [
+        {
+          "candidate_id": "nouveau-pascal",
+          "name": "Nouveau + Mesa/NVK (upstream lists Kepler and later; H170 validation pending)",
+          "kernel_module": "nouveau",
+          "userspace_candidates": [
+            "Mesa",
+            "NVK (upstream generation range includes Kepler/Pascal; exact 10de:1c82 runtime not assessed)"
+          ],
+          "package_candidates": [],
+          "package_resolution": "not-assessed",
+          "kernel_config": "not-assessed",
+          "runtime_binding": "unknown",
+          "source_license": "unknown",
+          "evidence": [
+            {
+              "kind": "upstream-reference",
+              "source": "Mesa NVK driver documentation",
+              "source_url": "https://docs.mesa3d.org/drivers/nvk.html",
+              "observed_at": "2026-11-26",
+              "summary": "Current upstream documentation lists Kepler and later GPU generations for NVK, Vulkan 1.4 conformance for officially supported GPUs, and Linux kernel >=6.6. A developer-only override may enumerate poorly tested or broken GPUs. This is generation-level upstream evidence only; exact 10de:1c82 enumeration, Guix package closure, firmware, binding and functional validation remain unassessed."
+            }
+          ],
+          "notes": [
+            "Windows nvidia-smi reported physical adapter location 00000000:01:00.0. That BDF is not a PCI vendor:device ID.",
+            "Do not infer reclocking, full acceleration, firmware presence or usable KDE acceleration from detection. Pascal performance limitations must be documented.",
+            "Mesa's current NVK documentation lists Kepler and later GPUs, states a Linux 6.6 minimum, and documents a developer-only override that can expose poorly tested or broken GPUs. This upstream scope does not prove enumeration or functional support for PCI ID 10de:1c82."
+          ]
+        }
+      ],
+      "firmware": {
+        "requirement": "unknown",
+        "package_candidates": [],
+        "package_resolution": "not-assessed",
+        "live_rootfs": "not-assessed",
+        "initrd": "not-assessed",
+        "installed_rootfs": "not-assessed",
+        "runtime_load": "not-assessed",
+        "redistribution": "unknown",
+        "evidence": []
+      },
+      "functional_validation": {
+        "status": "not-run",
+        "environment": "none",
+        "evidence": []
+      },
+      "notes": [
+        "Windows nvidia-smi reported physical adapter location 00000000:01:00.0. That BDF is not a PCI vendor:device ID.",
+        "Do not infer reclocking, full acceleration, firmware presence or usable KDE acceleration from detection. Pascal performance limitations must be documented."
+      ],
+      "identity_evidence": [
+        {
+          "kind": "owner-hardware-profile",
+          "source": "Owner-shared Windows PowerShell Get-PnpDevice -Class Display inventory",
+          "observed_at": "2026-09-02",
+          "summary": "VEN_10DE DEV_1C82 SUBSYS_33511462 REV_A1. The separately observed BDF 00000000:01:00.0 is a bus address, not a vendor:device identifier."
+        }
+      ]
+    },
+    {
+      "device_id": "killer-e2200",
+      "device_class": "network",
+      "model": "Killer E2200 Gigabit Ethernet Controller",
+      "evidence_class": "windows-observed",
+      "observed_bdf": null,
+      "pci_ids": [],
+      "driver_candidates": [
+        {
+          "candidate_id": "alx-e2200",
+          "name": "Linux alx driver",
+          "kernel_module": "alx",
+          "userspace_candidates": [],
+          "package_candidates": [],
+          "package_resolution": "not-assessed",
+          "kernel_config": "not-assessed",
+          "runtime_binding": "unknown",
+          "source_license": "unknown",
+          "evidence": []
+        }
+      ],
+      "firmware": {
+        "requirement": "unknown",
+        "package_candidates": [],
+        "package_resolution": "not-assessed",
+        "live_rootfs": "not-assessed",
+        "initrd": "not-assessed",
+        "installed_rootfs": "not-assessed",
+        "runtime_load": "not-assessed",
+        "redistribution": "unknown",
+        "evidence": []
+      },
+      "functional_validation": {
+        "status": "not-run",
+        "environment": "none",
+        "evidence": []
+      },
+      "notes": [
+        "Owner profile observes a Killer E2200 adapter. Exact PCI vendor:device ID, package availability, binding and DHCP/traffic test remain unknown."
+      ],
+      "identity_evidence": []
+    },
+    {
+      "device_id": "kingston-nv2",
+      "device_class": "nvme-storage",
+      "model": "Kingston SNV2S1000G NVMe SSD",
+      "evidence_class": "windows-observed",
+      "observed_bdf": null,
+      "pci_ids": [],
+      "driver_candidates": [
+        {
+          "candidate_id": "nvme-controller",
+          "name": "Linux NVMe core driver",
+          "kernel_module": "nvme",
+          "userspace_candidates": [],
+          "package_candidates": [],
+          "package_resolution": "not-assessed",
+          "kernel_config": "not-assessed",
+          "runtime_binding": "unknown",
+          "source_license": "unknown",
+          "evidence": []
+        }
+      ],
+      "firmware": {
+        "requirement": "unknown",
+        "package_candidates": [],
+        "package_resolution": "not-assessed",
+        "live_rootfs": "not-assessed",
+        "initrd": "not-assessed",
+        "installed_rootfs": "not-assessed",
+        "runtime_load": "not-assessed",
+        "redistribution": "unknown",
+        "evidence": []
+      },
+      "functional_validation": {
+        "status": "not-run",
+        "environment": "none",
+        "evidence": []
+      },
+      "notes": [
+        "Storage model/capacity are Windows-observed. No read/write validation or initrd requirement is claimed."
+      ],
+      "identity_evidence": []
+    },
+    {
+      "device_id": "samsung-sata",
+      "device_class": "sata-storage",
+      "model": "Samsung 850 EVO 120 GB and Samsung HD321KJ 320 GB",
+      "evidence_class": "windows-observed",
+      "observed_bdf": null,
+      "pci_ids": [],
+      "driver_candidates": [
+        {
+          "candidate_id": "ahci-controller",
+          "name": "Linux AHCI/SATA driver",
+          "kernel_module": "ahci",
+          "userspace_candidates": [],
+          "package_candidates": [],
+          "package_resolution": "not-assessed",
+          "kernel_config": "not-assessed",
+          "runtime_binding": "unknown",
+          "source_license": "unknown",
+          "evidence": []
+        }
+      ],
+      "firmware": {
+        "requirement": "unknown",
+        "package_candidates": [],
+        "package_resolution": "not-assessed",
+        "live_rootfs": "not-assessed",
+        "initrd": "not-assessed",
+        "installed_rootfs": "not-assessed",
+        "runtime_load": "not-assessed",
+        "redistribution": "unknown",
+        "evidence": []
+      },
+      "functional_validation": {
+        "status": "not-run",
+        "environment": "none",
+        "evidence": []
+      },
+      "notes": [
+        "Storage models are Windows-observed. No filesystem, partition or write test has been performed."
+      ],
+      "identity_evidence": []
+    },
+    {
+      "device_id": "hda-audio",
+      "device_class": "audio",
+      "model": "High Definition Audio / Intel and NVIDIA display audio endpoints",
+      "evidence_class": "windows-observed",
+      "observed_bdf": null,
+      "pci_ids": [],
+      "driver_candidates": [
+        {
+          "candidate_id": "snd-hda-intel",
+          "name": "Linux HDA driver",
+          "kernel_module": "snd_hda_intel",
+          "userspace_candidates": [],
+          "package_candidates": [],
+          "package_resolution": "not-assessed",
+          "kernel_config": "not-assessed",
+          "runtime_binding": "unknown",
+          "source_license": "unknown",
+          "evidence": []
+        }
+      ],
+      "firmware": {
+        "requirement": "unknown",
+        "package_candidates": [],
+        "package_resolution": "not-assessed",
+        "live_rootfs": "not-assessed",
+        "initrd": "not-assessed",
+        "installed_rootfs": "not-assessed",
+        "runtime_load": "not-assessed",
+        "redistribution": "unknown",
+        "evidence": []
+      },
+      "functional_validation": {
+        "status": "not-run",
+        "environment": "none",
+        "evidence": []
+      },
+      "notes": [
+        "Windows lists audio endpoints. Codec-level enumeration, firmware, audio service setup and playback/capture remain untested."
+      ],
+      "identity_evidence": []
+    }
+  ],
+  "policy": {
+    "nonfree_components_included": false,
+    "automatic_firmware_updates": false,
+    "host_disk_writes": false,
+    "unknown_must_remain_unknown": true,
+    "notes": [
+      "Free baseline only; no Nonguix channel, proprietary NVIDIA package, substitute key or firmware bundle is added.",
+      "No driver candidate in this draft is asserted present, bound or functional.",
+      "The owner profile is Windows-observed; WSL2/QEMU inventory cannot prove physical Linux PCI binding."
+    ]
+  }
+}

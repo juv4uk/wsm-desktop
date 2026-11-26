@@ -1,0 +1,3 @@
+# SPDX-License-Identifier: LicenseRef-Volnist
+# Runtime dependency for validating the versioned hardware report.
+jsonschema[format]==4.26.0
