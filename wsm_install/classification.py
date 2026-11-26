@@ -1,39 +1,19 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""Classify a machine as certified, known or unknown - per subsystem.
+"""Derive a conservative three-level summary from validated hardware evidence.
 
-The installer never meets the same hardware twice, so "supported hardware" is
-not a list. It is a judgement about *this* machine, made from evidence, and it
-has three levels rather than two:
-
-* **certified** - we have a valid evidence bundle for this machine and it says
-  this function passed. Someone ran it and wrote down the result.
-* **known** - the component was discovered and something drives it, but this
-  exact combination has not been verified. It will probably work; nobody
-  promised it.
-* **unknown** - nothing was discovered, or nothing drives it. Not "broken":
-  *not known*, which is a different statement and needs a different response.
-
-The response is what matters:
-
-* **stop** - a critical subsystem is unknown; continuing would produce a system
-  that cannot boot, or one that destroys data on the way.
-* **warn** - the system will install and boot, but something will not work, and
-  the user has to agree to that.
-* **proceed** - unknown peripherals are recorded and nothing else.
-
-`unknown` never silently becomes `known`. That is the whole point of the third
-level: without it, "we did not check" degrades into "we checked and it is fine".
+This module summarizes evidence only. It does not decide whether an installer
+scenario may continue: that decision belongs to the canonical scenario policy,
+which must consider impact and verified fallbacks.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Iterable
 
-# The canonical vocabulary lives in docs/HARDWARE-COMPATIBILITY-VERDICTS.md and
-# is owned by issue #22. This module does not invent a second one: it derives the
-# three-level summary from those evidence states, so a reader who knows the
-# policy recognises every value here.
 EVIDENCE_TO_LEVEL = {
     "supported-tested": "certified",
     "driver-bound-not-tested": "known",
@@ -48,34 +28,8 @@ EVIDENCE_TO_LEVEL = {
 CERTIFIED = "certified"
 KNOWN = "known"
 UNKNOWN = "unknown"
+DECISION_NOT_EVALUATED = "not-evaluated"
 
-
-def evidence_state_for(device: dict[str, Any]) -> str:
-    """Derive the canonical evidence state for one device from the report."""
-    tests = [test for test in device.get("functional_tests") or [] if isinstance(test, dict)]
-    if any(str(test.get("status")) == "failed" for test in tests):
-        return "known-problem"
-    if any(str(test.get("status")) == "passed" for test in tests):
-        return "supported-tested"
-
-    status = str(device.get("discovery_status", "unknown"))
-    driver = device.get("driver") or {}
-    bound = bool(str(driver.get("name") or driver.get("module") or "").strip())
-
-    if status == "not-detected":
-        return "not-detected"
-    if status == "unknown":
-        return "unknown"
-    if bound:
-        return "driver-bound-not-tested"
-    return "not-tested"
-
-STOP = "stop"
-WARN = "warn"
-PROCEED = "proceed"
-
-# Which report categories form which subsystem. A subsystem is a unit of
-# judgement: users care whether storage works, not which PCI address it sits on.
 SUBSYSTEMS: dict[str, tuple[str, ...]] = {
     "cpu": ("cpu",),
     "memory": ("memory",),
@@ -91,16 +45,225 @@ SUBSYSTEMS: dict[str, tuple[str, ...]] = {
     "other": ("other",),
 }
 
-# Unknown here means the machine may not boot or may lose data, so the installer
-# stops rather than guesses.
-CRITICAL = frozenset({"firmware", "storage", "cpu", "memory"})
 
-# Unknown here is survivable: the system installs, boots, and something inside it
-# does not work. The user must agree, because they may not find out until later.
-DEGRADING = frozenset({"graphics", "network", "audio", "bluetooth", "input"})
+class ClassificationEvidenceError(ValueError):
+    """A profile evidence bundle is invalid or does not bind to this report."""
 
-# Everything else is recorded and nothing more.
-PERIPHERAL = frozenset({"usb", "camera", "other"})
+
+_VALIDATION_TOKEN = object()
+
+
+@dataclass(frozen=True, init=False)
+class ValidatedProfileEvidence:
+    """A profile bundle that passed schema, artifact, and exact-report checks.
+
+    Instances are created only by load_validated_profile_evidence(). A plain
+    dictionary is deliberately not accepted by the classifier.
+    """
+
+    report_id: str
+    report_schema_version: str
+    report_sha256: str
+    function_statuses: tuple[tuple[str, str], ...]
+
+    def __init__(self, token: object, **values: Any) -> None:
+        if token is not _VALIDATION_TOKEN:
+            raise TypeError(
+                "ValidatedProfileEvidence must be created by "
+                "load_validated_profile_evidence()"
+            )
+        for name in (
+            "report_id",
+            "report_schema_version",
+            "report_sha256",
+            "function_statuses",
+        ):
+            object.__setattr__(self, name, values[name])
+
+    def status_for(self, subsystem: str) -> str | None:
+        return dict(self.function_statuses).get(subsystem.lower())
+
+
+def load_validated_profile_evidence(
+    report: dict[str, Any],
+    report_bytes: bytes,
+    evidence_path: Path,
+) -> ValidatedProfileEvidence:
+    """Validate one profile bundle and bind it to the exact current report.
+
+    The shared profile validator checks JSON Schema, profile.scm bytes, every
+    artifact byte stream, safe paths, and functional-evidence references. This
+    function adds report identity and raw-byte digest binding.
+    """
+    if not isinstance(report_bytes, bytes):
+        raise TypeError("report_bytes must be the exact source report bytes")
+    try:
+        decoded_report = json.loads(report_bytes)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ClassificationEvidenceError(
+            f"source report bytes are not valid JSON: {exc}"
+        ) from exc
+    if decoded_report != report:
+        raise ClassificationEvidenceError(
+            "report object does not match the supplied source report bytes"
+        )
+
+    from wsm_install.profile import (
+        EvidenceUnavailable,
+        load as load_profile,
+        problems as profile_problems,
+        slug_matches_directory,
+    )
+
+    path = Path(evidence_path)
+    try:
+        document = load_profile(path)
+    except EvidenceUnavailable as exc:
+        raise ClassificationEvidenceError(str(exc)) from exc
+
+    root = path.parent
+    errors: list[str] = []
+    if root.is_symlink() or not root.is_dir():
+        errors.append("profile evidence directory is missing or is a symbolic link")
+
+    if document.get("report_id") != report.get("report_id"):
+        errors.append("profile evidence report_id does not match the current report")
+    if document.get("report_schema_version") != report.get("schema_version"):
+        errors.append(
+            "profile evidence report_schema_version does not match the current report"
+        )
+
+    source_reports = [
+        item
+        for item in document.get("artifacts", [])
+        if isinstance(item, dict) and item.get("kind") == "wsm-hwcheck-report"
+    ]
+    if len(source_reports) != 1:
+        errors.append(
+            "profile evidence must contain exactly one wsm-hwcheck-report artifact"
+        )
+    else:
+        expected_digest = hashlib.sha256(report_bytes).hexdigest()
+        if source_reports[0].get("sha256") != expected_digest:
+            errors.append(
+                "profile evidence source-report SHA-256 does not match the exact report bytes"
+            )
+
+    profile_file = root / "profile.scm"
+    if root.is_symlink() or profile_file.is_symlink() or not profile_file.is_file():
+        errors.append("profile evidence directory has no regular profile.scm")
+    else:
+        try:
+            errors.extend(
+                slug_matches_directory(document, root, root.parent.parent)
+            )
+        except (KeyError, OSError, ValueError) as exc:
+            errors.append(f"profile directory identity cannot be verified: {exc}")
+
+    try:
+        errors.extend(profile_problems(document, artifact_root=root))
+    except EvidenceUnavailable as exc:
+        errors.append(str(exc))
+
+    functions = document.get("verified_functions", [])
+    normalized: dict[str, str] = {}
+    for item in functions if isinstance(functions, list) else []:
+        if not isinstance(item, dict):
+            errors.append("verified_functions contains a non-object entry")
+            continue
+        name = str(item.get("name", "")).strip().lower()
+        status = str(item.get("status", ""))
+        if not name:
+            errors.append("verified_functions contains an empty function name")
+            continue
+        if name in normalized:
+            errors.append(f"duplicate verified function name {name!r}")
+            continue
+        normalized[name] = status
+
+    if errors:
+        raise ClassificationEvidenceError("; ".join(errors))
+
+    return ValidatedProfileEvidence(
+        _VALIDATION_TOKEN,
+        report_id=str(report["report_id"]),
+        report_schema_version=str(report["schema_version"]),
+        report_sha256=hashlib.sha256(report_bytes).hexdigest(),
+        function_statuses=tuple(sorted(normalized.items())),
+    )
+
+
+def _validate_evidence_binding(
+    report: dict[str, Any],
+    evidence: ValidatedProfileEvidence | None,
+    report_bytes: bytes | None,
+) -> None:
+    if evidence is None:
+        return
+    if not isinstance(evidence, ValidatedProfileEvidence):
+        raise TypeError(
+            "profile evidence must be loaded with load_validated_profile_evidence(); "
+            "raw dictionaries are not trusted"
+        )
+    if report_bytes is None:
+        raise ValueError("exact report_bytes are required with profile evidence")
+    if evidence.report_id != report.get("report_id"):
+        raise ClassificationEvidenceError(
+            "validated profile evidence belongs to another report_id"
+        )
+    if evidence.report_schema_version != report.get("schema_version"):
+        raise ClassificationEvidenceError(
+            "validated profile evidence belongs to another report schema version"
+        )
+    if evidence.report_sha256 != hashlib.sha256(report_bytes).hexdigest():
+        raise ClassificationEvidenceError(
+            "validated profile evidence is not bound to these exact report bytes"
+        )
+
+
+def evidence_state_for(device: dict[str, Any]) -> str:
+    """Derive conservative device evidence from the real report v1 contract.
+
+    A passed per-capability test is retained as scoped evidence in the report,
+    but cannot certify an entire subsystem. A validated profile bundle is
+    required for the subsystem-level certified summary.
+    """
+    tests = [
+        item
+        for item in device.get("functional_tests", []) or []
+        if isinstance(item, dict)
+    ]
+    if any(item.get("status") == "failed" for item in tests):
+        return "known-problem"
+
+    firmware = device.get("firmware") or {}
+    if (
+        firmware.get("requirement") == "required"
+        and firmware.get("runtime_status") in {"missing", "load-error"}
+    ):
+        return "known-problem"
+
+    driver = device.get("driver") or {}
+    if driver.get("status") == "error":
+        return "known-problem"
+
+    discovery = device.get("discovery_status", "unknown")
+    if discovery == "not-detected":
+        return "not-detected"
+    if discovery != "discovered":
+        return "unknown"
+
+    bound_driver = driver.get("bound_driver")
+    if (
+        driver.get("status") == "bound"
+        and isinstance(bound_driver, str)
+        and bool(bound_driver.strip())
+    ):
+        return "driver-bound-not-tested"
+
+    # module-loaded-unbound, available-only, not-applicable, and a module name
+    # without bound-driver evidence do not establish a runtime function.
+    return "not-tested"
 
 
 @dataclass
@@ -109,7 +272,8 @@ class SubsystemVerdict:
     level: str
     devices: list[str] = field(default_factory=list)
     reasons: list[str] = field(default_factory=list)
-    assessed: bool = True
+    assessed: bool = False
+    coverage: str = "unknown"
     evidence_states: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
@@ -118,142 +282,159 @@ class SubsystemVerdict:
             "level": self.level,
             "devices": list(self.devices),
             "reasons": list(self.reasons),
+            # assessed means that at least one matching device record was
+            # classified. It does not claim complete collector coverage.
             "assessed": self.assessed,
+            "coverage": self.coverage,
             "evidence_states": list(self.evidence_states),
         }
 
 
 def _devices_for(report: dict[str, Any], categories: Iterable[str]) -> list[dict[str, Any]]:
     wanted = set(categories)
-    return [device for device in report.get("devices", []) if device.get("category") in wanted]
-
-
-def _evidence_cover(evidence: dict[str, Any] | None) -> dict[str, str]:
-    """Map a verified function name to its status, from a profile evidence bundle."""
-    if not evidence:
-        return {}
-    cover: dict[str, str] = {}
-    for item in evidence.get("verified_functions", []) or []:
-        name = str(item.get("name", "")).lower()
-        status = str(item.get("status", "not-assessed"))
-        if name:
-            cover[name] = status
-    return cover
+    devices = report.get("devices", [])
+    if not isinstance(devices, list):
+        raise ValueError("hardware report devices must be a list")
+    return [
+        device
+        for device in devices
+        if isinstance(device, dict) and device.get("category") in wanted
+    ]
 
 
 def classify_subsystem(
     report: dict[str, Any],
     subsystem: str,
-    evidence: dict[str, Any] | None = None,
+    evidence: ValidatedProfileEvidence | None = None,
+    *,
+    report_bytes: bytes | None = None,
 ) -> SubsystemVerdict:
-    devices = _devices_for(report, SUBSYSTEMS.get(subsystem, ()))
-    identifiers = [str(device.get("device_id", "?")) for device in devices]
-    verdict = SubsystemVerdict(subsystem=subsystem, level=UNKNOWN, devices=identifiers)
+    if subsystem not in SUBSYSTEMS:
+        raise ValueError(f"unknown subsystem: {subsystem}")
+    _validate_evidence_binding(report, evidence, report_bytes)
+
+    devices = _devices_for(report, SUBSYSTEMS[subsystem])
+    verdict = SubsystemVerdict(
+        subsystem=subsystem,
+        level=UNKNOWN,
+        devices=[str(device.get("device_id", "?")) for device in devices],
+        assessed=bool(devices),
+        coverage="reported-device-records" if devices else "unknown",
+    )
 
     if not devices:
-        # Absence in the report is not proof of absence on the machine: the
-        # report may simply not cover this subsystem. The level stays unknown,
-        # but the reason says which kind of unknown it is, because the two need
-        # different sentences in front of a user.
-        verdict.reasons.append("this report does not assess this subsystem")
-        verdict.assessed = False
+        verdict.reasons.append(
+            "no matching device record; report v1.0.0 has no complete "
+            "per-subsystem coverage manifest, so coverage is unknown"
+        )
         return verdict
 
-    # Certified requires evidence about *this* machine, not a driver that happens
-    # to be loaded: someone has to have run the function and recorded the result.
-    cover = _evidence_cover(evidence)
-    if cover.get(subsystem) == "pass":
-        verdict.level = CERTIFIED
-        verdict.reasons.append("a verified evidence bundle records this function as passing")
-        return verdict
-    if cover.get(subsystem) in {"fail", "not-assessed"}:
-        verdict.reasons.append(f"evidence exists but records this function as {cover[subsystem]}")
+    profile_status = evidence.status_for(subsystem) if evidence else None
+    if profile_status == "pass":
+        if len(devices) == 1:
+            verdict.level = CERTIFIED
+            verdict.evidence_states = ["supported-tested"]
+            verdict.reasons.append(
+                "a schema-valid, artifact-verified profile bundle is bound "
+                "to this exact report and covers the single reported device"
+            )
+            return verdict
+        verdict.reasons.append(
+            "profile evidence is subsystem-scoped, not device-scoped; it "
+            "cannot certify multiple device records without per-device mapping"
+        )
+    elif profile_status in {"fail", "not-assessed"}:
+        verdict.reasons.append(
+            f"validated profile evidence records {subsystem} as {profile_status}"
+        )
 
     states: list[str] = []
     for device in devices:
         state = evidence_state_for(device)
         states.append(state)
-        verdict.reasons.append(f"{device.get('device_id', '?')}: {state}")
+        identifier = str(device.get("device_id", "?"))
+        verdict.reasons.append(f"{identifier}: {state}")
 
+        tests = [
+            item
+            for item in device.get("functional_tests", []) or []
+            if isinstance(item, dict)
+        ]
+        if any(item.get("status") == "passed" for item in tests):
+            capabilities = ", ".join(
+                str(item.get("capability", "unspecified"))
+                for item in tests
+                if item.get("status") == "passed"
+            )
+            verdict.reasons.append(
+                f"{identifier}: individual tests passed ({capabilities}); "
+                "this does not certify the whole subsystem"
+            )
+
+    verdict.evidence_states = states
     levels = {EVIDENCE_TO_LEVEL.get(state, UNKNOWN) for state in states}
-    if CERTIFIED in levels and levels == {CERTIFIED}:
-        verdict.level = CERTIFIED
-    elif levels <= {CERTIFIED, KNOWN}:
+    if levels == {KNOWN}:
+        verdict.level = KNOWN
+    elif levels <= {KNOWN, CERTIFIED} and KNOWN in levels:
         verdict.level = KNOWN
     else:
         verdict.level = UNKNOWN
-    verdict.evidence_states = states
     return verdict
 
 
 def classify(
     report: dict[str, Any],
-    evidence: dict[str, Any] | None = None,
+    evidence: ValidatedProfileEvidence | None = None,
     subsystems: Iterable[str] | None = None,
+    *,
+    report_bytes: bytes | None = None,
 ) -> dict[str, Any]:
-    chosen = list(subsystems) if subsystems else list(SUBSYSTEMS)
-    verdicts = [classify_subsystem(report, name, evidence) for name in chosen]
-
-    decision = PROCEED
-    for verdict in verdicts:
-        if verdict.level != UNKNOWN:
-            continue
-        if verdict.subsystem in CRITICAL:
-            decision = STOP
-        elif verdict.subsystem in DEGRADING and decision != STOP:
-            decision = WARN
-
-    unknown_critical = [
-        v.subsystem for v in verdicts if v.level == UNKNOWN and v.subsystem in CRITICAL
+    """Return evidence levels only; scenario readiness is intentionally omitted."""
+    _validate_evidence_binding(report, evidence, report_bytes)
+    chosen = list(SUBSYSTEMS) if subsystems is None else list(subsystems)
+    verdicts = [
+        classify_subsystem(
+            report,
+            name,
+            evidence,
+            report_bytes=report_bytes,
+        )
+        for name in chosen
     ]
-    unknown_degrading = [
-        v.subsystem for v in verdicts if v.level == UNKNOWN and v.subsystem in DEGRADING
-    ]
-    not_assessed = [v.subsystem for v in verdicts if not v.assessed]
 
     return {
         "schema": "wsm-hardware-classification/1",
-        "decision": decision,
+        "decision": DECISION_NOT_EVALUATED,
+        "decision_reason": (
+            "scenario, impact, and verified fallback are not inputs to this "
+            "evidence summary; use the canonical scenario capability policy"
+        ),
         "counts": {
-            CERTIFIED: sum(1 for v in verdicts if v.level == CERTIFIED),
-            KNOWN: sum(1 for v in verdicts if v.level == KNOWN),
-            UNKNOWN: sum(1 for v in verdicts if v.level == UNKNOWN),
+            CERTIFIED: sum(1 for verdict in verdicts if verdict.level == CERTIFIED),
+            KNOWN: sum(1 for verdict in verdicts if verdict.level == KNOWN),
+            UNKNOWN: sum(1 for verdict in verdicts if verdict.level == UNKNOWN),
         },
-        "subsystems": [v.as_dict() for v in verdicts],
-        "stop_because": unknown_critical,
-        "warn_because": unknown_degrading,
-        "not_assessed": not_assessed,
-        "vocabulary": "docs/HARDWARE-COMPATIBILITY-VERDICTS.md (owned by issue #22)",
+        "subsystems": [verdict.as_dict() for verdict in verdicts],
+        "not_assessed": [
+            verdict.subsystem for verdict in verdicts if not verdict.assessed
+        ],
+        "vocabulary": "docs/HARDWARE-COMPATIBILITY-VERDICTS.md (§4.2)",
+        "scenario_policy": "docs/INSTALL-CAPABILITY-MATRIX.md",
         "note": (
-            "unknown is not a failure: it means this machine's behaviour was not "
-            "verified here. A decision to stop is about consequences, not about "
-            "how much we like the hardware. The three levels are a summary of the "
-            "canonical evidence states, not a replacement for them."
+            "unknown is not a failure. Missing records do not prove that "
+            "hardware is absent or incompatible. This summary does not decide "
+            "whether an installation scenario may continue."
         ),
     }
 
 
 def explain(result: dict[str, Any]) -> str:
-    """One short paragraph a person can act on."""
-    decision = result["decision"]
-    if decision == STOP:
-        names = ", ".join(result["stop_because"])
-        missing = [name for name in result["stop_because"] if name in result.get("not_assessed", [])]
-        if missing and len(missing) == len(result["stop_because"]):
-            return (
-                f"Installation stopped: {names} was not assessed by this report. "
-                "That is a gap in the report, not a verdict on the machine - "
-                "run wsm-hwcheck on the target and use that report instead."
-            )
-        return (
-            f"Installation stopped: {names} could not be identified or driven. "
-            "Continuing could produce a system that does not boot. "
-            "Send the hardware report so this machine can be classified properly."
-        )
-    if decision == WARN:
-        names = ", ".join(result["warn_because"])
-        return (
-            f"Installation can continue, but {names} is unverified and may not work. "
-            "The system will install and boot; agree explicitly before continuing."
-        )
-    return "Nothing critical is unknown. Unverified peripherals are recorded in the report."
+    """Explain the summary without pretending it is an installation verdict."""
+    counts = result["counts"]
+    return (
+        "Hardware evidence summary: "
+        f"{counts[CERTIFIED]} certified, {counts[KNOWN]} known, "
+        f"{counts[UNKNOWN]} unknown. No installation decision was made: "
+        "the selected scenario, capability impact, and verified fallback "
+        "must be evaluated by the canonical scenario policy."
+    )
