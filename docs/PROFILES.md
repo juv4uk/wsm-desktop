@@ -172,16 +172,21 @@ python3 scripts/check_channels.py --policy compatibility --lock channels/compati
 назву каналу, allow-listed repository URL, pinned commit та canonical
 introduction. Він **не перевіряє криптографічний підпис конкретного commit**.
 Це окремо робить GNU Guix channel authentication із увімкненою автентифікацією.
-Поки реальний Compatibility lock відсутній і його authentication result не
-зафіксований, не можна називати Nonguix commit або драйвер автентифікованим.
+Compatibility lock уже існує у `channels/compatibility.lock.scm` і містить
+окремий pin Nonguix. Python checker перевіряє лише структуру й canonical
+introduction. **Факт криптографічної автентифікації цього commit має бути
+підтверджений Guix** командою `guix time-machine` з цим lock; це окрема ручна
+перевірка `make check-guix-eval` і GitHub Actions workflow_dispatch. До її
+успішного завершення не можна називати Compatibility closure або NVIDIA
+driver build автентифіковано перевіреними.
 
 ### Що це означає для lock-файлів
 
 - `channels.lock.scm` — вільний образ, уже є.
-- `channels/compatibility.lock.scm` — **ще немає**. Його створення вимагає
-  робочого Guix і реального зафіксованого коміта Nonguix
-  ([#210](https://github.com/juv4uk/wsm-desktop/issues/210)). Вигадати хеш
-  означало б зламати саму властивість, яку перевіряє скрипт.
+- `channels/compatibility.lock.scm` — існує зі структурно перевірюваними
+  Guix і Nonguix pins. Повторна автентифікація commit і dry-run system build
+  виконуються окремо через Guix; див. `make check-guix-eval` та
+  [workflow_dispatch](../.github/workflows/ci.yml).
 
 ## Що лишається невідомим
 
