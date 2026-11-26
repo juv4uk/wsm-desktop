@@ -64,6 +64,7 @@ def _file_sha256_problem(
     unsafe_path = _safe_relative_path_problem(raw_path, label)
     if unsafe_path:
         return [unsafe_path]
+    relative = PurePosixPath(raw_path)
 
     if artifact_root is None:
         return [f"{label} cannot be verified without an evidence directory"]
