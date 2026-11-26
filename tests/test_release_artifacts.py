@@ -192,9 +192,9 @@ class HardwareCheckScriptTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["overall"], "preflight-blocked")
-            for backend in ("guix", "nix"):
-                self.assertEqual(manifest["plans"][backend]["status"], "safely-blocked")
-                self.assertFalse((output / f"plan-{backend}.json").exists())
+            self.assertEqual(manifest["plans"]["guix"]["status"], "safely-blocked")
+            self.assertFalse((output / "plan-guix.json").exists())
+            self.assertNotIn("nix", manifest["plans"])
 
 
 class ReleaseBundleTests(unittest.TestCase):
