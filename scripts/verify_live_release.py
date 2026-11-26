@@ -92,6 +92,87 @@ def check_manifest(iso: Path, manifest: dict[str, Any], sums: dict[str, str]) ->
     return criterion("manifest", "pass", "manifest describes the published file")
 
 
+PLATFORMS = {0: "x86 BIOS", 0xEF: "UEFI"}
+
+
+def read_boot_records(iso: Path) -> dict[str, object]:
+    """Parse the El Torito catalogue: which firmware can this image boot on?
+
+    A checksum proves the file arrived intact. This proves the file is *bootable*
+    at all - and on which firmware - without starting a machine. It is the
+    cheapest check that separates "a valid ISO9660 image" from "an image a
+    computer can start".
+    """
+    records: dict[str, object] = {"el_torito": False, "platforms": [], "entries": []}
+    with iso.open("rb") as handle:
+        for sector in range(16, 32):
+            handle.seek(sector * 2048)
+            descriptor = handle.read(2048)
+            if len(descriptor) < 2048:
+                break
+            if descriptor[0] == 255:
+                break
+            if descriptor[0] != 0 or not descriptor[7:30].startswith(b"EL TORITO SPECIFICATION"):
+                continue
+            records["el_torito"] = True
+            catalogue_lba = int.from_bytes(descriptor[71:75], "little")
+            handle.seek(catalogue_lba * 2048)
+            catalogue = handle.read(2048)
+            if len(catalogue) < 64 or catalogue[0] != 1:
+                records["error"] = "El Torito validation entry is malformed"
+                return records
+
+            def parse_entry(raw: bytes) -> dict[str, object]:
+                return {
+                    "bootable": raw[0] == 0x88,
+                    "media": raw[1],
+                    "sectors": int.from_bytes(raw[6:8], "little"),
+                    "load_lba": int.from_bytes(raw[8:12], "little"),
+                }
+
+            default = parse_entry(catalogue[32:64])
+            records["entries"].append({"platform": PLATFORMS.get(catalogue[1], "unknown"), **default})
+            records["platforms"].append(PLATFORMS.get(catalogue[1], "unknown"))
+
+            position = 64
+            while position + 32 <= len(catalogue) and catalogue[position] in (0x90, 0x91):
+                header = catalogue[position:position + 32]
+                platform = PLATFORMS.get(header[1], "unknown")
+                count = int.from_bytes(header[2:4], "little")
+                position += 32
+                for _ in range(count):
+                    if position + 32 > len(catalogue):
+                        break
+                    records["entries"].append({"platform": platform, **parse_entry(catalogue[position:position + 32])})
+                    records["platforms"].append(platform)
+                    position += 32
+                if header[0] == 0x90:
+                    break
+            break
+    return records
+
+
+def check_boot_records(iso: Path) -> dict[str, str]:
+    try:
+        records = read_boot_records(iso)
+    except OSError as exc:
+        return criterion("boot-records", "fail", f"cannot read the image: {exc}")
+    if not records["el_torito"]:
+        return criterion(
+            "boot-records",
+            "fail",
+            "no El Torito boot record: the image is data, not bootable media",
+        )
+    platforms = sorted({str(p) for p in records["platforms"]})
+    if len(platforms) < 2:
+        return criterion(
+            "boot-records",
+            "fail",
+            f"only one firmware can start this image: {platforms}; acceptance requires BIOS and UEFI",
+        )
+    return criterion("boot-records", "pass", f"bootable on {' and '.join(platforms)}")
+
+
 def check_iso_structure(iso: Path) -> dict[str, str]:
     size = iso.stat().st_size
     if size < ISO_MAGIC_OFFSET + len(ISO_MAGIC):
@@ -201,6 +282,7 @@ def main(argv: list[str] | None = None) -> int:
         criteria.append(criterion("manifest", "not-run", f"no {manifest_path.name}"))
 
     criteria.append(check_iso_structure(iso))
+    criteria.append(check_boot_records(iso))
 
     if args.boot:
         criteria.append(check_boot(iso, "bios", args.timeout_seconds, None))
