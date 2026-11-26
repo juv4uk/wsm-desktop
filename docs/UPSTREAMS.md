@@ -180,6 +180,27 @@ GPL-3.0-or-later, і жодна частина цього репозиторію
   необхідно перевірити на reference hardware; відсутність X11 fallback не
   можна компенсувати припущенням про сумісність.
 
+### GCD 009: Guix Bootspec (deliberation, не прийнято)
+
+Guix переробляє підсистему завантажувача. Зараз її інтерфейс називається
+загальним, але насправді сформований навколо GRUB: згенеровані конфігураційні
+файли, menu entries й колбеки інсталятора протікають крізь абстракцію. GCD 009
+пропонує *Guix Bootspec* — версійований, незалежний від завантажувача контракт
+запуску системного покоління: закрите ядро плюс типізовані розширення з
+просторами імен, а конфігурація конкретного завантажувача відокремлюється від
+самих поколінь. Окремо обговорюється, що `guix system image` має падати, коли
+коренева файлова система несумісна з обраним завантажувачем.
+
+- Стан на 26.11.2026: **draft**, deliberation розпочато 13.11.2026. Це не
+  прийняте рішення і не те, на що можна спиратися.
+- Чому це наша тема: інсталятор WSM пише конфігурацію завантажувача для
+  покоління. Якщо абстракція зміниться, припущення про menu entries й
+  згенеровані файли стануть хибними — а ми їх поки не маємо, тому встигаємо
+  зорієнтуватися раніше.
+- Що робимо: **нічого в коді**. Записуємо як вхідні дані й перевіряємо статус
+  перед тим, як будувати власний bootloader-контракт. Якщо GCD ухвалять до
+  нашого першого релізу, він стане upstream-вимогою, а не нашим рішенням.
+
 ### GNU Shepherd (init system Guix System)
 
 - Shepherd — це init і менеджер служб Guix System, написаний і конфігурований
@@ -275,6 +296,7 @@ Unified Kernel Image — один PE-файл, у який складені stub
 - [Guix 1.6.0 release schedule, 15.11.2026](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00091.html)
 - [GCD 009 deliberation notice](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00074.html)
 - [Guix repository on Codeberg](https://codeberg.org/guix/guix/)
+- [GCD 009 — Guix Bootspec (deliberation)](https://codeberg.org/guix/guix-consensus-documents/pulls/15)
 - [ArchWiki: Unified kernel image](https://wiki.archlinux.org/title/Unified_kernel_image)
 - [LWN: Fedora approves a smaller GRUB (UKI, TPM PCR stability)](https://lwn.net/Articles/1085609/)
 - [The Shepherd 1.0.0 released](https://shepherding.services/news/2024/12/the-shepherd-1.0.0-released/)
