@@ -16,7 +16,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 POLICY_LOCKS = {
     "free": ROOT / "channels.lock.scm",
-    "compatibility": ROOT / "channels.compatibility.lock.scm",
+    "compatibility": ROOT / "channels" / "compatibility.lock.scm",
 }
 POLICIES = {
     "free": {
