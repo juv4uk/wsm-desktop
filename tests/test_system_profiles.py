@@ -298,6 +298,18 @@ class MinimalLiveTests(unittest.TestCase):
         self.assertIn("WSM_LIVE_READY", text)
         self.assertIn("console=ttyS0", text)
 
+    def test_minimal_live_defaults_to_ukrainian_with_us_keyboard_fallback(self) -> None:
+        text = profile("live-minimal.scm")
+        self.assertIn('(locale "uk_UA.utf8")', text)
+        self.assertNotIn("(locale-definitions", text)
+        self.assertIn('(keyboard-layout "us,ua" #:options \'("grp:alt_shift_toggle"))', text)
+
+    def test_minimal_live_reconfigures_existing_tty2_console_font(self) -> None:
+        text = profile("live-minimal.scm")
+        self.assertIn("(console-font-service-type config =>", text)
+        self.assertIn('(cons "tty2" "LatGrkCyr-8x16")', text)
+        self.assertNotIn('(service console-font-service-type', text)
+
     def test_minimal_live_has_no_audio_printing_or_bluetooth(self) -> None:
         text = profile("live-minimal.scm")
         for absent in ("cups-service-type", "bluetooth-service-type",
