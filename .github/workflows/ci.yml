@@ -58,8 +58,8 @@ jobs:
 
       - name: Check the channel lock
         run: |
-          python scripts/check_channels.py --policy free
-          python scripts/check_channels.py --policy compatibility
+          python scripts/check_channels.py --policy free --lock channels.lock.scm
+          python scripts/check_channels.py --policy compatibility --lock channels/compatibility.lock.scm
 
       - name: Release gate (structural)
         # No ISO in CI, so the image criterion is `not-run` and the verdict is
