@@ -77,6 +77,16 @@ class NavigationTests(unittest.TestCase):
         self.assertNotIn("Installing", screen.text())
         self.assertNotIn("Installation finished", screen.text())
 
+    def test_structured_preview_details_are_rendered(self) -> None:
+        from wsm_install.tui import PreviewOutcome
+
+        screen = FakeScreen(["enter", "enter"] + type_path("/dev/nvme0n1") + ["enter"])
+        outcome = PreviewOutcome(0, ("DESTRUCTIVE: sgdisk --zap-all /dev/nvme0n1",))
+        code = run_tui(screen, DISKS, lambda *_args: outcome)
+        self.assertEqual(code, 0)
+        self.assertIn("DESTRUCTIVE: sgdisk", screen.text())
+        self.assertIn("APPLY is disabled", screen.text())
+
     def test_selection_wraps_around(self) -> None:
         calls: list = []
         screen = FakeScreen(["up", "enter", "enter"] + type_path("/dev/sda") + ["enter"])
