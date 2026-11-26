@@ -78,59 +78,59 @@ def run_guided(
 ) -> int:
     """Choose a target and show a read-only preview; real APPLY is disabled."""
     disks = list(candidates)
-    console.write("WSM install preview\n\n")
+    console.write("WSM — попередній перегляд інсталяції\n\n")
 
     if evidence_note:
-        console.write(f"Hardware: {evidence_note}\n\n")
+        console.write(f"Обладнання: {evidence_note}\n\n")
 
     if not disks:
         console.write(
-            "No whole disks were found. No installation can be planned.\n"
-            "If the disk is attached, check that the kernel sees it: lsblk\n"
+            "Дисків для перегляду не знайдено. План неможливо сформувати.\n"
+            "Перевірте, чи система бачить диск: lsblk\n"
         )
         return 1
 
-    console.write("Disks available for preview:\n")
+    console.write("Диски для перегляду:\n")
     for index, disk in enumerate(disks, start=1):
-        removable = " (removable)" if disk.removable else ""
+        removable = " (знімний)" if disk.removable else ""
         console.write(f"  {index}) {disk.path}  {disk.human_size()}{removable}\n")
     console.write("\n")
 
-    choice = _ask(console, "Choose a disk by number, or press Enter to stop: ")
+    choice = _ask(console, "Оберіть диск за номером; Enter — вихід: ")
     if not choice:
-        console.write("Stopped. Nothing was changed.\n")
+        console.write("Зупинено. Змін не внесено.\n")
         return 1
     if not choice.isdigit() or not (1 <= int(choice) <= len(disks)):
-        console.write("That is not one of the listed numbers. Stopped. Nothing was changed.\n")
+        console.write("Немає такого номера. Зупинено. Змін не внесено.\n")
         return 1
 
     disk = disks[int(choice) - 1]
-    firmware = _ask(console, "Firmware [uefi/bios] (default uefi): ", "uefi").lower()
+    firmware = _ask(console, "Режим завантаження [uefi/bios] (типово uefi): ", "uefi").lower()
     if firmware not in {"uefi", "bios"}:
-        console.write("Unknown firmware. Stopped. Nothing was changed.\n")
+        console.write("Невідомий режим. Зупинено. Змін не внесено.\n")
         return 1
 
     console.write("\n")
     console.write(
-        f"Preview target: {disk.path} ({disk.human_size()}). "
-        "No disk will be changed.\n"
+        f"Ціль перегляду: {disk.path} ({disk.human_size()}). "
+        "Диск не змінюватиметься.\n"
     )
-    typed = console.read("Type the disk path to confirm this preview, or press Enter to stop: ").strip()
+    typed = console.read("Введіть шлях до диска для підтвердження; Enter — вихід: ").strip()
     if typed != disk.path:
-        console.write("Confirmation does not match. Stopped. Nothing was changed.\n")
+        console.write("Шлях не збігається. Зупинено. Змін не внесено.\n")
         return 1
 
-    console.write("\nPreparing a read-only preview...\n")
+    console.write("\nГотуємо план лише для читання...\n")
     result = preview(disk.path, disk.size_bytes, firmware)
     if isinstance(result, int) and result != 0:
         console.write(
-            f"Preview could not be generated (exit {result}). "
-            "APPLY is disabled; nothing was changed.\n"
+            f"Не вдалося сформувати план (код {result}). "
+            "Застосування вимкнено; змін не внесено.\n"
         )
         return result
 
     console.write(
-        "Preview complete. APPLY is disabled; no disk commands were executed "
-        "and WSM was NOT installed.\n"
+        "Перегляд завершено. Застосування вимкнено; команди зміни диска не виконувалися "
+        "і WSM НЕ встановлено.\n"
     )
     return 0

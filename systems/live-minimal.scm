@@ -50,11 +50,16 @@
 (operating-system
   (host-name "wsm-live-minimal")
   (timezone "Europe/Kyiv")
-  (locale "en_US.utf8")
-  (keyboard-layout (keyboard-layout "us"))
+  ;; Українська — основна локаль; en_US лишається запасною для програм,
+  ;; які ще не повністю підтримують українські повідомлення.
+  (locale "uk_UA.utf8")
+  (locale-definitions
+   (list (locale-definition (name "uk_UA.utf8") (source "uk_UA"))
+         (locale-definition (name "en_US.utf8") (source "en_US"))))
 
-  ;; Локаль en_US навмисно: повідомлення про помилки в такому вигляді легше
-  ;; шукати. Українська лишається в документації, не в консолі інсталятора.
+  ;; US потрібна для паролів і шляхів; Alt+Shift перемикає US/UA.
+  (keyboard-layout
+   (keyboard-layout "us,ua" #:options '("grp:alt_shift_toggle")))
 
   (bootloader
    (bootloader-configuration
@@ -84,6 +89,8 @@
   (services
    (modify-services
     (append (list
+             ;; Шрифт містить кирилицю та Unicode-гліфи для TUI на tty2.
+             (service console-font-service-type '(("tty2" . "LatGrkCyr-8x16")))
              wsm-live-ready-marker
              (service network-manager-service-type)
              (service wpa-supplicant-service-type)
