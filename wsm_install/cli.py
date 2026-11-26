@@ -39,29 +39,29 @@ def build_parser() -> argparse.ArgumentParser:
 
     install = parser.add_argument_group(
         "install path",
-        "Plan a disk layout and the steps that would install onto it. Dry run "
-        "unless --execute is given together with --acknowledge-disk.",
+        "Plan a disk layout and preview install steps. Real APPLY is disabled "
+        "until stable target identity and digest-bound authorization exist.",
     )
     install.add_argument("--install", action="store_true",
                          help="plan disk layout and install steps for --target-disk")
     install.add_argument("--target-disk", metavar="PATH", help="whole block device, e.g. /dev/nvme0n1")
     install.add_argument("--target-size-bytes", type=int,
-                         help="size reported for the disk; drift above 2 percent is refused")
+                         help="user-supplied planning estimate; block device size is not probed")
     install.add_argument("--firmware", choices=("uefi", "bios"), default="uefi")
     install.add_argument("--filesystem", choices=("ext4", "btrfs", "xfs"), default="ext4")
     install.add_argument("--mount-point", default="/mnt")
     install.add_argument("--system-file", default="systems/desktop.scm",
                          help="Guix system file handed to guix system init")
     install.add_argument("--execute", action="store_true",
-                         help="actually run the steps; requires --acknowledge-disk")
+                         help="request real APPLY (currently refused; no disk commands are run)")
     install.add_argument("--guided", action="store_true",
-                         help="walk through the install in a console, no flags required")
+                         help="walk through disk selection and a read-only install preview")
     install.add_argument("--write-plan", metavar="PATH",
-                         help="write the plan as JSON for the privileged agent instead of running it")
+                         help="write a JSON plan for audit/preview validation; the agent is preview-only")
     install.add_argument("--tui", action="store_true",
-                         help="pseudo-graphical installer: full screen, arrow keys, Enter")
+                         help="pseudo-graphical read-only preview: full screen, arrow keys, Enter")
     install.add_argument("--acknowledge-disk", metavar="PATH",
-                         help="must repeat --target-disk exactly; there is no --yes")
+                         help="planner acknowledgement only; repeat --target-disk exactly; not APPLY authorization")
     return parser
 
 
@@ -132,7 +132,7 @@ def _safe_plan_output_path(
 
 
 def _write_plan_atomically(destination: Path, rendered: str) -> None:
-    """Write a same-directory temporary file and atomically replace the destination."""
+    """Publish a new plan atomically without replacing an existing file."""
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=f".{destination.name}.", suffix=".tmp", dir=str(destination.parent)
     )
@@ -141,7 +141,10 @@ def _write_plan_atomically(destination: Path, rendered: str) -> None:
             stream.write(rendered)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temporary_name, destination)
+        # The temp file is in the destination directory, so hard-link publish is
+        # atomic and fails rather than replacing a file created by another process.
+        os.link(temporary_name, destination)
+        os.unlink(temporary_name)
     except Exception:
         try:
             os.unlink(temporary_name)
@@ -180,24 +183,25 @@ def _hardware_note(args: argparse.Namespace) -> str:
     )
 
 
-def _installer_callbacks(args: argparse.Namespace):
-    def make(execute: bool):
-        def call(disk_path: str, size: int, firmware: str) -> None:
-            _run_install(argparse.Namespace(
-                target_disk=disk_path,
-                target_size_bytes=size,
-                firmware=firmware,
-                filesystem=args.filesystem,
-                mount_point=args.mount_point,
-                system_file=args.system_file,
-                acknowledge_disk=disk_path,
-                execute=execute,
-                quiet=True,
-            ))
+def _installer_preview_callback(args: argparse.Namespace):
+    """Build the only allowed callback: a read-only install-plan preview."""
+    def preview(disk_path: str, size: int, firmware: str) -> int:
+        return _run_install(argparse.Namespace(
+            target_disk=disk_path,
+            target_size_bytes=size,
+            firmware=firmware,
+            filesystem=args.filesystem,
+            mount_point=args.mount_point,
+            system_file=args.system_file,
+            acknowledge_disk=disk_path,
+            execute=False,
+            write_plan=None,
+            report=args.report,
+            schema=args.schema,
+            quiet=True,
+        ))
 
-        return call
-
-    return make(False), make(True)
+    return preview
 
 
 def _run_tui(args: argparse.Namespace) -> int:
@@ -214,12 +218,11 @@ def _run_tui(args: argparse.Namespace) -> int:
         )
         return _run_guided(args)
 
-    plan, install = _installer_callbacks(args)
+    preview = _installer_preview_callback(args)
     return run_tui(
         TerminalScreen(),
         list_disks(Path("/sys/block")),
-        plan,
-        install,
+        preview,
         _hardware_note(args),
     )
 
@@ -232,40 +235,23 @@ def _run_guided(args: argparse.Namespace) -> int:
 
     evidence_note = _hardware_note(args)
 
-    def plan(disk_path: str, size: int, firmware: str) -> None:
-        _run_install(argparse.Namespace(
-            target_disk=disk_path,
-            target_size_bytes=size,
-            firmware=firmware,
-            filesystem=args.filesystem,
-            mount_point=args.mount_point,
-            system_file=args.system_file,
-            acknowledge_disk=disk_path,
-            execute=False,
-            quiet=True,
-        ))
-
-    def install(disk_path: str, size: int, firmware: str) -> None:
-        _run_install(argparse.Namespace(
-            target_disk=disk_path,
-            target_size_bytes=size,
-            firmware=firmware,
-            filesystem=args.filesystem,
-            mount_point=args.mount_point,
-            system_file=args.system_file,
-            acknowledge_disk=disk_path,
-            execute=True,
-            quiet=True,
-        ))
-
-    return run_guided(_Console(), candidates, plan, install, evidence_note)
+    preview = _installer_preview_callback(args)
+    return run_guided(_Console(), candidates, preview, evidence_note)
 
 
 def _run_install(args: argparse.Namespace) -> int:
-    """Plan, then optionally run, the disk path. Dry run is the default."""
+    """Build a read-only disk plan. Real APPLY is disabled."""
     from wsm_install.executor import ExecutorError, execute
     from wsm_install.install_steps import backend_command, plan_steps, render
     from wsm_install.partition import Disk, Refused, plan as plan_layout
+
+    if getattr(args, "execute", False):
+        print(
+            "wsm-install: execute.apply-disabled: real APPLY is disabled until "
+            "target identity, immutable-plan consent and verified postconditions exist",
+            file=sys.stderr,
+        )
+        return 2
 
     if not args.target_disk:
         print("wsm-install: --install requires --target-disk", file=sys.stderr)
@@ -288,7 +274,6 @@ def _run_install(args: argparse.Namespace) -> int:
             disk,
             args.firmware,
             acknowledgement=args.acknowledge_disk,
-            expected_size_bytes=args.target_size_bytes,
         )
         steps = plan_steps(layout, args.filesystem, args.mount_point)
         command = backend_command(layout, args.system_file, args.mount_point)
@@ -297,48 +282,58 @@ def _run_install(args: argparse.Namespace) -> int:
         return 2
 
     if args.write_plan:
-        # The unprivileged side only writes the plan; wsm-install-agent is what
-        # touches a disk, and it re-validates every command itself.
-        Path(args.write_plan).write_text(
-            json.dumps({
-                "schema": "wsm-install-plan/1",
-                "disk": disk.path,
-                "firmware": args.firmware,
-                "filesystem": args.filesystem,
-                "mount_point": args.mount_point,
-                "handoff": command,
-                "steps": [
-                    {
-                        "command": step.command,
-                        "purpose": step.purpose,
-                        "destructive": step.destructive,
-                    }
-                    for step in steps
-                ],
-            }, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
+        destination, path_error = _safe_plan_output_path(
+            args.write_plan, Path(args.report), args.schema
         )
-        print(f"wsm-install: plan written to {args.write_plan}", file=sys.stderr)
+        if path_error:
+            print(f"wsm-install: unsafe plan output: {path_error}", file=sys.stderr)
+            return 2
+        assert destination is not None
+        plan_document = {
+            "schema": "wsm-install-plan/1",
+            "disk": disk.path,
+            "firmware": args.firmware,
+            "filesystem": args.filesystem,
+            "mount_point": args.mount_point,
+            "handoff": command,
+            "steps": [
+                {
+                    "command": step.command,
+                    "purpose": step.purpose,
+                    "destructive": step.destructive,
+                }
+                for step in steps
+            ],
+        }
+        try:
+            _write_plan_atomically(
+                destination,
+                json.dumps(plan_document, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            )
+        except OSError as exc:
+            print(f"wsm-install: cannot write plan: {exc}", file=sys.stderr)
+            return 2
+        print(
+            f"wsm-install: preview plan written to {destination}; "
+            "the privileged agent is preview-only and will not write to disk",
+            file=sys.stderr,
+        )
         return 0
 
     if not args.quiet:
         print(render(steps, command), file=sys.stderr)
 
     try:
-        results = execute(
-            steps,
-            disk=disk.path,
-            acknowledgement=args.acknowledge_disk,
-            dry_run=not args.execute,
-        )
+        results = execute(steps, disk=disk.path, dry_run=True)
     except ExecutorError as exc:
         print(f"wsm-install: {exc.code}: {exc.message}", file=sys.stderr)
         return 1
 
     print(json.dumps(
         {
-            "mode": "execute" if args.execute else "dry-run",
+            "mode": "dry-run",
             "disk": disk.path,
+            "target_size_source": "user-supplied planning estimate; not read from the block device",
             "firmware": args.firmware,
             "filesystem": args.filesystem,
             "steps": [result.as_dict() for result in results],
@@ -354,6 +349,13 @@ def _run_install(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.execute:
+        print(
+            "wsm-install: execute.apply-disabled: real APPLY is disabled until "
+            "target identity, immutable-plan consent and verified postconditions exist",
+            file=sys.stderr,
+        )
+        return 2
     if not args.preflight:
         parser.error("--preflight is required")
     if not args.dry_run:
