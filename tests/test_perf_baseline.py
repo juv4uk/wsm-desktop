@@ -110,6 +110,25 @@ class PressureTelemetryTests(unittest.TestCase):
             2,
         )
 
+    def test_zram_snapshot_is_partial_when_config_source_is_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            device = root / "zram0"
+            device.mkdir()
+            (device / "mm_stat").write_text(
+                "100 50 60 1000 70 1 2 3 4\n", encoding="utf-8"
+            )
+            (device / "io_stat").write_text("1 2 3 4\n", encoding="utf-8")
+            (device / "bd_stat").write_text("5 6 7\n", encoding="utf-8")
+            (device / "backing_dev").write_text("none\n", encoding="utf-8")
+            # Missing comp_algorithm means the reported zram configuration is incomplete.
+            snapshot = pressure.read_zram_snapshot(root)
+        report = snapshot["devices"]["zram0"]
+        self.assertEqual(snapshot["status"], "partial")
+        self.assertEqual(report["status"], "partial")
+        self.assertEqual(report["config"]["status"], "partial")
+        self.assertEqual(report["config"]["active_compressor"], "unknown")
+
     def test_read_zram_snapshot_is_read_only_and_records_active_compressor(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
