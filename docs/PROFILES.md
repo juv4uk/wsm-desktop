@@ -178,10 +178,11 @@ introduction. Він **не перевіряє криптографічний п
 ### Що це означає для lock-файлів
 
 - `channels.lock.scm` — вільний образ, уже є.
-- `channels.compatibility.lock.scm` — **ще немає**. Його створення вимагає
-  робочого Guix і реального зафіксованого коміта Nonguix
-  ([#210](https://github.com/juv4uk/wsm-desktop/issues/210)). Вигадати хеш
-  означало б зламати саму властивість, яку перевіряє скрипт.
+- `channels/compatibility.lock.scm` — окремий pin Guix + Nonguix для
+  Compatibility. Структурний checker звіряє URL, commit та introduction, але
+  не виконує GPG/channel authentication. До release PASS потрібна окрема
+  перевірка через `guix time-machine -C channels/compatibility.lock.scm -- describe -f channels`
+  та evaluation `systems/live-compat.scm` у Guix gate.
 
 ## Що лишається невідомим
 
