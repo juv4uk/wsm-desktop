@@ -49,9 +49,10 @@ class ReleaseAssetVerificationTests(unittest.TestCase):
         workflow_path = ROOT / ".github" / "workflows" / "release-minimal-live.yml"
         workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
         permissions = workflow["permissions"]
-        for permission in ("contents", "id-token", "attestations", "artifact-metadata"):
+        for permission in ("contents", "id-token", "attestations"):
             with self.subTest(permission=permission):
                 self.assertEqual(permissions[permission], "write")
+        self.assertNotIn("artifact-metadata", permissions)
 
         steps = workflow["jobs"]["build-and-publish"]["steps"]
         names = [step.get("name", "") for step in steps]
