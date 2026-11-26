@@ -33,16 +33,18 @@ class FakeConsole:
         return "".join(self.output)
 
 
-def plan_recorder(calls: list):
+def plan_recorder(calls: list, status: int = 0):
     def plan(path, size, firmware):
         calls.append(("plan", path, size, firmware))
+        return status
 
     return plan
 
 
-def install_recorder(calls: list):
+def install_recorder(calls: list, status: int = 0):
     def install(path, size, firmware):
         calls.append(("install", path, size, firmware))
+        return status
 
     return install
 
@@ -105,6 +107,32 @@ class SuccessTests(unittest.TestCase):
         console = FakeConsole(["1", "bios", "/dev/nvme0n1", "install"])
         run_guided(console, DISKS, plan_recorder(calls), install_recorder(calls))
         self.assertEqual(calls[0][3], "bios")
+
+
+class CallbackFailureTests(unittest.TestCase):
+    def test_plan_failure_stops_before_install_confirmation(self) -> None:
+        calls: list = []
+        console = FakeConsole(["1", "uefi", "/dev/nvme0n1", "install"])
+        code = run_guided(
+            console, DISKS, plan_recorder(calls, status=2), install_recorder(calls)
+        )
+        self.assertEqual(code, 2)
+        self.assertEqual([call[0] for call in calls], ["plan"])
+        self.assertIn("Planning failed", console.text())
+        self.assertNotIn("Install now?", console.text())
+        self.assertNotIn("Installation finished", console.text())
+
+    def test_apply_failure_is_not_reported_as_success(self) -> None:
+        calls: list = []
+        console = FakeConsole(["1", "uefi", "/dev/nvme0n1", "install"])
+        code = run_guided(
+            console, DISKS, plan_recorder(calls), install_recorder(calls, status=1)
+        )
+        self.assertEqual(code, 1)
+        self.assertEqual([call[0] for call in calls], ["plan", "install"])
+        self.assertIn("Installation did not complete", console.text())
+        self.assertIn("No successful installation is claimed", console.text())
+        self.assertNotIn("Installation finished", console.text())
 
 
 class DiskListingTests(unittest.TestCase):
