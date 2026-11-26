@@ -70,6 +70,8 @@ class ReleaseMetadataContractTests(unittest.TestCase):
         self.assertIn("docs/VERIFIED-ARTIFACTS.md", RELEASE_NOTES)
         self.assertIn("BIOS/UEFI boot та запуск інсталятора не перевірялися", RELEASE_NOTES)
         self.assertIn("не перевірено", VERIFIED_ARTIFACTS)
+        self.assertIn("| Завантаження в BIOS | **не перевірено**", VERIFIED_ARTIFACTS)
+        self.assertIn("| Завантаження в UEFI | **не перевірено**", VERIFIED_ARTIFACTS)
         self.assertIn("Інсталятор у образі не запускався", VERIFIED_ARTIFACTS)
 
 
