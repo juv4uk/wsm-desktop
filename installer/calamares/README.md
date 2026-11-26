@@ -2,7 +2,7 @@
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Статус: **модуль написано, у Calamares не запускався**
+- Статус: **preview-only; required job повертає failure, поки APPLY вимкнено**
 - Роль: **опційний** вхід. Основний шлях — `wsm-install` (CLI): він працює там,
   де графічний майстер не піднімається (див. [INSTALLER.md](../../docs/INSTALLER.md))
 - Рішення: [ADR 0008](../../docs/decisions/0008-calamares-backend-module.md) (`proposed`)
@@ -15,21 +15,23 @@
 | Розбиття диска | Calamares (kpmcore) | — |
 | Перевірка заліза й докази | **WSM** | `modules/wsm_deploy/main.py` |
 | Вибір профілю | **WSM** | те саме |
-| Запис системи | **WSM** | `wsm_install/install_steps.py` + `executor.py` |
+| Preview системи | **WSM** | `wsm_install/install_steps.py` + preview-only `executor.py` |
 
-Модуль навмисно тонкий: він не форматує й не монтує нічого сам, а викликає ті
-самі модулі, що й CLI. Одна реалізація кожної небезпечної операції, Calamares —
-лише обличчя.
+Модуль навмисно тонкий: він не форматує й не монтує нічого сам, а викликає той
+самий read-only planner, що й CLI. Поки APPLY не реалізований, required
+`wsm_deploy` не може повернути `None` success після preview: Calamares має
+зупинити job із повідомленням, що WSM не встановлено.
 
 ## Контракт jobmodule
 
-- `run()` повертає `None` при успіху;
-- при збої — кортеж `(message, details)`: короткий рядок для людини й довший
-  текст для журналу.
+- `run()` повертає failure tuple для preview, відсутнього `wsmDryRun` або false;
+- `None` буде дозволений лише тоді, коли окремий reviewed APPLY реально встановить систему;
+- failure tuple має форму `(message, details)`.
 
-Модуль ніколи не повертає `None`, якщо чогось бракує. Відсутній звіт про залізо,
-невирішений блокер, невалідні докази, відсутній диск або розмір — усе це кортеж
-з поясненням.
+Модуль зараз ніколи не повертає `None`: навіть успішний preview завершується
+failure tuple `WSM was not installed`. Це навмисно, бо Calamares трактує `None`
+як успішне завершення required job. Відсутній звіт, невалідні докази, диск або
+розмір також дають пояснювальний failure tuple.
 
 ## Ключі globalstorage, які читає модуль
 

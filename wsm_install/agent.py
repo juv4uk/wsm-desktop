@@ -1,45 +1,33 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""A privileged worker that executes only what it already knows how to do.
+"""A privileged worker that validates and previews installer plans only.
 
-Today the whole installer runs as root: the UI, the planner and the executor.
-Any mistake in argument handling is therefore a mistake with root rights. That
-is the gap the elementary installer closes with a separate daemon
-(`io.elementary.installer-daemon`) and the reason this module exists.
+The initial design used this module as a privileged command runner. That
+execution path is intentionally disabled: a command allowlist is not proof
+that a plan is bound to the intended physical disk, nor that the disk remains
+unchanged at each destructive boundary.
 
-The design here is deliberately smaller than a daemon. The unprivileged side
-writes a plan to a file; the privileged side reads it, checks every single
-command against an allowlist, and only then runs anything.
+The current worker validates plan shape and known command forms, then delegates
+to the shared preview-only executor. It never launches a process, writes a
+partition table, formats a filesystem, mounts a target, or deploys Guix.
 
-What the agent refuses, and why each refusal matters:
-
-* **a command outside the allowlist** - the whole point: a compromised UI must
-  not be able to run `sh -c ...` through the installer;
-* **an argument containing a shell metacharacter** - the executor never uses a
-  shell, but a future refactor might, and this keeps that door shut;
-* **a plan that is not a list of steps** - a malformed plan must fail before the
-  first disk is touched, not halfway through;
-* **running for real without root** - formatting a disk as a normal user would
-  fail later with a confusing error instead of now with a clear one.
-
-The agent is not a sandbox. It is a narrow door in front of the only code that
-writes to disks.
+Do not restore APPLY here as a local flag. Any future disk mutation must be
+designed and reviewed as one target-bound flow across every frontend, with an
+immutable plan, digest-bound consent, repeated device identity checks,
+postconditions, recovery evidence, and disposable-QEMU acceptance.
 """
-
 from __future__ import annotations
 
 import json
-import os
-import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Any, Sequence
 
-from wsm_install.executor import ExecutorError, default_runner, default_verifier, execute
+from wsm_install.executor import ExecutorError, execute
 from wsm_install.install_steps import Step
-from wsm_install.journal import DEFAULT_JOURNAL, Journal
+from wsm_install.partition import DEVICE_PATH
 
-# Everything the agent is allowed to run. Absolute paths only: a bare name would
-# be resolved through PATH, which is the Omarchy #8172 mistake.
+# Commands recognized by the plan validator. This list is not an execution
+# permission while APPLY remains disabled. Absolute paths avoid PATH ambiguity.
 ALLOWED_PROGRAMS = frozenset({
     "/usr/sbin/partprobe",
     "/usr/bin/udevadm",
@@ -71,8 +59,8 @@ def validate_command(command: Sequence[str]) -> None:
     if program not in ALLOWED_PROGRAMS:
         raise AgentError(
             "agent.not-allowed",
-            f"{program!r} is not in the agent allowlist; the agent runs only what "
-            "the installer needs and nothing else",
+            f"{program!r} is not in the agent allowlist; this plan contains an "
+            "unrecognized command form",
         )
     for argument in command[1:]:
         if not isinstance(argument, str):
@@ -131,34 +119,23 @@ def run_plan(
     document: dict[str, Any],
     steps: list[Step],
     dry_run: bool,
-    runner: Callable = default_runner,
-    verifier: Callable = default_verifier,
 ) -> int:
+    """Validate and preview a plan; never execute a disk mutation."""
     disk = document.get("disk")
-    if not isinstance(disk, str) or not disk.startswith("/dev/"):
-        raise AgentError("agent.bad-disk", f"the plan names no block device: {disk!r}")
+    if not isinstance(disk, str) or not DEVICE_PATH.fullmatch(disk):
+        raise AgentError("agent.bad-disk", f"the plan names no whole block device: {disk!r}")
 
-    if not dry_run and os.geteuid() != 0:
+    if dry_run is not True:
         raise AgentError(
-            "agent.not-root",
-            "running the plan for real requires root; refusing now rather than "
-            "failing on the first mount",
+            "agent.apply-disabled",
+            "real disk execution is disabled across all installer entry points; "
+            "this agent can validate and preview plans only",
         )
-
-    journal = None if dry_run else Journal(DEFAULT_JOURNAL)
 
     try:
-        execute(
-            steps,
-            disk=disk,
-            acknowledgement=disk,
-            dry_run=dry_run,
-            runner=runner,
-            verifier=verifier,
-            journal=journal,
-        )
+        execute(steps, disk=disk, dry_run=True)
     except ExecutorError as exc:
-        raise AgentError("agent.execution-failed", f"{exc.code}: {exc.message}") from exc
+        raise AgentError("agent.preview-failed", f"{exc.code}: {exc.message}") from exc
     return 0
 
 
@@ -168,13 +145,12 @@ def build_parser():
     parser = argparse.ArgumentParser(
         prog="wsm-install-agent",
         description=(
-            "Privileged worker: validate an install plan against an allowlist and run it. "
-            "The unprivileged UI writes the plan; this program is the only part that "
-            "touches disks."
+            "Validate an install plan against the command allowlist and show a preview. "
+            "Real disk APPLY is disabled; no command is executed."
         ),
     )
     parser.add_argument("--plan", type=Path, help="install plan JSON (or the journal with --recover)")
-    parser.add_argument("--dry-run", action="store_true", help="validate and report only")
+    parser.add_argument("--dry-run", action="store_true", help="required; validate and report only")
     parser.add_argument(
         "--recover",
         action="store_true",
@@ -186,10 +162,19 @@ def build_parser():
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.recover:
+        if args.plan is None:
+            print(
+                "wsm-install-agent: --plan is required with --recover",
+                file=sys.stderr,
+            )
+            return 2
         from wsm_install.journal import recovery_report
 
         sys.stdout.write(recovery_report(Path(args.plan)))
         return 0
+    if not args.dry_run:
+        print("wsm-install-agent: agent.apply-disabled: only --dry-run is supported", file=sys.stderr)
+        return 2
     if args.plan is None:
         print("wsm-install-agent: --plan is required unless --recover is given", file=sys.stderr)
         return 2
@@ -201,8 +186,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"wsm-install-agent: {exc.code}: {exc.message}", file=sys.stderr)
         return 1
     print(
-        f"wsm-install-agent: plan accepted ({len(steps)} step(s), "
-        f"{'dry run' if args.dry_run else 'executed'})"
+        f"wsm-install-agent: previewed {len(steps)} step(s); "
+        "APPLY disabled; no disk command executed"
     )
     return 0
 
