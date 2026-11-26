@@ -183,16 +183,19 @@ def _hardware_note(args: argparse.Namespace) -> str:
 def _run_tui(args: argparse.Namespace) -> int:
     """Keyboard navigation for a read-only plan; there is no install callback."""
     from wsm_install.guided import list_disks
-    from wsm_install.tui import TerminalScreen, run_tui
+    from wsm_install.tui import PreviewOutcome, TerminalScreen, run_tui
 
     if not sys.stdin.isatty() or not sys.stdout.isatty():
         print("wsm-install: no TTY for pseudo-graphics; using the guided preview", file=sys.stderr)
         return _run_guided(args)
 
-    def preview(disk_path: str, size: int, firmware: str) -> int:
-        # Keep the CLI JSON payload out of the ANSI TUI screen.
-        with contextlib.redirect_stdout(io.StringIO()):
-            return _run_install(argparse.Namespace(
+    def preview(disk_path: str, size: int, firmware: str) -> PreviewOutcome:
+        # Keep JSON and diagnostics out of the ANSI screen, then render a concise
+        # summary in the TUI itself.
+        output = io.StringIO()
+        errors = io.StringIO()
+        with contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+            code = _run_install(argparse.Namespace(
                 target_disk=disk_path,
                 target_size_bytes=size,
                 firmware=firmware,
@@ -203,6 +206,22 @@ def _run_tui(args: argparse.Namespace) -> int:
                 execute=False,
                 quiet=True,
             ))
+        if code != 0:
+            detail = errors.getvalue().strip() or "The read-only plan could not be generated."
+            return PreviewOutcome(code, (detail,))
+        try:
+            payload = json.loads(output.getvalue())
+        except json.JSONDecodeError:
+            return PreviewOutcome(1, ("The planner did not return valid JSON.",))
+        details: list[str] = []
+        for step in payload.get("steps", []):
+            marker = "DESTRUCTIVE" if step.get("destructive") else "READ-ONLY"
+            argv = step.get("command", [])
+            details.append(f"{marker}: {' '.join(str(arg) for arg in argv)}")
+        handoff = payload.get("handoff")
+        if isinstance(handoff, list):
+            details.append("Guix handoff (not executed): " + " ".join(map(str, handoff)))
+        return PreviewOutcome(0, tuple(details))
 
     return run_tui(
         TerminalScreen(),
