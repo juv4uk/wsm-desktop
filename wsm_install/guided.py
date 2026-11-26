@@ -4,14 +4,15 @@
 The minimal live image has no desktop, so the installer must be usable by
 someone who does not know the exact command line. This module is that flow: it
 lists candidate disks, shows what the hardware report already knows, and asks
-for the one confirmation that matters - typing the disk name.
+the user to confirm which disk the read-only preview describes. This is not
+authorization to write to that disk.
 
 Design rules, all of them consequences of the rest of the repository:
 
 * **the user picks the disk, never the tool.** There is no "auto" mode; a
   recommendation would be a guess with a filesystem on the end of it;
-* **the confirmation is the disk name typed again**, not a yes/no. A "y" is
-  pressed on autopilot; `/dev/nvme0n1` is not;
+* **the preview confirmation is the disk name typed again**, not a yes/no.
+  This confirms only which disk the preview describes; it never authorizes writes;
 * **every question has a default that changes nothing.** Enter means "stop", not
   "proceed";
 * **input and output are injected**, so the whole flow is testable without a
@@ -73,11 +74,10 @@ def _ask(console: Console, prompt: str, default: str = "") -> str:
 def run_guided(
     console: Console,
     candidates: Iterable[Candidate],
-    plan: Callable[[str, int, str], object],
-    install: Callable[[str, int, bool], object],
+    preview: Callable[[str, int, str], object],
     evidence_note: str = "",
 ) -> int:
-    """Walk the user through choosing a disk and confirming it. Returns an exit code."""
+    """Choose a target and show a read-only plan. Real APPLY is not available."""
     disks = list(candidates)
     console.write("WSM install\n\n")
 
@@ -113,21 +113,23 @@ def run_guided(
         return 1
 
     console.write("\n")
-    console.write(f"This will erase {disk.path} ({disk.human_size()}) completely.\n")
-    console.write("Type the disk path to confirm, or press Enter to stop: ")
+    console.write(f"Preview target: {disk.path} ({disk.human_size()}). No disk will be changed.\n")
+    console.write("Type the disk path to confirm this preview, or press Enter to stop: ")
     typed = console.read("").strip()
     if typed != disk.path:
         console.write("Confirmation does not match. Stopped. Nothing was changed.\n")
         return 1
 
-    console.write("\nPlanning...\n")
-    plan(disk.path, disk.size_bytes, firmware)
-
-    answer = _ask(console, "Install now? Type 'install' to begin, Enter to stop: ")
-    if answer != "install":
-        console.write("Stopped after planning. Nothing was changed.\n")
-        return 1
-
-    install(disk.path, disk.size_bytes, firmware)
-    console.write("Installation finished. Remove the medium and reboot.\n")
+    console.write("\nPreparing a read-only preview...\n")
+    result = preview(disk.path, disk.size_bytes, firmware)
+    if isinstance(result, int) and result != 0:
+        console.write(
+            f"Preview could not be generated (exit {result}). "
+            "APPLY is disabled; nothing was changed.\n"
+        )
+        return result
+    console.write(
+        "Preview complete. APPLY is disabled; no disk commands were executed "
+        "and nothing was changed.\n"
+    )
     return 0
