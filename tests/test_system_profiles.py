@@ -318,8 +318,8 @@ class CompatibilityBuildTargetTests(unittest.TestCase):
         self.assertNotIn("channels/compatibility.lock.scm", output)
 
     def test_general_guix_evaluation_delegates_to_the_separate_compatibility_gate(self) -> None:
-        output = self.make_dry_run("check-guix-eval")
-        self.assertIn("make check-compatibility-eval", output)
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        self.assertIn("$(MAKE) check-compatibility-eval", makefile)
 
 
 class CompatibilityImageTests(unittest.TestCase):
