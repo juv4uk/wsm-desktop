@@ -46,7 +46,7 @@ class InstallModeTests(unittest.TestCase):
         self.assertIn("--target-disk", result.stderr)
 
     def test_install_without_size_is_refused(self) -> None:
-        """Size is how a replaced disk is caught, so it cannot be omitted."""
+        """A planning estimate is required; it is not a measured device property."""
         result = run_cli("--install", "--target-disk", "/dev/nvme0n1", "--quiet")
         self.assertEqual(result.returncode, 2)
         self.assertIn("--target-size-bytes", result.stderr)
@@ -68,14 +68,24 @@ class InstallModeTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("disk.path", result.stderr)
 
-    def test_execute_without_acknowledgement_never_reaches_a_command(self) -> None:
-        """The dangerous flag alone must not be enough."""
+    def test_execute_without_acknowledgement_is_disabled(self) -> None:
         result = run_cli(
             "--install", "--execute", "--target-disk", "/dev/nvme0n1",
             "--target-size-bytes", str(256 * GIB), "--quiet",
         )
         self.assertEqual(result.returncode, 2)
-        self.assertIn("acknowledgement", result.stderr)
+        self.assertIn("execute.apply-disabled", result.stderr)
+
+    def test_execute_with_matching_acknowledgement_is_still_disabled(self) -> None:
+        """A matching path string is not target-bound authorization."""
+        result = run_cli(
+            "--install", "--execute", "--target-disk", "/dev/nvme0n1",
+            "--target-size-bytes", str(256 * GIB),
+            "--acknowledge-disk", "/dev/nvme0n1", "--quiet",
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("execute.apply-disabled", result.stderr)
+        self.assertEqual(result.stdout, "")
 
 
 if __name__ == "__main__":
