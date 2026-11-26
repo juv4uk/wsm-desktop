@@ -115,6 +115,18 @@ class MinimalLiveProfileTests(unittest.TestCase):
         self.assertIn("if-no-files-found: ignore", section)
         self.assertIn("retention-days: 7", section)
 
+    def test_minimal_live_marker_is_routed_to_serial_console(self) -> None:
+        profile = (ROOT / "systems/live-minimal.scm").read_text(encoding="utf-8")
+        self.assertIn('(call-with-output-file "/dev/console"', profile)
+        self.assertIn(
+            '(kernel-arguments ' + "'" + '("console=tty1" "console=ttyS0,115200"))',
+            profile,
+        )
+        self.assertNotIn(
+            '(kernel-arguments ' + "'" + '("console=ttyS0,115200" "console=tty1"))',
+            profile,
+        )
+
     def test_release_workflow_uses_current_node24_actions(self) -> None:
         workflow = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
         self.assertIn("actions/checkout@v7", workflow)
