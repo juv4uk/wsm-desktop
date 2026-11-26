@@ -51,7 +51,7 @@ class StopTests(unittest.TestCase):
         code, console, calls = self.run_flow([""])
         self.assertEqual(code, 1)
         self.assertEqual(calls, [])
-        self.assertIn("Nothing was changed", console.text())
+        self.assertIn("Змін не внесено", console.text())
 
     def test_unknown_number_stops(self) -> None:
         code, _, calls = self.run_flow(["7"])
@@ -63,23 +63,32 @@ class StopTests(unittest.TestCase):
         code, console, calls = self.run_flow(["1", "uefi", "yes"])
         self.assertEqual(code, 1)
         self.assertEqual(calls, [])
-        self.assertIn("does not match", console.text())
+        self.assertIn("не збігається", console.text())
 
     def test_preview_completes_without_a_second_install_confirmation(self) -> None:
         code, console, calls = self.run_flow(["1", "uefi", "/dev/nvme0n1"])
         self.assertEqual(code, 0)
         self.assertEqual([c[0] for c in calls], ["plan"])
-        self.assertIn("APPLY is disabled", console.text())
-        self.assertIn("WSM was NOT installed", console.text())
+        self.assertIn("APPLY вимкнено", console.text())
+        self.assertIn("WSM НЕ встановлено", console.text())
 
     def test_no_disks_found_stops(self) -> None:
         console = FakeConsole([])
         code = run_guided(console, [], plan_recorder([]))
         self.assertEqual(code, 1)
-        self.assertIn("No whole disks", console.text())
+        self.assertIn("Дисків для планування не знайдено", console.text())
 
 
 class PreviewTests(unittest.TestCase):
+    def test_guided_prompts_are_ukrainian(self) -> None:
+        calls: list = []
+        console = FakeConsole(["1", "uefi", "/dev/nvme0n1"])
+        run_guided(console, DISKS, plan_recorder(calls))
+        text = console.text()
+        self.assertIn("Оберіть диск за номером", text)
+        self.assertIn("Режим завантаження", text)
+        self.assertIn("Ціль перегляду", text)
+
     def test_full_flow_shows_preview_but_never_installs(self) -> None:
         calls: list = []
         console = FakeConsole(["2", "uefi", "/dev/sda"])
@@ -87,8 +96,8 @@ class PreviewTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual([c[0] for c in calls], ["plan"])
         self.assertEqual(calls[0][1], "/dev/sda")
-        self.assertIn("APPLY is disabled", console.text())
-        self.assertIn("WSM was NOT installed", console.text())
+        self.assertIn("APPLY вимкнено", console.text())
+        self.assertIn("WSM НЕ встановлено", console.text())
 
     def test_firmware_defaults_to_uefi(self) -> None:
         calls: list = []
