@@ -104,7 +104,7 @@ class PlanTests(unittest.TestCase):
 
 
 class ExecutionTests(unittest.TestCase):
-    def test_dry_run_never_calls_a_runner(self) -> None:
+    def test_dry_run_validates_and_previews_without_execution_api(self) -> None:
         document = plan(GOOD)
         steps = validate_plan(document)
         code = run_plan(document, steps, dry_run=True)
