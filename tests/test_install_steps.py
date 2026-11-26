@@ -16,7 +16,7 @@ from wsm_install.install_steps import (  # noqa: E402
     plan_steps,
     render,
 )
-from wsm_install.partition import Disk, Refused, plan  # noqa: E402
+from wsm_install.partition import Disk, Layout, Refused, plan  # noqa: E402
 
 
 def tool(step) -> str:
@@ -40,6 +40,21 @@ class DeviceNamingTests(unittest.TestCase):
 
     def test_mmc_partitions_get_a_p_suffix(self) -> None:
         self.assertEqual(device_for("/dev/mmcblk0", 1), "/dev/mmcblk0p1")
+
+
+class LayoutConsentTests(unittest.TestCase):
+    def test_plan_steps_rejects_layout_without_bound_acknowledgement(self) -> None:
+        unconfirmed = Layout(firmware="uefi", disk="/dev/nvme0n1")
+        with self.assertRaises(Refused) as caught:
+            plan_steps(unconfirmed)
+        self.assertEqual(caught.exception.code, "disk.acknowledgement")
+
+    def test_backend_handoff_rejects_layout_without_recorded_disk_size(self) -> None:
+        unconfirmed = layout()
+        unconfirmed.disk_size_bytes = None
+        with self.assertRaises(Refused) as caught:
+            backend_command(unconfirmed, "systems/desktop.scm")
+        self.assertEqual(caught.exception.code, "disk.size-unrecorded")
 
 
 class OrderingTests(unittest.TestCase):
