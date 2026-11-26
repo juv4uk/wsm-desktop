@@ -18,8 +18,10 @@
 | Команди, тести, exact-head CI, merge policy, мовна політика | [CONTRIBUTING.md](../CONTRIBUTING.md) |
 | Точка входу для агентів, карта джерел | [AGENTS.md](../AGENTS.md) |
 | Архітектурні рішення та їхній реєстр | [docs/decisions/](decisions/), [docs/DECISIONS.md](DECISIONS.md) |
-| Формат апаратних доказів | [docs/hardware/REPORT-FORMAT.md](hardware/REPORT-FORMAT.md) |
-| Оцінювання апаратної сумісності | [docs/HARDWARE-COMPATIBILITY-VERDICTS.md](HARDWARE-COMPATIBILITY-VERDICTS.md) |
+| Реєстр reference hardware та перший профіль | [#8 — матриця сумісності й перший reference profile](https://github.com/juv4uk/wsm-desktop/issues/8); профільні Free/Compatibility manifests — [#171](https://github.com/juv4uk/wsm-desktop/issues/171) |
+| Схема evidence bundle для профілю | [docs/HARDWARE-PROFILE-EVIDENCE.md](HARDWARE-PROFILE-EVIDENCE.md) |
+| Формат апаратного inventory report | [docs/hardware/REPORT-FORMAT.md](hardware/REPORT-FORMAT.md) |
+| Семантика verdict-ів сумісності | [#22](https://github.com/juv4uk/wsm-desktop/issues/22), [docs/HARDWARE-COMPATIBILITY-VERDICTS.md](HARDWARE-COMPATIBILITY-VERDICTS.md) |
 | Ліцензійна політика | [docs/LICENSING.md](LICENSING.md), [ADR 0003](decisions/0003-free-by-default.md) |
 | Вибір системного backend-а | [ADR 0004](decisions/0004-nix-guix-backend-strategy.md) |
 
@@ -33,7 +35,7 @@
 
 1. **Один вертикальний стек.** Залізо → прошивка → ядро → бекенд (Guix) → інсталятор → десктоп → документація. Кожен шар має бути узгоджений із сусідами, а не жити окремо.
 2. **Один авторитетний бекенд на систему.** Уже зафіксовано в [ADR 0004](decisions/0004-nix-guix-backend-strategy.md) — тримаємо жорстко. Екосистема не допускає «двох правд».
-3. **Один шлях користувача.** Від «вставив флешку» до «перший робочий стіл» — без розвилок, без «а тепер ще постав оце».
+3. **Один семантичний шлях користувача.** Від «вставив флешку» до першого робочого столу — спільні фази, типізований handoff і однакова семантика помилок. CLI/TUI/GUI можуть бути різними поверхнями взаємодії, але не окремими шляхами розгортання чи приводом дублювати backend logic.
 4. **Reference hardware.** Мета — сформувати скінченний перелік reference-конфігурацій із перевіреними можливостями та чіткими межами. Конфігурація може називатися `supported` лише після успішної інсталяції, першого boot і визначених функціональних перевірок на реальному обладнанні. До цього вона має чесний статус на кшталт `candidate`, `not-tested` або `limited`, а не обіцянку підтримки. Станом на цю редакцію валідних hardware evidence profiles ще немає.
 5. **Довіра як фіча.** Безпека, прозорість, `fail safely`, відсутність прихованих каналів — це не галочки, а частина продукту, яку користувач відчуває.
 
@@ -51,7 +53,7 @@
 
 ### 2.3. Evidence per claim
 
-Якщо агент додає в README, docs або UI слово «підтримується» / «працює» / «сумісно» — поруч має бути **посилання на evidence** (лог, тест, запис у compatibility matrix). Без evidence — це `planned`, а не `supported`. Це стосується і коду, і документації.
+Якщо агент додає в README, docs або UI слово «підтримується» / «працює» / «сумісно» — поруч має бути **посилання на evidence** (лог, тест, запис у compatibility matrix). Без evidence твердження не можна позначати `supported` або `verified`. Для апаратних функцій `not-tested` та `unknown` залишаються окремими станами; `planned` означає лише те, що реалізацію ще не виконано. Не згортуйте невідоме або неперевірене в один статус.
 
 Апаратний inventory-звіт має формат [docs/hardware/REPORT-FORMAT.md](hardware/REPORT-FORMAT.md); сам цей звіт **не є сертифікацією сумісності**. Compatibility claims тлумачаться за [docs/HARDWARE-COMPATIBILITY-VERDICTS.md](HARDWARE-COMPATIBILITY-VERDICTS.md). Для інших claims агент посилається на конкретний тест, CI run або лог із середовищем і методом перевірки. Рівні доказу (static test, Guix evaluation/build, QEMU boot, фізичне залізо) не змішуються — деталі в [CONTRIBUTING.md](../CONTRIBUTING.md).
 
@@ -100,8 +102,8 @@
 
 - **Інсталятор як єдиний шлях**: один канонічний user journey, одна послідовність фаз, один типізований план і один Guix backend. CLI/TUI/GUI можуть бути різними способами взаємодії лише тоді, коли використовують той самий handoff та acceptance-контракт; документація не повинна розводити користувача на різні процедури чи ручні обхідні команди.
 - **Перший boot**: агент, відповідальний за перший запуск, має описати **кожен екран** і **кожну точку збою**.
-- **Оновлення й відкат**: декларативний бекенд дає це майже безкоштовно — агент має зробити це **видимим для користувача**, а не прихованим. Межа відкату описана в [docs/STATELESS-CONFIGURATION.md](STATELESS-CONFIGURATION.md).
-- **Reference hardware matrix**: одна таблиця, один формат evidence, один власник. Це цільовий реєстр, а не наявний список сертифікованих машин: поки немає валідних профілів, жодну конфігурацію не слід називати reference-supported. Власник правил оцінювання — [docs/HARDWARE-COMPATIBILITY-VERDICTS.md](HARDWARE-COMPATIBILITY-VERDICTS.md), формат доказових bundle-ів — [docs/HARDWARE-PROFILE-EVIDENCE.md](HARDWARE-PROFILE-EVIDENCE.md).
+- **Оновлення й відкат**: зробити видимими номер покоління, source/config identity, результат build та activation, доступні попередні покоління й межі відновлення. Відкат Guix generation повертає декларативний стан системи, але **не** відкочує автоматично `/var/lib/<service>` або `/home/<user>`; міграції й persistent data потребують окремого ідемпотентного/recovery-контракту. Не обіцяти атомарний rollback між цими областями без окремої перевірки. Канонічні межі описані в [docs/STATELESS-CONFIGURATION.md](STATELESS-CONFIGURATION.md).
+- **Reference hardware matrix**: один канонічний реєстр кандидатів ведеться в межах [#8](https://github.com/juv4uk/wsm-desktop/issues/8); формування профілів і package manifests — окрема робота [#171](https://github.com/juv4uk/wsm-desktop/issues/171). Не змішуйте власників: inventory report має власний формат у [docs/hardware/REPORT-FORMAT.md](hardware/REPORT-FORMAT.md), profile evidence bundles — у [docs/HARDWARE-PROFILE-EVIDENCE.md](HARDWARE-PROFILE-EVIDENCE.md), а семантика verdict-ів — у [#22](https://github.com/juv4uk/wsm-desktop/issues/22) та [docs/HARDWARE-COMPATIBILITY-VERDICTS.md](HARDWARE-COMPATIBILITY-VERDICTS.md). Це цільовий реєстр, а не наявний список сертифікованих машин: валідних physical evidence profiles ще немає.
 
 ### Пріоритет 2 — те, що робить екосистему приємною
 
@@ -139,7 +141,7 @@
 1. **User journey описано** — хто, коли, що бачить, що при збої.
 2. **Вплив на сусідні шари перевірено** — інсталятор, перший boot, оновлення, docs.
 3. `fail safely` **поведінка визначена** — тригери зупинки й повідомлення.
-4. **Evidence додано** — лог, тест, запис у compatibility matrix.
+4. **Evidence додано для конкретного claim** — тест, лог або профіль з точним source SHA, конфігурацією/inputs, середовищем, командою, результатом/exit code та digest артефакту, якщо він створювався. Формат має відповідати класу доказу; hardware inventory не замінює build, QEMU, installer чи physical acceptance evidence.
 5. **Docs оновлено** — не «потім», а в тому ж PR.
 6. **Ліцензійна перевірка пройдена** — сумісність, nonfree, policy.
 7. **ADR оновлено**, якщо рішення архітектурне.
