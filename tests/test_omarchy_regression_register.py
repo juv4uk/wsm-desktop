@@ -133,12 +133,24 @@ class OmarchyRegisterTest(unittest.TestCase):
         self.assertEqual(row[4], "—")
 
     def test_late_drm_handoff_is_not_claimed_covered_before_acceptance(self) -> None:
+        """A guard against the known bad fix is `partial`, never `covered`.
+
+        The property — hardware DRM is ready before SDDM — still needs QEMU
+        late-KMS and physical acceptance. What changed is that the shipped
+        system definitions now may not buy readiness with a fixed sleep, so the
+        row has real evidence and the honest status is `partial`.
+        """
         row = self._row_for_source("Omarchy #20059")
         self.assertIn("simpledrm", row[0])
         self.assertIn("GNU Shepherd", row[1])
         self.assertIn("bounded", row[1])
-        self.assertEqual(row[3].strip("`"), "not-covered")
-        self.assertEqual(row[4], "—")
+        self.assertEqual(row[3].strip("`"), "partial")
+        self.assertIn(
+            "tests/test_system_definitions_have_no_sleep.py::test_no_shipped_definition_waits_with_sleep",
+            row[4],
+        )
+        self.assertIn("доводить", row[2], "the bound must stay written down")
+        self.assertIn("не замінює", row[2])
 
     def test_rollcall_functional_checks_remain_partial_in_wsm_inventory(self) -> None:
         row = self._row_for_source("Omarchy rollcall (#20107)")
