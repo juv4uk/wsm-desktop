@@ -43,6 +43,14 @@ class DriverProfileManifestTests(unittest.TestCase):
         self.assertValidProfile(self.free)
         self.assertValidProfile(self.compat)
 
+    def test_manifest_schema_version_is_explicit_and_current(self) -> None:
+        self.assertEqual(self.schema["properties"]["schema_version"]["const"], "1.1.0")
+        self.assertEqual(self.free["schema_version"], "1.1.0")
+        self.assertEqual(self.compat["schema_version"], "1.1.0")
+        notes = self.schema["$defs"]["candidate"]["properties"]["notes"]
+        self.assertEqual(notes["type"], "array")
+        self.assertEqual(notes["items"]["type"], "string")
+
     def test_channel_commit_matches_the_current_authenticated_free_lock(self) -> None:
         lock = (ROOT / "channels.lock.scm").read_text(encoding="utf-8")
         self.assertIn(f'(commit "{LOCKED_GUIX_COMMIT}")', lock)
