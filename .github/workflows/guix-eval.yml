@@ -58,7 +58,7 @@ jobs:
         run: |
           set -euo pipefail
           status=0
-          for file in systems/minimal.scm systems/desktop.scm systems/live.scm; do
+          for file in systems/minimal.scm systems/desktop.scm systems/live.scm systems/live-minimal.scm; do
             echo "::group::evaluating $file"
             if ! /usr/local/bin/guix time-machine -C channels.lock.scm -- \
                  system build "$file" --dry-run; then
