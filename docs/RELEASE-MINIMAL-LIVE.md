@@ -40,7 +40,7 @@ WSM TUI та після завершення видаляє тимчасові �
 
 ### Інтерактивний TTY smoke у QEMU
 
-Виконуйте його на ISO, зібраному з точного source commit, який перевіряєте. Створіть приватний тимчасовий каталог. VM має бути на TCG, без мережі, host passthrough і віртуального жорсткого диска; єдиний block device — ISO як CD-ROM:
+Виконуйте його на ISO, зібраному з точного source commit, який перевіряєте. Створіть приватний тимчасовий каталог і один **тимчасовий sparse qcow2 target**. VM має бути на TCG, без мережі, фізичних дисків чи host passthrough. Єдиний writable block device — цей файл у `$RUN_DIR`; ISO підключається тільки як CD-ROM:
 
 ```sh
 RUN_DIR="$(mktemp -d)"
@@ -48,6 +48,8 @@ chmod 700 "$RUN_DIR"
 WSM_ISO_DIR="$RUN_DIR/build" WSM_LIVE_PROFILE=systems/live-minimal.scm make image-live-minimal
 ISO="$RUN_DIR/build/wsm-desktop-live.iso"
 test -L "$ISO" && test -s "$ISO"
+qemu-img create -f qcow2 "$RUN_DIR/target.qcow2" 16G
+TARGET_SHA_BEFORE="$(sha256sum "$RUN_DIR/target.qcow2" | cut -d " " -f1)"
 ```
 
 BIOS-запуск:
@@ -55,6 +57,8 @@ BIOS-запуск:
 ```sh
 qemu-system-x86_64 \
   -machine q35,accel=tcg -m 2048 -smp 2 \
+  -drive if=none,id=target,file="$RUN_DIR/target.qcow2",format=qcow2 \
+  -device virtio-blk-pci,drive=target \
   -cdrom "$ISO" -boot order=d -nic none -display gtk \
   -serial "file:$RUN_DIR/bios-serial.log" -no-reboot
 ```
@@ -69,6 +73,8 @@ qemu-system-x86_64 \
   -machine q35,accel=tcg -m 2048 -smp 2 \
   -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
   -drive if=pflash,format=raw,file="$RUN_DIR/OVMF_VARS.fd" \
+  -drive if=none,id=target,file="$RUN_DIR/target.qcow2",format=qcow2 \
+  -device virtio-blk-pci,drive=target \
   -cdrom "$ISO" -boot order=d -nic none -display gtk \
   -serial "file:$RUN_DIR/uefi-serial.log" -no-reboot
 ```
@@ -77,9 +83,10 @@ qemu-system-x86_64 \
 
 1. Автоматичний вхід `wsm`; `locale` показує `uk_UA.utf8`.
 2. Кирилиця й рамки TUI відображаються без відсутніх glyph-ів; `LatGrkCyr-8x16` застосований до `tty2`.
-3. `Alt+Shift` перемикає US/UA в обидва боки; на US можна вводити шляхи, на UA клавіші `о/л` рухають вибір униз/угору, `й` завершує TUI.
-4. `wsm-install-live` показує українські повідомлення; стрілки та `j/k` теж працюють. Preview повідомляє, що APPLY вимкнено й система не встановлена.
-5. Серійний журнал містить `WSM_LIVE_READY`. Після виходу з VM перевірте, що не було підключено віртуальний жорсткий диск, мережу або host passthrough.
+3. `Alt+Shift` перемикає US/UA в обидва боки; на US можна вводити шляхи, на UA клавіші `о/л` рухають вибір униз/угору, `й` завершує TUI на екрані навігації.
+4. У списку цілей має бути тестовий `/dev/vda`. Введіть `/dev/vda` у підтвердженні. У цьому полі `q`, `j`, `k`, `й`, `о`, `л` є звичайними символами шляху; `Esc` скасовує введення. Regression tests окремо перевіряють `/dev/sdq`, `/dev/sdj` і `/dev/sdk`.
+5. `wsm-install-live` показує українські повідомлення; стрілки та `j/k` теж працюють. Preview повідомляє, що APPLY вимкнено й система не встановлена.
+6. Серійний журнал містить `WSM_LIVE_READY`. Після виходу з BIOS та UEFI VM SHA-256 qcow2 має збігатися з `$TARGET_SHA_BEFORE`; WSM не змінював ціль. Мережа й host passthrough відсутні.
 
 До звіту додайте source commit, Guix lock commit, SHA-256 ISO, версію QEMU, firmware mode, точну команду, serial log і результат кожного пункту. QEMU TCG доводить лише поведінку емульованої машини, а не фізичну сумісність.
 
