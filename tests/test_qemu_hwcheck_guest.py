@@ -53,9 +53,11 @@ class QemuHwcheckGuestSafetyTests(unittest.TestCase):
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
         self.assertEqual(guest.GUEST_VALIDATION_ABI, "cpython-311")
         self.assertIn(
-            '$(PYTHON) -c \'import sys; assert sys.implementation.cache_tag == "cpython-311"',
+            'sys.implementation.cache_tag == "cpython-311"',
             makefile,
         )
+        self.assertIn('version("jsonschema") == "4.26.0"', makefile)
+        self.assertIn("qemu-system-x86_64 busybox cpio modprobe", makefile)
         self.assertIn("$(PYTHON) scripts/ci_qemu_hwcheck_guest.py", makefile)
         documentation = (
             ROOT / "docs" / "testing" / "HWCHECK-QEMU-GUEST.md"
@@ -98,7 +100,7 @@ class QemuHwcheckGuestSafetyTests(unittest.TestCase):
 
     def test_guest_validator_requires_matching_cpython_abi(self) -> None:
         guest._require_guest_validation_abi("cpython-311")
-        with self.assertRaisesRegex(RuntimeError, "requires host ABI cpython-311"):
+        with self.assertRaisesRegex(RuntimeError, "host ABI cpython-311"):
             guest._require_guest_validation_abi("cpython-312")
 
     def test_guest_validator_dependency_allowlist_is_explicit(self) -> None:
