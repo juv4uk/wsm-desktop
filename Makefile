@@ -2,6 +2,7 @@
 
 PYTHON ?= python3
 GUIX ?= guix
+PRODUCT ?= free
 
 .PHONY: check release-gate check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle
 
