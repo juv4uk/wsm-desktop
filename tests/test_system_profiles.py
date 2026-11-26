@@ -287,6 +287,41 @@ class CompatibilityImageTests(unittest.TestCase):
         self.assertEqual(len(commits), 2)
 
 
+class RemovedServiceTests(unittest.TestCase):
+    """Services Guix deleted must not be referenced by any profile.
+
+    The first image build failed with "dhcp-client-service-type: unbound
+    variable": ISC DHCP reached end-of-life in 2022, the service was deprecated
+    in 2025 and removed afterwards. A profile that still names it cannot be
+    evaluated at all - the failure is at read time, not at build time.
+    """
+
+    def test_profiles_do_not_reference_removed_services(self) -> None:
+        removed = ("dhcp-client-service-type",)
+        offenders: list[str] = []
+        for path in sorted((ROOT / "systems").glob("*.scm")):
+            text = path.read_text(encoding="utf-8")
+            for name in removed:
+                # Mentions in comments are documentation, not configuration.
+                for line in text.splitlines():
+                    stripped = line.strip()
+                    if stripped.startswith(";") or stripped.startswith("#"):
+                        continue
+                    if name in stripped:
+                        offenders.append(f"{path.name}: {name}")
+        self.assertEqual(offenders, [], f"references a service Guix removed: {offenders}")
+
+    def test_network_manager_is_the_only_dhcp_client(self) -> None:
+        """Two DHCP clients fight over the same interface."""
+        text = profile("live-minimal.scm")
+        self.assertIn("network-manager-service-type", text)
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith(";"):
+                continue
+            self.assertNotIn("dhcpcd-service-type", stripped)
+
+
 class AudioConflictTests(unittest.TestCase):
     """The published image shipped both PipeWire and PulseAudio. That was a bug.
 
