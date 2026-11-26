@@ -2,6 +2,10 @@
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
+> Поточний підтримуваний шлях — read-only preflight та preview. APPLY вимкнено
+> в CLI, guided, TUI, Calamares і privileged agent; у жодному frontend-і
+> не можна трактувати завершення preview як встановлення системи.
+
 > Цей документ описує початковий Guix-oriented deployment design. Nix/NixOS backend потребуватиме окремого adapter design; Guix-specific кроки не можна переносити до нього.
 
 ## Два входи, один бекенд
