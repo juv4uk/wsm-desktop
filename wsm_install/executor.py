@@ -16,6 +16,7 @@ tool closure, and read-only postconditions in disposable QEMU.
 
 from __future__ import annotations
 
+import re
 import shlex
 import sys
 from dataclasses import dataclass
@@ -84,6 +85,15 @@ def _validate_preview(disk: str, steps: Sequence[Step]) -> None:
             raise ExecutorError("execute.purpose", f"step {index} has no purpose")
         if not isinstance(step.destructive, bool):
             raise ExecutorError("execute.destructive", f"step {index} has an invalid flag")
+
+        partition_suffix = r"p[1-9][0-9]*" if disk[-1].isdigit() else r"[1-9][0-9]*"
+        allowed_partition = re.compile(re.escape(disk) + partition_suffix)
+        for argument in step.command:
+            if argument.startswith("/dev/") and argument != disk and not allowed_partition.fullmatch(argument):
+                raise ExecutorError(
+                    "execute.target-mismatch",
+                    f"step {index} references {argument!r}, outside preview target {disk!r}",
+                )
 
 
 def execute(
