@@ -60,17 +60,21 @@ def scheme_definition(source: str, name: str) -> str:
 
 
 class CompatibilityNvidiaOverrideTests(unittest.TestCase):
-    def test_profile_header_reports_unverified_compatibility_acceptance(self) -> None:
+    def test_profile_header_separates_build_evidence_from_physical_acceptance(self) -> None:
         header = PROFILE.split("(use-modules", 1)[0]
         self.assertIn("окремий opt-in Compatibility", header)
         self.assertIn("Nonguix", header)
         self.assertIn("PCI ID 10de:1c82", header)
-        self.assertIn("Guix evaluation: NOT RUN", header)
-        self.assertIn("Compatibility package closure та image build: NOT RUN", header)
-        self.assertIn("QEMU BIOS/UEFI boot: NOT RUN", header)
-        self.assertIn("Physical H170 / GTX 1050 Ti binding та rendering: NOT RUN", header)
+        self.assertIn("локально зібрано в", header)
+        self.assertIn("QEMU TCG BIOS boot", header)
+        self.assertIn("ранній Guile init segfault", header)
+        self.assertIn("Physical H170 / GTX 1050 Ti binding", header)
+        self.assertIn("NOT RUN; потрібен окремий boot", header)
         self.assertIn("не є загальним твердженням про всі Pascal GPU", header)
-        self.assertNotIn("реально зібрано й завантажено в QEMU", header)
+        self.assertIn("Жодних тверджень про підтримку GTX 1050 Ti на реальному обладнанні", header)
+        self.assertNotIn("Guix evaluation: NOT RUN", header)
+        self.assertNotIn("Compatibility package closure та image build: NOT RUN", header)
+        self.assertNotIn("QEMU BIOS/UEFI boot: NOT RUN", header)
         self.assertNotIn("пропрієтарного firmware чи Nonguix", header)
 
     def test_pascal_driver_selection_is_scoped_to_the_exact_1050_ti_id(self) -> None:
@@ -80,6 +84,7 @@ class CompatibilityNvidiaOverrideTests(unittest.TestCase):
         self.assertIn("ID 1C82 відсутній", header)
         self.assertIn("не доводить, що pinned", header)
         self.assertNotIn("590+ GPU не розпізнає", header)
+
     def test_override_is_bound_to_the_reviewed_compatibility_lock(self) -> None:
         self.assertIn(
             '(name \'nonguix)',
