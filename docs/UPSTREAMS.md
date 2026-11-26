@@ -180,6 +180,34 @@ GPL-3.0-or-later, і жодна частина цього репозиторію
   необхідно перевірити на reference hardware; відсутність X11 fallback не
   можна компенсувати припущенням про сумісність.
 
+### Гонка simpledrm → нативний DRM (SDDM #1917)
+
+Це та сама гонка, від якої ми ставимо статичну заборону на `sleep` у
+[LESSONS-FROM-OMARCHY.md](LESSONS-FROM-OMARCHY.md) (рядок Omarchy #20059).
+Корисно знати механізм, а не лише заборонений засіб.
+
+Симптом: чорний екран із підсвіченим підсвічуванням; на холодному старті
+трапляється у 50–75 % випадків, підтверджено і на `amdgpu`, і на `i915`.
+Механізм у SDDM 0.21.0: `simpledrm` зникає → у seat0 `CanGraphical` стає false
+→ обробник `canGraphicalChanged` викликає `removeSeat()` без grace-періоду →
+деструктор `Display` доходить до `Auth::stop()` → `terminate()`,
+`waitForFinished(5000)`, `kill()`.
+
+Позиція розробників ядра (dri-devel, 2024-05): лагодити це в userspace — не
+виправлення, а обхід. Саме тому в тексту обговорення прямо сказано, що такий
+підхід «змушує userspace додавати щось на кшталт `sleep(10)`». Plymouth, до
+речі, уникає цього тим, що **не** вважає `simpledrm` KMS-пристроєм за
+замовчуванням.
+
+Окрема деталь для нас: у Omarchy (#17471) `sddm.service` впорядкований
+`After=plymouth-quit.service`, тому проміжок між виходом Plymouth і першим
+модсетом композитора вбудований у граф — і в цей проміжок консоль повертає
+кадр із прошивки (логотип виробника). `--retain-splash` сам по собі не
+допомагає, бо ніщо ще не володіє дисплеєм.
+
+Що це означає для майбутнього readiness gate: чекати треба не «скільки-то
+секунд», а появи нативного конектора — тобто події, а не таймера.
+
 ### GCD 009: Guix Bootspec (прийнято; upstream implementation ще не змерджено)
 
 Guix переробляє підсистему завантажувача. Нинішній інтерфейс формально загальний,
@@ -319,6 +347,8 @@ Unified Kernel Image — один PE-файл, у який складені stub
 - [Guix 1.6.0 release schedule, 15.11.2026](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00091.html)
 - [GCD 009 deliberation notice](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00074.html) and [acceptance record](https://codeberg.org/guix/guix-consensus-documents/pulls/15#issuecomment-28116399)
 - [Guix repository on Codeberg](https://codeberg.org/guix/guix/)
+- [SDDM #1917 — гонка з DRM-драйвером](https://github.com/sddm/sddm/issues/1917)
+- [dri-devel: simpledrm і запущені дисплей-сервери](https://lists.freedesktop.org/archives/dri-devel/2024-May/453272.html)
 - [GCD 009 — Guix Bootspec (deliberation)](https://codeberg.org/guix/guix-consensus-documents/pulls/15)
 - [ArchWiki: Unified kernel image](https://wiki.archlinux.org/title/Unified_kernel_image)
 - [LWN: Fedora approves a smaller GRUB (UKI, TPM PCR stability)](https://lwn.net/Articles/1085609/)
