@@ -86,6 +86,17 @@ class StopTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("No whole disks", console.text())
 
+    def test_preview_failure_is_reported_without_success_message(self) -> None:
+        console = FakeConsole(["1", "uefi", "/dev/nvme0n1"])
+        code = run_guided(
+            console,
+            DISKS,
+            lambda *_: 2,
+        )
+        self.assertEqual(code, 2)
+        self.assertIn("Preview could not be generated", console.text())
+        self.assertNotIn("Preview complete", console.text())
+
 
 class SuccessTests(unittest.TestCase):
     def test_full_flow_only_previews_the_chosen_disk(self) -> None:
