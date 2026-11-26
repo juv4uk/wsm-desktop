@@ -89,10 +89,9 @@ for output in "$ISO_OUTPUT" "$BUILD_LOG" "$CHANNELS_FILE" "$CHANNELS_LOG" "$MANI
     fi
 done
 
-# Read the version from the pinned channel, not only from the bootstrap
-# Guix executable. The -L option makes the repository's WSM modules visible
-# inside this exact time-machine invocation.
-GUIX_LOCKED_VERSION=$(guix time-machine -C "$LOCK" -L "$ROOT" -- --version | sed -n '1p')
+# Pass -L to the inferior Guix itself, not to the outer time-machine command.
+# Everything after "--" is argv for the locked Guix instance.
+GUIX_LOCKED_VERSION=$(guix time-machine -C "$LOCK" -- -L "$ROOT" --version | sed -n '1p')
 PROFILE_SHA256=$(python3 - "$PROFILE" <<'PY'
 import hashlib
 import sys
@@ -109,7 +108,7 @@ printf '%s\n' "build-iso: output=$ISO_OUTPUT"
 printf '%s\n' "build-iso: resolving locked channels (Guix authentication is not disabled)"
 
 # Resolve the exact channel set through the same time-machine lock used below.
-if guix time-machine -C "$LOCK" -L "$ROOT" -- describe -f channels >"$CHANNELS_FILE" 2>"$CHANNELS_LOG"; then
+if guix time-machine -C "$LOCK" -- -L "$ROOT" describe -f channels >"$CHANNELS_FILE" 2>"$CHANNELS_LOG"; then
     :
 else
     status=$?
@@ -128,7 +127,7 @@ if grep -Eiq 'channel authentication disabled' "$CHANNELS_FILE" "$CHANNELS_LOG";
 fi
 
 printf '%s\n' "build-iso: building with locked Guix channel; see build.log"
-if guix time-machine -C "$LOCK" -L "$ROOT" -- system image \
+if guix time-machine -C "$LOCK" -- -L "$ROOT" system image \
     --no-grafts \
     --root="$ISO_OUTPUT" \
     --image-type=iso9660 \
@@ -171,6 +170,7 @@ WSM_GUIX_LOCKED_VERSION="$GUIX_LOCKED_VERSION" \
 WSM_PROFILE="$PROFILE" \
 WSM_PROFILE_SHA256="$PROFILE_SHA256" \
 WSM_LOCK="$LOCK" \
+WSM_REPO_ROOT="$ROOT" \
 WSM_ISO_OUTPUT="$ISO_OUTPUT" \
 WSM_STORE_PATH="$STORE_PATH" \
 WSM_CHANNELS_FILE="$CHANNELS_FILE" \
@@ -199,6 +199,7 @@ channels_log = Path(os.environ["WSM_CHANNELS_LOG"])
 build_log = Path(os.environ["WSM_BUILD_LOG"])
 profile = Path(os.environ["WSM_PROFILE"])
 lock = Path(os.environ["WSM_LOCK"])
+repo_root = Path(os.environ["WSM_REPO_ROOT"])
 manifest_path = Path(os.environ["WSM_MANIFEST_FILE"])
 checksums_path = Path(os.environ["WSM_CHECKSUMS_FILE"])
 
@@ -236,7 +237,7 @@ manifest = {
     },
     "build": {
         "command": [
-            "guix", "time-machine", "-C", str(lock), "--", "system", "image",
+            "guix", "time-machine", "-C", str(lock), "--", "-L", str(repo_root), "system", "image",
             "--no-grafts", f"--root={iso}", "--image-type=iso9660",
             "--system=x86_64-linux", str(profile),
         ],
