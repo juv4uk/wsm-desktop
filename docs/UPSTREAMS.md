@@ -88,21 +88,29 @@ GPL-3.0-or-later, і жодна частина цього репозиторію
 
 ### KDE Plasma
 
-- Актуальний stable — **Plasma 6.8.3** (10.11.2026); лінія 6.8 вийшла
-  14.10.2026, а 6.7 знято з підтримки того ж дня. Паралельно живе LTS-лінія
-  **6.6** (6.6.7 станом на 16.10.2026).
-- **Plasma 6.8 прибирає X11-сесію.** Для WSM це не косметика: у live-сесії не
-  буде fallback на X11, тому дефект, який проявляється лише під Wayland, стає
-  блокером, а не «обійдемо іншим сеансом».
+- Актуальний stable — **Plasma 6.8.3** (10.11.2026); лінія 6.8 була
+  оголошена 14.10.2026. Не слід стверджувати, що 6.7 припинила отримувати
+  виправлення того самого дня: KDE опублікувала **Plasma 6.7.6** 03.11.2026,
+  уже після виходу 6.8.0. Це останній 6.7.x випуск, який видно в офіційному
+  каталозі на дату цього зрізу.
+- Паралельно підтримується LTS-лінія **6.6**: випуск 6.6.7 датований
+  16.10.2026; KDE вказує орієнтовний строк підтримки цієї LTS-лінії до
+  серпня 2029 року. Це upstream-статус, а не доказ доступності 6.6.7 у нашому
+  Guix lock.
+- **Plasma 6.8 прибирає X11 login session.** У менеджері входу доступна
+  Wayland-сесія; окремі X11-застосунки продовжують працювати через XWayland.
+  Тобто XWayland не є запасною повноцінною Plasma/X11-сесією.
 - WSM не вибирає версію Plasma сам: `plasma-desktop-service-type` приходить із
   зафіксованого Guix-зрізу, тому фактична версія — похідна від піна каналу
-  ([#39](https://github.com/juv4uk/wsm-desktop/issues/39)). **Відкритий пункт:**
-  перевірити, яку саме версію несе поточний пін. Без цього не можна
+  ([#39](https://github.com/juv4uk/wsm-desktop)). **Відкритий пункт:** перевірити,
+  яку саме версію несе поточний пін. Без Guix evaluation/build не можна
   стверджувати ні «у нас 6.8+», ні «у нас LTS».
-- Практичний наслідок для вже відомого: виправлення введення з клавіатури для
-  QML-модулів Calamares під Wayland (3.4.3, див.
-  [CALAMARES-FEASIBILITY.md](CALAMARES-FEASIBILITY.md)) — не «приємно мати», а
-  умова роботи GUI, якщо зріз несе 6.8+.
+- Поточний minimal-live напрям WSM — CLI/TUI, а Calamares deprioritized.
+  Тому зміна X11/Wayland у Plasma не є підставою повертати Calamares або
+  другий frontend. Якщо Plasma desktop буде включено в перевірюваний шлях,
+  Wayland стане єдиною сесійною ціллю: display, keyboard/input, GPU та resume
+  необхідно перевірити на reference hardware; відсутність X11 fallback не
+  можна компенсувати припущенням про сумісність.
 
 ### Calamares
 
@@ -115,5 +123,11 @@ GPL-3.0-or-later, і жодна частина цього репозиторію
 - [Guix toolchain/transition freeze, 10.11.2026](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00039.html)
 - [GCD 009 deliberation notice](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00074.html)
 - [Guix repository on Codeberg](https://codeberg.org/guix/guix/)
+- [KDE Plasma 6.8.3, 10.11.2026](https://kde.org/announcements/plasma/6/6.8.3/)
+- [KDE Plasma 6.8 announcement, 14.10.2026](https://kde.org/announcements/plasma/6/6.8.0/)
+- [KDE Plasma 6.7.6, 03.11.2026](https://kde.org/announcements/plasma/6/6.7.6/)
+- [KDE Plasma 6.6.7 LTS, 16.10.2026](https://kde.org/announcements/plasma/6/6.6.7/)
+- [KDE Plasma LTS support policy](https://kde.org/support/compliance/)
+- [Official Plasma source release archive](https://download.kde.org/stable/plasma/)
 - [KDE Plasma 6.8.3, bugfix release 10.11.2026](https://kde.org/announcements/plasma/6/6.8.3/)
 - [KDE Plasma 6.8 announcement, 14.10.2026](https://kde.org/announcements/plasma/6/6.8.0/)
