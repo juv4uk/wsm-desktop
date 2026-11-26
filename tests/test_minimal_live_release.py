@@ -86,9 +86,11 @@ class MinimalLiveProfileTests(unittest.TestCase):
             "-C channels.lock.scm -L . -- home -L . build systems/home.scm --dry-run",
             evaluation,
         )
+        self.assertIn("$(MAKE) check-compatibility-eval", evaluation)
+        compatibility = makefile.split("check-compatibility-eval:", 1)[1].split("\n\n", 1)[0]
         self.assertIn(
             "-C channels/compatibility.lock.scm -L . -- system -L . build systems/live-compat.scm --dry-run",
-            evaluation,
+            compatibility,
         )
         self.assertIn("(gnu system locale)", (ROOT / "systems" / "live-minimal.scm").read_text(encoding="utf-8"))
 
