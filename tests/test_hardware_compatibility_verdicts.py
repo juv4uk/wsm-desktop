@@ -90,5 +90,69 @@ class HardwareCompatibilityVerdictPolicyTests(unittest.TestCase):
         self.assertIn("не дозволяти confirmable plan", self.lower)
 
 
+
+
+EVIDENCE_STATES = {
+    "supported-tested",
+    "driver-bound-not-tested",
+    "candidate-only",
+    "known-problem",
+    "not-detected",
+    "not-tested",
+    "not-collected",
+    "unknown",
+}
+
+
+def section(text: str, heading: str) -> str:
+    start = text.index(heading)
+    rest = text[start + len(heading):]
+    end = rest.find("\n## ")
+    return rest if end == -1 else rest[:end]
+
+
+class DecisionLevelTests(unittest.TestCase):
+    """Stop levels and the coarse three-tier words must stay derived."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.text = POLICY.read_text(encoding="utf-8")
+
+    def test_four_decision_levels_are_named(self) -> None:
+        block = section(self.text, "## 4.1")
+        for level in ("hard-stop", "soft-stop", "warn-and-continue", "continue"):
+            with self.subTest(level=level):
+                self.assertIn(f"`{level}`", block)
+
+    def test_hard_stop_does_not_claim_incompatibility(self) -> None:
+        block = section(self.text, "## 4.1")
+        self.assertIn("не означає «залізо несумісне»", block)
+        self.assertIn("заборонене", block)
+
+    def test_warning_cannot_escalate_silently(self) -> None:
+        block = section(self.text, "## 4.1")
+        self.assertIn("не може непомітно стати `hard-stop`", block)
+
+    def test_coarse_tiers_map_only_to_known_evidence_states(self) -> None:
+        """A three-word UI vocabulary may not invent a state we do not have."""
+        block = section(self.text, "## 4.2")
+        rows = [line for line in block.splitlines() if line.startswith("| `")]
+        self.assertGreaterEqual(len(rows), 3, rows)
+        for line in rows:
+            cells = [cell.strip() for cell in line.strip("|").split("|")]
+            tier = cells[0].strip("`")
+            self.assertIn(tier, {"certified", "known", "unknown"}, line)
+            for state in EVIDENCE_STATES:
+                if f"`{state}`" in cells[1]:
+                    break
+            else:
+                self.fail(f"{tier}: maps to no known evidence state: {cells[1]}")
+
+    def test_coarse_tiers_are_declared_derived(self) -> None:
+        block = section(self.text, "## 4.2")
+        self.assertIn("згортання", block)
+        self.assertIn("ніколи не приймаються за трирівневою мовою", block)
+
+
 if __name__ == "__main__":
     unittest.main()
