@@ -250,16 +250,18 @@ def measure(mode: str, repetitions: int) -> dict[str, Any]:
     for name, workload in WORKLOADS.items():
         workload()  # warm-up, discarded: the first call pays for page faults
         pressure_before = read_pressure_snapshot()
+        sample_window_started = time.perf_counter()
         samples: list[float] = []
         for _ in range(repetitions):
             started = time.perf_counter()
             workload()
             samples.append(time.perf_counter() - started)
+        sample_window_seconds = time.perf_counter() - sample_window_started
         pressure_after = read_pressure_snapshot()
         measurement = median_and_spread(samples)
-        measurement["system_pressure"] = compare_pressure_snapshots(
-            pressure_before, pressure_after
-        )
+        system_pressure = compare_pressure_snapshots(pressure_before, pressure_after)
+        system_pressure["sample_window_seconds"] = sample_window_seconds
+        measurement["system_pressure"] = system_pressure
         results[name] = measurement
 
     environment_facts = environment(mode)
