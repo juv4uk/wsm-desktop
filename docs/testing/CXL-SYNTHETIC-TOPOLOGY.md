@@ -190,3 +190,5 @@ done
 Підготовка kernel module dependency closure має жорсткий ліміт як для archive input (128 MiB на module), так і для aggregate expanded output (128 MiB на closure). `zstd`, `xz` та `gzip` запускаються через pipe; stdout читається потоково невеликими блоками й записується лише до встановленого ліміту. На першому байті понад budget subprocess завершується, частковий файл видаляється; кожен decompressor має timeout 20 секунд. Нерозпаковані `.ko` копіюються тим самим bounded reader-ом, а aggregate remainder передається в кожний наступний виклик.
 
 Host commands використовують спільний `scripts/qemu_boot_smoke.py:run_bounded_process`: stdout/stderr мають окремі фіксовані capture budgets. QEMU guest serial обмежений 64 KiB, stderr — 16 KiB; перевищення не перевіряється постфактум після необмеженого `capture_output`.
+
+Результати feasibility та межі тестового фреймворку — у [CXL-QEMU-AND-TEST-FRAMEWORK-FEASIBILITY.md](CXL-QEMU-AND-TEST-FRAMEWORK-FEASIBILITY.md).
