@@ -156,3 +156,31 @@ jobs:
             "$release_dist/$release_iso" "$release_dist/SHA256SUMS" \
             "$release_dist/build-manifest.json" "$release_dist/release-manifest.json" \
             "$release_dist/boot-bios.json" "$release_dist/boot-uefi.json"
+
+      - name: Повідомити причину збою
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          BODY=$(mktemp)
+          {
+            echo "### Minimal Live Release: збірка не завершилась"
+            echo ""
+            echo "Commit: \`$GITHUB_SHA\`"
+            echo ""
+            for log in "$RUNNER_TEMP/wsm-live-build/build.log" \
+                       "$RUNNER_TEMP/wsm-live-build/channel-resolution.log"; do
+              if [ -f "$log" ]; then
+                echo "#### $(basename "$log")"
+                echo '```'
+                tail -60 "$log"
+                echo '```'
+              fi
+            done
+            df -h / || true
+          } > "$BODY"
+          # Логи задачі потребують авторизації; коментар до коміту читається
+          # інструментами, тому причина збою лишається тут.
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
+            -F body=@"$BODY" >/dev/null && echo "причину записано коментарем"
