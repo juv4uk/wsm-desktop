@@ -367,7 +367,9 @@ class InstallerPlanGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "gigabyte" / "ga-h170-gaming3"
             prepare_artifact_root(root, self.report_bytes)
-            _plan, blockers, _warnings = self.build(self.matching_bundle(), root)
+            evidence = self.matching_bundle()
+            evidence["profile"]["slug"] = "gigabyte/different-board"
+            _plan, blockers, _warnings = self.build(evidence, root)
         self.assertTrue(any("does not match the directory" in item for item in blockers))
 
     def test_build_plan_rejects_profile_source_modified_after_verification(self) -> None:
@@ -472,7 +474,7 @@ class DirectoryTests(unittest.TestCase):
                 profile={
                     "vendor": "GIGABYTE",
                     "model": "GA-H170-Gaming 3",
-                    "slug": "gigabyte/ga-h170-gaming3",
+                    "slug": "gigabyte/different-board",
                 }
             )
             document["profile_source"]["sha256"] = hashlib.sha256(profile_bytes).hexdigest()
