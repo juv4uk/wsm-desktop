@@ -9,6 +9,9 @@
 
 ## Різниця, яку фіксує цей формат
 
+Формат спирається на спільний словник екосистеми — [OBSERVATION-PRINCIPLES.md](OBSERVATION-PRINCIPLES.md): `unknown ≠ false`, `status → source → evidence`.
+
+
 Є два способи сказати «ця машина підтримується»:
 
 1. «Ми написали конфігурацію для GA-H170-Gaming 3, має працювати.»
