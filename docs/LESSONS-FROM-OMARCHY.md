@@ -58,8 +58,14 @@ pacman не вміє володіти: перевключити службу, п
 проблема, яку Omarchy вирішив скриптами; у нас вона поки не виникла лише тому,
 що реальних bundle ще немає.
 
-**Спокуса обгорнути все в shell.** У нас 12 скриптів і 35 тестів; якщо
-співвідношення почне падати, це сигнал.
+**Спокуса рахувати файли замість перевірок.** У `main` на 26.11.2026 є 13
+файлів у `scripts/` і 36 Python test modules, але співвідношення саме по собі
+нічого не доводить. Поточний `tests/test_repo_hygiene.py` ще містить перевірку,
+яка лише шукає назву скрипту в тексті тестів, і перевірку наявності текстових
+маркерів CI shell script. Це не behavioral coverage; `bash -n` доводить лише
+синтаксичну коректність. Кандидат #243 замінює слабкі перевірки AST policy та
+реальними regression fixtures, але до merge й exact-head CI це не є властивістю
+`main`.
 
 ---
 
@@ -107,7 +113,75 @@ JSON-масивом аргументів, який передається як `
 `/security` і команда, що розбирає звіти. У нас SECURITY.md описує процес, але
 не обіцяє строків.
 
-~~**Перевірки, що опублікований ISO не містить сторонніх каналів.**~~ —
-зроблено: `scripts/check_channels.py` читає форми `channels.lock.scm` (не
-коментарі) і відхиляє сторонній канал, `http://`, невідомий хост, гілку замість
-коміта й канал без introduction. Виконується в `make check`.
+**Перевірка channel policy вже входить у `make check`, але її строгість ще
+потребує посилення.** Поточний `check-channels` запускає обидві політики, однак
+старий checker використовує один default lock для Free та Compatibility і
+дозволяє ширші host-based правила замість точних repository URL та повної
+перевірки типів Scheme-полів. Застарілий PR [#263](https://github.com/juv4uk/wsm-desktop/pull/263)
+закрито без merge; його відкритий successor [#276](https://github.com/juv4uk/wsm-desktop/pull/276)
+ще потребує синхронізації з current main та exact-head CI. До його merge ці
+вимоги не є властивістю main. Structural PASS не є криптографічною
+автентифікацією: її окремо виконує Guix з увімкненим channel authentication.
+
+
+## Оновлення аналізу: Omarchy 4.5 (листопад 2026)
+
+Офіційний анонс Omarchy 4.5 опублікований 4 листопада, а GitHub позначає
+`v4.5.0` як latest stable release від 5 листопада 2026 року. Команда повідомляє
+про понад 740 merged PR від 180+ contributors за 12 тижнів. Це сильна швидкість
+розробки, але кількість PR не замінює acceptance і не є аргументом копіювати
+весь стек.
+
+**Що варто вивчити, а не переносити буквально:**
+
+- **Prebuilt root image замість сотень окремих package installs.** Omarchy 4.5
+  описує скорочення інсталяції приблизно вдвічі після переходу від встановлення
+  близько 940 пакетів по одному до розпакування prebuilt root image з подальшою
+  machine-specific конфігурацією. Для WSM кандидат — відтворюваний Guix system
+  output або кешована derivation з точними source/lock/profile hashes, а не
+  непрозорий rootfs без provenance. До acceptance потрібні manifest, checksums,
+  package closure і disposable-QEMU boot саме цього artifact.
+- **Події замість зайвого polling.** Omarchy повідомляє про перехід частини UI
+  на реакцію на зміни замість періодичних опитувань. У WSM використовувати
+  D-Bus/udev та інші стабільні події там, де це реально зменшує навантаження;
+  не додавати watcher, якщо він дублює власника транзакції або створює гонки.
+- **Кілька режимів без втрати основного сценарію.** Omarchy 4.5 поєднує tiling
+  і floating desktop modes, додає 50 мов та ARM install targets. Для WSM це
+  нагадування розділяти desktop UX, system locale, UI language та input method,
+  а архітектурну підтримку розширювати лише після package closure та реальних
+  device acceptance. Поточний WSM vertical slice залишається x86_64/UEFI;
+  KDE Plasma/Guix не треба замінювати на Hyprland/Arch лише заради наслідування.
+- **Agent features не повинні обходити security model.** Omarchy 4.0.1
+  замінив повний permission bypass для Claude/Codex на auto-review. Це підтримує
+  правило WSM: агентська автоматизація має працювати в межах явної авторизації,
+  журналювання та target-bound consent; «агент сказав, що все завершив» не є
+  доказом.
+- **Секрети й тимчасовий привілейований state мають мати власника.** Пізніші
+  Omarchy fixes охопили пароль у RDP argv, state у world-writable `/tmp`,
+  cleanup inhibitor-ів не тим процесом і sudo expiry після suspend. Для WSM:
+  секрети не передавати в argv/logs; runtime state тримати в приватному
+  UID-owned каталозі; cleanup прив'язувати до creator/owner; privilege lease
+  має мати чіткий expiry та перевірку після suspend/resume.
+
+**Конкретні regression classes з першоджерел:**
+
+- [#6951](https://github.com/omacom/omarchy/pull/6951) — `root=` був втрачений
+  під час package/kernel transaction; merged 3 жовтня 2026.
+- [#14949](https://github.com/omacom/omarchy/pull/14949) — factory reset
+  видаляв boot entries інших ОС на shared ESP; merged 20 жовтня 2026.
+- [#14874](https://github.com/omacom/omarchy/pull/14874) — resume LUKS key change
+  помилково міг видалити slot, доданий власником як recovery key; merged.
+- [#16421](https://github.com/omacom/omarchy/pull/16421) — unresolved migration
+  не повинна отримувати completion marker; merged.
+- [#20178](https://github.com/omacom/omarchy/issues/20178) — open issue про
+  Legacy/CSM multi-disk install без перевіреного boot-order handoff.
+
+Ці upstream reports — не докази дефектів у WSM або на конкретному обладнанні.
+Це джерела для regression fixtures та acceptance вимог; кожен сценарій має
+окремий prevent/detect rule і статус власної перевірки.
+
+Джерела: [Omarchy 4.5 announcement](https://omarchy.org/news/2026/11/omarchy-4-5/),
+[official v4.5.0 release](https://github.com/omacom/omarchy/releases/tag/v4.5.0),
+[update process](https://github.com/omacom/omarchy/blob/quattro/docs/update-process.md),
+[migration guide](https://github.com/omacom/omarchy/blob/quattro/agents/skills/migrations.md),
+[Omarchy 4.0.1 security release](https://github.com/omacom/omarchy/releases/tag/v4.0.1).
