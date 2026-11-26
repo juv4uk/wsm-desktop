@@ -4,3 +4,4 @@
 # Retry Minimal Live after #461: NetworkManager now owns DHCP; the removed Guix dhcp-client-service-type is no longer referenced.
 
 
+
