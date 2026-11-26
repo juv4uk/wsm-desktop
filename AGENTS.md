@@ -8,6 +8,7 @@
 
 - [CONTRIBUTING.md](CONTRIBUTING.md) — внесок, тестування, exact-head CI, merge policy та мовна політика.
 - [LESSONS-FROM-OMARCHY.md](docs/LESSONS-FROM-OMARCHY.md) — перевірені failure modes із Omarchy та WSM-запобіжники.
+- [docs/ECOSYSTEM-PRINCIPLES.md](docs/ECOSYSTEM-PRINCIPLES.md) — критерії когерентності екосистеми: стек, evidence per claim, `fail safely`, антипатерни, Definition of Done.
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — середовище розробки та Guix bring-up.
 - [agents/skills/](agents/skills/) — task-specific процедури; для installer/provisioning читайте [installer-lifecycle.md](agents/skills/installer-lifecycle.md).
 - [docs/](docs/) — архітектура та прийняті рішення. Зокрема [STATELESS-CONFIGURATION.md](docs/STATELESS-CONFIGURATION.md), [PARTITIONING.md](docs/PARTITIONING.md) і [INSTALLER-HANDOFF.md](docs/INSTALLER-HANDOFF.md) є власниками своїх контрактів.
