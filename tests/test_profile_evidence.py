@@ -164,5 +164,20 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(strays, [])
 
 
+class OwnerReferenceSeparationTests(unittest.TestCase):
+    def test_owner_hardware_reference_is_outside_profile_discovery(self) -> None:
+        owner_reference = ROOT / "docs" / "hardware" / "OWNER-HARDWARE-REFERENCE.md"
+        self.assertTrue(owner_reference.is_file())
+        self.assertFalse((ROOT / "profiles" / "hardware" / "gigabyte" / "ga-h170-gaming3" / "README.md").exists())
+        content = owner_reference.read_text(encoding="utf-8")
+        self.assertIn("не hardware evidence bundle", content)
+        self.assertIn("native Linux", content)
+        self.assertIn("not-assessed", content)
+
+    def test_profile_catalog_points_to_separate_owner_reference(self) -> None:
+        catalog = (ROOT / "profiles" / "hardware" / "README.md").read_text(encoding="utf-8")
+        self.assertIn("OWNER-HARDWARE-REFERENCE.md", catalog)
+        self.assertIn("оголошених апаратних профілів", catalog)
+
 if __name__ == "__main__":
     unittest.main()
