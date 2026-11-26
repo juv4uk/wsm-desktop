@@ -193,3 +193,25 @@ overall: incomplete
 Тобто: documentation і тестовий набір зелені, але Compatibility lock не
 налаштований, реальних profile bundles немає й **образ не перевірено**. Це
 чесна картина, а не «майже готово».
+## Product-scoped release gate
+
+Звичайна локальна перевірка за замовчуванням оцінює Free product:
+
+```sh
+make release-gate PRODUCT=free
+```
+
+Compatibility та спільний реліз перевіряються лише явно:
+
+```sh
+make release-gate PRODUCT=compatibility
+make release-gate PRODUCT=all
+```
+
+`PRODUCT=free` перевіряє лише Free lock/profile. `PRODUCT=compatibility` вимагає
+окремий `channels.compatibility.lock.scm`; якщо його немає, результатом буде
+`NOT_CONFIGURED` / `not-run`, а release status — `incomplete`, не `pass` і не
+`fail`. `PRODUCT=all` агрегує обидва продукти незалежно. Наявність
+`channels.compatibility.lock.scm` сама по собі не доводить криптографічну
+автентифікацію каналу: її окремо має виконати GNU Guix із увімкненою
+channel authentication.
