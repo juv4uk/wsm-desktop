@@ -50,10 +50,10 @@ report.json               сирий hardware evidence report (schema 1.0.0)
 plan-guix.json            diagnostic-only draft plan для guix-system
 manifest.json             версія, commit, exit codes, argv-команди, перевірки безпеки
 
-The release helper evaluates exactly one system backend: GNU Guix System
-(`guix-system`). The historical NixOS experiment is tracked separately in
-[#55](https://github.com/juv4uk/wsm-desktop/issues/55) and is not a product
-plan, release check, or supported installation path.
+Release hardware-check перевіряє лише один системний backend першого preview —
+GNU Guix System (`guix-system`). Історичний NixOS експеримент відстежується
+окремо в [#55](https://github.com/juv4uk/wsm-desktop/issues/55) і не є
+продуктовим plan, release gate або підтриманим шляхом інсталяції.
 install-guix.stdout.log   стандартний вивід preflight (зазвичай порожній)
 install-guix.stderr.log   людський summary + warnings/blockers
 hwcheck.*.log             з'являються лише якщо звіт збирається, а не подається через --report
@@ -78,7 +78,7 @@ PY
 
 Очікувані значення:
 
-- `overall: "pass"` — обидва плани видано й перевірено;
+- `overall: "pass"` — єдиний Guix diagnostic plan видано й перевірено;
 - `overall: "preflight-blocked"` — звіт зібрано, але єдиний підтримуваний Guix backend зупинився з exit=3, порожнім stdout і маркером `no plan emitted because required critical evidence is unresolved` у stderr. Це **безпечний результат**, а не помилка скрипта;
 - `status: "verified-diagnostic"` для кожного виданого плану;
 - `safe_execution_flags: true`, `plan_sha256_matches: true`, `source_report_sha256_matches: true`, `backend_id_matches_request: true`, `confirmable_false: true`.
