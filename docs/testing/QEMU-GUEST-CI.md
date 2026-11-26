@@ -1,52 +1,49 @@
-# QEMU acceptance у GitHub Actions
+# Ручні QEMU runtime-перевірки
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Статус: **єдиний CI workflow, окремий обов'язковий job**
-- Workflow: `.github/workflows/ci.yml`
-- Job: `qemu-acceptance`
-- Документи суміжних рівнів: [HWCHECK-QEMU-GUEST.md](HWCHECK-QEMU-GUEST.md), [../INSTALLER-QEMU-HARNESS.md](../INSTALLER-QEMU-HARNESS.md)
+- Статус: **ручне acceptance; не запускається в hosted CI**
+- Швидкий CI: `.github/workflows/ci.yml`
+- Ручна команда: `make qemu-acceptance-manual`
+- Суміжний контракт: [INSTALLER-QEMU-HARNESS.md](../INSTALLER-QEMU-HARNESS.md)
 
-## Навіщо це окремо від швидких тестів
+## Межа швидкого CI
 
-Job `checks` перевіряє Python, документацію, channel policy та структурний release gate. Він не доводить, що QEMU справді запустив ядро або що наш collector виконався всередині гостьової Linux-системи.
+Hosted CI навмисно виконує лише Python unit/policy tests, перевірку документації та структурні перевірки двох channel locks. Він не встановлює QEMU, Guix чи пакети ОС, не збирає ISO й не запускає гостьові системи. Звичайний push або PR має завершуватися швидко й не чекати на runtime acceptance.
 
-Тому один workflow має окремий `qemu-acceptance` із межею 30 хвилин. Він запускається на кожен push у `main`, кожен pull request і ручний `workflow_dispatch`; path filters навмисно не використовуються, щоб обов'язкова перевірка не зникала зі статусів через новий шлях у репозиторії.
+## Ручне QEMU acceptance
 
-## Рівні перевірки
+Запускати окремо на Linux host із QEMU, BusyBox, cpio, modprobe та Python-залежністю `jsonschema[format]==4.26.0`:
 
-1. **Generic Linux guest.** `scripts/ci_qemu_guest_smoke.sh` завантажує ядро runner-а під QEMU TCG, без диска й мережі; гість мусить вивести `WSM_QEMU_GUEST_INIT_OK`.
-2. **WSM hardware collector.** `scripts/ci_qemu_hwcheck_guest.py` запускає реальний `python -m wsm_hwcheck` у гостьовому ядрі. Гість читає власні read-only `/proc` і `/sys`, передає звіт через serial; host перевіряє SHA-пінований CPython runtime, bounded transport та JSON Schema.
-3. **CXL sysfs guest.** `scripts/ci_cxl_qemu_guest.py` копіює тільки dependency closure модулів вибраного runner kernel та перевіряє enumeration віртуального CXL Type 3 пристрою. Host modules не завантажуються, host sysfs не змінюється.
-4. **Synthetic ISO через WSM harness.** Job будує тимчасовий GRUB/BusyBox ISO та запускає його через `scripts/qemu_boot_smoke.py`. Очікується `WSM_QEMU_HARNESS_ISO_BOOT_OK`; harness створює лише одноразовий qcow2 і перевіряє isolation flags.
-5. **Policy tests.** Перевіряються QEMU argument builder, bounded serial/stderr capture, CXL module-copy limits, installer capability matrix та contract самого workflow.
+```sh
+make qemu-acceptance-manual
+```
 
-## Ізоляція
+Ціль послідовно запускає:
 
-- Тільки GitHub-hosted `ubuntu-24.04` runner та QEMU TCG; KVM і host CPU passthrough не вмикаються.
-- Усі QEMU guests без мережі (`-nic none`).
-- Немає host block-device, USB/GPU passthrough, shared folders або EFI variable store.
-- Writable qcow2, initramfs і synthetic ISO живуть у тимчасовому runner-каталозі.
-- Немає фізичного диска, firmware flash, Guix APPLY або автоматичного оновлення драйверів.
-- Workflow має лише `contents: read`, не використовує repository secrets.
-- Кожен процес має власний wall-clock timeout; job обмежено 30 хвилинами.
+1. `scripts/ci_qemu_guest_smoke.sh` — generic Linux guest boot під QEMU TCG без диска й мережі; очікуваний маркер `WSM_QEMU_GUEST_INIT_OK`.
+2. `scripts/ci_qemu_hwcheck_guest.py` — реальний `wsm-hwcheck` усередині disposable guest; runtime CPython завантажується за зафіксованим SHA-256, звіт передається через serial і перевіряється на host.
+3. `scripts/ci_cxl_qemu_guest.py --timeout 90` — read-only CXL Type 3 enumeration у гостьовому ядрі; host-модулі не завантажуються й host sysfs не змінюється.
 
-## Ручна Guix evaluation
+Команди можна запускати окремо для локалізації проблеми. Відсутні інструменти, модулі або права мають завершуватися явною помилкою, а не пропуском із PASS.
 
-Job `guix` запускається тільки через `workflow_dispatch`. Він оцінює Free system files і home environment через pinned `channels.lock.scm`.
+## Ручна перевірка конкретного ISO
 
-Далі окремо перевіряються `systems/compatibility.scm` та `systems/live-compat.scm` через `channels/compatibility.lock.scm`. Якщо окремого lock немає, job повертає явний `NOT_CONFIGURED` і exit code 2. Він не підміняє цей стан успіхом Free lock або пропущеним кроком. Канал має пройти звичайну authentication перевірку Guix; `--disable-authentication` не використовується.
+Для перевірки вже зібраного ISO використовуйте project harness:
 
-## Єдина точка агрегації
+```sh
+python scripts/qemu_boot_smoke.py --help
+python scripts/qemu_boot_smoke.py --iso /absolute/path/to/image.iso
+```
 
-Job `acceptance-gates` має `if: always()` та перевіряє результати `checks`, `qemu-acceptance` і, для ручного запуску, `guix`. На звичайному push/PR Guix відображається як `not-run`, бо він manual-only. Невдалий, скасований або пропущений QEMU job не перетворюється на PASS.
+Harness створює одноразовий qcow2 у тимчасовому каталозі, працює через TCG без мережі й не підключає host block devices, USB/GPU passthrough, shared folders або EFI variable store. Це перевіряє лише запуск вибраного ISO в межах заданого сценарію; результат не є доказом фізичної сумісності.
 
-## Межі висновку
+## Інші повільні перевірки
 
-- Generic guest boot доводить запуск ядра й init, а не WSM ISO.
-- HWCHECK guest доводить роботу collector-а на віртуальних `/proc` і `/sys`, а не фізичне виявлення всіх пристроїв.
-- CXL guest доводить лише синтетичне QEMU enumeration; це не фізичний CXL hardware test.
-- Synthetic ISO доводить роботу QEMU harness, а не збірку чи завантаження Guix-generated WSM image.
-- Фізична сумісність GTX 1050 Ti, Wi-Fi, audio, storage або реального монітора залишається окремим owner-hardware acceptance.
+Guix evaluation також запускається лише за явною командою:
 
-Усі рівні мають власний маркер і bounded output. Відсутність runtime evidence — `not-run`, не `pass` і не `fail`.
+```sh
+make check-guix-eval
+```
+
+Локальні unit-тести аргументів і harness залишаються у швидкому наборі тестів; вони не запускають QEMU guest. Повне runtime acceptance навмисно відокремлене від `make check` і hosted CI.
