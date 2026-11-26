@@ -65,11 +65,12 @@ class StopTests(unittest.TestCase):
         self.assertEqual(calls, [])
         self.assertIn("does not match", console.text())
 
-    def test_stop_before_install_leaves_the_disk_untouched(self) -> None:
-        code, console, calls = self.run_flow(["1", "uefi", "/dev/nvme0n1", ""])
-        self.assertEqual(code, 1)
+    def test_preview_completes_without_a_second_install_confirmation(self) -> None:
+        code, console, calls = self.run_flow(["1", "uefi", "/dev/nvme0n1"])
+        self.assertEqual(code, 0)
         self.assertEqual([c[0] for c in calls], ["plan"])
-        self.assertIn("Stopped after planning", console.text())
+        self.assertIn("APPLY is disabled", console.text())
+        self.assertIn("WSM was NOT installed", console.text())
 
     def test_no_disks_found_stops(self) -> None:
         console = FakeConsole([])
