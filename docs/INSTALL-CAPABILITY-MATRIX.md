@@ -102,7 +102,7 @@ Firmware має щонайменше три різні питання:
 
 Позитивна відповідь на одне питання не доводить інші. Пакет у package index або у майбутній target closure не доводить, що live kernel уже мав його під час ініціалізації пристрою.
 
-WSM спершу повторно використовує підтримувані upstream kernel/driver/firmware packages і штатні Guix/Nix sources/substitutes. Не компілювати драйвери вручну та не завантажувати довільні binaries лише для перетворення unknown на ready. Nonfree firmware, якщо вона потрібна, має бути явно позначена за ліцензійною політикою та окремо підтверджена для live image, initrd і target system.
+WSM спершу повторно використовує підтримувані upstream kernel/driver/firmware packages і штатні Guix sources/substitutes для першого preview; Nix/NixOS залишається дослідженням і не є доступним installer backend-ом. Не компілювати драйвери вручну та не завантажувати довільні binaries лише для перетворення unknown на ready. Nonfree firmware, якщо вона потрібна, має бути явно позначена за ліцензійною політикою та окремо підтверджена для live image, initrd і target system.
 
 ## 7. Правила для #13: plan eligibility
 
@@ -113,7 +113,7 @@ WSM спершу повторно використовує підтримува�
 - Наявний record з `discovery_status = unknown` або відсутній evidence coverage дає unknown, а не ready.
 - Hard-stop застосовується лише до capability, обов'язкової для явно вибраного сценарію, і має reason code та evidence reference.
 - Якщо CLI ще не приймає сценарій явно, він повинен називати результат **diagnostic draft only** і не позиціонувати його як підтвердження готовності до інсталяції.
-- `guix-system` та `nixos` — окремі backend IDs; вибір backend не змінює hardware evidence.
+- Перший preview має лише backend ID `guix-system`; майбутній backend, якщо його окремо приймуть, матиме власний ID та deployment path. Вибір backend не змінює hardware evidence.
 - Draft plan не містить дозволу на mutation. Fresh report не замінює target revalidation.
 
 ### 7.1 Рекомендовані reason codes
