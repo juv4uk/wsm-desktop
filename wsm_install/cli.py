@@ -226,22 +226,8 @@ def _run_guided(args: argparse.Namespace) -> int:
 
     evidence_note = _hardware_note(args)
 
-    def plan(disk_path: str, size: int, firmware: str) -> None:
-        _run_install(argparse.Namespace(
-            target_disk=disk_path,
-            target_size_bytes=size,
-            firmware=firmware,
-            filesystem=args.filesystem,
-            mount_point=args.mount_point,
-            system_file=args.system_file,
-            acknowledge_disk=disk_path,
-            execute=False,
-            quiet=True,
-        ))
-
-
-
-    return run_guided(_Console(), candidates, plan, evidence_note)
+    preview = _installer_preview_callback(args)
+    return run_guided(_Console(), candidates, preview, evidence_note)
 
 
 def _run_install(args: argparse.Namespace) -> int:
