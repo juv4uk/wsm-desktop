@@ -27,7 +27,7 @@ STATUSES = {"covered", "partial", "not-covered", "out-of-scope"}
 EVIDENCE_STATUSES = {"covered", "partial"}
 ROW = re.compile(r"^\|\s*(?P<row>.+?)\s*\|\s*$")
 EVIDENCE = re.compile(r"`(?P<path>tests/[\w./-]+\.py)::(?P<method>test_\w+)`")
-MINIMUM_ROWS = 12
+MINIMUM_ROWS = 13
 
 
 def register_rows(text: str) -> list[list[str]]:
@@ -130,6 +130,12 @@ class OmarchyRegisterTest(unittest.TestCase):
         self.assertIn("bios_grub", row[1])
         self.assertIn("Legacy/CSM", row[0])
         self.assertEqual(row[3].strip("`"), "not-covered")
+        self.assertEqual(row[4], "—")
+
+    def test_boot_update_esp_identity_is_not_claimed_covered_without_updater(self) -> None:
+        row = self._row_for_source("Omarchy #15435")
+        self.assertIn("не-booted ESP", row[0])
+        self.assertEqual(row[3].strip("`"), "out-of-scope")
         self.assertEqual(row[4], "—")
 
     def test_register_class_names_are_unique(self) -> None:
