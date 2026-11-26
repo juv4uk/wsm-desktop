@@ -48,6 +48,18 @@ Calamares завантажує `main.py` за шляхом, тому пакет 
 піднімається вгору по батьківських теках, доки не знайде `wsm_install`, замість
 того щоб вгадувати фіксовану глибину.
 
+## Межа безпеки APPLY
+
+Calamares jobmodule зараз **preview-only**. Відсутній або `None` `wsmDryRun`
+означає preview; явний `False` та некоректний тип відхиляються. Модуль не може
+підтвердити диск від свого імені й не може запускати destructive кроки. Спільний
+`wsm_install.executor` теж безумовно відхиляє `dry_run=False`.
+
+Реальне виконання не підтримується до закриття [#280](https://github.com/juv4uk/wsm-desktop/issues/280)
+та окремого target-bound acceptance. Дані `wsmTargetDisk` і
+`wsmTargetSizeBytes`, які передає Calamares, поки що є frontend assertions,
+а не результатом незалежного read-only block-device probe.
+
 ## Чого ще немає
 
 - **Запуску в Calamares.** Жодного разу: ні збірки модуля, ні прогону в живому
