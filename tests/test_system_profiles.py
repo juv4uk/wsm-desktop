@@ -318,6 +318,18 @@ class MinimalLiveTests(unittest.TestCase):
         self.assertIn("(wsm packages wsm)", text)
         self.assertIn("wsm-tools", text)
 
+    def test_minimal_live_defaults_to_ukrainian_with_us_fallback(self) -> None:
+        text = profile("live-minimal.scm")
+        self.assertIn('(locale "uk_UA.utf8")', text)
+        self.assertIn('(keyboard-layout "us,ua" #:options \'("grp:alt_shift_toggle"))', text)
+        self.assertNotIn("locale-definitions", text)
+
+    def test_minimal_live_reconfigures_the_existing_tty2_font_service(self) -> None:
+        text = profile("live-minimal.scm")
+        self.assertIn("(console-font-service-type config =>", text)
+        self.assertIn('(cons "tty2" "LatGrkCyr-8x16")', text)
+        self.assertNotIn("(service console-font-service-type", text)
+
     def test_minimal_live_prints_the_same_acceptance_marker(self) -> None:
         """Acceptance is one contract; a second image is not exempt from it."""
         text = profile("live-minimal.scm")
