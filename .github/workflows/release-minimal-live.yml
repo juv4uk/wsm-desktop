@@ -81,7 +81,12 @@ jobs:
           WSM_ISO_DIR: ${{ runner.temp }}/wsm-live-build
         run: |
           set -euo pipefail
-          WSM_LIVE_PROFILE=systems/live-minimal.scm make image-live-minimal
+          mkdir -p "$WSM_ISO_DIR"
+          # make returns 2 for any failed recipe, which hides whether the build
+          # itself failed or a later check in build_iso.sh refused. Keep the
+          # step's own stderr so the refusal reason is not lost in the job log.
+          WSM_LIVE_PROFILE=systems/live-minimal.scm make image-live-minimal \
+            2>&1 | tee "$WSM_ISO_DIR/step.log"
           ISO_LINK="$WSM_ISO_DIR/wsm-desktop-live.iso"
           test -L "$ISO_LINK"
           ISO_STORE="$(readlink -f "$ISO_LINK")"
@@ -296,7 +301,8 @@ jobs:
             echo ""
             echo "Commit: \`$GITHUB_SHA\`"
             echo ""
-            for log in "$RUNNER_TEMP/wsm-live-build/build.log" \
+            for log in "$RUNNER_TEMP/wsm-live-build/step.log" \
+                       "$RUNNER_TEMP/wsm-live-build/build.log" \
                        "$RUNNER_TEMP/wsm-live-build/channel-resolution.log"; do
               if [ -f "$log" ]; then
                 echo "#### $(basename "$log")"
