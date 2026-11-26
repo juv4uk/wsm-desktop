@@ -97,6 +97,19 @@ class FailureTests(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertIn("size", result[0].lower())
 
+    def test_real_apply_is_refused_even_with_complete_target_values(self) -> None:
+        report = report_file(self.directory)
+        install_fake_libcalamares({
+            "wsmReportPath": str(report),
+            "wsmTargetDisk": "/dev/nvme0n1",
+            "wsmTargetSizeBytes": 256 * GIB,
+            "wsmDryRun": False,
+        })
+        result = load_module().run()
+        self.assertIsNotNone(result)
+        self.assertIn("APPLY is disabled", result[0])
+        self.assertIn("preview-only", result[1])
+
     def test_invalid_evidence_blocks_deployment(self) -> None:
         report = report_file(self.directory)
         evidence = self.directory / "evidence.json"
@@ -134,7 +147,15 @@ class SuccessTests(unittest.TestCase):
         self.temporary.cleanup()
         sys.modules.pop("libcalamares", None)
 
-    def test_dry_run_returns_none_and_runs_nothing(self) -> None:
+    def test_missing_dry_run_flag_defaults_to_preview(self) -> None:
+        install_fake_libcalamares({
+            "wsmReportPath": str(self.report),
+            "wsmTargetDisk": "/dev/nvme0n1",
+            "wsmTargetSizeBytes": 256 * GIB,
+        })
+        self.assertIsNone(load_module().run())
+
+    def test_explicit_true_dry_run_returns_preview(self) -> None:
         install_fake_libcalamares({
             "wsmReportPath": str(self.report),
             "wsmTargetDisk": "/dev/nvme0n1",
