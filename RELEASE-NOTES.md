@@ -155,6 +155,8 @@ NixOS-експеримент для #55 має `nix_build_exit=0`. Окреми�
 
 ## Як перевірити цілісність
 
+Метадані релізу (`RELEASE-INFO.json`) мають версійовану схему [`schemas/release-info.schema.json`](schemas/release-info.schema.json): `make check-release-info` відмовляє на невідомій версії схеми, на артефакті з шляхом замість імені файлу і на версії, якої немає в жодній назві артефакту.
+
 Завантажте `wsm-desktop-0.1.0-rc1-source.tar.gz`, `SHA256SUMS` і `release-manifest.json` з одного релізу:
 
 ```sh
