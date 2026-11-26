@@ -186,6 +186,16 @@ JSON-масивом аргументів, який передається як `
 тест справді існує, а `make check-regression-register` запускає цю перевірку
 в основному gate наборі.
 
+**Зведення на 26.11.2026:** із 18 класів у реєстрі 6 закриті тестом
+(`covered`), 4 закриті частково (`partial`), 1 не покритий (`not-covered`),
+7 позначені `out-of-scope`. Тобто 10 із 18 мають доказ у репозиторії, а
+8 — ні.
+
+Ці числа не набираються руками: `tests/test_omarchy_regression_register.py`
+рахує їх із самої таблиці й падає, якщо зведення розійшлося з нею. Привід
+конкретний: у сусідньому проєкті число жило в двох місцях, документ відстав
+на два значення, і ніхто цього не бачив, бо тест був про інше.
+
 | Клас | Prevent rule у WSM | Detect rule | Статус | Доказ |
 | --- | --- | --- | --- | --- |
 | PATH-підміна у привілейованому кроці (Omarchy #8172) | усі команди — абсолютні шляхи з фіксованої таблиці | тест перевіряє кожну команду плану | `covered` | `tests/test_install_steps.py::test_every_command_starts_with_an_absolute_path` |
@@ -202,7 +212,7 @@ JSON-масивом аргументів, який передається як `
 | `root=` втрачено під час kernel/package transaction (Omarchy #6951) | bootloader-конфіг генерує Guix System; WSM не пише `root=` сам | немає — WSM не має власного boot-кроку | `out-of-scope` | — |
 | LUKS recovery slot видалено при зміні ключа (Omarchy #14874) | шифрування не реалізоване | немає коду, який чіпає slots | `out-of-scope` | — |
 | Omarchy rollcall (#20107): функціональна перевірка не дорівнює інвентаризації | WSM збирає bus/sysfs inventory, driver binding та runtime-firmware facts; звіт локальний і не містить чутливих host identifiers | `functional_tests` навмисно порожній: немає незалежних Wi-Fi/Bluetooth/audio/mic/panel/backlight/touchpad/GPU-render/battery/service pass/fail/skip перевірок або розрізнення user-disabled skip | `partial` | `tests/test_hwcheck.py::test_inventory_separates_driver_binding_and_functional_tests`; `tests/test_hwcheck.py::test_report_is_local_and_does_not_include_sensitive_identifiers` |
-| Перехід simpledrm → апаратний DRM до запуску SDDM (Omarchy #20059) | У WSM desktop/live використовується GNU Shepherd; не копіювати systemd drop-in. Перед SDDM потрібен лише обґрунтований bounded readiness gate для DRM/udev, без фіксованого sleep і глобального `udevadm settle` | QEMU late-KMS і фізичний acceptance для стабільності seat, SDDM та first-boot autologin ще не виконані | `not-covered` | — |
+| Перехід simpledrm → апаратний DRM до запуску SDDM (Omarchy #20059) | У WSM desktop/live використовується GNU Shepherd; не копіювати systemd drop-in. Перед SDDM потрібен лише обґрунтований bounded readiness gate для DRM/udev, без фіксованого sleep і глобального `udevadm settle` | тест забороняє фіксований `sleep` і глобальний `udevadm settle` у визначеннях, що постачаються (`systems/*.scm`); він **не** доводить, що DRM готовий до SDDM, і не замінює QEMU late-KMS та фізичний acceptance | `partial` | `tests/test_system_definitions_have_no_sleep.py::test_no_shipped_definition_waits_with_sleep` |
 | Legacy/CSM multi-disk boot-order hand-off (Omarchy #20178) | BIOS layout створює `bios_grub`, але preview не доводить, що firmware після майбутнього встановлення стартує з цільового диска | немає двохдискового Legacy/CSM QEMU або physical acceptance | `not-covered` | — |
 | Міграція власних артефактів (`wsm-profile-evidence/2` → `/3`) | читач відмовляє на невідомій версії за іменем; плану міграції поки немає | тест: кожен наявний читач відмовляє на версії +1 і приймає поточну | `partial` | `tests/test_artifact_version_refusal.py::test_next_version_is_refused_by_name` |
 | Частково завантажені або змінені release assets (Omarchy #516) | реліз лишається draft до read-back перевірки точного набору файлів і SHA-256 | verifier відхиляє missing/extra/corrupt/path traversal/symlink assets | `covered` | `tests/test_verify_release_assets.py::test_valid_download_matches_local_bundle` |

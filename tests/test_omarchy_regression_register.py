@@ -133,12 +133,24 @@ class OmarchyRegisterTest(unittest.TestCase):
         self.assertEqual(row[4], "—")
 
     def test_late_drm_handoff_is_not_claimed_covered_before_acceptance(self) -> None:
+        """A guard against the known bad fix is `partial`, never `covered`.
+
+        The property — hardware DRM is ready before SDDM — still needs QEMU
+        late-KMS and physical acceptance. What changed is that the shipped
+        system definitions now may not buy readiness with a fixed sleep, so the
+        row has real evidence and the honest status is `partial`.
+        """
         row = self._row_for_source("Omarchy #20059")
         self.assertIn("simpledrm", row[0])
         self.assertIn("GNU Shepherd", row[1])
         self.assertIn("bounded", row[1])
-        self.assertEqual(row[3].strip("`"), "not-covered")
-        self.assertEqual(row[4], "—")
+        self.assertEqual(row[3].strip("`"), "partial")
+        self.assertIn(
+            "tests/test_system_definitions_have_no_sleep.py::test_no_shipped_definition_waits_with_sleep",
+            row[4],
+        )
+        self.assertIn("доводить", row[2], "the bound must stay written down")
+        self.assertIn("не замінює", row[2])
 
     def test_rollcall_functional_checks_remain_partial_in_wsm_inventory(self) -> None:
         row = self._row_for_source("Omarchy rollcall (#20107)")
@@ -198,6 +210,48 @@ class OmarchyRegisterTest(unittest.TestCase):
             self.assertEqual(
                 row[4], "—", f"{row[0]}: {status} row must not cite evidence"
             )
+
+
+class RegisterCensusTests(unittest.TestCase):
+    """The published counts must come from the table, not from memory.
+
+    The same defect happened in a sibling project: a census number lived in a
+    test and in a document, the document fell two behind, and nobody saw it
+    because the test was about something else. So the document states the
+    counts and this test recomputes them.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.text = REGISTER.read_text(encoding="utf-8")
+        cls.counts = {}
+        for status in ("covered", "partial", "not-covered", "out-of-scope"):
+            cls.counts[status] = 0
+        for line in cls.text.splitlines():
+            match = re.search(r"\|\s*`(covered|partial|not-covered|out-of-scope)`\s*\|", line)
+            if match and line.startswith("| "):
+                cls.counts[match.group(1)] += 1
+
+    def test_census_total_matches_the_table(self) -> None:
+        stated = re.search(r"із (\d+) класів у реєстрі", self.text)
+        self.assertIsNotNone(stated, "the register must publish its census")
+        self.assertEqual(int(stated.group(1)), sum(self.counts.values()))
+
+    def test_census_per_status_matches_the_table(self) -> None:
+        expected = {
+            "закриті тестом": ("covered", r"(\d+) закриті тестом"),
+            "закриті частково": ("partial", r"(\d+) закриті частково"),
+            "не покритий": ("not-covered", r"(\d+) не покритий"),
+            "позначені": ("out-of-scope", r"(\d+) позначені\s+`?out-of-scope`?"),
+        }
+        for phrase, (status, pattern) in expected.items():
+            with self.subTest(status=status):
+                match = re.search(pattern, self.text)
+                self.assertIsNotNone(match, phrase)
+                self.assertEqual(int(match.group(1)), self.counts[status], phrase)
+
+    def test_the_census_is_not_empty(self) -> None:
+        self.assertGreaterEqual(sum(self.counts.values()), 10)
 
 
 if __name__ == "__main__":
