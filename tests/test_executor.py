@@ -93,6 +93,27 @@ class InputValidationTests(unittest.TestCase):
             execute([invalid], DISK, out=lambda _: None)
         self.assertEqual(caught.exception.code, "execute.command")
 
+    def test_preview_rejects_device_operands_outside_the_displayed_target(self) -> None:
+        mismatched = Step(
+            ["/usr/sbin/mkfs.ext4", "-F", "/dev/sda1"],
+            "format a different disk",
+            destructive=True,
+        )
+        with self.assertRaises(ExecutorError) as caught:
+            execute([mismatched], DISK, out=lambda _: None)
+        self.assertEqual(caught.exception.code, "execute.target-mismatch")
+
+    def test_preview_accepts_partition_operands_of_the_displayed_nvme_target(self) -> None:
+        partition = Step(
+            ["/usr/sbin/mkfs.ext4", "-F", "/dev/nvme0n1p2"],
+            "format the selected root partition",
+            destructive=True,
+        )
+        self.assertEqual(
+            execute([partition], DISK, out=lambda _: None)[0].status,
+            "skipped",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
