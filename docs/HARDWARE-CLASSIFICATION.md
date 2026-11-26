@@ -1,114 +1,81 @@
-# Класифікація заліза: три рівні впевненості
+# Класифікація апаратних доказів
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Статус: **реалізовано**, на реальному залізі не застосовувалось
+- Статус: **обмежене read-only зведення; не підключено до CLI та не перевірено на фізичному залізі**
 - Код: [`wsm_install/classification.py`](../wsm_install/classification.py)
-- Тести: `tests/test_classification.py` (15)
-- Словник: [OBSERVATION-PRINCIPLES.md](OBSERVATION-PRINCIPLES.md)
-- **Канонічна політика станів: [HARDWARE-COMPATIBILITY-VERDICTS.md](HARDWARE-COMPATIBILITY-VERDICTS.md)** (власник — [#22](https://github.com/juv4uk/wsm-desktop/issues/22)). Три рівні нижче — це стислий виклад тих самих станів, а не друга політика.
+- Тести: [`tests/test_classification.py`](../tests/test_classification.py)
+- Канонічна політика: [HARDWARE-COMPATIBILITY-VERDICTS.md](HARDWARE-COMPATIBILITY-VERDICTS.md), власник #22
+- Сценарна політика: [INSTALL-CAPABILITY-MATRIX.md](INSTALL-CAPABILITY-MATRIX.md), власник #24
+- Реалізаційне виправлення: [#447](https://github.com/juv4uk/wsm-desktop/issues/447)
 
-## Питання
+## Призначення
 
-Apple, System76 і Purism контролюють залізо, тому можуть гарантувати досвід.
-WSM ставлять на те, що вже є, і заздалегідь невідомо, що це буде.
+WSM встановлюється на обладнання, яке наперед невідоме. Класифікатор стисло
+показує, які факти є у звіті, але **не** вирішує, чи можна продовжувати
+конкретний сценарій інсталяції. Рішення потребує сценарію, рівня впливу,
+достатності доказів та підтвердженого fallback — це визначено окремо у
+сценарній матриці.
 
-Тому «залізоорієнтованість» тут означає не «ми знаємо, на чому працюємо», а
-**«ми вміємо виявити, класифікувати й чесно поводитися з невідомим»**.
+## Три рівні — похідний підсумок, не друга політика
 
-## Три рівні — це стислий виклад, а не друга політика
-
-У репозиторії вже є канонічна політика станів доказів
-([HARDWARE-COMPATIBILITY-VERDICTS.md](HARDWARE-COMPATIBILITY-VERDICTS.md)) із сімома
-станами. Цей модуль **не вигадує власний словник**: він виводить трирівневий
-підсумок із тих самих станів, щоб людина бачила коротке рішення, а машина
-зберігала повний стан.
-
-| Канонічний стан | Рівень |
-| --- | --- |
-| `supported-tested` | certified |
-| `driver-bound-not-tested` | known |
-| `candidate-only`, `known-problem`, `not-detected`, `not-tested`, `unknown`, `not-collected` | unknown |
-
-## Три рівні
-
-| Рівень | Що означає | Як досягається |
+| Канонічний стан | Рівень | Межа твердження |
 | --- | --- | --- |
-| **certified** | функцію перевірили на цій машині й записали результат | дійсний evidence bundle зі статусом `pass` |
-| **known** | компонент виявлено, драйвер є, але саме ця комбінація не перевірялась | `discovery_status` не `unknown`, драйвер прив'язаний |
-| **unknown** | нічого не виявлено або ніщо не керує | усе інше |
+| `supported-tested` | `certified` | Лише конкретна функція з відповідним валідованим профільним evidence |
+| `driver-bound-not-tested` | `known` | Драйвер прив'язаний у момент спостереження; функція ще не перевірена |
+| `candidate-only` | `known` | Є явний candidate driver, але binding не доведено |
+| `known-problem`, `not-detected`, `not-tested`, `unknown`, `not-collected` | `unknown` | Доказів недостатньо або є конкретна проблема |
 
-Ключове: **прив'язаний драйвер не робить рівень `certified`**. Драйвер означає
-«щось завантажилось», а не «хтось перевірив, що це працює».
+### Обмеження поточної реалізації
 
-## Рішення, а не ярлик
+Поточний hardware report v1.0.0 не містить повного coverage manifest за
+підсистемами. Тому відсутність device record означає лише
+`observation=no-device-record` та `coverage=unknown`; вона не доводить
+`not-detected`, `not-collected` або несумісність.
 
-Рівень сам собою нічого не вартий — варте те, що з нього випливає.
+Поле `driver.status` є авторитетним фактом binding. Лише
+`status=bound` разом із непорожнім `bound_driver` дає
+`driver-bound-not-tested`. Для built-in kernel driver відсутність `module`
+нормальна. Наявність `module` або `module_loaded=true` без binding не є
+доказом прив'язки. `available-only` разом з явним `candidate` означає
+`candidate-only`; `not-applicable` не є помилкою драйвера.
 
-| Підсистема unknown | Рішення | Чому |
-| --- | --- | --- |
-| `firmware`, `storage`, `cpu`, `memory` | **stop** | система може не завантажитись, або втратити дані дорогою |
-| `graphics`, `network`, `audio`, `bluetooth`, `input` | **warn** | поставиться й завантажиться, але щось не працюватиме |
-| `usb`, `camera`, `other` | **proceed** | записується у звіт і більше нічого |
+Результат функціонального тесту зберігається окремо за парою
+`device_id + capability`. `passed` для `display-mode` не доводить GPU
+rendering, suspend/resume чи працездатність другого GPU. Провал одного тесту
+також не перетворюється на глобальне твердження про всі можливості пристрою.
 
-Різниця між цими рівнями — і є інженерна робота. «Зупинятися на всьому» зробить
-систему непридатною; «продовжувати завжди» зробить її небезпечною.
+`wsm-profile-evidence/2` описує перевірені функції профілю, але не має
+device-scoped binding для кожної функції. Через це класифікатор наразі не
+приймає довільний evidence dictionary і не присвоює `certified` підсистемі.
+Для такого переходу потрібні спільна перевірка bundle через
+`wsm_install.profile.problems(..., artifact_root=...)`, точне зв'язування
+source report за ID/schema/SHA-256 та доказ scope конкретного пристрою і
+capability. Нові поля producer-owned schema не додаються в цьому модулі.
 
-## Четвертий стан, який довелося додати
+## Межі та install policy
 
-`unknown` означає «ми подивились і не знайшли». Але є випадок «ми **не**
-дивились» — коли звіт просто не покриває підсистему.
+Класифікатор повертає діагностичне зведення. Він не повертає
+`stop/warn/proceed` і не містить глобальних списків `CRITICAL` або
+`DEGRADING`. Наприклад, Wi-Fi може бути необов'язковим для offline install,
+але мережевий connectivity test може бути критичним для network-assisted
+сценарію. Такий висновок має робитися лише за явним scenario/policy input,
+відповідно до [матриці сценаріїв](INSTALL-CAPABILITY-MATRIX.md).
 
-Це різні речі, і плутати їх небезпечно в обидва боки:
+Це library-only компонент: прикладу `wsm-install --classify` немає, бо
+відповідного CLI шляху ще не реалізовано. Він не читає sysfs, не запускає
+драйвери, не змінює firmware, не виконує мережеві запити, не вибирає диск і
+не дозволяє backend mutation.
 
-- назвати неперевірене «зламаним» — викинути робоче залізо;
-- назвати неперевірене «нормальним» — обіцяти те, чого не перевіряли.
+## Непокрита capability: suspend/resume
 
-Тому вердикт має поле `assessed`. Якщо критична підсистема не оцінена звітом,
-рішення все одно `stop`, але пояснення інше: «це прогалина у звіті, а не вирок
-машині — запусти `wsm-hwcheck` на цілі».
+У звіті `wsm-hwcheck` наразі немає категорії suspend. Майбутній collector
+має розрізняти щонайменше:
+- `/sys/power/mem_sleep` — доступні режими й поточний default;
+- `/sys/power/suspend_stats/last_hw_sleep` — виміряний час у hardware sleep
+  після останнього циклу suspend/resume;
+- повідомлення ядра про low-power S0 idle — використаний шлях s2idle.
 
-## Приклад
-
-```
-$ wsm-install --preflight --report hw.json --classify
-decision: warn
-counts: {certified: 1, known: 3, unknown: 2}
-  graphics   unknown   assessed=True
-  network    known     assessed=True
-Installation can continue, but graphics is unverified and may not work.
-The system will install and boot; agree explicitly before continuing.
-```
-
-## Чого це не робить
-
-**Не перелічує моделі ноутбуків.** Класифікуються підсистеми й чіпсети, а не
-десятки тисяч моделей — інакше це не масштабується.
-
-**Не стає `certified` саме по собі.** Це вимагає прогнаного `wsm-hwcheck` і
-записаного evidence bundle, тобто людини, яка перевірила.
-
-**Не замінює матрицю сумісності.** Це механізм, яким матриця застосовується до
-конкретної машини.
-
-**Не класифікує сон і пробудження — і це відома прогалина.** Серед підсистем
-немає `suspend`, хоча «працює, але не засинає» — один із найчастіших дефектів
-на сучасних ноутбуках. Причина не в байдужості: у звіті `wsm-hwcheck` немає
-категорії, з якої це можна взяти, а додавання категорії — зміна схеми
-[HARDWARE-REPORT](../schemas/hardware-report.schema.json) і належить власникам
-[#5](https://github.com/juv4uk/wsm-desktop/issues/5)/[#24](https://github.com/juv4uk/wsm-desktop/issues/24).
-
-Що саме треба буде збирати, вже відомо з документації ядра й досвіду дистрибутивів:
-
-- `/sys/power/mem_sleep` — які режими взагалі доступні й який типовий:
-  `s2idle [deep]` (доступні обидва, типовий S3), `[s2idle] deep` (доступні
-  обидва, типовий s2idle) або `[s2idle]` (S3 прошивка не виставляє);
-- `/sys/power/suspend_stats/last_hw_sleep` — скільки часу після циклу система
-  справді провела в апаратному сні;
-- рядок ядра `Low-power S0 idle used by default for system suspend` — що
-  використано s2idle, а не S3.
-
-Це **не** доказ, що сон працює: режим може бути доступним, а пристрій — не
-входити в низьке споживання. Тому майбутня категорія мусить розрізняти
-«режим заявлено», «режим обрано» і «цикл сну пройдено з виміряним результатом» —
-рівно як з firmware у [REPORT-FORMAT.md](hardware/REPORT-FORMAT.md).
+Жодне з цих спостережень окремо не доводить успішний end-to-end цикл сну та
+пробудження. Читання має бути read-only: `mem_sleep` є керованим sysfs
+атрибутом, його не можна записувати з inventory collector.
