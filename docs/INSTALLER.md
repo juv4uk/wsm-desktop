@@ -43,8 +43,8 @@ Calamares лишається як зручність для тих, кому в�
 | Ризик графічного майстра | Наша компенсація |
 | --- | --- |
 | Випадково обрано не той диск | підтвердження мусить **назвати** диск; `--yes` не існує |
-| Диск підмінили між планом і записом | звірка розміру, дрейф понад 2% — відмова |
-| Помилка посеред розбиття | перший збій зупиняє все, кожен крок перевіряється |
+| Диск підмінили між планом і записом | **не виявляється**: розмір вводиться користувачем як оцінка; APPLY вимкнено |
+| Неперевірений крок | лише preview; реальних команд і postcondition checks зараз немає |
 | «Зелена» галочка на несправному кроці | перевірка читає систему (`blkid`, `/proc/mounts`), а не код виходу |
 
 ## Поточний стан: інсталятор не вибрано
@@ -84,13 +84,14 @@ Calamares розрізняє user-visible view modules та job modules. View mo
 2. Мова та клавіатура.
 3. Часовий пояс.
 4. Вибір профілю Free або Compatibility з поясненням наслідків.
-5. Розмітка диска та монтування перевіреним модулем Calamares.
-6. WSM configuration summary: диск, partition plan, mount points, profile, boot mode.
-7. Явне підтвердження незворотних дій.
-8. WSM preflight.
-9. Генерація конфігурації Guix.
-10. Guix system build / перевірка конфігурації.
-11. Guix system init.
+5. WSM preflight: тільки читання апаратних даних і перевірка evidence.
+6. Побудова partition layout та mount plan як даних; жодних записів.
+7. WSM configuration summary: цільовий диск, повний partition diff, mount points, profile, boot mode та джерела evidence.
+8. Явне підтвердження, прив'язане до target identity й digest плану.
+9. Розмітка, форматування та монтування одним executor-ом лише після consent. **У поточному прототипі цей етап вимкнено (preview-only).**
+10. Генерація конфігурації Guix із того самого typed plan.
+11. Guix system build / перевірка конфігурації.
+12. Guix system init лише після окремої перевіреної APPLY реалізації та postconditions.
 12. Перевірка завершення та звіт.
 
 Порядок буде уточнено після тестування обраної версії Calamares та її модулів.
@@ -130,4 +131,4 @@ Guix configuration має бути єдиним джерелом істини д
 
 ## Поточний стан
 
-Робочого Calamares settings.conf, module.desc або deployment-коду поки немає. Вони будуть додані після M2, коли ми підтвердимо доступність Calamares, його залежностей та інтерфейс API у цільовому live-середовищі. Див. README у installer/calamares/.
+Python jobmodule wsm_deploy і його module.desc уже є в репозиторії, але settings.conf та реальний запуск Calamares не підтверджені. Модуль наразі лише preview: explicit wsmDryRun=false відхиляється, відсутній прапорець означає preview. Жодний frontend ще не має підтримуваного APPLY; див. README у installer/calamares/ та EXECUTOR.md.
