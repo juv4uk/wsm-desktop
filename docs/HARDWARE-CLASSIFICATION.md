@@ -2,91 +2,104 @@
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Статус: **реалізовано**, на реальному залізі не застосовувалось
-- Код: [`wsm_install/classification.py`](../wsm_install/classification.py)
-- Тести: `tests/test_classification.py` (15)
+- Статус: **read-only бібліотечний прототип**; CLI не інтегровано, на реальному залізі не застосовувалось
+- Код: [ `wsm_install/classification.py` ](../wsm_install/classification.py)
+- Тести: `tests/test_classification.py` (21)
 - Словник: [OBSERVATION-PRINCIPLES.md](OBSERVATION-PRINCIPLES.md)
-- **Канонічна політика станів: [HARDWARE-COMPATIBILITY-VERDICTS.md](HARDWARE-COMPATIBILITY-VERDICTS.md)** (власник — [#22](https://github.com/juv4uk/wsm-desktop/issues/22)). Три рівні нижче — це стислий виклад тих самих станів, а не друга політика.
+- Канонічні стани та рішення: [HARDWARE-COMPATIBILITY-VERDICTS.md](HARDWARE-COMPATIBILITY-VERDICTS.md)
+- Сценарні вимоги й fallback: [INSTALL-CAPABILITY-MATRIX.md](INSTALL-CAPABILITY-MATRIX.md)
 
-## Питання
+## Призначення
 
-Apple, System76 і Purism контролюють залізо, тому можуть гарантувати досвід.
-WSM ставлять на те, що вже є, і заздалегідь невідомо, що це буде.
+WSM ставлять на обладнання, яке заздалегідь невідоме. Класифікатор стисло
+підсумовує докази для виявлених підсистем, але не перетворює інвентаризацію на
+обіцянку сумісності й не приймає інсталяційних рішень.
 
-Тому «залізоорієнтованість» тут означає не «ми знаємо, на чому працюємо», а
-**«ми вміємо виявити, класифікувати й чесно поводитися з невідомим»**.
+## Три рівні — це похідний підсумок
 
-## Три рівні — це стислий виклад, а не друга політика
-
-У репозиторії вже є канонічна політика станів доказів
-([HARDWARE-COMPATIBILITY-VERDICTS.md](HARDWARE-COMPATIBILITY-VERDICTS.md)) із сімома
-станами. Цей модуль **не вигадує власний словник**: він виводить трирівневий
-підсумок із тих самих станів, щоб людина бачила коротке рішення, а машина
-зберігала повний стан.
+Внутрішнім джерелом істини залишаються сім канонічних станів доказів із
+[HARDWARE-COMPATIBILITY-VERDICTS.md, §2](HARDWARE-COMPATIBILITY-VERDICTS.md):
 
 | Канонічний стан | Рівень |
 | --- | --- |
-| `supported-tested` | certified |
-| `driver-bound-not-tested` | known |
-| `candidate-only`, `known-problem`, `not-detected`, `not-tested`, `unknown`, `not-collected` | unknown |
+| `supported-tested` | `certified` |
+| `driver-bound-not-tested` | `known` |
+| `candidate-only`, `known-problem`, `not-detected`, `not-tested`, `unknown`, `not-collected` | `unknown` |
 
-## Три рівні
+### Коли пристрій може бути `known`
 
-| Рівень | Що означає | Як досягається |
-| --- | --- | --- |
-| **certified** | функцію перевірили на цій машині й записали результат | дійсний evidence bundle зі статусом `pass` |
-| **known** | компонент виявлено, драйвер є, але саме ця комбінація не перевірялась | `discovery_status` не `unknown`, драйвер прив'язаний |
-| **unknown** | нічого не виявлено або ніщо не керує | усе інше |
+Класифікатор читає саме контракт hardware report v1.0.0:
 
-Ключове: **прив'язаний драйвер не робить рівень `certified`**. Драйвер означає
-«щось завантажилось», а не «хтось перевірив, що це працює».
+- потрібні одночасно `driver.status == "bound"` і непорожній `driver.bound_driver`;
+- built-in драйвер може бути bound без `driver.module`, тому відсутність module link
+  не спростовує binding;
+- `module-loaded-unbound`, `available-only`, `candidate`, `module_loaded=true`
+  або сам `module` не доводять binding;
+- `driver.status == "not-applicable"` не є доказом драйверної підтримки.
 
-## Рішення, а не ярлик
+Окремий успішний функціональний тест зберігається як доказ конкретної capability,
+але не сертифікує автоматично всю підсистему.
 
-Рівень сам собою нічого не вартий — варте те, що з нього випливає.
+### Коли пристрій може бути `certified`
 
-| Підсистема unknown | Рішення | Чому |
-| --- | --- | --- |
-| `firmware`, `storage`, `cpu`, `memory` | **stop** | система може не завантажитись, або втратити дані дорогою |
-| `graphics`, `network`, `audio`, `bluetooth`, `input` | **warn** | поставиться й завантажиться, але щось не працюватиме |
-| `usb`, `camera`, `other` | **proceed** | записується у звіт і більше нічого |
+`certified` вимагає `ValidatedProfileEvidence`, яке створюється тільки через
+`load_validated_profile_evidence()` після:
 
-Різниця між цими рівнями — і є інженерна робота. «Зупинятися на всьому» зробить
-систему непридатною; «продовжувати завжди» зробить її небезпечною.
+1. перевірки JSON Schema `wsm-profile-evidence/2`;
+2. перевірки `profile.scm` та всіх artifact bytes за SHA-256;
+3. перевірки безпечних шляхів, functional-test references і profile slug;
+4. збігу `report_id` і `report_schema_version`;
+5. збігу SHA-256 **точних raw bytes** джерельного hardware report.
 
-## Четвертий стан, який довелося додати
+Звичайний словник Python із `{"status": "pass"}` не приймається. Bundle v2 називає
+функцію підсистеми, але не має per-device ID. Тому один `storage: pass` не може
+сертифікувати кілька storage device records: для такого випадку потрібен
+окремий per-device evidence contract із власниками #5/#171.
 
-`unknown` означає «ми подивились і не знайшли». Але є випадок «ми **не**
-дивились» — коли звіт просто не покриває підсистему.
+## Coverage — окремо від рівня
 
-Це різні речі, і плутати їх небезпечно в обидва боки:
+Report schema v1.0.0 не містить повного per-subsystem coverage manifest.
+Тому відсутність device record означає:
 
-- назвати неперевірене «зламаним» — викинути робоче залізо;
-- назвати неперевірене «нормальним» — обіцяти те, чого не перевіряли.
+- `level=unknown`;
+- `coverage=unknown`;
+- `assessed=false` — немає запису цієї підсистеми, який можна класифікувати.
 
-Тому вердикт має поле `assessed`. Якщо критична підсистема не оцінена звітом,
-рішення все одно `stop`, але пояснення інше: «це прогалина у звіті, а не вирок
-машині — запусти `wsm-hwcheck` на цілі».
+Це **не** доводить, що collector повністю пройшов цю підсистему й не знайшов
+пристрою. Не можна виводити `not-detected`, `not-collected`, несумісність або
+готовність до встановлення з відсутності record.
 
-## Приклад
+Коли записи є, `coverage=reported-device-records` означає лише, що оцінено
+наявні записи. Це не обіцянка повного покриття фізичної системи.
 
-```
-$ wsm-install --preflight --report hw.json --classify
-decision: warn
-counts: {certified: 1, known: 3, unknown: 2}
-  graphics   unknown   assessed=True
-  network    known     assessed=True
-Installation can continue, but graphics is unverified and may not work.
-The system will install and boot; agree explicitly before continuing.
-```
+## Класифікатор не вирішує, чи можна встановлювати
 
-## Чого це не робить
+`classification.py` повертає `decision=not-evaluated`. Він не містить статичних
+списків `CRITICAL`/`DEGRADING` і не згортає невідоме сховище, GPU чи Wi-Fi у
+глобальний `stop` або `warn`.
 
-**Не перелічує моделі ноутбуків.** Класифікуються підсистеми й чіпсети, а не
-десятки тисяч моделей — інакше це не масштабується.
+Інсталяційне рішення належить сценарній політиці: обраний сценарій, рівень
+впливу функції та підтверджений fallback визначають `hard-stop`, `soft-stop`,
+`warn-and-continue` або `continue`. Джерело — [HARDWARE-COMPATIBILITY-VERDICTS.md,
+§3–4](HARDWARE-COMPATIBILITY-VERDICTS.md) разом із
+[INSTALL-CAPABILITY-MATRIX.md](INSTALL-CAPABILITY-MATRIX.md).
 
-**Не стає `certified` саме по собі.** Це вимагає прогнаного `wsm-hwcheck` і
-записаного evidence bundle, тобто людини, яка перевірила.
+## Межі інтеграції
 
-**Не замінює матрицю сумісності.** Це механізм, яким матриця застосовується до
-конкретної машини.
+Модуль є read-only бібліотечним прототипом. `wsm-install --classify` не існує й
+не згадується як доступна команда. CLI preflight та Guix handoff продовжують
+користуватися власними versioned contracts; цей класифікатор не запускає
+команди, не завантажує модулі, не змінює firmware, диски, bootloader чи мережу.
+
+Приклад використання бібліотеки після schema validation звіту:
+
+\`\`\`python
+from wsm_install.classification import classify, explain
+
+result = classify(report)
+print(explain(result))
+# decision=not-evaluated: install readiness belongs to the scenario policy.
+\`\`\`
+
+Невідоме не означає несправне. Але й відсутність доказу не означає, що функція
+працює.
