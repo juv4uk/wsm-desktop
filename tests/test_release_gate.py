@@ -346,6 +346,56 @@ class CliTests(unittest.TestCase):
         self.assertIn("channels", ids)
         self.assertIn("image", ids)
 
+class PartsImageTests(unittest.TestCase):
+    """The gate must consume a release published as parts, not just a whole ISO."""
+
+    def make_payload(self, *, source="parts (2)", artifact="live.iso"):
+        payload = verifier_payload()
+        payload["artifact"] = artifact
+        payload["artifact_source"] = source
+        return payload
+
+    def test_a_part_with_a_reassembled_verdict_passes_the_name_check(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            part = Path(temporary) / "live.iso.part000"
+            part.write_bytes(b"first part")
+            payload = self.make_payload()
+            payload["artifact_sha256"] = hashlib.sha256(b"joined image").hexdigest()
+            completed = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=json.dumps(payload), stderr=""
+            )
+            with patch("release_gate.subprocess.run", return_value=completed):
+                result = check_image(part, boot=False)
+        self.assertNotEqual(result["status"], "fail", result["detail"])
+
+    def test_a_part_without_a_reassembly_report_is_refused(self) -> None:
+        """A verdict that silently verified something else proves nothing."""
+        with tempfile.TemporaryDirectory() as temporary:
+            part = Path(temporary) / "live.iso.part000"
+            part.write_bytes(b"first part")
+            payload = self.make_payload(source="whole")
+            completed = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=json.dumps(payload), stderr=""
+            )
+            with patch("release_gate.subprocess.run", return_value=completed):
+                result = check_image(part, boot=False)
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("reassembled", result["detail"])
+
+    def test_a_whole_iso_still_checks_its_own_digest(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            iso = Path(temporary) / "live.iso"
+            iso.write_bytes(b"different bytes")
+            payload = self.make_payload(source="whole", artifact="live.iso")
+            completed = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=json.dumps(payload), stderr=""
+            )
+            with patch("release_gate.subprocess.run", return_value=completed):
+                result = check_image(iso, boot=False)
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("SHA-256 does not match", result["detail"])
+
+
 
 if __name__ == "__main__":
     unittest.main()
