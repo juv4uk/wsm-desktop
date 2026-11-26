@@ -21,8 +21,11 @@ UNKNOWN = "unknown"
 # Canonical vocabulary: docs/HARDWARE-COMPATIBILITY-VERDICTS.md (§4.2).
 # A report-level device summary can use KNOWN/UNKNOWN only. CERTIFIED is
 # deliberately reserved until evidence has exact device/capability scope.
+# A passing function test is not enough for subsystem-level certification.
+# The canonical policy also requires a validated profile bundle covering all
+# critical functions; until that device-scoped contract exists, this state is
+# deliberately absent from the summary mapping.
 EVIDENCE_TO_LEVEL = {
-    "supported-tested": CERTIFIED,
     "driver-bound-not-tested": KNOWN,
     "candidate-only": KNOWN,
     "known-problem": UNKNOWN,
