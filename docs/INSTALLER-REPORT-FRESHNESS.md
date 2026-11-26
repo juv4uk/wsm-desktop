@@ -1,74 +1,78 @@
-# Installer report freshness and revalidation contract
+# Контракт актуальності звіту інсталятора та повторної перевірки
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Status: **consumer-side proposal; producer/schema approval required**
-- Related: #12 (handoff contract), #17 (canonical handoff documentation), #23 (freshness contract), #5/#6 (schema and collector owners), #14 (QEMU integration)
-- Prototype: `wsm_install/freshness.py`
-- Tests: `tests/test_installer_freshness.py`
+- Статус: **пропозиція на боці споживача; потрібне погодження виробника/схеми**
+- Пов'язано: #12 (контракт передачі), #17 (канонічна документація передачі), #23 (контракт актуальності), #5/#6 (власники схеми та збирача), #14 (інтеграція QEMU)
+- Прототип: `wsm_install/freshness.py`
+- Тести: `tests/test_installer_freshness.py`
 
-## Problem
+## Проблема
 
-A report can be valid JSON, pass schema validation, and still describe a previous boot or a device topology that has since changed. A recent wall-clock timestamp alone is not proof of freshness: the live clock may be wrong, unset, or adjusted while an offline installer is running.
+Звіт може бути коректним JSON, проходити перевірку схеми й водночас описувати попереднє завантаження системи або топологію пристроїв, яка вже змінилася. Свіжа часова позначка сама по собі не доводить актуальність: годинник live-середовища може бути неправильним, не встановленим або зміненим під час роботи автономного інсталятора.
 
-The existing schema v1.0.0 contains `collected_at`, architecture, kernel release, boot mode, and report-local device records. It does not contain a per-boot identity or a monotonic collection timestamp. Because schema v1.0.0 rejects additional properties, this proposal does not modify it.
+Наявна схема v1.0.0 містить `collected_at`, архітектуру, версію ядра, режим завантаження та записи пристроїв у межах звіту. Вона не містить ідентифікатора окремого завантаження або монотонної часової позначки збору. Оскільки схема v1.0.0 відхиляє додаткові властивості, ця пропозиція її не змінює.
 
-## Proposed evidence envelope for a future schema revision
+## Запропонований конверт доказів для майбутньої ревізії схеми
 
-The collector should provide the following values in a versioned schema extension:
+Збирач має надавати такі значення у версіонованому розширенні схеми:
 
-- `boot_session_sha256`: SHA-256 over a domain-separated kernel boot ID. The raw boot ID is never included in the report. It changes on reboot and is stable during one boot.
-- `collected_monotonic_ns`: collection completion time from `CLOCK_BOOTTIME`, not wall-clock time. It is comparable only when boot-session digests match.
-- `architecture`, `kernel_release`, `boot_mode`: the exact collection environment.
-- `topology_sha256`: the current prototype hashes a canonical, report-local **device inventory** list of category, bus, discovery status, and non-sensitive hardware IDs. It does not yet hash relationship edges (for example, controller/interface or GPU/DRM/connector links); until #18's relationship contract is ratified and included, this digest must not be described as a complete topology-graph fingerprint. Do not include serial numbers, MAC addresses, host paths, UUIDs, hostnames, or raw EDID.
-- Existing `collected_at` remains useful for human audit but is not the authoritative freshness clock.
+- `boot_session_sha256`: SHA-256 від ідентифікатора завантаження ядра з доменним розділенням. Сирий ідентифікатор завантаження ніколи не включається до звіту. Він змінюється після перезавантаження й залишається сталим протягом одного завантаження.
+- `collected_monotonic_ns`: час завершення збору за годинником `CLOCK_BOOTTIME`, а не за настінним годинником. Його можна порівнювати лише тоді, коли digest сесії завантаження збігається.
+- `architecture`, `kernel_release`, `boot_mode`: точне середовище, у якому виконано збір.
+- `topology_sha256`: поточний прототип хешує канонічний список **інвентаризації пристроїв** у межах звіту: категорію, шину, стан виявлення та нечутливі апаратні ідентифікатори. Він поки не хешує ребра зв'язків (наприклад, контролер/інтерфейс або GPU/DRM/конектор); доки контракт зв'язків із #18 не буде ратифіковано й включено, цей digest не можна описувати як повний відбиток графа топології. Не включайте серійні номери, MAC-адреси, шляхи хоста, UUID, імена хостів або сирий EDID.
+- Наявне поле `collected_at` залишається корисним для аудиту людиною, але не є авторитетним годинником актуальності.
 
-The session digest is not a persistent machine identifier. It permits comparison only within one boot session; it must not be reused as a cross-boot identity.
+Digest сесії не є постійним ідентифікатором машини. Він дозволяє порівнювати дані лише в межах одного завантаження; його не можна повторно використовувати як ідентифікатор між різними завантаженнями.
 
-## Decision order
+## Порядок ухвалення рішення
 
-At plan confirmation, the consumer must perform a new read-only session/topology observation and compare it with the report bound to the draft plan:
+Під час підтвердження плану споживач має виконати нове read-only спостереження сесії/топології та порівняти його зі звітом, до якого прив'язаний чернетковий план:
 
-1. Verify the exact report SHA-256 equals the digest embedded in the plan.
-2. Verify both report and live-session boot digests are valid and equal.
-3. Verify the monotonic clock is available and non-regressing; calculate age only within the matching boot session.
-4. Reject a report older than the configured maximum age (prototype default: 600 seconds).
-5. Require architecture, kernel release, and boot mode to match exactly.
-6. Require the canonical topology digest to match.
-7. Only then mark the report fresh and permit the user to continue to a separate confirmation step.
+1. Перевірити, що точний SHA-256 звіту дорівнює digest, вбудованому в план.
+2. Перевірити, що digest завантаження у звіті та поточній live-сесії коректні й однакові.
+3. Перевірити доступність монотонного годинника та відсутність регресії; обчислювати вік лише в межах тієї самої сесії завантаження.
+4. Відхилити звіт, старший за налаштований максимальний вік (типове значення прототипу: 600 секунд).
+5. Вимагати точного збігу архітектури, версії ядра та режиму завантаження.
+6. Вимагати збігу канонічного digest топології.
+7. Лише після цього позначати звіт як fresh і дозволяти користувачеві перейти до окремого кроку підтвердження.
 
-The prototype evaluator is pure and does not read files, probe hardware, invoke a backend, or access disks. The caller must hash the exact raw report bytes and supply that digest as `report_sha256`; the evaluator compares the supplied digest with the plan-bound value but does not open or hash a report file itself. It returns a distinct status and a reason for each failure class.
+Прототипний evaluator є чистою функцією: він не читає файли, не зондує обладнання, не викликає backend і не звертається до дисків. Викликач має хешувати точні сирі байти звіту й передавати цей digest як `report_sha256`; evaluator порівнює передане значення з digest, прив'язаним до плану, але сам не відкриває й не хешує файл звіту. Для кожного класу помилки він повертає окремий статус і причину.
 
-## Status semantics
+## Семантика статусів
 
-| Status | Meaning | Freshness gate passed |
+| Статус | Значення | Перевірку актуальності пройдено |
 |---|---|---:|
-| `fresh` | Report bytes, boot session, age, environment, and topology match | Yes |
-| `stale` | Same boot, but collection age exceeds policy | No |
-| `session-mismatch` | Report belongs to another boot | No |
-| `report-digest-mismatch` | Report bytes differ from the plan-bound report | No |
-| `environment-mismatch` | Architecture, kernel, or boot mode changed | No |
-| `topology-changed` | Relevant device inventory changed | No |
-| `unverifiable` | Required freshness evidence is absent or inconsistent | No |
+| `fresh` | Байти звіту, сесія завантаження, вік, середовище й топологія збігаються | Так |
+| `stale` | Та сама сесія завантаження, але вік збору перевищує політику | Ні |
+| `session-mismatch` | Звіт належить іншому завантаженню системи | Ні |
+| `report-digest-mismatch` | Байти звіту відрізняються від digest, прив'язаного до плану | Ні |
+| `environment-mismatch` | Змінилася архітектура, версія ядра або режим завантаження | Ні |
+| `topology-changed` | Змінилася релевантна інвентаризація пристроїв | Ні |
+| `unverifiable` | Обов'язкові докази актуальності відсутні або суперечливі | Ні |
 
-A freshness failure is not evidence of hardware incompatibility. It means the report must be recollected or the user must return to preflight.
+Помилка перевірки актуальності не є доказом апаратної несумісності. Вона означає, що звіт потрібно зібрати повторно або користувач має повернутися до preflight.
 
-**Important boundary:** `freshness_gate_passed = true` means only that this isolated freshness sub-check succeeded. It does **not** make the complete installation plan confirmable, authorize a backend, select or validate a target disk, satisfy scenario capability requirements, or permit disk writes. The current #19 `wsm-install` output remains `diagnostic-only` and `plan_readiness.confirmable=false`. The freshness evaluator is not wired into that CLI until #5/#6 approve a versioned producer envelope and the complete scenario/target confirmation path is implemented.
+**Важлива межа:** `freshness_gate_passed = true` означає лише, що цю ізольовану підперевірку актуальності пройдено. Це **не** робить повний план інсталяції придатним до підтвердження, не авторизує backend, не вибирає й не перевіряє цільовий диск, не задовольняє вимоги можливостей сценарію та не дозволяє запис на диск. Поточний результат `wsm-install` із #19 залишається `diagnostic-only`, а `plan_readiness.confirmable=false`. Evaluator актуальності не підключено до цього CLI, доки #5/#6 не погодять версіонований конверт даних виробника та не буде реалізовано повний шлях перевірки сценарію й підтвердження цільового диска.
 
-## Plan binding and target safety
+## Прив'язка плану та безпека цільового пристрою
 
-The draft plan must bind to the exact report digest and boot-session digest. Any change to either invalidates the plan. A changed topology requires a new report and new plan.
+Чернетковий план має бути прив'язаний до точного digest звіту та digest сесії завантаження. Зміна будь-якого з них робить план недійсним. Зміна топології вимагає нового звіту й нового плану.
 
-Freshness is not target-disk identity. Immediately before any future destructive operation, the installer must independently re-identify the selected target device, compare its identity with the user's explicit selection, and require a separate confirmation. No freshness result authorizes disk writes.
+Актуальність не є перевіркою ідентичності цільового диска. Безпосередньо перед будь-якою майбутньою руйнівною операцією інсталятор має незалежно повторно ідентифікувати вибраний цільовий пристрій, порівняти його ідентичність із явним вибором користувача й вимагати окремого підтвердження. Жоден результат перевірки актуальності не дозволяє запис на диск.
 
-## Privacy and safety
+## Приватність і безпека
 
-- Never store the raw kernel boot ID in an exported report.
-- Never add persistent machine identifiers to correlate reports across boots.
-- Never include serial numbers, MAC addresses, host paths, or network identifiers in the topology digest.
-- The preflight and freshness check remain offline and read-only.
-- Unknown clock/session/topology evidence fails closed for confirmation, but must not be mislabeled as unsupported hardware.
+- Ніколи не зберігайте сирий ідентифікатор завантаження ядра в експортованому звіті.
+- Ніколи не додавайте постійні ідентифікатори машини для зіставлення звітів між завантаженнями.
+- Ніколи не включайте серійні номери, MAC-адреси, шляхи хоста або мережеві ідентифікатори до digest топології.
+- Перевірки preflight та актуальності залишаються автономними й read-only.
+- Невідомі дані годинника/сесії/топології fail-closed для підтвердження, але їх не можна помилково позначати як непідтримуване обладнання.
 
-## Open producer decisions
+## Невирішені рішення виробника
 
-This proposal requires #5/#6 owners to confirm field names, collection points, and backward-compatibility strategy before integration. The existing v1.0.0 schema and collector are intentionally unchanged. A QEMU reboot test belongs to #14 and should prove that a report from boot A cannot be confirmed after boot B.
+Ця пропозиція потребує від власників #5/#6 підтвердження назв полів, точок збору та стратегії зворотної сумісності перед інтеграцією. Наявна схема v1.0.0 і збирач навмисно не змінюються. Тест перезавантаження у QEMU належить до #14 і має довести, що звіт із завантаження A не можна повторно використати після завантаження B.
+
+---
+
+Англійський переклад цього документа: [INSTALLER-REPORT-FRESHNESS.en.md](INSTALLER-REPORT-FRESHNESS.en.md). Канонічною є українська версія.

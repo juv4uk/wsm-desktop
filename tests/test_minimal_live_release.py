@@ -65,11 +65,17 @@ class MinimalLiveProfileTests(unittest.TestCase):
         self.assertIn("-- -L . system build systems/desktop.scm --dry-run", evaluation)
         self.assertIn("-- -L . home build systems/home.scm --dry-run", evaluation)
 
-    def test_release_request_pins_the_intended_tag(self) -> None:
-        self.assertEqual(
-            (ROOT / "RELEASE-REQUEST.txt").read_text(encoding="utf-8").strip(),
-            "0.1.0-rc3-minimal-live",
-        )
+    def test_release_request_pins_one_tag_and_ignores_comments(self) -> None:
+        lines = (ROOT / "RELEASE-REQUEST.txt").read_text(encoding="utf-8").splitlines()
+        requested = [line.split("#", 1)[0].strip() for line in lines]
+        tags = [line for line in requested if line]
+        self.assertEqual(tags, ["0.1.0-rc3-minimal-live"])
+
+    def test_release_workflow_requires_exactly_one_non_comment_tag(self) -> None:
+        workflow = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
+        self.assertIn("mapfile -t REQUEST_TAGS", workflow)
+        self.assertIn('${#REQUEST_TAGS[@]}', workflow)
+        self.assertIn("sed -e 's/[[:space:]]*#.*$//'", workflow)
 
 
 class LiveInstallerLauncherTests(unittest.TestCase):
