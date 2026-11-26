@@ -133,6 +133,16 @@ class DecisionLevelTests(unittest.TestCase):
         block = section(self.text, "## 4.1")
         self.assertIn("не може непомітно стати `hard-stop`", block)
 
+    def test_hard_stop_covers_a_report_gap(self) -> None:
+        """`not-collected` blocks too, but must not be worded as a machine verdict."""
+        block = section(self.text, "## 4.1")
+        hard_stop = next(
+            line for line in block.splitlines() if line.startswith("| `hard-stop`")
+        )
+        self.assertIn("`not-collected`", hard_stop)
+        self.assertIn("прогалина у звіті", block)
+        self.assertIn("а не вирок машині", block)
+
     def test_coarse_tiers_map_only_to_known_evidence_states(self) -> None:
         """A three-word UI vocabulary may not invent a state we do not have."""
         block = section(self.text, "## 4.2")
