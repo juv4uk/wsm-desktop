@@ -85,4 +85,3 @@
   (services
    (append (list wsm-live-ready-marker)
            (operating-system-services base-os))))
-
