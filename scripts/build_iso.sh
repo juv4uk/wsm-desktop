@@ -170,6 +170,7 @@ WSM_GUIX_LOCKED_VERSION="$GUIX_LOCKED_VERSION" \
 WSM_PROFILE="$PROFILE" \
 WSM_PROFILE_SHA256="$PROFILE_SHA256" \
 WSM_LOCK="$LOCK" \
+WSM_REPO_ROOT="$ROOT" \
 WSM_ISO_OUTPUT="$ISO_OUTPUT" \
 WSM_STORE_PATH="$STORE_PATH" \
 WSM_CHANNELS_FILE="$CHANNELS_FILE" \
@@ -198,6 +199,7 @@ channels_log = Path(os.environ["WSM_CHANNELS_LOG"])
 build_log = Path(os.environ["WSM_BUILD_LOG"])
 profile = Path(os.environ["WSM_PROFILE"])
 lock = Path(os.environ["WSM_LOCK"])
+repo_root = Path(os.environ["WSM_REPO_ROOT"])
 manifest_path = Path(os.environ["WSM_MANIFEST_FILE"])
 checksums_path = Path(os.environ["WSM_CHECKSUMS_FILE"])
 
@@ -235,7 +237,7 @@ manifest = {
     },
     "build": {
         "command": [
-            "guix", "time-machine", "-C", str(lock), "--", "-L", str(ROOT), "system", "image",
+            "guix", "time-machine", "-C", str(lock), "--", "-L", str(repo_root), "system", "image",
             "--no-grafts", f"--root={iso}", "--image-type=iso9660",
             "--system=x86_64-linux", str(profile),
         ],

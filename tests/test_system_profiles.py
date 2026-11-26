@@ -510,6 +510,15 @@ exit 8
             )
             self.assertIn("default", manifest["guix"]["authentication_policy"])
             self.assertEqual(manifest["guix"]["locked_version"], "guix (GNU Guix) 1.5.0-pinned")
+            self.assertEqual(
+                manifest["build"]["command"],
+                [
+                    "guix", "time-machine", "-C", str(lock), "--",
+                    "-L", str(ROOT), "system", "image",
+                    "--no-grafts", f"--root={expected}", "--image-type=iso9660",
+                    "--system=x86_64-linux", str(ROOT / "systems" / "live.scm"),
+                ],
+            )
 
             checksum_entries = {}
             for line in checksums_path.read_text(encoding="utf-8").splitlines():

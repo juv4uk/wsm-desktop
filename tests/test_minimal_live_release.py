@@ -55,7 +55,9 @@ class MinimalLiveProfileTests(unittest.TestCase):
         builder = (ROOT / "scripts" / "build_iso.sh").read_text(encoding="utf-8")
         self.assertIn('guix time-machine -C "$LOCK" -- -L "$ROOT" system image', builder)
         self.assertNotIn('guix time-machine -C "$LOCK" -L "$ROOT" -- system image', builder)
-        self.assertIn('"--", "-L", str(ROOT), "system", "image"', builder)
+        self.assertIn('"--", "-L", str(repo_root), "system", "image"', builder)
+        self.assertIn('WSM_REPO_ROOT="$ROOT"', builder)
+        self.assertIn('repo_root = Path(os.environ["WSM_REPO_ROOT"])', builder)
 
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
         evaluation = makefile.split("check-guix-eval:", 1)[1].split("\n\n", 1)[0]
