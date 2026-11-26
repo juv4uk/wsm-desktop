@@ -24,6 +24,11 @@ TRANSLATION_SUFFIXES = (".uk.md", ".en.md")
 CYRILLIC_PATTERN = re.compile(r"[\u0400-\u04ff]")
 LATIN_PATTERN = re.compile(r"[A-Za-z]")
 CYRILLIC_TOLERANCE = 1.0  # At least as many Cyrillic as Latin letters.
+# Technical Ukrainian carries a lot of Latin: URLs, identifiers, schema field
+# names, tool names. A canonical document is therefore judged by share, not by
+# beating Latin outright. The lowest canonical document sits near 0.40; an
+# English document sits near 0.01, so 0.25 separates them without guessing.
+UKRAINIAN_RATIO_FLOOR = 0.25
 
 
 def markdown_files() -> list[Path]:
@@ -107,6 +112,29 @@ def canonical_of(path: Path) -> Path | None:
     return None
 
 
+def is_ukrainian_dominant(text: str) -> bool:
+    """True when Cyrillic makes up a meaningful share of the letters."""
+    cyrillic = len(CYRILLIC_PATTERN.findall(text))
+    latin = len(LATIN_PATTERN.findall(text))
+    if cyrillic + latin == 0:
+        return True  # nothing to judge: an empty or symbol-only document
+    return cyrillic / (cyrillic + latin) >= UKRAINIAN_RATIO_FLOOR
+
+
+def check_docs_language() -> list[str]:
+    """Every document under docs/ is canonical in Ukrainian, or a *.en.md translation."""
+    errors: list[str] = []
+    for source in sorted((ROOT / "docs").rglob("*.md")):
+        if source.name.endswith(".en.md"):
+            continue
+        if not is_ukrainian_dominant(source.read_text(encoding="utf-8")):
+            errors.append(
+                f"{source.relative_to(ROOT)}: documentation under docs/ is canonical in "
+                f"Ukrainian; write the English text as a .en.md translation beside it"
+            )
+    return errors
+
+
 def check_document_language() -> list[str]:
     """Entry points must be Ukrainian; translations must have an original."""
     errors: list[str] = []
@@ -132,7 +160,12 @@ def check_document_language() -> list[str]:
 
 
 def main() -> int:
-    errors = check_links() + check_research_status() + check_document_language()
+    errors = (
+        check_links()
+        + check_research_status()
+        + check_document_language()
+        + check_docs_language()
+    )
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1

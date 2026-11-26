@@ -25,6 +25,30 @@ class DocumentationTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
+class DocumentationLanguageTests(unittest.TestCase):
+    """A document under docs/ is Ukrainian, or it is a *.en.md translation."""
+
+    def test_ukrainian_document_is_dominant(self) -> None:
+        text = (
+            "Це український текст із технічними термінами: sysfs, EDID, guix graph. "
+            "Він містить багато латинських слів, але все одно є українським."
+        )
+        self.assertTrue(check_docs.is_ukrainian_dominant(text))
+
+    def test_english_document_is_not_dominant(self) -> None:
+        text = (
+            "This document is written in English and mentions sysfs, EDID and guix "
+            "graph, with almost no Cyrillic at all."
+        )
+        self.assertFalse(check_docs.is_ukrainian_dominant(text))
+
+    def test_symbol_only_document_is_not_judged(self) -> None:
+        self.assertTrue(check_docs.is_ukrainian_dominant("|---|---|\n| a | b |\n"))
+
+    def test_every_canonical_document_passes_the_rule(self) -> None:
+        self.assertEqual(check_docs.check_docs_language(), [])
+
+
 class InstallerDocumentationPolicyTests(unittest.TestCase):
     def test_installer_doc_matches_current_minimal_live_direction(self) -> None:
         document = (ROOT / "docs" / "INSTALLER.md").read_text(encoding="utf-8")
