@@ -143,6 +143,16 @@ class PreviewOutcomeTests(unittest.TestCase):
             **extra,
         }
 
+    def test_internal_deploy_helper_rejects_false_before_loading_report(self) -> None:
+        from unittest.mock import patch
+
+        module = load_module()
+        with patch("wsm_install.executor.execute") as execute:
+            result = module._deploy(False)
+        self.assertIsNotNone(result)
+        self.assertIn("APPLY is disabled", result[0])
+        execute.assert_not_called()
+
     def test_explicit_preview_returns_non_success_not_none(self) -> None:
         from unittest.mock import patch
 
