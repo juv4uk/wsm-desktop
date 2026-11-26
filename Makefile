@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
 
 PYTHON ?= python3
+QEMU_PYTHON ?= python3.11
 GUIX ?= guix
 PRODUCT ?= free
 
@@ -175,10 +176,11 @@ qemu-acceptance-manual:
 	command -v busybox >/dev/null
 	command -v cpio >/dev/null
 	command -v modprobe >/dev/null
-	$(PYTHON) -c 'import jsonschema'
+	command -v "$(QEMU_PYTHON)" >/dev/null
+	"$(QEMU_PYTHON)" -c 'import sys, jsonschema; assert sys.version_info[:2] == (3, 11), sys.version'
 	bash scripts/ci_qemu_guest_smoke.sh
-	$(PYTHON) scripts/ci_qemu_hwcheck_guest.py
-	$(PYTHON) scripts/ci_cxl_qemu_guest.py --timeout 90
+	"$(QEMU_PYTHON)" scripts/ci_qemu_hwcheck_guest.py
+	"$(QEMU_PYTHON)" scripts/ci_cxl_qemu_guest.py --timeout 90
 
 release-bundle: check
 	$(PYTHON) scripts/build_release_bundle.py
