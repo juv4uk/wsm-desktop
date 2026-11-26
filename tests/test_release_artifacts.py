@@ -45,8 +45,8 @@ class HardwareCheckScriptTests(unittest.TestCase):
 
             manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["overall"], "pass")
-            self.assertEqual(set(manifest["plans"]), {"guix", "nix"})
-            for backend in ("guix", "nix"):
+            self.assertEqual(set(manifest["plans"]), {"guix"})
+            for backend in ("guix",):
                 plan_entry = manifest["plans"][backend]
                 self.assertEqual(plan_entry["status"], "verified-diagnostic")
                 self.assertTrue(plan_entry["safe_execution_flags"])
@@ -69,15 +69,15 @@ class HardwareCheckScriptTests(unittest.TestCase):
             expected = {
                 "report.json",
                 "plan-guix.json",
-                "plan-nix.json",
                 "manifest.json",
                 "SHA256SUMS",
                 "install-guix.stdout.log",
                 "install-guix.stderr.log",
-                "install-nix.stdout.log",
-                "install-nix.stderr.log",
             }
             self.assertTrue(expected.issubset({path.name for path in output.iterdir()}))
+            self.assertFalse((output / "plan-nix.json").exists())
+            self.assertFalse((output / "install-nix.stdout.log").exists())
+            self.assertFalse((output / "install-nix.stderr.log").exists())
 
             sums = {}
             for line in (output / "SHA256SUMS").read_text(encoding="utf-8").splitlines():
