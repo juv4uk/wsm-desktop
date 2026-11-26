@@ -53,16 +53,20 @@ class MinimalLiveProfileTests(unittest.TestCase):
 
     def test_locked_guix_load_path_is_applied_at_both_cli_levels(self) -> None:
         builder = (ROOT / "scripts" / "build_iso.sh").read_text(encoding="utf-8")
+        normalized_builder = " ".join(builder.split())
         self.assertIn(
             'guix time-machine -C "$LOCK" -L "$ROOT" -- system -L "$ROOT" image',
-            builder,
+            normalized_builder,
         )
-        self.assertIn('guix time-machine -C "$LOCK" -L "$ROOT" -- describe -f channels', builder)
-        self.assertNotIn('guix time-machine -C "$LOCK" -- -L "$ROOT"', builder)
+        self.assertIn(
+            'guix time-machine -C "$LOCK" -L "$ROOT" -- describe -f channels',
+            normalized_builder,
+        )
+        self.assertNotIn('guix time-machine -C "$LOCK" -- -L "$ROOT"', normalized_builder)
         self.assertIn(
             '"guix", "time-machine", "-C", str(lock), "-L", str(repo_root), "--", '
             '"system", "-L", str(repo_root), "image"',
-            builder,
+            normalized_builder,
         )
         self.assertIn('WSM_REPO_ROOT="$ROOT"', builder)
         self.assertIn('repo_root = Path(os.environ["WSM_REPO_ROOT"])', builder)
