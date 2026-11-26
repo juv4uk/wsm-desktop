@@ -27,7 +27,12 @@ jobs:
 
       - name: Install Guix
         run: |
-          wget -q https://git.savannah.gnu.org/cgit/guix.git/plain/etc/guix-install.sh
+          # wget exit code 8 means the server refused the request. Savannah's
+          # cgit does that to automated clients, so take the script from the
+          # official GitHub mirror and fall back to the release tarball.
+          wget -q https://raw.githubusercontent.com/guix-mirror/guix/master/etc/guix-install.sh \
+            || wget -q https://git.savannah.gnu.org/cgit/guix.git/plain/etc/guix-install.sh \
+            || { echo "::error::cannot fetch guix-install.sh"; exit 1; }
           chmod +x guix-install.sh
           # Empty answers accept every default. The output is captured and echoed
           # as ::error:: lines, because the job log is not reachable through the
