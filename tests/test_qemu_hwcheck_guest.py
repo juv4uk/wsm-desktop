@@ -83,6 +83,10 @@ class QemuHwcheckGuestSafetyTests(unittest.TestCase):
         self.assertNotIn("{ld_library_path}", rendered)
         self.assertNotIn("{max_report_bytes}", rendered)
 
+    def test_guest_validator_requires_matching_cpython_abi(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "requires host ABI cpython-311"):
+            guest._require_guest_validation_abi("cpython-312")
+
     def test_guest_validator_dependency_allowlist_is_explicit(self) -> None:
         self.assertEqual(guest.GUEST_JSONSCHEMA_VERSION, "4.26.0")
         for name in (
