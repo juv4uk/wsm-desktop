@@ -72,6 +72,11 @@ class MakefileCoverageTests(unittest.TestCase):
         missing = sorted(self.all_targets - phony_targets(self.text))
         self.assertEqual(missing, [], f"check targets missing from .PHONY: {missing}")
 
+    def test_manual_guix_eval_covers_the_compatibility_lock_and_system(self) -> None:
+        target = block_for(self.text, "check-guix-eval")
+        self.assertIn("channels/compatibility.lock.scm", target)
+        self.assertIn("systems/live-compat.scm", target)
+
     def test_each_python_target_runs_at_least_one_command(self) -> None:
         for name in sorted(self.python_targets):
             with self.subTest(target=name):
