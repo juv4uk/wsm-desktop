@@ -42,6 +42,16 @@ class AllowlistTests(unittest.TestCase):
     def test_allowed_program_passes(self) -> None:
         validate_command(GOOD)
 
+    def test_non_string_executable_is_refused(self) -> None:
+        with self.assertRaises(AgentError) as caught:
+            validate_command([["not", "a", "program"]])
+        self.assertEqual(caught.exception.code, "agent.bad-program")
+
+    def test_non_string_argument_is_refused(self) -> None:
+        with self.assertRaises(AgentError) as caught:
+            validate_command(["/usr/bin/mount", ["/dev/nvme0n1p2"], "/mnt"])
+        self.assertEqual(caught.exception.code, "agent.bad-argument")
+
     def test_shell_is_refused(self) -> None:
         """A compromised UI must not be able to run a shell through the agent."""
         with self.assertRaises(AgentError) as caught:
