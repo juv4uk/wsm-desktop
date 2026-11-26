@@ -180,6 +180,11 @@ class SourceResolutionTests(unittest.TestCase):
         for skipped in ("/.git", "/__pycache__", "/build"):
             with self.subTest(skip=skipped):
                 self.assertIn(skipped, text)
+    def test_package_imports_guix_utils_for_version_major_minor(self) -> None:
+        """version-major+minor is a Guix utility, not a build-side helper."""
+        text = (ROOT / "wsm" / "packages" / "wsm.scm").read_text(encoding="utf-8")
+        self.assertIn("#:use-module (guix utils)", text)
+        self.assertIn("version-major+minor", text)
 
 
 class LiveProfileTests(unittest.TestCase):
