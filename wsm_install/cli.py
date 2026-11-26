@@ -56,6 +56,8 @@ def build_parser() -> argparse.ArgumentParser:
                          help="actually run the steps; requires --acknowledge-disk")
     install.add_argument("--guided", action="store_true",
                          help="walk through the install in a console, no flags required")
+    install.add_argument("--write-plan", metavar="PATH",
+                         help="write the plan as JSON for the privileged agent instead of running it")
     install.add_argument("--tui", action="store_true",
                          help="pseudo-graphical installer: full screen, arrow keys, Enter")
     install.add_argument("--acknowledge-disk", metavar="PATH",
@@ -293,6 +295,31 @@ def _run_install(args: argparse.Namespace) -> int:
     except Refused as exc:
         print(f"wsm-install: {exc.code}: {exc.message}", file=sys.stderr)
         return 2
+
+    if args.write_plan:
+        # The unprivileged side only writes the plan; wsm-install-agent is what
+        # touches a disk, and it re-validates every command itself.
+        Path(args.write_plan).write_text(
+            json.dumps({
+                "schema": "wsm-install-plan/1",
+                "disk": disk.path,
+                "firmware": args.firmware,
+                "filesystem": args.filesystem,
+                "mount_point": args.mount_point,
+                "handoff": command,
+                "steps": [
+                    {
+                        "command": step.command,
+                        "purpose": step.purpose,
+                        "destructive": step.destructive,
+                    }
+                    for step in steps
+                ],
+            }, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        print(f"wsm-install: plan written to {args.write_plan}", file=sys.stderr)
+        return 0
 
     if not args.quiet:
         print(render(steps, command), file=sys.stderr)
