@@ -80,6 +80,24 @@ Installation can continue, but graphics is unverified and may not work.
 The system will install and boot; agree explicitly before continuing.
 ```
 
+## Де це застосовується
+
+Класифікація стоїть **перед** першим дотиком до диска:
+
+```sh
+wsm-install --classify --report hw.json          # тільки вердикт
+wsm-install --install --report hw.json ...       # гейт у плані
+```
+
+| Рішення | Що робить інсталятор |
+| --- | --- |
+| `stop` | відмовляє з кодом 3, `--accept-degraded` не допомагає |
+| `warn` | відмовляє з кодом 3, доки не передано `--accept-degraded` |
+| `proceed` | будує план |
+
+`--accept-degraded` навмисно **не** перекриває `stop`: ним дають згоду на те, що
+не працюватиме, а не на те, що може не завантажитись.
+
 ## Чого це не робить
 
 **Не перелічує моделі ноутбуків.** Класифікуються підсистеми й чіпсети, а не

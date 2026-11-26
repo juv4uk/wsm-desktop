@@ -219,6 +219,32 @@ GPL-3.0-or-later, і жодна частина цього репозиторію
 - [`gnu/services/shepherd.scm` — default `shepherd-1.0`](https://git.savannah.gnu.org/cgit/guix.git/tree/gnu/services/shepherd.scm?id=4e5195be20d9b124df8a8bb69213412236e4668e)
 - [`gnu/packages/admin.scm` — Shepherd 1.0.9 package definition](https://git.savannah.gnu.org/cgit/guix.git/tree/gnu/packages/admin.scm?id=4e5195be20d9b124df8a8bb69213412236e4668e)
 
+### UKI і Secure Boot: два факти, які змінюють дизайн
+
+Unified Kernel Image — один PE-файл, у який складені stub, ядро, initramfs і
+командний рядок; його підписують цілком для Secure Boot, і systemd-boot знаходить
+його в ESP без окремого boot entry. Для WSM це майбутній шлях, а не поточний: ми
+не маємо ні UKI, ні власного підписувача.
+
+Два факти, які варто знати **до** того, як хтось почне будувати цей шлях:
+
+1. **Під Secure Boot вбудований `.cmdline` перемагає.** Параметри, передані через
+   boot entry або вручну, ігноруються, якщо вони вже є в UKI. Без Secure Boot
+   передані параметри, навпаки, перекривають вбудовані. Тобто «додамо `root=` при
+   завантаженні» — не універсальне припущення: воно залежить від стану Secure
+   Boot, і саме тому наш bootloader-контракт не повинен покладатися на ручні
+   параметри.
+2. **Оновлення bootloader-а або UKI змінює TPM-вимірювання.** Саме тому Fedora
+   зробила окремий мінімальний UKI-only GRUB для конфіденційних VM: кожне
+   оновлення завантажувача змінює PCR, і політика атестації, яка чекає стабільних
+   значень, ламається. Для нас це означає: якщо колись з'явиться attestation-
+   політика, оновлення завантажувача стає подією, а не рутиною.
+
+Обидва факти — вхідні дані для рядка реєстру про boot-артефакти
+([LESSONS-FROM-OMARCHY.md](LESSONS-FROM-OMARCHY.md), Omarchy #15435), який зараз
+позначений `out-of-scope` саме тому, що власного updater-а й підписувача в нас
+немає.
+
 ### SBOM із `guix graph`
 
 - З Guix **1.5.0** `guix graph` має бекенди `graphml` і `cyclonedx-json`, тобто
@@ -249,6 +275,8 @@ GPL-3.0-or-later, і жодна частина цього репозиторію
 - [Guix 1.6.0 release schedule, 15.11.2026](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00091.html)
 - [GCD 009 deliberation notice](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00074.html)
 - [Guix repository on Codeberg](https://codeberg.org/guix/guix/)
+- [ArchWiki: Unified kernel image](https://wiki.archlinux.org/title/Unified_kernel_image)
+- [LWN: Fedora approves a smaller GRUB (UKI, TPM PCR stability)](https://lwn.net/Articles/1085609/)
 - [The Shepherd 1.0.0 released](https://shepherding.services/news/2024/12/the-shepherd-1.0.0-released/)
 - [GNU Shepherd 1.0.9 released (fixes the stop/unmount bug)](https://lists.libreplanet.org/archive/html/guix-devel/2025-12/msg00032.html)
 - [guix graph: CycloneDX backend, PR #2405](https://codeberg.org/guix/guix/pulls/2405)

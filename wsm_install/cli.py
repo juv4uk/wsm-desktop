@@ -63,6 +63,11 @@ def build_parser() -> argparse.ArgumentParser:
                          help="disabled; real APPLY requires a separately reviewed target-bound executor")
     install.add_argument("--guided", action="store_true",
                          help="choose a target and show a read-only preview in the console")
+    install.add_argument("--classify", action="store_true",
+                         help="classify this machine as certified / known / unknown and stop")
+    install.add_argument("--accept-degraded", action="store_true",
+                         help="continue when a non-critical subsystem is unknown; "
+                              "the user takes responsibility for what will not work")
     install.add_argument("--check-env", action="store_true",
                          help="verify this machine can install at all, then stop")
     install.add_argument("--write-plan", metavar="PATH",
@@ -259,6 +264,16 @@ def _run_guided(args: argparse.Namespace) -> int:
     )
 
 
+def _run_classification(args: argparse.Namespace) -> dict:
+    """Classify the machine from the report; the caller decides what to do."""
+    from wsm_install.classification import classify
+
+    report, _, error = _load_json(Path(args.report))
+    if error:
+        raise SystemExit(f"wsm-install: {error}")
+    return classify(report)
+
+
 def _run_install(args: argparse.Namespace) -> int:
     """Build and render a disk plan; real APPLY is disabled."""
     if args.execute:
@@ -283,6 +298,23 @@ def _run_install(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
+
+    # The classification runs before anything touches a disk: a machine whose
+    # storage or firmware is unknown must not be installed blind, and a machine
+    # with an unverified GPU needs an explicit yes rather than a silent install.
+    from wsm_install.classification import STOP, WARN, explain
+
+    verdict = _run_classification(args)
+    if verdict["decision"] == STOP:
+        print(f"wsm-install: classification.stop: {explain(verdict)}", file=sys.stderr)
+        return 3
+    if verdict["decision"] == WARN and not args.accept_degraded:
+        print(
+            f"wsm-install: classification.warn: {explain(verdict)}\n"
+            "Pass --accept-degraded to continue anyway.",
+            file=sys.stderr,
+        )
+        return 3
 
     disk = Disk(
         path=args.target_disk,
@@ -419,6 +451,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
+    if args.classify:
+        print(json.dumps(_run_classification(args), ensure_ascii=False, indent=2, sort_keys=True))
+        return 0
     if args.check_env:
         return _run_env_check(args)
     if args.tui:
