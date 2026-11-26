@@ -92,6 +92,20 @@ JSON Schema перевіряє форму. Скрипт перевіряє те,
 Вгадувати тут означало б знищити сенс доказів: неправильний профіль гірший за
 відсутній, бо він **виглядає** перевіреним.
 
+## Дослідницькі довідки — не hardware profiles
+
+Датовані спостереження про машину власника з Windows/WSL зберігаються окремо:
+[OWNER-HARDWARE-REFERENCE.md](hardware/OWNER-HARDWARE-REFERENCE.md). Це
+посилання на джерело планування тестів, а не каталог профілю, `wsm-hwcheck`
+report чи evidence bundle. Воно не створює `verified_functions` та не може
+бути використане як доказ native Linux driver binding, firmware state,
+Plasma/display, network/audio чи suspend/resume.
+
+Ревізія плати залишається `unknown`; WSL ISA snapshot — лише input для
+синтетичної перевірки класифікатора, а GTX 1050 Ti — Compatibility candidate,
+не підтверджена робоча конфігурація. Доки немає native Linux report і окремих
+function-test artifacts, такі функції мають лишатися `unknown` або
+`not-assessed`.
 ## Межа довіри та майбутній APPLY
 
 SHA-256 підтверджує лише збіг фактичних байтів із записаним digest. Він не засвідчує автора, code review, походження commit або підпис WSM. `profile.scm` є виконуваним Guile Scheme-кодом, тому контроль цілісності файлу не можна трактувати як дозвіл на його виконання.
