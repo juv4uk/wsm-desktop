@@ -152,7 +152,7 @@ class CliTests(unittest.TestCase):
             )
             result = self.run_cli("--iso", str(iso), "--compact")
         payload = json.loads(result.stdout)
-        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.returncode, 2)
         self.assertEqual(payload["overall"], "incomplete")
         statuses = {item["id"]: item["status"] for item in payload["criteria"]}
         self.assertEqual(statuses["boot-bios"], "not-run")
