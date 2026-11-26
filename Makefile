@@ -1,11 +1,11 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 
 PYTHON ?= python3
 GUIX ?= guix
 
-.PHONY: check check-guix-eval release-gate check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle check-profiles check-agent check-calamares check-channels check-cli-install check-env-preflight check-evidence-drafter check-executor check-guided check-hygiene check-install-steps check-isa check-journal check-live-acceptance check-makefile check-observation check-partition check-perf-baseline check-profile-evidence check-profile-match check-profiles-matrix check-release-verdict check-state check-syntax check-tui
+.PHONY: check check-guix-eval release-gate check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle check-profiles check-agent check-calamares check-channels check-cli-install check-env-preflight check-evidence-drafter check-executor check-guided check-hygiene check-install-steps check-isa check-journal check-live-acceptance check-makefile check-observation check-partition check-perf-baseline check-profile-evidence check-profile-match check-profiles-matrix check-release-verdict check-state check-syntax check-tui check-licences
 
-check: check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa check-live-acceptance check-profiles-matrix check-perf-baseline check-profile-evidence check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-hygiene check-channels check-executor check-cli-install check-calamares check-guided check-tui check-agent check-journal check-env-preflight check-observation
+check: check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa check-live-acceptance check-profiles-matrix check-perf-baseline check-profile-evidence check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-hygiene check-channels check-executor check-cli-install check-calamares check-guided check-tui check-agent check-journal check-env-preflight check-observation check-licences
 
 check-profiles:
 	$(PYTHON) tests/test_system_profiles.py
@@ -74,6 +74,9 @@ check-env-preflight:
 check-observation:
 	$(PYTHON) tests/test_observation_principles.py
 
+check-licences:
+	$(PYTHON) tests/test_licence_headers.py
+
 # Manual, needs Guix: evaluates the Scheme without building anything.
 # Not part of `check` on purpose - a contributor without Guix must still pass.
 check-guix-eval:
@@ -93,6 +96,7 @@ check-channels:
 	$(PYTHON) tests/test_check_channels.py
 	$(PYTHON) scripts/check_channels.py --policy free
 	$(PYTHON) scripts/check_channels.py --policy compatibility
+	$(PYTHON) scripts/check_channels.py --policy compatibility --lock channels/compatibility.lock.scm
 
 check-profiles-matrix:
 	$(PYTHON) tests/test_profiles.py

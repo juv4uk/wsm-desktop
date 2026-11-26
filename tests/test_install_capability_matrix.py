@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Policy invariants for the installer capability matrix.
 
 These tests validate documentation guardrails only. They do not prove hardware
