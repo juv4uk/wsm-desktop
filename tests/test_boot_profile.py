@@ -389,6 +389,25 @@ class BootIdentityTests(unittest.TestCase):
 
 
 class BootCliTests(unittest.TestCase):
+    def test_cli_import_path_supports_checkout_and_packaged_site_packages(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "wsm_perf").mkdir()
+            self.assertEqual(cli.package_search_path(root), root)
+
+            (root / "wsm_perf").rmdir()
+            site = root / "lib/python3.11/site-packages"
+            (site / "wsm_perf").mkdir(parents=True)
+            self.assertEqual(
+                cli.package_search_path(root, (3, 11)),
+                site,
+            )
+
+            # A store path without either layout must not be replaced by cwd.
+            missing = root / "missing"
+            missing.mkdir()
+            self.assertIsNone(cli.package_search_path(missing, (3, 11)))
+
     def test_cli_writes_json_artifact_to_explicit_path(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "boot-profile.json"
