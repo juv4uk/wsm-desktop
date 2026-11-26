@@ -34,6 +34,8 @@ class MinimalLiveProfileTests(unittest.TestCase):
 
     def test_guix_package_installs_python_runtime_and_wsm_commands(self) -> None:
         package = (ROOT / "wsm" / "packages" / "wsm.scm").read_text(encoding="utf-8")
+        self.assertIn("(guix utils)", package)
+        self.assertIn("(version-major+minor", package)
         for path in ("scripts/wsm-hwcheck.sh","scripts/wsm-install.sh","scripts/wsm-install-live.sh"):
             with self.subTest(path=path):
                 self.assertIn(path, package)

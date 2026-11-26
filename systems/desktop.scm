@@ -74,7 +74,7 @@
   ;; Шрифти з кирилицею — обов'язкові, інакше український інтерфейс
   ;; показується квадратами.
   (packages
-   (append (list font-dejavu font-liberation font-noto font-noto-cjk)
+   (append (list font-dejavu font-liberation font-google-noto font-google-noto-sans-cjk)
            %base-packages))
 
   (services
