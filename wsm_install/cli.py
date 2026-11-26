@@ -15,6 +15,7 @@ from typing import Any
 from jsonschema import Draft202012Validator, FormatChecker
 
 from .plan import build_plan, canonical_json, summarize_report
+from .profile import EvidenceUnavailable, load as load_profile_evidence
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SCHEMA = ROOT / "schemas" / "hardware-report.schema.json"
@@ -34,6 +35,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--dry-run", action="store_true", help="required; never deploys or writes disks")
     parser.add_argument("--schema", type=Path, default=DEFAULT_SCHEMA, help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--profile-evidence",
+        type=Path,
+        metavar="PATH",
+        help="optional evidence.json; its profile source and artifact bytes are checked read-only",
+    )
     parser.add_argument("--plan-output", metavar="PATH", help="write draft plan; stdout is used otherwise")
     parser.add_argument("--quiet", action="store_true", help="suppress human summary")
 
@@ -87,6 +94,7 @@ def _safe_plan_output_path(
     output_value: str,
     report_path: Path,
     schema_path: Path,
+    extra_protected_paths: tuple[Path, ...] = (),
 ) -> tuple[Path | None, str | None]:
     """Resolve a regular-file destination without aliasing inputs or device nodes."""
     requested = Path(output_value)
@@ -98,16 +106,20 @@ def _safe_plan_output_path(
         return None, "plan output parent is not a directory"
 
     destination = parent / requested.name
-    for source in (report_path, schema_path):
+    for source in (report_path, schema_path, *extra_protected_paths):
         try:
             source_resolved = source.resolve(strict=True)
         except OSError as exc:
             return None, f"cannot resolve protected input path {source}: {exc}"
         if destination == source_resolved:
+            if source in extra_protected_paths:
+                return None, "plan output must not overwrite a protected input"
             return None, "plan output must not overwrite the report or schema input"
         if destination.exists():
             try:
                 if os.path.samefile(destination, source):
+                    if source in extra_protected_paths:
+                        return None, "plan output must not alias a protected input"
                     return None, "plan output must not alias the report or schema input"
             except OSError as exc:
                 return None, f"cannot verify plan output identity: {exc}"
@@ -398,6 +410,15 @@ def main(argv: list[str] | None = None) -> int:
             print(f"wsm-install: {len(errors) - 20} additional schema errors omitted", file=sys.stderr)
         return 2
 
+    if args.profile_evidence is not None and (
+        args.check_env or args.install or args.guided or args.tui
+    ):
+        print(
+            "wsm-install: --profile-evidence is accepted only by the read-only preflight planner",
+            file=sys.stderr,
+        )
+        return 2
+
     if args.check_env:
         return _run_env_check(args)
     if args.tui:
@@ -408,7 +429,23 @@ def main(argv: list[str] | None = None) -> int:
         return _run_install(args)
 
     assert raw is not None
-    plan, blockers, warnings = build_plan(report, raw, args.backend)
+    profile_evidence = None
+    profile_evidence_root = None
+    if args.profile_evidence is not None:
+        try:
+            profile_evidence = load_profile_evidence(args.profile_evidence)
+        except EvidenceUnavailable as exc:
+            print(f"wsm-install: invalid profile evidence: {exc}", file=sys.stderr)
+            return 2
+        profile_evidence_root = args.profile_evidence.parent
+
+    plan, blockers, warnings = build_plan(
+        report,
+        raw,
+        args.backend,
+        profile_evidence,
+        profile_evidence_root,
+    )
     if not args.quiet:
         print(summarize_report(report), file=sys.stderr)
         for warning in warnings:
@@ -422,8 +459,32 @@ def main(argv: list[str] | None = None) -> int:
 
     rendered = canonical_json(plan) + "\n"
     if args.plan_output:
+        protected_profile_inputs: tuple[Path, ...] = ()
+        if (
+            args.profile_evidence is not None
+            and profile_evidence is not None
+            and profile_evidence_root is not None
+        ):
+            raw_artifacts = profile_evidence.get("artifacts")
+            artifact_paths = (
+                tuple(
+                    profile_evidence_root / item["path"]
+                    for item in raw_artifacts
+                    if isinstance(item, dict) and isinstance(item.get("path"), str)
+                )
+                if isinstance(raw_artifacts, list) else ()
+            )
+            protected_profile_inputs = (
+                args.profile_evidence,
+                profile_evidence_root / "profile.scm",
+                *artifact_paths,
+            )
+
         destination, path_error = _safe_plan_output_path(
-            args.plan_output, Path(args.report), args.schema
+            args.plan_output,
+            Path(args.report),
+            args.schema,
+            protected_profile_inputs,
         )
         if path_error:
             print(f"wsm-install: unsafe plan output: {path_error}", file=sys.stderr)
