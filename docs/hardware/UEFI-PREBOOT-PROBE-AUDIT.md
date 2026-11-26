@@ -35,9 +35,9 @@ wsm-os має власну текстову ліцензію «ВОЛЬНІСТ�
 
 Цей аудит не копіює вихідний код. Для майбутньої реалізації потрібне явне уточнення/дозвіл правовласника або незалежна clean-room реалізація за публічною UEFI Specification. Не робити висновок про несумісність ліцензій без окремого правового рішення.
 
-### QEMU fixture з wsm-os-lisp
+### Параметри QEMU machine profile з wsm-os-lisp
 
-Для тесту доречно повторно використати параметри [machine profile](https://github.com/juv4uk/wsm-os-lisp/blob/main/contracts/qemu-m0-machine-profile.lisp): x86_64, q35, OVMF, 128 MiB RAM, COM1 115200 8N1, display off, reboot disabled, timeout 30 секунд. Це тестовий fixture, не production machine profile або WSM schema. Його evidence має provenance qemu-ovmf, не physical-uefi.
+Для тестового harness доречно повторно використати параметри [machine profile](https://github.com/juv4uk/wsm-os-lisp/blob/main/contracts/qemu-m0-machine-profile.lisp): x86_64, q35, OVMF, 128 MiB RAM, COM1 115200 8N1, display off, reboot disabled, timeout 30 секунд. Цей файл описує конфігурацію тестового середовища; він **не містить OVMF firmware image, готового disk fixture чи snapshot**. Сам firmware binary має походити з окремо визначеного та зафіксованого пакета/джерела harness. Ці параметри не є production machine profile або WSM schema. Результат такого запуску має provenance `qemu-ovmf`, не `physical-uefi`.
 
 ## Аудит наявного probe
 
@@ -143,10 +143,10 @@ ACPI RSDP призначений для надання фізичної адре
 
 **`physical-boot-probe.c`** пише `\WSM-PROBE-LOG.TXT` на **кожен** writable FAT-том, який бачить firmware. Це прямий конфлікт із політикою read-only preflight ([#3](https://github.com/juv4uk/wsm-desktop/issues/3)): інструмент, який змінює чужі диски, не може бути частиною перевірки, навіть якщо пише лише текстовий лог. Другий ефект — приватність: той самий лог містить адреси й execution state, а файл лягає на носій, який користувач потім комусь передає. Якщо WSM колись знадобить фізичний pre-boot збір, він має писати лише на носій, з якого завантажився, і лише після явної згоди.
 
-**`wsm-probe-driver.c`** — та сама проба як `EFI_FV_FILETYPE_DRIVER`, тобто вбудована у firmware й запускається DXE-диспетчером на кожному boot без відома користувача. Для WSM це поза межами за визначенням: ми не модифікуємо firmware і не ставимо компонентів, які виконуються до того, як користувач щось вирішив. Окремо варто зафіксувати upstream-пастку: application і driver не взаємозамінні на рівні коду — driver мусить повернутися, інакше DXE-диспетчер блокується назавжди; саме тому в wsm-os це два файли, а не один із прапорцем.
+**`wsm-probe-driver.c`** — варіант як `EFI_FV_FILETYPE_DRIVER`, вбудований у firmware і автоматично викликаний DXE-диспетчером під час boot, якщо його включено до firmware volume. Це не файловий лог, але й не read-only probe: код читає попередню власну EFI variable через `GetVariable`, збільшує `BootCounter` і викликає `SetVariable` для `WsmProbeData` з `EFI_VARIABLE_NON_VOLATILE | EFI_VARIABLE_BOOTSERVICE_ACCESS | EFI_VARIABLE_RUNTIME_ACCESS`. Отже, він записує стійкий стан у firmware NVRAM, який переживає перезавантаження; повторний запуск змінює значення лічильника. Окрім цього, driver виконує `WRMSR` для `IA32_BIOS_SIGN_ID` та читає `BOOTGUARD_SACM_INFO`, а також зчитує TSC після `Stall`. Для WSM це поза межами за визначенням: жодних автоматичних firmware-variable writes, MSR writes або boot-time компонентів без явного рішення власника. Окремо слід врахувати upstream-пастку: application і driver не взаємозамінні — driver мусить повернутися, інакше DXE-диспетчер заблокується; саме тому в wsm-os це два окремі файли.
 
 **Ліцензія.** Обидва файли під тією ж ліцензією ВОЛЬНІСТЬ, тому висновок розділу «Ліцензійна межа» вище не змінюється.
 
-**Що з цього варто взяти.** Нічого з коду. Варто взяти дисципліну оформлення: кожна проба в wsm-os має власний заголовок, який пояснює, чому це окремий файл, а не редагування попереднього, і які реальні обмеження середовища він обходить. Це та сама практика, якої WSM вимагає від ADR.
+**Що з цього варто взяти.** Нічого з коду. Варто взяти дисципліну оформлення: кожна проба в wsm-os має власний заголовок, який пояснює, чому це окремий файл, а не редагування попереднього, і які реальні обмеження середовища він обходить. Для аудиту важливо розрізняти filesystem writes, persistent EFI-variable writes та MSR writes: усі три типи є зміною стану й заборонені автоматичним WSM preflight. Це та сама практика доказовості, якої WSM вимагає від ADR.
 
 Джерела: [physical-boot-probe.c](https://github.com/juv4uk/wsm-os/blob/main/probe/physical-boot-probe.c), [wsm-probe-driver.c](https://github.com/juv4uk/wsm-os/blob/main/probe/wsm-probe-driver.c), [wsm-os/LICENSE](https://github.com/juv4uk/wsm-os/blob/main/LICENSE).
