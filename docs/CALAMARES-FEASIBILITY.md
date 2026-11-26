@@ -2,10 +2,20 @@
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Дата перевірки: 2026-11-25
-- Розглянута версія: Calamares 3.4.2
-- Статус: дослідження джерел; локальна збірка ще не виконувалася
-- Рішення: 3.4.2 — кандидат для першого прототипу, не підтверджений release target
+## Поточна позиція WSM — 2026-11-26
+
+- Calamares не є обраним frontend для поточного WSM minimal-live RC3. Канонічний напрямок першого preview — **read-only CLI/TUI** поверх preflight → plan → typed Guix handoff; Calamares залишається deprioritized/reference-only до окремого рішення.
+- Детальний CMake/Qt/KF6/KPMcore розбір нижче стосується **лише тегу v3.4.2**. Його не можна переносити на v3.4.3 без diff review та повторної перевірки конкретного source tag.
+- Calamares 3.4.3 Stable — новіший upstream-кандидат, але не підтверджений Guix build target. Опублікований upstream SHA, Debian repack SHA та hash власного завантаження — різні типи даних; WSM має перевірити саме отримані upstream bytes і підпис.
+- Немає доказу, що Calamares 3.4.2 або 3.4.3 зібраний у Guix, що partition module реально встановлено, що Python job API працює в live image або що сценарій пройшов QEMU. Package index і release notes не є build/acceptance evidence.
+- Будь-яке повернення до packaging spike потребує окремого перегляду issue #10 та ADR 0008; воно не може непомітно змінити поточний frontend direction або створити другий owner для partitioning, bootloader чи system activation.
+
+
+- Дата перевірки: 2026-11-26
+- Історична версія детального CMake-аналізу: Calamares 3.4.2
+- Поточний upstream-кандидат: Calamares 3.4.3 Stable
+- Статус: дослідження джерел; локальна Guix-збірка та runtime acceptance не виконувалися
+- Рішення: Calamares **deprioritized**, лише умовний reference; не є обраним frontend або release target
 
 ## Висновок
 
@@ -133,9 +143,9 @@ FS resizer також використовує KPMcore; його доступн�
 - [ ] Calamares стартує з WSM configuration у disposable VM.
 - [ ] Результат тесту зафіксований разом із Guix channel revision та повним build manifest.
 
-## Рекомендація
+## Історична рекомендація (замінена 2026-11-26)
 
-Продовжити з невеликого packaging spike для Calamares 3.4.2 у власному WSM Guix channel. Спершу довести dependency closure і набір модулів. Не починати розробку великого backend, поки не підтверджено, що live-середовище може надійно запускати сам Calamares.
+Цей текст відображає попередню оцінку після аналізу Calamares 3.4.2. Він **не є поточним завданням або рішенням**: packaging spike для 3.4.2 не схвалений і не запускався. Поточна позиція WSM наведена на початку документа; Calamares deprioritized, а minimal-live RC3 використовує read-only CLI/TUI поверх спільного handoff contract.
 
 Цей документ не засвідчує фактичної збірки, запуску або сумісності на фізичному обладнанні.
 
@@ -167,12 +177,24 @@ developer documentation перенесені на
   Це метадані, опубліковані Debian у підписаному source-package notice; перед
   використанням у Guix треба незалежно отримати Codeberg tag/tarball, перевірити
   підпис і перерахувати SHA-256 саме з отриманих байтів.
+- Сторінка релізів Codeberg показує **v3.4.3 Stable** з датою 2026-09-10, підпис
+  `adridg` (GPG key ID `14B6CC381BC256D6`), tarball `calamares-3.4.3.tar.gz`,
+  SHA-256 `144cbbf6bdcebfb21685950db4f0777218519df095f62f4aa392f28348110d18`.
+  Release notes називають дві зміни, що стосуються нас прямо: набір bugfixes і
+  дрібних покращень у `partition` module та виправлення введення з клавіатури
+  для QML-модулів під Wayland. Перше — наш обов'язковий модуль, друге — наш
+  GUI-шлях; обидва є причиною переоцінити 3.4.2 як baseline.
+- SHA-256 upstream tarball (`144cbbf6…`) і Debian `orig.tar.xz` (`b6283226…`)
+  **різні**, бо Debian перепаковує джерело. Тому хеш для Guix-рецепта береться
+  лише з артефакту, який ми самі завантажили й перевірили, а не з чужого
+  package metadata.
 - Nixpkgs snapshot, перевірений 17–20.11.2026, ще пакував 3.4.2; bump до 3.4.3
   перебував у черзі. Це корисна ознака package-maintenance lag, але не доказ
   про Guix і не причина копіювати Nix patches.
 
 Джерела:
 - [Офіційний Calamares portal і Codeberg migration](https://calamares.codeberg.page/)
+- [Codeberg releases: v3.4.3 Stable, 2026-09-10](https://codeberg.org/Calamares/calamares/releases/)
 - [Debian #1148139: archive/migration notice та 3.4.3-1 source checksums](https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1148139)
 - [Debian sid package 3.4.3-1](https://packages.debian.org/unstable/utils/calamares)
 - [Nixpkgs Calamares package status](https://maintainermode.org/p/calamares)

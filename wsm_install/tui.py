@@ -123,7 +123,7 @@ def run_tui(
         body += ["", "↑/↓ або j/k (о/л) — вибір; Enter — далі; q/й — вихід."]
         if evidence_note:
             body += ["", f"Обладнання: {evidence_note}"[: BOX_WIDTH - 4]]
-        screen.render(box("WSM install", body))
+        screen.render(box("WSM • перегляд плану", body))
 
         key = screen.read_key()
         if key == "quit":

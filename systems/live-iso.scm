@@ -20,6 +20,7 @@
 ;; дистрибутива.
 
 (use-modules (gnu)
+             (gnu services shepherd)
              (gnu packages python)
              (gnu packages python-xyz)
              (gnu packages screen)
@@ -106,6 +107,30 @@
     (description "Read-only hardware report, diagnostic-only Guix plan and desktop launcher.")
     (license license:gpl3+)))
 
+;; Приймання образу — це маркер у послідовній консолі, а не «збірка повернула
+;; нуль». Перевірено на опублікованому ISO: у ньому маркера не було, бо цей
+;; профіль його не містив, і жодна перевірка не могла пройти.
+;;
+;; Служба не валить завантаження: якщо консолі немає, маркер просто відсутній.
+(define wsm-live-ready-marker
+  (simple-service 'wsm-live-ready shepherd-root-service-type
+    (list (shepherd-service
+           (documentation "Announce on the serial console that the live system is up.")
+           (provision '(wsm-live-ready))
+           (requirement '(user-processes))
+           (respawn? #f)
+           (start #~(lambda ()
+                      (catch #t
+                        (lambda ()
+                          (call-with-output-file "/dev/console"
+                            (lambda (port)
+                              (display "WSM_LIVE_READY" port)
+                              (newline port)
+                              (force-output port))))
+                        (lambda _ #f))
+                      #t))
+           (stop #~(const #t))))))
+
 (operating-system
   (host-name "wsm-kde")
   (timezone "Europe/Kyiv")
@@ -130,7 +155,8 @@
   (packages (cons* wsm-live-tools screen %base-packages))
   (services
    (append
-    (list (service network-manager-service-type)
+    (list wsm-live-ready-marker
+          (service network-manager-service-type)
           (service wpa-supplicant-service-type)
           (service elogind-service-type)
           (service plasma-desktop-service-type)

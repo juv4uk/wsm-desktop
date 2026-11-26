@@ -198,3 +198,5 @@ evaluation `systems/live-compat.scm` у Guix gate.
 
 Тому статус — `proposal`. Профіль, який неможливо зібрати на зафіксованій ревізії,
 не вважається існуючим.
+
+Склад і призначення desktop-профілю детальніше описано в [DESKTOP-PROFILE.md](DESKTOP-PROFILE.md).

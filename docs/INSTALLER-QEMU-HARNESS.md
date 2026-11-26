@@ -1,44 +1,53 @@
-# Disposable QEMU installer harness
+# Ручний QEMU harness для WSM installer
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Status: **QEMU harness and synthetic-ISO acceptance run in the unified `.github/workflows/ci.yml` job `qemu-acceptance`; Guix/WSM guest acceptance pending**
-- Related: #1 (Guix VM milestone), #13 (read-only CLI), #14 (QEMU integration), #23 (session freshness), #27 (harness)
-- Harness: `scripts/qemu_boot_smoke.py`
-- Synthetic-ISO integration: `.github/workflows/ci.yml` → `qemu-acceptance`.
-- Generic Linux guest smoke: `scripts/ci_qemu_guest_smoke.sh`
+- Статус: **локальний harness; runtime acceptance запускається вручну**
+- Реалізація: `scripts/qemu_boot_smoke.py`
+- Ручні guest checks: [testing/QEMU-GUEST-CI.md](testing/QEMU-GUEST-CI.md)
 
-## What is implemented
+## Що робить harness
 
-The project harness accepts a user-supplied regular ISO, validates bounded disk/RAM/CPU/time parameters, creates a new qcow2 in a temporary directory, runs QEMU with TCG and no network, and optionally requires an exact caller-supplied boot marker. Serial stdout and QEMU stderr are streamed concurrently into fixed-size tail buffers rather than being accumulated in an unbounded temporary log or subprocess pipe. The default caps are 1 MiB for serial and 256 KiB for stderr; the JSON result reports bytes observed and whether either stream was truncated. Marker detection scans the full serial stream (including markers before the retained tail) and handles markers split across read chunks. A wall-clock timeout kills QEMU and the harness drains/closes its pipes before returning. QEMU block-device arguments use structured JSON nodes after `-blockdev`, as exercised by the real-QEMU argument smoke test; serial uses `-serial stdio` and the host drains that pipe. The harness does not attach host block devices or pass through USB/GPU devices or EFI variables.
+Project harness приймає наявний ISO-файл, перевіряє обмеження диска/RAM/CPU/часу, створює новий qcow2 у тимчасовому каталозі й запускає QEMU з TCG та вимкненою мережею. За потреби можна вимагати точний boot marker.
 
-### Bounded output capture
+Serial stdout і QEMU stderr читаються паралельно в буфери обмеженого розміру. JSON-звіт містить хвіст виводу, кількість побачених байтів і прапорці обрізання. Marker шукається в усьому serial stream, навіть якщо його байти вже не входять у збережений хвіст. Після timeout процес QEMU завершується, а потоки закриваються.
 
-The result fields `serial_output_tail` and `qemu_error` are bounded diagnostic tails, not complete logs. Their corresponding byte counters are `serial_bytes_seen` and `stderr_bytes_seen`; `serial_truncated` and `stderr_truncated` indicate that output exceeded the retained caps. The boot marker is evaluated while streaming and is independent of whether its bytes remain in the returned tail.
+Блокові пристрої передаються через структуровані QEMU `-blockdev` arguments. Host block devices не підключаються. Немає USB/GPU passthrough, shared folders або EFI variable store.
 
-The unified `qemu-acceptance` job in `.github/workflows/ci.yml` builds a tiny disposable GRUB/BusyBox guest, passes it through the actual project harness, and requires the guest-only marker `WSM_QEMU_HARNESS_ISO_BOOT_OK`. The same unified job also directly boots the GitHub runner kernel with a minimal BusyBox initramfs and checks `WSM_QEMU_GUEST_INIT_OK`. These tests cover different layers: direct guest-kernel execution and the project's ISO/QEMU harness.
+## Ручний запуск
 
-## What a pass means — and does not mean
+```sh
+python scripts/qemu_boot_smoke.py --help
+python scripts/qemu_boot_smoke.py --iso /absolute/path/to/image.iso
+```
 
-The direct guest smoke proves that a generic Linux kernel and init process can execute under QEMU TCG. The synthetic-ISO integration proves that the project harness can create its disposable disk, launch QEMU, capture serial output, and observe a marker from a controlled guest.
+Для повного набору disposable guest checks:
 
-Neither test boots a Guix-generated WSM system image. Neither runs `wsm-install` inside a WSM guest. Neither validates the host's physical GPU, Wi-Fi, audio, display, storage, or firmware. They must not be presented as WSM ISO, installer, or physical-hardware compatibility evidence.
+```sh
+make qemu-acceptance-manual
+```
 
-## Isolation
+Ці перевірки не запускаються автоматично в GitHub Actions. Hosted CI обмежений швидкими unit/policy tests, документацією та структурними channel checks.
 
-- Only GitHub-hosted runners and QEMU TCG are used.
-- Guest networking is disabled.
-- Writable qcow2 images and generated ISO/initramfs files live only in temporary runner directories and are deleted after the run.
-- No host disks, host block devices, USB/GPU passthrough, shared host folders, EFI variable store, or physical hardware access is used.
-- No Guix/Nix backend, firmware updater, or installer apply operation is invoked.
-- Workflows use `contents: read` and no repository secrets.
+## Що означає успіх
 
-## Next acceptance steps
+Успішний generic guest boot доводить, що конкретне ядро та init-процес запустилися під QEMU TCG. Запуск конкретного ISO доводить лише, що harness зміг стартувати цей ISO та зафіксувати потрібний marker у вибраному сценарії.
 
-1. Obtain the verified, authenticated Guix channel lock from #39; do not substitute a moving channel snapshot.
-2. Build the minimal Guix/WSM guest artifact from that exact snapshot in a bounded disposable runner.
-3. Boot that artifact through `scripts/qemu_boot_smoke.py` and capture the guest marker/log.
-4. Execute `wsm-install --preflight ... --dry-run` inside the guest without host-folder or host-device passthrough.
-5. Assert the guest plan reports `dry_run=true`, `backend_invoked=false`, `disk_access_performed=false`, and `plan_confirmable=false`.
+Це не доводить:
 
-A generic guest boot or synthetic ISO marker is not a substitute for these steps.
+- що ISO є Guix-generated WSM image;
+- що WSM installer виконав встановлення;
+- що система завантажується на фізичному ПК;
+- що GPU, Wi-Fi, audio, display, storage або firmware фізичного хоста сумісні.
+
+Не використовуйте generic guest marker як hardware compatibility evidence або як заяву про готовність інсталятора.
+
+## Ізоляція
+
+- QEMU працює через TCG; KVM і host CPU passthrough не потрібні.
+- Guest networking вимкнено.
+- Writable qcow2 та тимчасові файли створюються у приватному тимчасовому каталозі й видаляються після запуску.
+- Немає host disks, host block devices, USB/GPU passthrough, shared host folders або EFI variable store.
+- Harness не запускає Guix/Nix deployment, firmware updater чи installer APPLY.
+
+Документи harness-у: [QEMU-GUEST-CI.md](testing/QEMU-GUEST-CI.md) — CI-джоби й обов'язковий acceptance; [QEMU-HARNESS-INTEGRATION.md](testing/QEMU-HARNESS-INTEGRATION.md) — інтеграційний експеримент; [HWCHECK-QEMU-GUEST.md](testing/HWCHECK-QEMU-GUEST.md) — прогін колектора в гостьовій системі.

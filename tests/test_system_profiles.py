@@ -235,6 +235,48 @@ class DesktopCompletenessTests(unittest.TestCase):
         self.assertNotIn("pulseaudio-service-type", profile("desktop.scm"))
 
 
+class PublishedIsoTests(unittest.TestCase):
+    """Every live profile must carry the acceptance marker.
+
+    The published 0.1.0-rc2-live-iso image was checked byte for byte: it contains
+    wsm-install, but no WSM_LIVE_READY anywhere. The profile that built it
+    (systems/live-iso.scm) had no marker service, so no acceptance check could
+    ever have passed on that image.
+    """
+
+    def test_every_live_profile_prints_the_marker(self) -> None:
+        for name in ("live.scm", "live-minimal.scm", "live-iso.scm"):
+            with self.subTest(profile=name):
+                self.assertIn("WSM_LIVE_READY", profile(name))
+
+    def test_every_live_profile_registers_the_marker_service(self) -> None:
+        for name in ("live.scm", "live-minimal.scm", "live-iso.scm"):
+            with self.subTest(profile=name):
+                self.assertIn("wsm-live-ready-marker", profile(name))
+
+    def test_the_iso_profile_ships_the_installer_tools(self) -> None:
+        """The image must contain what it is supposed to install with."""
+        self.assertIn("wsm-live-tools", profile("live-iso.scm"))
+
+
+class AudioConflictTests(unittest.TestCase):
+    """The published image shipped both PipeWire and PulseAudio. That was a bug.
+
+    Byte-level inspection of wsm-desktop-kde-hardened-20261125.iso found
+    pipewire-1.6.8 and pulseaudio-17.0 in the same store. #262 removed the
+    system-wide PulseAudio service for exactly this reason; this test keeps it
+    from coming back through the desktop profile.
+    """
+
+    def test_desktop_profile_does_not_start_system_pulseaudio(self) -> None:
+        self.assertNotIn("pulseaudio-service-type", profile("desktop.scm"))
+
+    def test_live_profiles_do_not_start_system_pulseaudio(self) -> None:
+        for name in ("live.scm", "live-minimal.scm", "live-iso.scm"):
+            with self.subTest(profile=name):
+                self.assertNotIn("(service pulseaudio-service-type)", profile(name))
+
+
 class MinimalLiveTests(unittest.TestCase):
     """A second live image, for hardware that cannot run a graphical installer."""
 
