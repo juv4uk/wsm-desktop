@@ -85,13 +85,22 @@ jobs:
       - name: Diagnostics on failure
         if: failure()
         run: |
-          echo "--- guix daemon"
-          sudo systemctl status guix-daemon --no-pager || true
-          sudo tail -50 /var/log/guix-daemon.log || true
-          echo "--- disk"
-          df -h /
-          echo "--- guix"
-          /usr/local/bin/guix --version || true
+          {
+            echo "## Build diagnostics"
+            echo ""
+            echo "### guix"
+            /usr/local/bin/guix --version || true
+            echo ""
+            echo "### guix-daemon"
+            sudo systemctl status guix-daemon --no-pager 2>&1 | head -20 || true
+            sudo tail -30 /var/log/guix-daemon.log 2>&1 || true
+            echo ""
+            echo "### build.log (tail)"
+            echo '```'
+            tail -60 build/build.log 2>/dev/null || echo "no build.log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "diagnostics written to the step summary"
 
       - name: Verify the image
         run: |
