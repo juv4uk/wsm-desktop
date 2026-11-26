@@ -1,71 +1,66 @@
-# Виконання кроків
+# Виконання кроків інсталятора
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Статус: **реалізовано, на реальному диску не запускалось**
-- Код: [`wsm_install/executor.py`](../wsm_install/executor.py)
-- Тести: `tests/test_executor.py` (9)
+- Статус: **preview-only; APPLY вимкнено в усіх frontend-ах**
+- Код: [`wsm_install/executor.py`](../wsm_install/executor.py), [`wsm_install/agent.py`](../wsm_install/agent.py)
+- Frontends: CLI, guided, TUI, Calamares
+- Тести: `tests/test_executor.py`, `tests/test_agent.py`, `tests/test_cli_install.py`, `tests/test_guided.py`, `tests/test_tui.py`, `tests/test_calamares_module.py`
 
-## Чотири правила
+## Єдина межа
 
-Це єдиний модуль інсталятора, який щось виконує. Тому правила тут
-безкомпромісні.
+Спільний `wsm_install.executor.execute()` приймає лише preview-запити:
+будь-яке значення `dry_run`, крім буквального `True`, повертає
+`execute.apply-disabled` до виводу або зовнішньої дії. У модулі немає
+`subprocess`, runner-а або verifier-а.
 
-**1. Dry-run типово.** Реальний запуск вимагає підтвердження, яке **називає
-диск**: `--wipe /dev/nvme0n1`, а не `--yes`.
+Привілейований `wsm-install-agent` також відмовляє на `dry_run=False`
+з `agent.apply-disabled`. Allowlist тут використовується для перевірки
+структури плану, а не як дозвіл на виконання.
 
-**2. Підтвердження перевіряється перед кожною руйнівною дією**, а не один раз на
-початку. Згода, дана для першого кроку, не має мовчки покривати сьомий.
+## Поведінка frontend-ів
 
-**3. Кожен крок перевіряється перед наступним.** `mkfs`, який повернув 0 і
-нічого не створив, — це не успіх. Перевірка читає систему, а не код виходу:
+| Вхід | Дозволено | Заборонено |
+| --- | --- | --- |
+| CLI `--install` | побудувати й показати план | `--execute`, навіть із правильним шляхом підтвердження |
+| CLI `--guided` | вибрати ціль і показати preview | install callback і destructive confirmation |
+| CLI `--tui` | навігація, вибір і preview | install callback та екран «Installing» |
+| Calamares `wsm_deploy` | внутрішній read-only preview | `None` success для неінстальованої системи; missing/false `wsmDryRun` також відхиляється |
 
-| Крок | Що перевіряється |
-| --- | --- |
-| `partprobe` | вузли розділів з'явилися |
-| `mkfs.*` | `blkid` повідомляє очікувану файлову систему |
-| `mount` | пристрій справді є в `/proc/mounts` за цією точкою |
-| `mkdir` | тека існує |
+Guided/TUI можуть завершити побудову preview з кодом 0, але явно повідомляють,
+що APPLY вимкнено й WSM **не встановлено**. Calamares required jobmodule завжди
+повертає failure tuple, бо успішне завершення цього job означало б, що система
+встановлена.
 
-**4. Перший збій зупиняє все.** Продовжити після невдалого монтування й
-відформатувати щось інше — це як машина лишається без системи й без пояснення.
+## Що доведено
 
-## Чому перевірка, а не код виходу
+- Спільний executor відхиляє `dry_run=False` до будь-якого output.
+- Його API не приймає runner, verifier або окремий acknowledgement рядок.
+- Root-агент не має runner/verifier API та не виконує план навіть із root.
+- CLI відхиляє `--execute` до report loading і вибору frontend-а.
+- Guided/TUI приймають лише preview callback.
+- Calamares не повертає `None` для preview, відсутнього або false `wsmDryRun`.
+- Жоден тест цього набору не запускає `sgdisk`, `mkfs`, `mount` чи Guix deploy.
 
-`mkfs.ext4` повертає 0 і в разі, коли диск насправді недописався через збій
-носія. `mount` повертає 0, а потім точка зникає через помилку в `fstab`.
-Код виходу говорить «команда не поскаржилась», а не «система в потрібному
-стані». Тому кожен крок підтверджується окремо.
+## Умови для майбутнього APPLY
 
-## Тестованість
+Реальний виконавець може повернутися лише окремим reviewed PR після виконання
+всіх умов:
 
-`execute()` приймає `runner` і `verifier` як параметри. Тому весь модуль
-перевіряється без диска, root і QEMU: тести підставляють фальшиві виконавці й
-перевіряють порядок, зупинку на збої й відмови.
+1. Immutable typed plan із target identity, filesystem, layout, mount facts
+   та digest одного snapshot.
+2. Повторна перевірка block-device type, major/minor, stable identity,
+   capacity, sector size, partition table і topology перед кожною destructive
+   boundary.
+3. Digest-bound consent, яке перевіряється перед кожним записом; повторне
+   введення `/dev/...` саме по собі не є дозволом.
+4. Закрита й перевірена Guix package closure для кожного executable.
+5. Postconditions після GPT write, partprobe/udev, mkfs і mount: реальні
+   partition nodes, type/offset/size, filesystem UUID/type та mountinfo.
+6. Recovery journal із перевіркою фактичного стану після переривання; журнал
+   не є дозволом повторювати destructive дію.
+7. Disposable-QEMU acceptance з підміною target, interruption і доказом,
+   що сусідній диск не змінюється.
 
-## Чого ще немає
-
-- **Запуску на реальному диску.** Жодного разу.
-- **Відкату.** Якщо крок упав посередині, план відновлення не описаний.
-- **Роботи з UUID.** `/dev/nvme0n1p2` може стати іншим після перезавантаження.
-- **Перевірки, що диск не змінився** між плануванням і виконанням — зараз є лише
-  звірка розміру в планувальнику.
-
-## Як це запускається
-
-```sh
-# подивитись план, нічого не роблячи
-wsm-install --preflight --dry-run --report hw.json --backend guix \
-    --install --target-disk /dev/nvme0n1 --target-size-bytes 274877906944 \
-    --acknowledge-disk /dev/nvme0n1
-
-# виконати (лише з явним підтвердженням)
-wsm-install ... --install --execute --acknowledge-disk /dev/nvme0n1
-```
-
-Без `--execute` — dry-run: кроки перелічуються зі статусом `skipped`, нічого не
-виконується. `--execute` без `--acknowledge-disk` відхиляється до того, як
-прозвучить перша команда.
-
-`--target-size-bytes` обов'язковий навмисно: розмір — це те, чим ловиться
-підмінений диск, і вгадувати його не можна.
+До виконання цих умов підтримуваний шлях закінчується на preflight, typed plan
+і preview. Не запускайте код на фізичному диску.
