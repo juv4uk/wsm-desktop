@@ -233,7 +233,6 @@ def _run_install(args: argparse.Namespace) -> int:
             disk,
             args.firmware,
             acknowledgement=args.acknowledge_disk,
-            expected_size_bytes=args.target_size_bytes,
         )
         steps = plan_steps(layout, args.filesystem, args.mount_point)
         command = backend_command(layout, args.system_file, args.mount_point)
