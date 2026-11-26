@@ -93,6 +93,59 @@ Guix, а не про наш образ: доки ми не зробили дво
 
 Що це означає для нас: власний підпис — це не «ще один `.sig`-файл поруч». Якщо ми хочемо, щоб артефакт можна було перевірити офлайн, треба постачати bundle і trusted root, а не сам лише підпис. Це додає до релізу кілька файлів і один крок перевірки — і саме це варто зважити в ADR, а не вирішувати між ділом.
 
+## Офлайн-перевірка GitHub Artifact Attestations
+
+GitHub уже документує офлайн-перевірку атестацій без додаткового Cosign signing step. На машині з мережею треба підготувати три речі: сам release artifact, bundle атестації та snapshot trusted root.
+
+Для конкретного артефакту:
+
+```sh
+gh attestation download path/to/wsm-desktop-live.iso \
+  --repo juv4uk/wsm-desktop
+gh attestation trusted-root > trusted_root.jsonl
+```
+
+Потім перенести артефакт, отриманий bundle (файл з digest у назві) та `trusted_root.jsonl` в offline-середовище й виконати:
+
+```sh
+gh attestation verify path/to/wsm-desktop-live.iso \
+  --repo juv4uk/wsm-desktop \
+  --bundle path/to/attestation-bundle.jsonl \
+  --custom-trusted-root trusted_root.jsonl \
+  --signer-workflow juv4uk/wsm-desktop/.github/workflows/release-minimal-live.yml
+```
+
+Для автоматизованої перевірки очікуваного GitHub repository ID використовувати JSON-вивід:
+
+```sh
+gh attestation verify path/to/wsm-desktop-live.iso \
+  --repo juv4uk/wsm-desktop \
+  --bundle path/to/attestation-bundle.jsonl \
+  --custom-trusted-root trusted_root.jsonl \
+  --signer-workflow juv4uk/wsm-desktop/.github/workflows/release-minimal-live.yml \
+  --format json \
+  --jq '.[].verificationResult.signature.certificate.sourceRepositoryIdentifier'
+```
+
+Числовий ID треба заздалегідь отримати з довіреного онлайн-джерела (`gh api repos/juv4uk/wsm-desktop --jq .id`) і порівняти з кожним ID у результаті. Це важливо, бо офлайн-перевірка за `--repo owner/name` звіряє підписану назву, але не може виявити подальше перейменування репозиторію або повторне використання старої назви.
+
+### Межі trust-root snapshot
+
+- Snapshot, отриманий через `gh attestation trusted-root`, не має вбудованого строку завершення, але його слід оновлювати щоразу перед імпортом нового набору підписаних матеріалів.
+- Ключі Sigstore можуть ротуватися кілька разів на рік. Старий snapshot не дає дізнатися про відкликання ключа після його створення; це властиве обмеження офлайн-моделі, а не помилка команди.
+- Для майбутнього WSM release workflow треба окремо вирішити, чи публікувати bundle та snapshot як release assets. Поточний workflow перевіряє атестацію онлайн до публікації, але **ще не обіцяє повний offline-verification kit**.
+- Наявність bundle не замінює перевірку точного signer workflow, repository ID, source ref і digest артефакту.
+
+### Стан Cosign
+
+Станом на 26.11.2026 upstream GitHub Releases показує Cosign 3.1.4 як актуальний випуск 3.1.x. У 3.1.3 було виправлено verification bypass через неочікуваний public key у legacy bundle. Лінійка 3.1.x за замовчуванням створює стандартизований новий bundle format і продовжує читати обидва формати. Тому, якщо M6 колись обере Cosign, WSM має вимагати новий bundle format і відхиляти legacy bundles у своїй policy; не покладатися на auto-detection як на security policy.
+
+Джерела:
+- [GitHub Docs — verifying attestations offline](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/verify-attestations-offline)
+- [Cosign releases — new bundle default і security fix для legacy bundle](https://github.com/sigstore/cosign/releases)
+
+Цей розділ фіксує доступний механізм і його обмеження. Він не ратифікує M6, не додає Cosign як залежність і не змінює набір release assets.
+
 ## Що з цим робити
 
 Нічого не змінюємо в цьому документі: це вхідні дані. Рішення про provenance і підпис оформлюється окремим ADR разом із політикою підпису образів (M6), і в ньому має бути три речі:
