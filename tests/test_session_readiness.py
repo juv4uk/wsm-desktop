@@ -174,7 +174,7 @@ class SessionReadinessTests(unittest.TestCase):
         available = self.collect()
         self.assertEqual(list(validator.iter_errors(available)), [])
 
-        partial = self.collect(which=lambda name: None)
+        partial = self.collect(which=lambda name, **_kwargs: None)
         self.assertEqual(list(validator.iter_errors(partial)), [])
 
     def test_runtime_artifact_is_atomic_private_and_contains_no_raw_session_id(self) -> None:
