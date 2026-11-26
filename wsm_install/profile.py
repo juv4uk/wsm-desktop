@@ -38,13 +38,8 @@ def load(path: Path) -> dict[str, Any]:
     return value
 
 
-def _file_sha256_problem(
-    raw_path: str,
-    expected_sha256: str,
-    artifact_root: Path | None,
-    label: str,
-) -> list[str]:
-    """Verify one safe relative file path and its exact SHA-256."""
+def _safe_relative_path_problem(raw_path: str, label: str) -> str | None:
+    """Reject absolute, traversing, non-canonical or platform-specific paths."""
     parts = raw_path.split("/")
     relative = PurePosixPath(raw_path)
     if (
@@ -55,7 +50,20 @@ def _file_sha256_problem(
         or any(part in ("", ".", "..") for part in parts)
         or relative.as_posix() != raw_path
     ):
-        return [f"{label}/path is not a safe relative path: {raw_path!r}"]
+        return f"{label}/path is not a safe relative path: {raw_path!r}"
+    return None
+
+
+def _file_sha256_problem(
+    raw_path: str,
+    expected_sha256: str,
+    artifact_root: Path | None,
+    label: str,
+) -> list[str]:
+    """Verify one safe relative file path and its exact SHA-256."""
+    unsafe_path = _safe_relative_path_problem(raw_path, label)
+    if unsafe_path:
+        return [unsafe_path]
 
     if artifact_root is None:
         return [f"{label} cannot be verified without an evidence directory"]
@@ -129,6 +137,24 @@ def problems(
     containing evidence.json; this makes it impossible for the installer to
     accept a digest that has not been checked against actual bytes.
     """
+    # Report path-safety violations before JSON Schema shape errors so callers
+    # receive the actionable filesystem reason (absolute path / traversal).
+    early_path_problems: list[str] = []
+    profile_source = document.get("profile_source")
+    if isinstance(profile_source, dict) and isinstance(profile_source.get("path"), str):
+        issue = _safe_relative_path_problem(profile_source["path"], "profile_source")
+        if issue:
+            early_path_problems.append(issue)
+    raw_artifacts = document.get("artifacts")
+    if isinstance(raw_artifacts, list):
+        for index, artifact in enumerate(raw_artifacts):
+            if isinstance(artifact, dict) and isinstance(artifact.get("path"), str):
+                issue = _safe_relative_path_problem(artifact["path"], f"artifacts/{index}")
+                if issue:
+                    early_path_problems.append(issue)
+    if early_path_problems:
+        return early_path_problems
+
     schema = schema or load_schema()
 
     try:
