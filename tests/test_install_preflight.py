@@ -28,6 +28,50 @@ def load_fixture(name: str) -> tuple[dict, bytes]:
     return json.loads(raw), raw
 
 
+def make_profile_evidence(report: dict, root: Path, report_bytes: bytes) -> dict:
+    """Create a synthetic evidence bundle bound to exact profile/report bytes."""
+    profile_path = root / "profile.scm"
+    if not profile_path.is_file() or profile_path.is_symlink():
+        raise AssertionError("test fixture must create profile.scm before evidence")
+    profile_bytes = profile_path.read_bytes()
+    payload = b"synthetic installer test evidence\n"
+    artifact_dir = root / "artifacts"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    (artifact_dir / "dmesg.txt").write_bytes(payload)
+    (artifact_dir / "wsm-hwcheck-report.json").write_bytes(report_bytes)
+    return {
+        "schema": "wsm-profile-evidence/2",
+        "profile": {"vendor": "TEST", "model": "FIXTURE", "slug": "test/fixture"},
+        "report_id": report["report_id"],
+        "report_schema_version": report["schema_version"],
+        "profile_source": {
+            "path": "profile.scm",
+            "sha256": hashlib.sha256(profile_bytes).hexdigest(),
+        },
+        "isa_level": "x86-64-v2",
+        "verified_on": "2026-11-26",
+        "verified_by": "local agent",
+        "verified_functions": [{
+            "name": "synthetic-fixture",
+            "status": "pass",
+            "evidence": ["artifacts/dmesg.txt"],
+        }],
+        "known_limitations": [],
+        "not_assessed": ["physical-device-functionality"],
+        "artifacts": [
+            {
+                "kind": "functional-test-log",
+                "path": "artifacts/dmesg.txt",
+                "sha256": hashlib.sha256(payload).hexdigest(),
+            },
+            {
+                "kind": "wsm-hwcheck-report",
+                "path": "artifacts/wsm-hwcheck-report.json",
+                "sha256": hashlib.sha256(report_bytes).hexdigest(),
+            },
+        ],
+    }
+
 class InstallerPlanTests(unittest.TestCase):
     def test_observed_report_emits_deterministic_guix_plan(self) -> None:
         report, raw = load_fixture("desktop-observed.json")
@@ -101,6 +145,36 @@ class InstallerPlanTests(unittest.TestCase):
                 ])
             self.assertEqual(result, 2)
             self.assertEqual(report_path.read_bytes(), report_bytes)
+
+    def test_plan_output_cannot_overwrite_profile_configuration_or_artifacts(self) -> None:
+        report, _ = load_fixture("desktop-observed.json")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report_path = root / "report.json"
+            report_path.write_bytes((FIXTURES / "desktop-observed.json").read_bytes())
+            profile_dir = root / "test" / "fixture"
+            profile_dir.mkdir(parents=True)
+            profile_bytes = b";; synthetic test profile\\n"
+            profile_path = profile_dir / "profile.scm"
+            profile_path.write_bytes(profile_bytes)
+            evidence = make_profile_evidence(report, profile_dir, report_path.read_bytes())
+            evidence_path = profile_dir / "evidence.json"
+            evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+            artifact_path = profile_dir / "artifacts" / "dmesg.txt"
+            artifact_bytes = artifact_path.read_bytes()
+
+            for protected_path, expected_bytes in (
+                (profile_path, profile_bytes),
+                (artifact_path, artifact_bytes),
+            ):
+                with self.subTest(protected_path=protected_path), contextlib.redirect_stderr(io.StringIO()):
+                    result = main([
+                        "--preflight", "--report", str(report_path), "--backend", "guix",
+                        "--dry-run", "--profile-evidence", str(evidence_path),
+                        "--plan-output", str(protected_path),
+                    ])
+                self.assertEqual(result, 2)
+                self.assertEqual(protected_path.read_bytes(), expected_bytes)
 
     def test_plan_output_rejects_hardlink_and_symlink_aliases(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -179,6 +253,102 @@ class InstallerPlanTests(unittest.TestCase):
         report["devices"][0]["discovery_status"] = "not-detected"
         _, blockers, _ = build_plan(report, raw, "nix")
         self.assertTrue(any("not-detected" in item for item in blockers))
+
+    def test_cli_accepts_profile_evidence_and_records_provenance(self) -> None:
+        report, _ = load_fixture("desktop-observed.json")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report_path = root / "report.json"
+            report_path.write_bytes((FIXTURES / "desktop-observed.json").read_bytes())
+            profile_dir = root / "test" / "fixture"
+            profile_dir.mkdir(parents=True)
+            (profile_dir / "profile.scm").write_text(";; synthetic test fixture\n", encoding="utf-8")
+            evidence = make_profile_evidence(report, profile_dir, report_path.read_bytes())
+            evidence_path = profile_dir / "evidence.json"
+            evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+            plan_path = root / "plan.json"
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                result = main([
+                    "--preflight", "--report", str(report_path), "--backend", "guix",
+                    "--dry-run", "--profile-evidence", str(evidence_path),
+                    "--plan-output", str(plan_path),
+                ])
+            self.assertEqual(result, 0, stderr.getvalue())
+            plan = json.loads(plan_path.read_text(encoding="utf-8"))
+            self.assertEqual(plan["profile_evidence"]["slug"], "test/fixture")
+            self.assertEqual(plan["profile_evidence"]["report_id"], report["report_id"])
+
+    def test_cli_refuses_changed_report_bytes_when_report_id_is_unchanged(self) -> None:
+        report, report_bytes = load_fixture("desktop-observed.json")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report_path = root / "report.json"
+            report_path.write_bytes(report_bytes)
+            profile_dir = root / "test" / "fixture"
+            profile_dir.mkdir(parents=True)
+            (profile_dir / "profile.scm").write_text(";; synthetic test fixture\\n", encoding="utf-8")
+            evidence = make_profile_evidence(report, profile_dir, report_bytes)
+            evidence_path = profile_dir / "evidence.json"
+            evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+
+            report["environment"]["kernel_release"] = "different-kernel-with-same-report-id"
+            report_path.write_text(json.dumps(report), encoding="utf-8")
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                result = main([
+                    "--preflight", "--report", str(report_path), "--backend", "guix",
+                    "--dry-run", "--profile-evidence", str(evidence_path),
+                ])
+        self.assertEqual(result, 3)
+        self.assertIn("source-report SHA-256 does not match", stderr.getvalue())
+
+    def test_plan_output_cannot_overwrite_a_functional_evidence_artifact(self) -> None:
+        report, report_bytes = load_fixture("desktop-observed.json")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report_path = root / "report.json"
+            report_path.write_bytes(report_bytes)
+            profile_dir = root / "test" / "fixture"
+            profile_dir.mkdir(parents=True)
+            (profile_dir / "profile.scm").write_text(";; synthetic test fixture\\n", encoding="utf-8")
+            evidence = make_profile_evidence(report, profile_dir, report_bytes)
+            evidence_path = profile_dir / "evidence.json"
+            evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+            artifact_path = profile_dir / "artifacts" / "dmesg.txt"
+            original = artifact_path.read_bytes()
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                result = main([
+                    "--preflight", "--report", str(report_path), "--backend", "guix",
+                    "--dry-run", "--profile-evidence", str(evidence_path),
+                    "--plan-output", str(artifact_path),
+                ])
+        self.assertEqual(result, 2)
+        self.assertIn("must not overwrite a protected input", stderr.getvalue())
+        self.assertEqual(artifact_path.read_bytes(), original)
+
+    def test_cli_refuses_profile_evidence_for_a_different_report(self) -> None:
+        report, _ = load_fixture("desktop-observed.json")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            report_path = root / "report.json"
+            report_path.write_bytes((FIXTURES / "desktop-observed.json").read_bytes())
+            profile_dir = root / "test" / "fixture"
+            profile_dir.mkdir(parents=True)
+            (profile_dir / "profile.scm").write_text(";; synthetic test fixture\\n", encoding="utf-8")
+            evidence = make_profile_evidence(report, profile_dir, report_path.read_bytes())
+            evidence["report_id"] = "different-report"
+            evidence_path = profile_dir / "evidence.json"
+            evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                result = main([
+                    "--preflight", "--report", str(report_path), "--backend", "guix",
+                    "--dry-run", "--profile-evidence", str(evidence_path),
+                ])
+        self.assertEqual(result, 3)
+        self.assertIn("report_id does not match", stderr.getvalue())
 
 if __name__ == "__main__":
     unittest.main()
