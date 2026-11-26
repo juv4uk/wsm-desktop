@@ -53,7 +53,7 @@ def build_parser() -> argparse.ArgumentParser:
     install.add_argument("--system-file", default="systems/desktop.scm",
                          help="Guix system file handed to guix system init")
     install.add_argument("--execute", action="store_true",
-                         help="actually run the steps; requires --acknowledge-disk")
+                         help="request APPLY; currently refused until target-bound authorization is implemented")
     install.add_argument("--acknowledge-disk", metavar="PATH",
                          help="must repeat --target-disk exactly; there is no --yes")
     return parser
