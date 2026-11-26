@@ -323,6 +323,26 @@ class SplitAssetTests(unittest.TestCase):
     def test_iso_size_is_reported_before_any_decision(self) -> None:
         self.assertIn("ISO size:", self.text)
 
+class SplitChecksumTests(unittest.TestCase):
+    """After a split, the manifests must describe what is actually published."""
+
+    def setUp(self) -> None:
+        self.text = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
+
+    def test_checksums_are_rewritten_after_the_split(self) -> None:
+        split = self.text.index("Поділити образ на частини")
+        rewrite = self.text.index("checksums rewritten for", split)
+        self.assertGreater(rewrite, split)
+
+    def test_manifest_records_parts(self) -> None:
+        self.assertIn('artifact["published_as"] = "parts"', self.text)
+        self.assertIn('artifact["parts"] = parts', self.text)
+
+    def test_sha256sums_covers_the_parts_not_the_removed_image(self) -> None:
+        """The read-back check rejects a listed file that is not in the upload."""
+        self.assertIn("covered = [root / name for name in parts]", self.text)
+        self.assertIn("if not split:", self.text)
+
 
 
 if __name__ == "__main__":
