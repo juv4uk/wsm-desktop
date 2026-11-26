@@ -171,11 +171,10 @@ image-live-minimal:
 
 # Повні QEMU runtime checks запускаються лише вручну, не в `make check` і не в CI.
 qemu-acceptance-manual:
-	command -v qemu-system-x86_64 >/dev/null
-	command -v busybox >/dev/null
-	command -v cpio >/dev/null
-	command -v modprobe >/dev/null
-	$(PYTHON) -c 'import jsonschema'
+	@for tool in qemu-system-x86_64 busybox cpio modprobe ldd gzip sudo mknod timeout zstd xz; do \
+		command -v "$tool" >/dev/null || { echo "qemu-acceptance-manual: missing host tool: $tool" >&2; exit 1; }; \
+	done
+	$(PYTHON) -c 'import sys; from importlib.metadata import version; assert sys.implementation.cache_tag == "cpython-311", "use PYTHON=python3.11"; assert version("jsonschema") == "4.26.0", "install requirements-dev.txt with Python 3.11"'
 	bash scripts/ci_qemu_guest_smoke.sh
 	$(PYTHON) scripts/ci_qemu_hwcheck_guest.py
 	$(PYTHON) scripts/ci_cxl_qemu_guest.py --timeout 90
