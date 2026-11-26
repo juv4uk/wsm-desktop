@@ -61,6 +61,23 @@ Provenance відповідає на «хто і з якого коміту це
 від зафіксованого коміту каналу — тобто пін каналу і є фіксацією інструментів.
 Окреме поле з версіями додало б читабельності, але не додало б доказу.
 
+Корисний орієнтир — `mkosi` (проєкт systemd), який збирає образи через
+`systemd-repart` і має для відтворюваності окремі ручки: `SourceDateEpoch=`
+(притискає mtime файлів), `Seed=` (детерміновані UUID і PARTUUID замість
+випадкових) і `ToolsTree=` (фіксує версії інструментів збірки замість того, щоб
+брати їх із хоста). Для WSM `mkosi` не підходить як засіб — він обгортає
+`dnf`/`apt`/`pacman`, а наш backend — Guix, — але список того, що ламає
+відтворюваність, у нього той самий.
+
+Наскільки це недрібниця: існує окремий проєкт
+[`edgelesssys/reproducible-mkosi`](https://github.com/edgelesssys/reproducible-mkosi),
+який документує «години налагодження» і десяток upstream-виправлень лише для
+того, щоб дві збірки збігалися: поширення `SOURCE_DATE_EPOCH` у `systemd-repart`
+і `mcopy`, нормалізація mtime, сортування входу `cpio`, відмова від розширених
+PAX-заголовків із atime/ctime. Тобто «Guix уміє відтворювані ISO» — це про
+Guix, а не про наш образ: доки ми не зробили двох збірок і не порівняли байти,
+ми не знаємо, які з цих пасток у нас увімкнені.
+
 **Чого в нас немає:** жодного прогону, який довів би, що дві збірки дають той
 самий SHA-256. Тому WSM не заявляє відтворюваність образу — лише provenance і
 цілісність. Твердження «відтворювано» вимагає двох незалежних збірок і
@@ -74,4 +91,4 @@ Provenance відповідає на «хто і з якого коміту це
 2. чи входить `gh attestation verify` в інструкцію перевірки поруч із `SHA256SUMS`;
 3. чи додаємо ми власний підпис поверх атестації, чи поки покладаємося на неї.
 
-Джерела: [reproducible-builds.org — system images](https://reproducible-builds.org/docs/system-images/), [xorriso: reproducibility залежить від версії інструментів](https://lists.reproducible-builds.org/pipermail/rb-general/2025-April/003728.html), [GitHub Docs — artifact attestations](https://docs.github.com/en/actions/concepts/security/artifact-attestations), [actions/attest](https://github.com/actions/attest/), [gh attestation verify](https://cli.github.com/manual/gh_attestation_verify).
+Джерела: [mkosi: SourceDateEpoch, Seed, ToolsTree](https://github.com/systemd/mkosi/blob/main/mkosi/resources/man/mkosi.1.md), [reproducible-mkosi: перелік upstream-виправлень](https://github.com/edgelesssys/reproducible-mkosi), [reproducible-builds.org — system images](https://reproducible-builds.org/docs/system-images/), [xorriso: reproducibility залежить від версії інструментів](https://lists.reproducible-builds.org/pipermail/rb-general/2025-April/003728.html), [GitHub Docs — artifact attestations](https://docs.github.com/en/actions/concepts/security/artifact-attestations), [actions/attest](https://github.com/actions/attest/), [gh attestation verify](https://cli.github.com/manual/gh_attestation_verify).
