@@ -222,6 +222,12 @@ user-writable PATH. Для Shepherd змінну `SHEPHERD_SOCKET` з успад
 - Жоден з цих знімків не доводить готовність Plasma/Wayland desktop session.
   Потрібний окремий session-level marker, пов'язаний із фактичним входом
   користувача.
+- Це спостереження поточного boot, не shutdown trace: воно не доводить, що
+  Shepherd виконав усі stop handlers або що цільові файлові системи успішно
+  розмонтовані. Upstream-клас помилки stop/unmount у Shepherd 1.0.9 описано в
+  [UPSTREAMS.md](UPSTREAMS.md); точну версію Shepherd із pinned Guix channel
+  цей collector не перевіряє. Installer shutdown/unmount acceptance має бути
+  окремим тестом і не виводиться з herd log.
 
 Відсутній manager/CLI, недоступний socket, nonzero exit, malformed procfs або
 timeout дають `unavailable/partial/unknown`, не нуль і не pass. Невідомий PID 1
