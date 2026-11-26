@@ -2,22 +2,27 @@
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-> **Поточний стан: read-only preview.** CLI, guided, TUI, Calamares та
-> privileged agent не виконують запис на диск. `--execute` і будь-який
-> `dry_run=False` відхиляються. Успішний preview не означає, що WSM
-> встановлено; рішення про installer frontend лишається окремим ADR.
+> **Поточний шлях minimal-live: read-only CLI/TUI preview.** Live-образ
+> запускає `wsm-install-live`, який збирає локальний hardware report і
+> відкриває WSM TUI. Guided CLI використовує той самий typed plan/handoff
+> contract. Усі entrypoints лишаються preview-only: `--execute` і
+> `dry_run=False` відхиляються; успішний preview не означає, що WSM
+> встановлено. Остаточний frontend інсталятора ще не ратифікований за #10.
+> Calamares — deprioritized/reference-only і не входить до поточного minimal-live шляху.
 
 > Цей документ описує початковий Guix-oriented deployment design. Nix/NixOS backend потребуватиме окремого adapter design; Guix-specific кроки не можна переносити до нього.
 
-## Два входи, один бекенд
+## Один typed contract, поточний CLI/TUI шлях
 
-| Вхід | Кому | Чому |
+| Поверхня | Статус | Межі |
 | --- | --- | --- |
-| **`wsm-install` (CLI)** | типово, і єдиний на слабкому залізі | не тягне Qt/KDE, працює послідовною консоллю, потребує мінімум пам'яті |
-| Calamares | опційно, для тих, кому потрібен графічний майстер | готовий UI, локалізація, екран розбиття |
+| `wsm-install-live` у minimal-live | **Поточний entrypoint preview** | Створює hardware report і відкриває WSM TUI; APPLY вимкнено |
+| `wsm-install` та guided CLI | **Діагностичні/планувальні входи** | Використовують спільні report, typed plan і Guix handoff contracts; не пишуть на диск |
+| Calamares | **deprioritized/reference-only** | Не входить до minimal-live образу, не є вибраним frontend і не є підтвердженою Guix-залежністю |
 
-Обидва викликають **той самий бекенд**: `partition.py`, `install_steps.py`,
-`executor.py`. Це не два інсталятори, а два обличчя одного.
+Усі поточні поверхні спираються на спільні hardware report, planning і
+typed Guix handoff contracts. Це не означає, що існує завершений installer
+або що будь-який frontend має право виконувати план: APPLY наразі вимкнено.
 
 ### Чому CLI первинний
 
@@ -29,15 +34,16 @@
 графічного інсталятора, — це залізоорієнтованість для тих, у кого вже є
 достатньо заліза.
 
-Тому CLI — не «тимчасово, поки не зробимо Calamares». Це основний шлях.
-Calamares лишається як зручність для тих, кому вона потрібна.
+Тому CLI/TUI — поточний мінімальний live-шлях, а не тимчасова заміна
+Calamares. Потреба в майбутньому графічному frontend-і залишається окремим
+рішенням #10; не слід подавати Calamares як уже обраний або доступний варіант.
 
 ### Два образи, не один
 
-| Образ | Що всередині | Для чого |
+| Образ | Що всередині | Статус |
 | --- | --- | --- |
-| `systems/live.scm` | KDE Plasma, SDDM, звук, друк | звичайна машина |
-| `systems/live-minimal.scm` | консоль, мережа, інструменти WSM | слабке залізо, сервер, відновлення |
+| `systems/live-minimal.scm` | Консоль, мережа, інструменти WSM, CLI/TUI | Поточна основа minimal-live preview |
+| `systems/live.scm` | KDE Plasma, SDDM, звук, друк | Окремий desktop/live напрям; не є доказом готового installer UX |
 
 Мінімальний образ **не містить** ні графічного середовища, ні Calamares: уся
 його суть — обійтися без них. Він несе ті самі інструменти й той самий маркер
@@ -67,15 +73,24 @@ Calamares лишається як зручність для тих, кому в�
 Рішення ухвалюється в [#10](https://github.com/juv4uk/wsm-desktop/issues/10). Доти будь-який
 рядок нижче — це проєкт, а не чинна архітектура.
 
-## Обрана версія для прототипу
+## Calamares: лише історичний/умовний reference
 
-Початковий кандидат — **Calamares 3.4.2** (tag `v3.4.2`). До завершення feasibility/build перевірок це кандидат, а не підтримувана чи зафіксована релізна залежність. Деталі — у [оцінці можливості інтеграції](CALAMARES-FEASIBILITY.md).
+Calamares не обраний для поточного minimal-live preview і не входить до
+підтверджених release dependencies. Документ [CALAMARES-FEASIBILITY.md](CALAMARES-FEASIBILITY.md)
+містить історичний CMake-аналіз 3.4.2 та окрему upstream-оцінку 3.4.3;
+жодна з цих версій не доведена як Guix build target. Повторний розгляд
+потребуватиме окремого рішення, pinned source/signature/hash, Guix closure,
+partition-module acceptance і QEMU перевірки.
 
-## Ролі
+## Умовна модель Calamares (не поточний шлях)
 
-Calamares — це спільний UI та workflow engine. Він не замінює системний deployment engine обраного backend-а.
+Наведені нижче технічні нотатки описують лише можливий майбутній adapter,
+якщо його повторно розглянуть у межах #10. Вони не є специфікацією вже
+обраного frontend-а, залежністю minimal-live ISO або дозволом на APPLY.
 
-Для Guix System WSM додає інтеграцію між даними Calamares та Guix System configuration. Nix/NixOS deployment має бути окремим backend adapter із власним порядком build та activation.
+Calamares може виступати UI/workflow engine, але не замінює системний
+deployment engine. Для Guix він потребував би окремого adapter; Nix/NixOS
+потребував би іншого backend adapter і не входить до першого preview.
 
 ## Модульна модель Calamares
 
@@ -83,7 +98,11 @@ Calamares розрізняє user-visible view modules та job modules. View mo
 
 Перед реалізацією адаптера потрібно зафіксувати конкретну версію Calamares і перевірити її inline Python API. Не слід програмувати проти випадково знайденого прикладу іншої версії.
 
-## Запропонований workflow
+## Умовний workflow Calamares (не реалізовано)
+
+Наведений нижче історичний ескіз не є поточним user journey або
+підтвердженою інсталяційною процедурою. Його не можна публікувати як
+інструкцію для користувача або виконувати без окремого ADR та acceptance.
 
 1. Welcome та інформація про статус підтримки.
 2. Мова та клавіатура.
@@ -97,8 +116,6 @@ Calamares розрізняє user-visible view modules та job modules. View mo
 10. Guix system build / перевірка конфігурації.
 11. Guix system init.
 12. Перевірка завершення та звіт.
-
-Порядок буде уточнено після тестування обраної версії Calamares та її модулів.
 
 ## Що не можна просто взяти зі стандартного Calamares
 
