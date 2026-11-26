@@ -190,8 +190,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"wsm-install-agent: {exc.code}: {exc.message}", file=sys.stderr)
         return 1
     print(
-        f"wsm-install-agent: plan accepted ({len(steps)} step(s), "
-        f"{'dry run' if args.dry_run else 'executed'})"
+        f"wsm-install-agent: previewed {len(steps)} step(s); "
+        "APPLY disabled; no disk command executed"
     )
     return 0
 
