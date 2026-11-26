@@ -192,18 +192,18 @@ JSON-масивом аргументів, який передається як `
 | Невільна залежність потрапляє до Free payload (WSM policy) | Nonguix лише в окремому Compatibility-профілі; Free channel відхиляє його | політика каналів перевіряє розділення профілів | `covered` | `tests/test_check_channels.py::test_nonguix_is_refused_by_free_policy` |
 | Неперевірена тема/плагін виконує код (Omarchy CVE-2026-108913) | WSM поки не має механізму встановлення сторонніх тем/плагінів; поява такого механізму вимагатиме окремого threat review, provenance та явної згоди | немає такого install/execution path у поточному дереві | `out-of-scope` | — |
 | Дія на застарілому стані (partition table після запису) | таблиця перечитується перед форматуванням | тест перевіряє порядок кроків | `covered` | `tests/test_install_steps.py::test_partition_table_is_reread_before_formatting` |
-| Неправильний диск (Omarchy #8129, підміна імені пристрою) | відмова на running system disk, partition path і disk image | тест відмови до будь-якого запису | `covered` | `tests/test_partition.py::test_running_system_disk_is_refused` |
-| Перервана операція отримує completion marker (Omarchy #16421) | журнал пише «до» і «після» з fsync | тест викликає перерваний крок і перевіряє звіт | `covered` | `tests/test_journal.py::test_interrupted_step_is_called_out` |
+| USB device metadata виконується як Hyprland Lua (Omarchy #8129) | WSM не реалізує Hyprland device-toggle або генерацію Lua з USB descriptors | відповідної інтеграції в WSM немає | `out-of-scope` | — |
+| FIDO2 migration передчасно позначається завершеною без виконання precondition (Omarchy #16421) | майбутній WSM migration runner має лишати невирішені preconditions у pending; власного FIDO2 migration runner поки немає | відповідну migration-підсистему WSM не реалізовано | `out-of-scope` | — |
 | Видалення чужих boot entries на shared ESP (Omarchy #14949) | ESP монтується всередину цілі; чужий ESP не форматується | частково: тест перевіряє mountpoint, а не вміст ESP | `partial` | `tests/test_install_steps.py::test_esp_is_mounted_inside_the_target_not_outside` |
 | `root=` втрачено під час kernel/package transaction (Omarchy #6951) | bootloader-конфіг генерує Guix System; WSM не пише `root=` сам | немає — WSM не має власного boot-кроку | `out-of-scope` | — |
 | LUKS recovery slot видалено при зміні ключа (Omarchy #14874) | шифрування не реалізоване | немає коду, який чіпає slots | `out-of-scope` | — |
-| Legacy/CSM multi-disk boot order (Omarchy #20178) | підтримується лише UEFI | немає перевірки порядку завантаження між дисками | `not-covered` | — |
+| Legacy/CSM multi-disk boot-order hand-off (Omarchy #20178) | BIOS layout створює `bios_grub`, але preview не доводить, що firmware після майбутнього встановлення стартує з цільового диска | немає двохдискового Legacy/CSM QEMU або physical acceptance | `not-covered` | — |
 | Міграція власних артефактів (`wsm-profile-evidence/1` → `/2`) | плану міграції немає | немає | `not-covered` | — |
 
 `out-of-scope` не означає «вирішено»: це означає, що коду, який міг би зламатися
 саме так, у WSM поки немає. Щойно з'явиться власний boot-крок, шифрування,
 механізм встановлення сторонніх тем/плагінів або друга версія артефакту —
-відповідний рядок переходить у `not-covered` і отримує тест.
+відповідний рядок переходить у `not-covered` і отримує тест. Це також стосується майбутнього FIDO2 або іншого системного migration workflow.
 
 Ці upstream reports — не докази дефектів у WSM або на конкретному обладнанні.
 Це джерела для regression fixtures та acceptance вимог; кожен сценарій має

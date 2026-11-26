@@ -108,6 +108,34 @@ class OmarchyRegisterTest(unittest.TestCase):
             rows[0][4],
         )
 
+    def _row_for_source(self, source: str) -> list[str]:
+        matches = [row for row in self.rows if source in row[0]]
+        self.assertEqual(len(matches), 1, f"expected one row for {source!r}")
+        return matches[0]
+
+    def test_usb_metadata_injection_is_not_mapped_to_disk_refusal(self) -> None:
+        row = self._row_for_source("Omarchy #8129")
+        self.assertIn("Hyprland Lua", row[0])
+        self.assertEqual(row[3].strip("`"), "out-of-scope")
+        self.assertEqual(row[4], "—")
+
+    def test_unresolved_fido2_migration_is_not_mapped_to_journal(self) -> None:
+        row = self._row_for_source("Omarchy #16421")
+        self.assertIn("FIDO2 migration", row[0])
+        self.assertEqual(row[3].strip("`"), "out-of-scope")
+        self.assertEqual(row[4], "—")
+
+    def test_legacy_bios_layout_does_not_claim_multidisk_boot_order(self) -> None:
+        row = self._row_for_source("Omarchy #20178")
+        self.assertIn("bios_grub", row[1])
+        self.assertIn("Legacy/CSM", row[0])
+        self.assertEqual(row[3].strip("`"), "not-covered")
+        self.assertEqual(row[4], "—")
+
+    def test_register_class_names_are_unique(self) -> None:
+        names = [row[0] for row in self.rows]
+        self.assertEqual(len(names), len(set(names)), "duplicate regression class")
+
     def test_uncovered_rows_cite_nothing(self) -> None:
         for row in self.rows:
             status = row[3].strip("`")
