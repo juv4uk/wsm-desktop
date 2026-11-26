@@ -68,14 +68,32 @@ class InstallModeTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("disk.path", result.stderr)
 
-    def test_execute_without_acknowledgement_never_reaches_a_command(self) -> None:
-        """The dangerous flag alone must not be enough."""
+    def test_execute_without_acknowledgement_is_disabled(self) -> None:
         result = run_cli(
             "--install", "--execute", "--target-disk", "/dev/nvme0n1",
             "--target-size-bytes", str(256 * GIB), "--quiet",
         )
         self.assertEqual(result.returncode, 2)
-        self.assertIn("acknowledgement", result.stderr)
+        self.assertIn("execute.apply-disabled", result.stderr)
+
+    def test_matching_acknowledgement_still_cannot_enable_execute(self) -> None:
+        result = run_cli(
+            "--install", "--execute", "--target-disk", "/dev/nvme0n1",
+            "--target-size-bytes", str(256 * GIB),
+            "--acknowledge-disk", "/dev/nvme0n1", "--quiet",
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("execute.apply-disabled", result.stderr)
+
+    def test_guided_execute_is_rejected_before_interaction(self) -> None:
+        result = run_cli("--guided", "--execute", "--quiet")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("execute.apply-disabled", result.stderr)
+
+    def test_tui_execute_is_rejected_before_interaction(self) -> None:
+        result = run_cli("--tui", "--execute", "--quiet")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("execute.apply-disabled", result.stderr)
 
 
 if __name__ == "__main__":
