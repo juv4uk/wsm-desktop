@@ -75,7 +75,7 @@ class FailureTests(unittest.TestCase):
         sys.modules.pop("libcalamares", None)
 
     def test_missing_report_fails_closed(self) -> None:
-        install_fake_libcalamares({"wsmTargetDisk": "/dev/nvme0n1", "wsmTargetSizeBytes": 256 * GIB})
+        install_fake_libcalamares({"wsmTargetDisk": "/dev/nvme0n1", "wsmTargetSizeBytes": 256 * GIB, "wsmDryRun": True})
         result = load_module().run()
         self.assertIsNotNone(result)
         message, details = result
@@ -85,14 +85,14 @@ class FailureTests(unittest.TestCase):
     def test_missing_disk_is_refused(self) -> None:
         """WSM never chooses a disk for the user."""
         report = report_file(self.directory)
-        install_fake_libcalamares({"wsmReportPath": str(report), "wsmTargetSizeBytes": 256 * GIB})
+        install_fake_libcalamares({"wsmReportPath": str(report), "wsmTargetSizeBytes": 256 * GIB, "wsmDryRun": True})
         result = load_module().run()
         self.assertIsNotNone(result)
         self.assertIn("disk", result[0].lower())
 
     def test_missing_size_is_refused(self) -> None:
         report = report_file(self.directory)
-        install_fake_libcalamares({"wsmReportPath": str(report), "wsmTargetDisk": "/dev/nvme0n1"})
+        install_fake_libcalamares({"wsmReportPath": str(report), "wsmTargetDisk": "/dev/nvme0n1", "wsmDryRun": True})
         result = load_module().run()
         self.assertIsNotNone(result)
         self.assertIn("size", result[0].lower())
@@ -117,6 +117,7 @@ class FailureTests(unittest.TestCase):
             "wsmReportPath": str(report),
             "wsmTargetDisk": "/dev/nvme0n1",
             "wsmTargetSizeBytes": 256 * GIB,
+            "wsmDryRun": True,
             "wsmProfileEvidence": str(evidence),
         })
         result = load_module().run()
