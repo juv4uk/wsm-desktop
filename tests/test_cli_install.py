@@ -85,6 +85,13 @@ class InstallModeTests(unittest.TestCase):
         self.assertIn("execute.apply-disabled", result.stderr)
         self.assertNotIn("Choose a disk", result.stdout)
 
+    def test_tui_execute_request_is_refused_before_terminal_or_disk_scan(self) -> None:
+        result = run_cli("--tui", "--execute")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("execute.apply-disabled", result.stderr)
+        self.assertNotIn("Choose a disk", result.stdout)
+
+
     def test_execute_without_acknowledgement_never_reaches_a_command(self) -> None:
         """The dangerous flag alone must not be enough."""
         result = run_cli(
