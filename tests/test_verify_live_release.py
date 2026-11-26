@@ -264,6 +264,67 @@ class RecordedVerdictTests(unittest.TestCase):
         self.assertEqual(statuses["boot-bios"], "not-run")
         self.assertEqual(statuses["boot-uefi"], "not-run")
 
+class PartsTests(unittest.TestCase):
+    """A release published as parts must still be verifiable as published."""
+
+    def make_parts(self, directory, payload=b"x" * 8192, count=2):
+        image = directory / "WSM-Desktop-fixture.iso"
+        image.write_bytes(payload)
+        subprocess.run(["split", "-b", str(len(payload) // count + 1), "-d", "-a", "3",
+                        str(image), str(image) + ".part"], check=True)
+        image.unlink()
+        return sorted(directory.glob("*.iso.part*"))
+
+    def test_join_parts_rebuilds_the_same_bytes(self):
+        import sys
+        sys.path.insert(0, str(ROOT / "scripts"))
+        from verify_live_release import join_parts
+
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            payload = bytes(range(256)) * 64
+            parts = self.make_parts(directory, payload)
+            joined = join_parts(parts, directory / "joined.iso")
+            self.assertEqual(joined.read_bytes(), payload)
+
+    def test_join_parts_uses_lexical_order(self):
+        import sys
+        sys.path.insert(0, str(ROOT / "scripts"))
+        from verify_live_release import join_parts
+
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            payload = b"0" * 3000 + b"1" * 3000 + b"2" * 3000
+            parts = self.make_parts(directory, payload, count=3)
+            joined = join_parts(parts, directory / "joined.iso")
+            self.assertEqual(joined.read_bytes(), payload)
+
+    def test_discover_parts_rejects_a_duplicate_suffix(self):
+        import sys
+        sys.path.insert(0, str(ROOT / "scripts"))
+        from verify_live_release import discover_parts
+
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            (directory / "a.iso.part000").write_bytes(b"x")
+            (directory / "b.iso.part000").write_bytes(b"y")
+            with self.assertRaises(ValueError):
+                discover_parts(directory)
+
+    def test_verifier_reassembles_when_given_a_part(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            parts = self.make_parts(directory)
+            result = subprocess.run(
+                [sys.executable, "scripts/verify_live_release.py",
+                 "--iso", str(parts[0]), "--compact"],
+                capture_output=True, text=True, cwd=ROOT,
+            )
+            payload = json.loads(result.stdout)
+            self.assertEqual(payload["artifact"], "WSM-Desktop-fixture.iso")
+            self.assertTrue(payload["artifact_source"].startswith("parts"))
+
+
 
 if __name__ == "__main__":
     unittest.main()
