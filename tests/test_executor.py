@@ -1,9 +1,8 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""The executor is where an installer destroys data, so the tests come first."""
+"""The shared executor must be a preview renderer, never a disk writer."""
 
 from __future__ import annotations
 
-import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -14,99 +13,78 @@ sys.path.insert(0, str(ROOT))
 from wsm_install.executor import ExecutorError, execute  # noqa: E402
 from wsm_install.install_steps import Step  # noqa: E402
 
+DISK = "/dev/nvme0n1"
 STEPS = [
-    Step(["/usr/sbin/partprobe", "/dev/nvme0n1"], "re-read"),
-    Step(["/usr/sbin/mkfs.ext4", "-F", "/dev/nvme0n1p2"], "format root", destructive=True),
-    Step(["/usr/bin/mount", "/dev/nvme0n1p2", "/mnt"], "mount root"),
+    Step(["/run/current-system/profile/sbin/partprobe", DISK], "re-read"),
+    Step(
+        ["/run/current-system/profile/sbin/mkfs.ext4", "-F", "/dev/nvme0n1p2"],
+        "format root",
+        destructive=True,
+    ),
+    Step(
+        ["/run/current-system/profile/bin/mount", "/dev/nvme0n1p2", "/mnt"],
+        "mount root",
+    ),
 ]
 
 
-def ok_runner(calls: list[list[str]]):
-    def runner(command):
-        calls.append(list(command))
-        return subprocess.CompletedProcess(list(command), 0, "", "")
+class PreviewTests(unittest.TestCase):
+    def test_default_mode_returns_only_skipped_preview_steps(self) -> None:
+        output: list[str] = []
+        results = execute(STEPS, DISK, out=output.append)
+        self.assertEqual(len(results), len(STEPS))
+        self.assertTrue(all(result.status == "skipped" for result in results))
+        self.assertTrue(all("command not executed" in result.detail for result in results))
+        self.assertIn("Preview context only", output[0])
+        self.assertIn("[DESTRUCTIVE]", output[2])
 
-    return runner
+    def test_preview_results_are_immutable_and_render_as_json_lists(self) -> None:
+        results = execute(STEPS, DISK, out=lambda _: None)
+        self.assertIsInstance(results[0].command, tuple)
+        self.assertEqual(results[1].as_dict()["command"], list(STEPS[1].command))
+        with self.assertRaises(Exception):
+            results[0].status = "done"  # type: ignore[misc]
 
-
-def ok_verifier(step):
-    return True, "verified"
-
-
-def failing_runner(command):
-    return subprocess.CompletedProcess(list(command), 1, "", "boom")
-
-
-class DryRunTests(unittest.TestCase):
-    def test_dry_run_executes_nothing(self) -> None:
-        calls: list[list[str]] = []
-        results = execute(STEPS, "/dev/nvme0n1", dry_run=True, runner=ok_runner(calls), verifier=ok_verifier, out=lambda _: None)
-        self.assertEqual(calls, [])
-        self.assertTrue(all(r.status == "skipped" for r in results))
-        self.assertEqual(len(results), 3)
-
-    def test_dry_run_needs_no_acknowledgement(self) -> None:
-        execute(STEPS, "/dev/nvme0n1", dry_run=True, runner=ok_runner([]), verifier=ok_verifier, out=lambda _: None)
-
-
-class RefusalTests(unittest.TestCase):
-    def test_real_run_without_acknowledgement_is_refused(self) -> None:
+    def test_real_mode_is_refused_before_output(self) -> None:
+        output: list[str] = []
         with self.assertRaises(ExecutorError) as caught:
-            execute(STEPS, "/dev/nvme0n1", dry_run=False, runner=ok_runner([]), verifier=ok_verifier, out=lambda _: None)
-        self.assertEqual(caught.exception.code, "execute.acknowledgement")
+            execute(STEPS, DISK, dry_run=False, out=output.append)
+        self.assertEqual(caught.exception.code, "execute.apply-disabled")
+        self.assertEqual(output, [])
 
-    def test_acknowledgement_for_another_disk_is_refused(self) -> None:
+    def test_truthy_non_boolean_is_not_accepted_as_dry_run(self) -> None:
+        with self.assertRaises(ExecutorError) as caught:
+            execute(STEPS, DISK, dry_run=1, out=lambda _: None)  # type: ignore[arg-type]
+        self.assertEqual(caught.exception.code, "execute.apply-disabled")
+
+    def test_only_whole_device_preview_target_is_accepted(self) -> None:
+        for target in ("", "/dev/.", "/dev/..", "/dev/nvme0n1p2", "/tmp/disk"):
+            with self.subTest(target=target), self.assertRaises(ExecutorError):
+                execute(STEPS, target, out=lambda _: None)
+
+    def test_other_device_operand_is_refused_even_in_preview(self) -> None:
+        wrong = [Step(
+            ["/run/current-system/profile/sbin/mkfs.ext4", "-F", "/dev/sda2"],
+            "format another disk",
+            destructive=True,
+        )]
+        with self.assertRaises(ExecutorError) as caught:
+            execute(wrong, DISK, out=lambda _: None)
+        self.assertEqual(caught.exception.code, "execute.target-mismatch")
+
+    def test_invalid_step_and_control_character_are_refused(self) -> None:
+        with self.assertRaises(ExecutorError) as caught:
+            execute([{"command": ["mkfs"]}], DISK, out=lambda _: None)  # type: ignore[list-item]
+        self.assertEqual(caught.exception.code, "execute.step-type")
+        invalid = Step(["/bin/echo", "bad\nargument"], "display")
+        with self.assertRaises(ExecutorError) as caught:
+            execute([invalid], DISK, out=lambda _: None)
+        self.assertEqual(caught.exception.code, "execute.command")
+
+    def test_empty_preview_is_allowed_but_not_authority_to_write(self) -> None:
+        self.assertEqual(execute([], DISK, out=lambda _: None), [])
         with self.assertRaises(ExecutorError):
-            execute(STEPS, "/dev/nvme0n1", acknowledgement="/dev/sda", dry_run=False,
-                    runner=ok_runner([]), verifier=ok_verifier, out=lambda _: None)
-
-    def test_plan_without_destructive_steps_is_refused_for_a_real_run(self) -> None:
-        """A "real" run with nothing to destroy means the plan is wrong."""
-        harmless = [Step(["/usr/sbin/partprobe", "/dev/x"], "re-read")]
-        with self.assertRaises(ExecutorError) as caught:
-            execute(harmless, "/dev/x", acknowledgement="/dev/x", dry_run=False,
-                    runner=ok_runner([]), verifier=ok_verifier, out=lambda _: None)
-        self.assertEqual(caught.exception.code, "execute.no-destructive-steps")
-
-
-class ExecutionTests(unittest.TestCase):
-    def test_steps_run_in_order(self) -> None:
-        calls: list[list[str]] = []
-        execute(STEPS, "/dev/nvme0n1", acknowledgement="/dev/nvme0n1", dry_run=False,
-                runner=ok_runner(calls), verifier=ok_verifier, out=lambda _: None)
-        self.assertEqual([c[0] for c in calls],
-                         ["/usr/sbin/partprobe", "/usr/sbin/mkfs.ext4", "/usr/bin/mount"])
-
-    def test_first_failure_stops_everything(self) -> None:
-        calls: list[list[str]] = []
-
-        def runner(command):
-            calls.append(list(command))
-            return subprocess.CompletedProcess(list(command), 1 if "mkfs" in command[0] else 0, "", "boom")
-
-        with self.assertRaises(ExecutorError) as caught:
-            execute(STEPS, "/dev/nvme0n1", acknowledgement="/dev/nvme0n1", dry_run=False,
-                    runner=runner, verifier=ok_verifier, out=lambda _: None)
-        self.assertEqual(caught.exception.code, "execute.step-failed")
-        # The mount after the failed format must never have been attempted.
-        self.assertFalse(any("mount" in c[0] for c in calls))
-
-    def test_a_step_that_exits_zero_but_did_nothing_is_unverified(self) -> None:
-        """Exit codes lie; verification reads the system instead."""
-        def verifier(step):
-            return (False, "no filesystem found") if "mkfs" in step.command[0] else (True, "ok")
-
-        with self.assertRaises(ExecutorError) as caught:
-            execute(STEPS, "/dev/nvme0n1", acknowledgement="/dev/nvme0n1", dry_run=False,
-                    runner=ok_runner([]), verifier=verifier, out=lambda _: None)
-        self.assertEqual(caught.exception.code, "execute.step-unverified")
-
-    def test_results_record_what_happened(self) -> None:
-        results = execute(STEPS, "/dev/nvme0n1", acknowledgement="/dev/nvme0n1", dry_run=False,
-                          runner=ok_runner([]), verifier=ok_verifier, out=lambda _: None)
-        self.assertTrue(all(r.status == "done" for r in results))
-        self.assertTrue(results[1].destructive)
-        self.assertFalse(results[0].destructive)
+            execute([], DISK, dry_run=False, out=lambda _: None)
 
 
 if __name__ == "__main__":
