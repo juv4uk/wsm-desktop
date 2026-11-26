@@ -30,9 +30,15 @@ jobs:
           set -euo pipefail
           wget -q https://git.savannah.gnu.org/cgit/guix.git/plain/etc/guix-install.sh
           chmod +x guix-install.sh
-          printf 'n\n' | sudo ./guix-install.sh || true
-          ls -la /usr/local/bin/guix
-          /usr/local/bin/guix --version
+          # The installer asks several questions; empty answers take the default.
+          yes '' | sudo ./guix-install.sh || true
+          echo "--- what the installer left behind"
+          ls -la /usr/local/bin/guix || true
+          ls -la /var/guix 2>/dev/null | head -5 || true
+          systemctl is-active guix-daemon || sudo systemctl start guix-daemon || true
+          systemctl status guix-daemon --no-pager | head -20 || true
+          command -v guix || true
+          /usr/local/bin/guix --version || true
 
       - name: Install QEMU and OVMF
         run: |
@@ -51,6 +57,17 @@ jobs:
           IMAGE=$(tail -n1 build/image-path.txt)
           cp "$IMAGE" build/wsm-desktop-minimal.iso
           ls -la build/wsm-desktop-minimal.iso
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          echo "--- guix daemon"
+          sudo systemctl status guix-daemon --no-pager || true
+          sudo tail -50 /var/log/guix-daemon.log || true
+          echo "--- disk"
+          df -h /
+          echo "--- guix"
+          /usr/local/bin/guix --version || true
 
       - name: Verify the image
         run: |
