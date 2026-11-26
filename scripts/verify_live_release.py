@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import tempfile
 import hashlib
 import json
 import shutil
@@ -221,6 +222,37 @@ def check_boot(iso: Path, firmware: str, timeout: int, ovmf_code: Path | None) -
     return criterion(identifier, "pass", f"{MARKER} observed on the serial console")
 
 
+def join_parts(parts: list[Path], destination: Path) -> Path:
+    """Concatenate release parts into one file, in lexical order.
+
+    The release may publish the image as parts because one GitHub asset cannot
+    exceed 2 GiB. Verification needs the whole file, and asking the user to
+    assemble it first would make "verify what was published" a manual step that
+    nobody performs. Streaming keeps memory flat regardless of image size.
+    """
+    ordered = sorted(parts)
+    names = [path.name for path in ordered]
+    if names != sorted(names):
+        raise ValueError(f"parts are not in lexical order: {names}")
+    with destination.open("wb") as sink:
+        for part in ordered:
+            with part.open("rb") as source:
+                for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                    sink.write(chunk)
+    return destination
+
+
+def discover_parts(directory: Path) -> list[Path]:
+    """Find ``*.iso.partNNN`` siblings and reject a half-downloaded set."""
+    parts = sorted(directory.glob("*.iso.part*"))
+    if not parts:
+        return []
+    suffixes = [path.suffix for path in parts]
+    if len(set(suffixes)) != len(suffixes):
+        raise ValueError(f"duplicate part suffix in {directory}")
+    return parts
+
+
 def verdict(criteria: list[dict[str, str]], iso: Path) -> dict[str, Any]:
     statuses = {item["status"] for item in criteria}
     if "fail" in statuses:
@@ -246,7 +278,8 @@ def build_parser() -> argparse.ArgumentParser:
         prog="verify-live-release",
         description="Verify a published live ISO and emit a versioned verdict.",
     )
-    parser.add_argument("--iso", required=True, type=Path)
+    parser.add_argument("--iso", required=True, type=Path,
+                        help="the image, or any part of it when it was published as parts")
     parser.add_argument("--sums", type=Path, help="default: SHA256SUMS next to the ISO")
     parser.add_argument("--manifest", type=Path, help="default: release-manifest.json next to the ISO")
     parser.add_argument("--boot", action="store_true", help="also boot the ISO in QEMU (slow)")
@@ -260,9 +293,26 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     iso: Path = args.iso
-    if not iso.is_file():
-        print(f"verify-live-release: no such file: {iso}", file=sys.stderr)
-        return 2
+    reassembled: Path | None = None
+    source_kind = "whole"
+
+    if not iso.is_file() or ".part" in iso.name:
+        parts = discover_parts(iso.parent)
+        if not parts:
+            print(f"verify-live-release: no such file: {iso}", file=sys.stderr)
+            return 2
+        with tempfile.TemporaryDirectory() as temporary:
+            joined = join_parts(parts, Path(temporary) / "reassembled.iso")
+            # Copy out of the temporary directory so the checks below can use it
+            # after the context manager exits.
+            reassembled = iso.parent / "reassembled.iso"
+            reassembled.write_bytes(joined.read_bytes())
+        iso = reassembled
+        source_kind = f"parts ({len(parts)})"
+        # The verdict must name what was published, not the scratch file the
+        # parts were joined into.
+        artifact_name = parts[0].name.split(".part")[0]
+        print(f"verify-live-release: joined {len(parts)} parts", file=sys.stderr)
 
     sums_path = args.sums or iso.parent / "SHA256SUMS"
     manifest_path = args.manifest or iso.parent / "release-manifest.json"
@@ -294,6 +344,11 @@ def main(argv: list[str] | None = None) -> int:
             )
 
     result = verdict(criteria, iso)
+    result["artifact_source"] = source_kind
+    if source_kind != "whole":
+        result["artifact"] = artifact_name
+    if reassembled is not None:
+        reassembled.unlink(missing_ok=True)
     rendered = json.dumps(
         result, ensure_ascii=False, indent=None if args.compact else 2, sort_keys=True
     ) + "\n"
