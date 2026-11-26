@@ -419,12 +419,12 @@ class ReleaseMetadataPolicyTests(unittest.TestCase):
     def test_release_metadata_does_not_claim_compatibility_authentication(self) -> None:
         info = json.loads((ROOT / "RELEASE-INFO.json").read_text(encoding="utf-8"))
         notes = (ROOT / "RELEASE-NOTES.md").read_text(encoding="utf-8")
-        combined = json.dumps(info, ensure_ascii=False) + "\\n" + notes
+        combined = (json.dumps(info, ensure_ascii=False) + "\\n" + notes).lower()
 
         self.assertIn("channels/compatibility.lock.scm", combined)
-        self.assertIn("manual", combined.lower())
-        self.assertIn("not yet run", combined.lower())
-        self.assertNotIn("authenticated Compatibility lock", combined)
+        self.assertIn("manual", combined)
+        self.assertIn("ще не виконувалась", combined)
+        self.assertNotIn("authenticated compatibility lock", combined)
 
 
 def gzip_open(path: Path):  # pragma: no cover - tiny helper for readable test
