@@ -8,15 +8,15 @@
 
 ## Мета
 
-Додати явну ручну команду, яка збирає boot milestones та critical path systemd з поточного boot. Не запускати її в hardware preflight, інсталяторі, фоні або звичайному CI.
+Додати явну ручну команду, яка збирає boot/service-manager evidence з поточного boot для systemd або GNU Shepherd. Не запускати її в hardware preflight, інсталяторі, фоні або звичайному CI.
 
 ## Реалізація
 
-1. Використати штатний read-only `systemd-analyze time`, `blame`, `critical-chain`, а не вигадувати власний timer або реконструювати boot із непрямих timestamps.
-2. Зібрати default target і `graphical.target` окремо, зберігати сирий stdout/stderr, exit code, argv, duration, timeout та truncation.
+1. Визначати manager за `/proc/1/comm`; для systemd використовувати read-only `systemd-analyze time`, `blame`, `critical-chain`, для GNU Shepherd — `herd status`, `herd log`, `herd graph`. Не реконструювати час із непрямих timestamps.
+2. Для systemd збирати default target і `graphical.target` окремо; для Shepherd зберігати snapshot статусів, event log та dependency graph. Зберігати сирий stdout/stderr, exit code, argv, duration, timeout та truncation.
 3. Кожна команда — fixed argv allowlist без shell; локаль `C`, stdin закритий, timeout обмежений, output у JSON bounded.
 4. Записати boot identity як короткий SHA-256 digest boot ID (без raw UUID), uptime, kernel/machine і virtualization evidence від canonical read-only collector.
-5. Відсутня systemd, недоступний manager, timeout, nonzero exit або неповний chain — `unknown/partial`, не нуль і не pass.
+5. Невідомий PID 1 не отримує fallback. Недоступний executable/socket, timeout, nonzero exit або неповний chain/log — `unknown/partial`, не нуль і не pass. User Shepherd не видавати за system boot; не виконувати `sudo` автоматично.
 6. Документувати обмеження: `time` завершується на spawn services, а не на повній готовності desktop; `blame` не враховує parallelism; critical-chain показує один шлях і має caveats щодо socket activation, device units та jobs/timeouts.
 7. Один профіль описує один boot; статистику між boots агрегувати окремо, не називати п'ять повторів усередині одного boot незалежними samples.
 
@@ -24,6 +24,6 @@
 
 - Unit-тести fixed argv/no shell, missing binary, timeout, nonzero exit, bounded output, boot ID privacy та unavailable procfs.
 - Повний `make check` у GitHub Actions на exact PR HEAD.
-- Ручне виконання на реальному systemd host не заявляти до запуску команди на цільовій системі.
+- Ручне виконання на реальному Linux host із systemd або GNU Shepherd не заявляти до запуску команди на цільовій системі.
 
 Без змін unit-файлів, systemd-конфігурації, bootloader, BIOS/UEFI, EFI variables, governor, power controls або дисків.
