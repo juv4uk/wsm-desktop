@@ -143,6 +143,17 @@ class SuccessTests(unittest.TestCase):
         })
         self.assertIsNone(load_module().run())
 
+    def test_apply_request_is_refused_when_dry_run_is_false(self) -> None:
+        install_fake_libcalamares({
+            "wsmReportPath": str(self.report),
+            "wsmTargetDisk": "/dev/nvme0n1",
+            "wsmTargetSizeBytes": 256 * GIB,
+            "wsmDryRun": False,
+        })
+        result = load_module().run()
+        self.assertIsNotNone(result)
+        self.assertIn("execute.apply-disabled", result[1])
+
     def test_pretty_name_is_defined(self) -> None:
         install_fake_libcalamares({})
         self.assertTrue(load_module().pretty_name())
