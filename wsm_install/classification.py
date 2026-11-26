@@ -133,11 +133,16 @@ def load_validated_profile_evidence(
             "profile evidence report_schema_version does not match the current report"
         )
 
-    source_reports = [
-        item
-        for item in document.get("artifacts", [])
-        if isinstance(item, dict) and item.get("kind") == "wsm-hwcheck-report"
-    ]
+    raw_artifacts = document.get("artifacts")
+    if not isinstance(raw_artifacts, list):
+        errors.append("profile evidence artifacts must be a list")
+        source_reports = []
+    else:
+        source_reports = [
+            item
+            for item in raw_artifacts
+            if isinstance(item, dict) and item.get("kind") == "wsm-hwcheck-report"
+        ]
     if len(source_reports) != 1:
         errors.append(
             "profile evidence must contain exactly one wsm-hwcheck-report artifact"
@@ -207,6 +212,18 @@ def _validate_evidence_binding(
         )
     if report_bytes is None:
         raise ValueError("exact report_bytes are required with profile evidence")
+    if not isinstance(report_bytes, bytes):
+        raise TypeError("report_bytes must be the exact source report bytes")
+    try:
+        decoded_report = json.loads(report_bytes)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ClassificationEvidenceError(
+            f"source report bytes are not valid JSON: {exc}"
+        ) from exc
+    if decoded_report != report:
+        raise ClassificationEvidenceError(
+            "report object does not match the exact source report bytes"
+        )
     if evidence.report_id != report.get("report_id"):
         raise ClassificationEvidenceError(
             "validated profile evidence belongs to another report_id"
