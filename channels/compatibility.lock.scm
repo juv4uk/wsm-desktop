@@ -1,7 +1,10 @@
 ;; SPDX-License-Identifier: LicenseRef-Volnist
 ;;
-;; Authenticated Compatibility lock: Guix free snapshot + Nonguix 6b8897c.
+;; Pinned Compatibility lock: Guix free snapshot + Nonguix 6b8897c.
 ;; Used for systems/live-compat.scm (NVIDIA 580.xx for Pascal GP107).
+;; Structural policy is checked by check_channels.py; cryptographic channel
+;; authentication must be run with guix time-machine before release. A lock
+;; file existing in the repository is not, by itself, an authentication result.
 (list (channel
        (name 'guix)
        (url "https://git.guix.gnu.org/guix.git")
