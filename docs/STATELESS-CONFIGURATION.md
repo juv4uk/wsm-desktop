@@ -2,7 +2,7 @@
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Статус: **proposed — на розгляді [#150](https://github.com/juv4uk/wsm-desktop/issues/150)**
+- Статус: **контракт реалізовано й змерджено в [PR #189](https://github.com/juv4uk/wsm-desktop/pull/189)**; міграції persistent state та автоматичне відновлення даних ще не реалізовані
 - Дата: 2026-11-26
 - Батьківське рішення: [ADR 0007](decisions/0007-clear-linux-principles.md) — принципи Clear Linux без Clear Linux
 - Пов'язане: [ADR 0004](decisions/0004-nix-guix-backend-strategy.md), [INSTALLER-HANDOFF.md](INSTALLER-HANDOFF.md), [ETHICS.md](ETHICS.md)
@@ -77,6 +77,62 @@ Guix дає іншу, але сумісну за духом модель: `/gnu/
 Тест не доводить, що система поводиться правильно — він не дає документу
 розійтися з профілем і не дає забути шлях при зміні конфігурації.
 
+## Міграції й rollback: не плутати покоління з транзакцією
+
+Guix generation повертає декларативний стан системи, але не відкочує автоматично
+довільні зміни в `/var/lib/<service>` або `/home/<user>`. Користувацький
+migration marker у home може пережити rollback системної generation, хоча
+системний ефект міграції вже повернувся до старішого стану. Тому generation,
+persistent service data та user state мають окремі власні межі.
+
+До появи автоматичного migration runner WSM дотримується таких інваріантів:
+
+1. **Міграція ідемпотентна.** Повтор після переривання приводить до того самого
+   цільового стану й не дублює побічних ефектів.
+2. **Маркер не замінює postcondition.** Завершення позначається лише після
+   read-only перевірки фактичного результату. Відсутність помилки або наявність
+   marker-файла самі по собі не доводять успіх.
+3. **Маркер належить тій самій rollback-межі, що й ефект.** Коли це неможливо,
+   маркер прив'язується до generation/config digest, а наступна активація
+   повторно перевіряє postcondition перед пропуском міграції.
+4. **Частковий успіх має recovery-шлях.** Для кількох persistent domains потрібен
+   транзакційний commit, compensating action або документована reconcile-процедура.
+   Timeout не доводить, що side effect не відбувся.
+5. **Нова generation не вважається придатною лише після build.** Перед видаленням
+   старого покоління потрібен окремий boot acceptance на disposable QEMU; boot
+   artifact має відповідати тій самій generation і цільовому root.
+
+Omarchy [#12777](https://github.com/omacom/omarchy/issues/12777) показав клас помилки,
+коли side effect завершився, а IPC timeout перервав крок до запису marker-а.
+[#16421](https://github.com/omacom/omarchy/pull/16421) виправив інший випадок:
+міграція позначалася завершеною, хоча postcondition не був виконаний. Для WSM
+це джерела регресійних сценаріїв, а не доказ наявності тих самих дефектів у нашому runtime.
+
+## Атомарний запис користувацької конфігурації
+
+Для майбутніх mutable config writers:
+
+- тимчасовий файл створюється в тій самій директорії, що й ціль;
+- повний вміст записується та синхронізується через `fsync`, після чого файл
+  атомарно перейменовується; за потреби синхронізується і директорія;
+- mode, owner, group та ACL цільового файла зберігаються явно;
+- помилка parse не дозволяє мовчки перезаписати початкові байти defaults;
+- паралельні writers мають узгоджуватися або перевіряти версію/digest перед commit.
+
+Omarchy [#18094](https://github.com/omacom/omarchy/issues/18094) демонструє, чому
+`mv` з tmpfs `/tmp` до іншої файлової системи не гарантує atomic rename;
+[#10885](https://github.com/omacom/omarchy/issues/10885) описує окремий stale
+in-memory lost-update; [#9326](https://github.com/omacom/omarchy/issues/9326) —
+окрему регресію permissions після заміни через тимчасовий файл. Не об'єднувати
+ці причини в один нечіткий «atomic write bug».
+
+## Необов'язкові залежності — окремий failure domain
+
+Відсутність мережі, agent registry або необов'язкового developer tool не повинна
+зривати system generation чи hardware preflight. Remote resolution має bounded
+timeout і виконується один раз на операцію; локальна перевірка встановленого
+стану має залишатися локальною. Недоступний optional provider повертає явний
+`unavailable`, а не підмінюється мовчазним success.
 ## Що може змінити це рішення
 
 - Поява в Guix штатного механізму для користувацьких overlay-конфігурацій, який
