@@ -128,7 +128,11 @@ build/release manifests, SHA-256 і результати BIOS/UEFI boot smoke.
 
 Після успішної збірки ISO, BIOS/UEFI marker smoke та повторної перевірки
 завантажених із GitHub release assets workflow створює підписане SLSA v1
-build-provenance через GitHub Artifact Attestations і Sigstore. Атестація
+build-provenance через GitHub Artifact Attestations і Sigstore. Релізний workflow
+дозволяє запуск лише з `refs/heads/main`; `gh attestation verify` вимагає CLI
+не нижче `2.102.0`, оскільки старі версії мали помилку prefix-match у
+`--signer-workflow` (GHSA-wjmr-j3rp-mh2g). Перевірка також фіксує точний
+`--source-ref refs/heads/main`. Атестація
 охоплює ISO, `SHA256SUMS`, build/release manifests і BIOS/UEFI evidence;
 їхні digest пов'язуються з репозиторієм, commit і workflow signer.
 
