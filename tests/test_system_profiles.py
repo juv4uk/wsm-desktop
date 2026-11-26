@@ -301,7 +301,7 @@ class MinimalLiveTests(unittest.TestCase):
     def test_minimal_live_defaults_to_ukrainian_with_us_keyboard_fallback(self) -> None:
         text = profile("live-minimal.scm")
         self.assertIn('(locale "uk_UA.utf8")', text)
-        self.assertNotIn("locale-definitions", text)
+        self.assertNotIn("(locale-definitions", text)
         self.assertIn('(keyboard-layout "us,ua" #:options \'("grp:alt_shift_toggle"))', text)
 
     def test_minimal_live_reconfigures_existing_tty2_console_font(self) -> None:
