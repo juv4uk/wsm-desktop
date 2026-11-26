@@ -151,13 +151,27 @@ def _deploy(dry_run: bool) -> tuple[str, str] | None:
 
 
 def run() -> tuple[str, str] | None:
-    """Calamares entry point."""
+    """Calamares entry point.
+
+    Preview is not a successful deployment: the required job must never report
+    success when no system was written. APPLY remains disabled by the shared
+    executor until the target-bound authorization protocol is implemented.
+    """
     dry_run = bool(_global("wsmDryRun", False))
     _log(f"wsm_deploy: starting (dry_run={dry_run})")
     result = _deploy(dry_run)
     if result is not None:
         _log(f"wsm_deploy: failed: {result[0]}")
-    return result
+        return result
+    if dry_run:
+        return (
+            "WSM preview only",
+            "The plan was inspected, but no installation was performed; APPLY is disabled.",
+        )
+    return (
+        "WSM APPLY disabled",
+        "The shared executor refused real deployment; no system was installed.",
+    )
 
 
 def pretty_name() -> str:
