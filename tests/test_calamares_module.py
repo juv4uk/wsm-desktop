@@ -152,6 +152,7 @@ class PreviewOutcomeTests(unittest.TestCase):
         self.assertIn("not installed", result[0].lower())
         execute.assert_called_once()
         self.assertIs(execute.call_args.kwargs["dry_run"], True)
+        self.assertNotIn("acknowledgement", execute.call_args.kwargs)
 
     def test_explicit_false_dry_run_is_refused_before_preview(self) -> None:
         from unittest.mock import patch
