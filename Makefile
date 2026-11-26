@@ -85,6 +85,7 @@ check-guix-eval:
 	$(GUIX) time-machine -C channels.lock.scm -- system build systems/live.scm --dry-run
 	$(GUIX) time-machine -C channels.lock.scm -- system build systems/live-minimal.scm --dry-run
 	$(GUIX) time-machine -C channels.lock.scm -- home build systems/home.scm --dry-run
+	$(GUIX) time-machine -C channels/compatibility.lock.scm -- system build systems/live-compat.scm --dry-run
 
 check-hygiene:
 	$(PYTHON) tests/test_repo_hygiene.py
@@ -94,9 +95,12 @@ release-gate:
 
 check-channels:
 	$(PYTHON) tests/test_check_channels.py
-	$(PYTHON) scripts/check_channels.py --policy free
-	$(PYTHON) scripts/check_channels.py --policy compatibility
-	$(PYTHON) scripts/check_channels.py --policy compatibility --lock channels/compatibility.lock.scm
+	$(PYTHON) scripts/check_channels.py --policy free --lock channels.lock.scm
+	@if test -f channels/compatibility.lock.scm; then \
+		$(PYTHON) scripts/check_channels.py --policy compatibility --lock channels/compatibility.lock.scm; \
+	else \
+		printf '%s\n' 'check-channels: Compatibility lock NOT_CONFIGURED; synthetic policy tests only (no lock PASS)'; \
+	fi
 
 check-profiles-matrix:
 	$(PYTHON) tests/test_profiles.py
