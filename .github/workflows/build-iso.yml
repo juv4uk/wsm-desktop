@@ -1,0 +1,74 @@
+name: Build live ISO
+
+# Building an image needs Guix, which no development machine here has. A runner
+# does. Pushing to a `build/**` branch is the trigger: it needs no extra API
+# permission, and it keeps image builds away from ordinary pull requests.
+
+on:
+  push:
+    branches:
+      - "build/**"
+  workflow_dispatch:
+
+concurrency:
+  group: build-iso-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  minimal:
+    name: minimal console ISO
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Guix
+        run: |
+          set -euo pipefail
+          wget -q https://git.savannah.gnu.org/cgit/guix.git/plain/etc/guix-install.sh
+          chmod +x guix-install.sh
+          printf 'n\n' | sudo ./guix-install.sh || true
+          ls -la /usr/local/bin/guix
+          /usr/local/bin/guix --version
+
+      - name: Install QEMU and OVMF
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-system-x86 ovmf
+
+      - name: Build the image from the pinned channels
+        run: |
+          set -euo pipefail
+          export PATH="/usr/local/bin:$PATH"
+          mkdir -p build
+          guix time-machine -C channels.lock.scm -- \
+            system image --image-type=iso9660 systems/live-minimal.scm \
+            > build/image-path.txt
+          cat build/image-path.txt
+          IMAGE=$(tail -n1 build/image-path.txt)
+          cp "$IMAGE" build/wsm-desktop-minimal.iso
+          ls -la build/wsm-desktop-minimal.iso
+
+      - name: Verify the image
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet 'jsonschema[format]==4.26.0' pyyaml
+          python3 scripts/verify_live_release.py \
+            --iso build/wsm-desktop-minimal.iso \
+            --boot \
+            --ovmf-code /usr/share/OVMF/OVMF_CODE.fd \
+            --output build/verdict.json || true
+          cat build/verdict.json
+
+      - name: Upload the image and the verdict
+        uses: actions/upload-artifact@v4
+        with:
+          name: wsm-desktop-minimal-iso
+          path: |
+            build/wsm-desktop-minimal.iso
+            build/verdict.json
+          retention-days: 7
+          if-no-files-found: error
