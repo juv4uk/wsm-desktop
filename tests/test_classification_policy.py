@@ -70,6 +70,9 @@ class ClassificationPolicyAgreementTests(unittest.TestCase):
             classification.KNOWN,
         )
 
+    def test_supported_test_needs_profile_bundle_before_certified_level(self) -> None:
+        self.assertNotIn("supported-tested", classification.EVIDENCE_TO_LEVEL)
+
 
 if __name__ == "__main__":
     unittest.main()
