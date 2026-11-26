@@ -43,7 +43,7 @@ class CanonicalDocumentationLanguageGateTests(unittest.TestCase):
         self.assertFalse(check_docs.is_ukrainian_dominant(text))
 
     def test_symbol_only_document_is_not_judged(self) -> None:
-        self.assertTrue(check_docs.is_ukrainian_dominant("|---|---|\n| a | b |\n"))
+        self.assertTrue(check_docs.is_ukrainian_dominant("|---|---|\n| 1 | 2 |\n"))
 
     def test_every_canonical_document_passes_the_rule(self) -> None:
         self.assertEqual(check_docs.check_docs_language(), [])
