@@ -12,14 +12,14 @@
 | Шар | Хто робить | Файл |
 | --- | --- | --- |
 | Мова, локація, клавіатура, користувач | Calamares, з коробки | — |
-| Розбиття диска | Calamares (kpmcore) | — |
+| Розбиття диска | план WSM як дані; Calamares partition module ще не налаштований | — |
 | Перевірка заліза й докази | **WSM** | `modules/wsm_deploy/main.py` |
 | Вибір профілю | **WSM** | те саме |
-| Запис системи | **WSM** | `wsm_install/install_steps.py` + `executor.py` |
+| План і preview | **WSM** | `wsm_install/install_steps.py` + preview-only `executor.py` |
 
 Модуль навмисно тонкий: він не форматує й не монтує нічого сам, а викликає ті
-самі модулі, що й CLI. Одна реалізація кожної небезпечної операції, Calamares —
-лише обличчя.
+самі read-only planning modules, що й CLI. Жодна небезпечна операція не виконується;
+реальний APPLY вимкнено для обох frontend-ів.
 
 ## Контракт jobmodule
 
@@ -28,8 +28,8 @@
   текст для журналу.
 
 Модуль ніколи не повертає `None`, якщо чогось бракує. Відсутній звіт про залізо,
-невирішений блокер, невалідні докази, відсутній диск або розмір — усе це кортеж
-з поясненням.
+невирішений блокер, невалідні докази, відсутній диск або planning estimate — усе це
+кортеж з поясненням.
 
 ## Ключі globalstorage, які читає модуль
 
@@ -37,10 +37,10 @@
 | --- | --- | --- |
 | `wsmReportPath` | крок preflight | звіт `wsm-hwcheck` |
 | `wsmTargetDisk` | Calamares | цільовий диск; WSM ніколи не обирає сам |
-| `wsmTargetSizeBytes` | Calamares | розмір — те, чим ловиться підмінений диск |
+| `wsmTargetSizeBytes` | Calamares | user-supplied оцінка для плану; не вимірюється з block device |
 | `wsmProfileEvidence` | крок вибору профілю | bundle доказів заліза |
 | `wsmSystemFile` | крок вибору профілю | який `.scm` віддати Guix |
-| `wsmDryRun` | налаштування | прогін без запису |
+| `wsmDryRun` | налаштування | відсутнє значення трактують як true; false відхиляється |
 
 ## Чому модуль сам шукає `wsm_install`
 
@@ -58,3 +58,11 @@ Calamares завантажує `main.py` за шляхом, тому пакет 
 - **Кроку preflight як окремого модуля.** Зараз `wsmReportPath` має заповнити
   хтось інший; цей модуль лише читає його.
 - **QML-інтерфейсу вибору профілю.**
+
+## Межа APPLY
+
+Модуль Calamares не виконує partition, mkfs, mount чи guix system init. Він відхиляє
+будь-яке явне значення wsmDryRun, відмінне від boolean true; відсутній ключ
+вважається preview. Це правило діє незалежно від CLI і не може бути вимкнене
+рядком із global storage. Реальне виконання потребує окремого target-bound
+executor та acceptance на disposable QEMU.
