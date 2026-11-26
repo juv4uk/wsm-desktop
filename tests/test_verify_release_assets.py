@@ -83,9 +83,21 @@ class ReleaseAssetVerificationTests(unittest.TestCase):
         self.assertIn("gh attestation verify", verification)
         self.assertIn('--repo "$GITHUB_REPOSITORY"', verification)
         self.assertIn("--bundle", verification)
+        self.assertIn("bundle-path", verification)
+        self.assertIn('"$release_dist/$ASSET"', verification)
         self.assertIn("--signer-workflow", verification)
         self.assertIn("release-minimal-live.yml", verification)
         self.assertIn("https://slsa.dev/provenance/v1", verification)
+        for filename in (
+            "WSM-Desktop-0.1.0-rc3-Minimal-Live.iso",
+            "SHA256SUMS",
+            "build-manifest.json",
+            "release-manifest.json",
+            "boot-bios.json",
+            "boot-uefi.json",
+        ):
+            with self.subTest(verified_subject=filename):
+                self.assertIn(filename, verification)
 
     def test_valid_download_matches_local_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
