@@ -92,7 +92,7 @@ def disk_list(candidates: list[Candidate], selected: int) -> list[str]:
     lines: list[str] = []
     for index, disk in enumerate(candidates):
         marker = ">" if index == selected else " "
-        знімний = "  знімний" if disk.removable else ""
+        removable = "  знімний" if disk.removable else ""
         lines.append(f"{marker} {index + 1}. {disk.path:<16} {disk.human_size():>9}{removable}")
     return lines
 
