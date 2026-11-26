@@ -181,6 +181,29 @@ GPL-3.0-or-later, і жодна частина цього репозиторію
   необхідно перевірити на reference hardware; відсутність X11 fallback не
   можна компенсувати припущенням про сумісність.
 
+### Legacy/CSM: чому boot order не наша властивість
+
+Рядок реєстру про Legacy/CSM multi-disk hand-off (Omarchy #20178) стоїть
+`not-covered`, і є спокуса «закрити» його QEMU-тестом із двома дисками. Це
+довело б не те, що треба.
+
+- Специфікація PC BIOS дозволяє **лише один** завантажувальний диск: якщо
+  завантаження з нього не вдалося, BIOS не пробує інші диски — хіба що флопі
+  або мережу.
+- SeaBIOS зазвичай пробує **один** диск; у лютому 2026 з'явився патч, щоб
+  пробувати диски по черзі, саме тому що зараз він цього не робить. Окремо
+  виявився баг QEMU: якщо диски приєднувати в стані prelaunch, `bootorder` у
+  fw_cfg лишається застарілим, і SeaBIOS стартує не з того диска. Симптом не
+  відтворюється під EDK2/UEFI.
+- Детермінований порядок задається властивістю `bootindex` на пристроях QEMU;
+  змішувати його з `-boot order=` не можна — поведінка невизначена.
+
+Висновок: порядок завантаження задає прошивка машини, а не наш план. Тест із
+`bootindex` доводить, що **ми правильно налаштували QEMU**, а не що користувач
+завантажиться з цільового диска. Тому рядок лишається `not-covered`: довести
+його може фізичне залізо або явне документоване обмеження, а не зелений прогін
+у нашому ж стенді.
+
 ### Гонка simpledrm → нативний DRM (SDDM #1917)
 
 Це та сама гонка, від якої ми ставимо статичну заборону на `sleep` у
@@ -348,6 +371,8 @@ Unified Kernel Image — один PE-файл, у який складені stub
 - [Guix 1.6.0 release schedule, 15.11.2026](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00091.html)
 - [GCD 009 deliberation announcement, 13.11.2026](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00074.html) and [consensus acceptance record, 20.11.2026](https://codeberg.org/guix/guix-consensus-documents/pulls/15#issuecomment-28116399)
 - [Guix repository on Codeberg](https://codeberg.org/guix/guix/)
+- [QEMU: bootindex і обмеження прошивки](https://www.qemu.org/docs/master/system/bootindex.html)
+- [SeaBIOS: спроба кількох дисків по черзі (2026)](https://mail.coreboot.org/archives/list/seabios@seabios.org/message/KECOCJCQOMPUF3WMIVN6YUJ7JVF7EAYW/)
 - [SDDM #1917 — гонка з DRM-драйвером](https://github.com/sddm/sddm/issues/1917)
 - [dri-devel: simpledrm і запущені дисплей-сервери](https://lists.freedesktop.org/archives/dri-devel/2024-May/453272.html)
 - [GCD 009 — Guix Bootspec (accepted; implementation pending upstream merge)](https://codeberg.org/guix/guix-consensus-documents/pulls/15)

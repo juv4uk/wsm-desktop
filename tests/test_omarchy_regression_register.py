@@ -126,11 +126,19 @@ class OmarchyRegisterTest(unittest.TestCase):
         self.assertEqual(row[4], "—")
 
     def test_legacy_bios_layout_does_not_claim_multidisk_boot_order(self) -> None:
+        """Boot order belongs to the firmware, so no QEMU test may close this.
+
+        A two-disk QEMU run with `bootindex` would prove that we configured
+        QEMU correctly, not that the user's machine starts from the target
+        disk. The row must keep saying that out loud.
+        """
         row = self._row_for_source("Omarchy #20178")
         self.assertIn("bios_grub", row[1])
         self.assertIn("Legacy/CSM", row[0])
         self.assertEqual(row[3].strip("`"), "not-covered")
         self.assertEqual(row[4], "—")
+        self.assertIn("не наша властивість", row[2])
+        self.assertIn("bootindex", row[2])
 
     def test_late_drm_handoff_is_not_claimed_covered_before_acceptance(self) -> None:
         """A guard against the known bad fix is `partial`, never `covered`.
