@@ -180,6 +180,24 @@ GPL-3.0-or-later, і жодна частина цього репозиторію
   необхідно перевірити на reference hardware; відсутність X11 fallback не
   можна компенсувати припущенням про сумісність.
 
+### GNU Shepherd (init system Guix System)
+
+- Shepherd — це init і менеджер служб Guix System, написаний і конфігурований
+  Guile Scheme. Серія 1.0 вийшла в грудні 2024 (перший мажор після 21 року
+  ZeroVer), станом на кінець 2025 актуальна лінія — 1.0.x; 1.0 вимагає Guile 3.x.
+- Для WSM це не абстракція: наш backend — Guix System, тому Shepherd у нас є
+  PID 1, і всі наші служби (SDDM, NetworkManager, plasma) описані через нього.
+  Тому поведінка Shepherd — це наша поведінка, зокрема під час завершення роботи.
+- **Регресійний клас, який варто знати:** у 1.0.9 виправлено помилку, коли
+  `stop`-процедура служби не викликалася, якщо її залежність кидала помилку; у
+  Guix System це могло призводити до того, що файлові системи не розмонтовувалися
+  коректно. Для інсталятора, який монтує цільові файлові системи під `/mnt`, це
+  прямий ризик: незавершене розмонтування — це не «попередження в лозі».
+  Фіксуємо як upstream-клас, а не як наш дефект: власного коду, який це ламає,
+  у нас немає.
+- Дрібниця, корисна для релізної довіри: tarball Shepherd 1.0.0 заявлений як
+  bit-for-bit відтворюваний із відповідного git-тегу.
+
 ### SBOM із `guix graph`
 
 - З Guix **1.5.0** `guix graph` має бекенди `graphml` і `cyclonedx-json`, тобто
@@ -210,6 +228,8 @@ GPL-3.0-or-later, і жодна частина цього репозиторію
 - [Guix 1.6.0 release schedule, 15.11.2026](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00091.html)
 - [GCD 009 deliberation notice](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00074.html)
 - [Guix repository on Codeberg](https://codeberg.org/guix/guix/)
+- [The Shepherd 1.0.0 released](https://shepherding.services/news/2024/12/the-shepherd-1.0.0-released/)
+- [GNU Shepherd 1.0.9 released (fixes the stop/unmount bug)](https://lists.libreplanet.org/archive/html/guix-devel/2025-12/msg00032.html)
 - [guix graph: CycloneDX backend, PR #2405](https://codeberg.org/guix/guix/pulls/2405)
 - [GNU Guix 1.5.0 release announcement](https://guix.gnu.org/en/blog/2026/gnu-guix-1.5.0-released/)
 - [KDE Plasma 6.8.3, 10.11.2026](https://kde.org/announcements/plasma/6/6.8.3/)
