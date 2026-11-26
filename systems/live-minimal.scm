@@ -50,12 +50,9 @@
 (operating-system
   (host-name "wsm-live-minimal")
   (timezone "Europe/Kyiv")
-  ;; Українська — основна локаль; en_US лишається запасною для програм,
-  ;; які ще не повністю підтримують українські повідомлення.
+  ;; Українська — основна локаль. Guix автоматично враховує її у
+  ;; locale data; не дублюємо стандартний locale-definitions список.
   (locale "uk_UA.utf8")
-  (locale-definitions
-   (list (locale-definition (name "uk_UA.utf8") (source "uk_UA"))
-         (locale-definition (name "en_US.utf8") (source "en_US"))))
 
   ;; US потрібна для паролів і шляхів; Alt+Shift перемикає US/UA.
   (keyboard-layout
@@ -89,13 +86,19 @@
   (services
    (modify-services
     (append (list
-             ;; Шрифт містить кирилицю та Unicode-гліфи для TUI на tty2.
-             (service console-font-service-type '(("tty2" . "LatGrkCyr-8x16")))
              wsm-live-ready-marker
              (service network-manager-service-type)
              (service wpa-supplicant-service-type)
              (service dhcp-client-service-type))
             %base-services)
+    ;; Замість другого екземпляра console-font-service-type змінюємо
+    ;; наявну конфігурацію %base-services: один Shepherd font service на tty2.
+    (console-font-service-type config =>
+      (map (lambda (tty+font)
+             (if (string=? (car tty+font) "tty2")
+                 (cons "tty2" "LatGrkCyr-8x16")
+                 tty+font))
+           config))
     ;; tty1 і serial лишаються для boot logs; live-сесія доступна на tty2.
     (mingetty-service-type config =>
       (if (string=? (mingetty-configuration-tty config) "tty2")
