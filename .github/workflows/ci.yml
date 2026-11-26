@@ -58,8 +58,8 @@ jobs:
 
       - name: Check the channel lock
         run: |
-          python scripts/check_channels.py --policy free
-          python scripts/check_channels.py --policy compatibility
+          python scripts/check_channels.py --policy free --lock channels.lock.scm
+          python scripts/check_channels.py --policy compatibility --lock channels/compatibility.lock.scm
 
       - name: Release gate (structural)
         # No ISO in CI, so the image criterion is `not-run` and the verdict is
@@ -98,3 +98,10 @@ jobs:
         run: |
           /usr/local/bin/guix time-machine -C channels.lock.scm -- \
             home build systems/home.scm --dry-run
+
+      - name: Authenticate Compatibility channel and evaluate its system
+        # Guix time-machine authenticates fetched channel commits by default.
+        run: |
+          test -f channels/compatibility.lock.scm
+          /usr/local/bin/guix time-machine -C channels/compatibility.lock.scm -- \
+            system build systems/live-compat.scm --dry-run
