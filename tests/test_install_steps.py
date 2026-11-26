@@ -136,7 +136,7 @@ class FilesystemChoiceTests(unittest.TestCase):
 
         scheme = (ROOT / "systems" / "desktop.scm").read_text(encoding="utf-8")
         root = re.search(
-            r'\\(file-system\\s+\\(mount-point "/").*?\\(type "([^"]+)"\\)',
+            r'\(file-system\s+\(mount-point "/").*?\(type "([^"]+)"\)',
             scheme,
             flags=re.DOTALL,
         )
