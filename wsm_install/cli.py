@@ -56,6 +56,8 @@ def build_parser() -> argparse.ArgumentParser:
                          help="actually run the steps; requires --acknowledge-disk")
     install.add_argument("--guided", action="store_true",
                          help="walk through the install in a console, no flags required")
+    install.add_argument("--check-env", action="store_true",
+                         help="verify this machine can install at all, then stop")
     install.add_argument("--write-plan", metavar="PATH",
                          help="write the plan as JSON for the privileged agent instead of running it")
     install.add_argument("--tui", action="store_true",
@@ -164,6 +166,19 @@ class _Console:
         if not line:
             return ""
         return line.rstrip("\n")
+
+
+def _run_env_check(args: argparse.Namespace) -> int:
+    """Check the environment before a disk is touched."""
+    from wsm_install.preflight_env import run as run_env_check
+
+    result = run_env_check(
+        mount_point=Path(args.mount_point),
+        system_file=Path(args.system_file),
+        report=Path(args.report) if args.report else None,
+    )
+    print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+    return 1 if result["overall"] == "fail" else 0
 
 
 def _hardware_note(args: argparse.Namespace) -> str:
@@ -381,6 +396,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"wsm-install: {len(errors) - 20} additional schema errors omitted", file=sys.stderr)
         return 2
 
+    if args.check_env:
+        return _run_env_check(args)
     if args.tui:
         return _run_tui(args)
     if args.guided:
