@@ -48,7 +48,11 @@ firmware в live rootfs/initrd; жоден functional test не позначен
 
 ## Guix provenance
 
-Обидва JSON профілі прив'язані до commit 4e5195be20d9b124df8a8bb69213412236e4668e з channels.lock.scm. У коментарі зазначено authenticated pull, але побудову пакунків/образу на цьому commit ще не виконано. Це не evidence, що модуль існує в ядрі, пакет присутній у rootfs або firmware включено до initrd.
+Free manifest використовує `channels.lock.scm` із Guix commit `4e5195be20d9b124df8a8bb69213412236e4668e`; запис authenticated pull існує, але package/build evidence ще немає.
+
+Compatibility manifest окремо використовує `channels/compatibility.lock.scm`: той самий Guix commit `4e5195be20d9b124df8a8bb69213412236e4668e` і Nonguix commit `6b8897cd6f3223b158c070cdc9cc638279f8c337`. Наявність pin не є доказом криптографічної автентифікації Compatibility lock, package resolution, build чи права розповсюдження. Тому `channel_authentication_evidence=not-evaluated`, а profile лишається `draft`.
+
+Жоден із цих lock-файлів не доводить, що драйвер є в ядрі, пакет у rootfs чи firmware в initrd.
 
 
 ## Оновлені upstream-орієнтири для GTX 1050 Ti (2026-11-26)
@@ -75,4 +79,4 @@ firmware в live rootfs/initrd; жоден functional test не позначен
 
 ## Наявний system-level Compatibility профіль
 
-`systems/compatibility.scm` тепер існує в `main` як окремий opt-in рецепт Nonguix/NVIDIA `nvda-580`. Це не робить H170 compatibility manifest buildable: наявний `channels.lock.scm` фіксує лише офіційний Guix, а recipe потребує `(nonguix transformations)` і `(nongnu packages ...)`. Поки немає окремого authenticated `channels.compatibility.lock.scm` з точними Guix + Nonguix commits та введенням ключів, статус package resolution/build/redistribution у H170 compatibility лишається `not-assessed`/`unknown`. Free profile та основний `systems/live.scm` не повинні імпортувати Compatibility чи Nonguix.
+`systems/compatibility.scm` тепер існує в `main` як окремий opt-in рецепт Nonguix/NVIDIA `nvda-580`. Це не робить H170 compatibility manifest buildable: наявний `channels.lock.scm` фіксує лише офіційний Guix, а recipe потребує `(nonguix transformations)` і `(nongnu packages ...)`. Поки немає окремого authenticated `channels.compatibility.lock.scm` ще має бути підтверджена штатним Guix release gate, статус package resolution/build/redistribution у H170 compatibility лишається `not-assessed`/`unknown`. Free profile та основний `systems/live.scm` не повинні імпортувати Compatibility чи Nonguix.
