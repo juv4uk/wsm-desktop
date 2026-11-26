@@ -403,3 +403,64 @@ def gzip_open(path: Path):  # pragma: no cover - tiny helper for readable test
 
 if __name__ == "__main__":
     unittest.main()
+
+class ReleaseMetadataTests(unittest.TestCase):
+    """Release claims must match the preview-only implementation and artifact names."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.release = json.loads(
+            (ROOT / "RELEASE-INFO.json").read_text(encoding="utf-8")
+        )
+        cls.notes = (ROOT / "RELEASE-NOTES.md").read_text(encoding="utf-8")
+
+    def test_release_assets_match_the_declared_version(self) -> None:
+        version = self.release["version"]
+        self.assertEqual(self.release["schema"], "wsm-release-info/1")
+        self.assertEqual(
+            self.release["artifacts"],
+            [
+                f"wsm-desktop-{version}-source.tar.gz",
+                "SHA256SUMS",
+                "release-manifest.json",
+            ],
+        )
+        self.assertIn(version, self.notes)
+        self.assertIn("RC4", self.notes.splitlines()[0])
+
+    def test_all_installer_entries_are_preview_only(self) -> None:
+        scope = "\\n".join(self.release["scope"])
+        self.assertIn("preview-only", scope)
+        self.assertIn("APPLY вимкнено", scope)
+        self.assertIn("not-run", scope)
+        self.assertIn("не запускає процеси", scope)
+        self.assertIn("APPLY вимкнено", self.notes)
+        self.assertIn('status: "not-run"', self.notes)
+        self.assertIn("не запускаються", self.notes)
+        self.assertNotIn(
+            "root executes only an allowlisted set of commands",
+            scope + self.notes,
+        )
+        self.assertNotIn("і лише тоді виконує", self.notes)
+
+    def test_channel_pin_and_structural_policy_are_not_called_authentication(self) -> None:
+        self.assertIn(
+            "структурна перевірка lock-файлів не є криптографічною автентифікацією",
+            " ".join(self.release["scope"]),
+        )
+        self.assertIn(
+            "структурна перевірка не є криптографічною автентифікацією",
+            self.notes,
+        )
+        self.assertNotIn(
+            "зафіксованим автентифікованим channel input",
+            self.notes,
+        )
+
+    def test_unverified_install_and_image_claims_stay_explicit(self) -> None:
+        excluded = "\\n".join(self.release["excluded"])
+        self.assertIn("ані в QEMU, ані на фізичному обладнанні", excluded)
+        self.assertIn("релізний WSM ISO", excluded)
+        self.assertIn("Фізичні benchmark-и не виконувалися", excluded)
+        self.assertIn("синтетичний ISO у CI harness не є релізним WSM ISO", self.notes)
+
