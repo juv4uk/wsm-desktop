@@ -163,8 +163,8 @@ def _run_install(args: argparse.Namespace) -> int:
         return 2
     if args.target_size_bytes is None:
         print(
-            "wsm-install: --install requires --target-size-bytes; the size is how a "
-            "replaced disk is detected, so it cannot be guessed",
+            "wsm-install: --install requires --target-size-bytes as a planning estimate; "
+            "it is not read from the block device",
             file=sys.stderr,
         )
         return 2
@@ -179,7 +179,7 @@ def _run_install(args: argparse.Namespace) -> int:
             disk,
             args.firmware,
             acknowledgement=args.acknowledge_disk,
-         )
+        )
         steps = plan_steps(layout, args.filesystem, args.mount_point)
         command = backend_command(layout, args.system_file, args.mount_point)
     except Refused as exc:
