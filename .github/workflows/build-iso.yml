@@ -102,6 +102,27 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           echo "diagnostics written to the step summary"
 
+      - name: Report the failure where it can be read
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          BODY=$(mktemp)
+          {
+            echo "### Build failed"
+            echo ""
+            echo "Commit: \`$GITHUB_SHA\`"
+            echo ""
+            echo '```'
+            tail -80 build/build.log 2>/dev/null || echo "no build.log was written"
+            echo '```'
+          } > "$BODY"
+          # The job log needs authentication that the tools here do not have;
+          # a commit comment can be read back, so the reason lands there.
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
+            -F body=@"$BODY" >/dev/null && echo "comment posted"
+
       - name: Verify the image
         run: |
           set -euo pipefail
