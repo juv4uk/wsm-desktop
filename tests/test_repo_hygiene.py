@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(ROOT))
-PYTHON_SECURITY_DIRS = ("scripts", "wsm_install", "wsm_hwcheck")
+PYTHON_SECURITY_DIRS = ("scripts", "wsm_install", "wsm_hwcheck", "wsm_perf")
 
 PIPE_TO_SHELL = re.compile(
     r"\b(?:curl|wget)\b[^|\n]*\|\s*(?:sudo\s+)?(?:bash|sh)\b",
