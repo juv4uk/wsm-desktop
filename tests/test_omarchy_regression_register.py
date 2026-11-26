@@ -141,7 +141,7 @@ class OmarchyRegisterTest(unittest.TestCase):
         self.assertEqual(row[4], "—")
 
     def test_rollcall_functional_checks_remain_partial_in_wsm_inventory(self) -> None:
-        row = self._row_for_source("Omarchy #20107")
+        row = self._row_for_source("Omarchy rollcall (#20107)")
         self.assertIn("inventory", row[0])
         self.assertIn("driver binding", row[1])
         self.assertIn("functional_tests", row[2])
