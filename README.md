@@ -74,7 +74,7 @@ Tarball будується з `git archive HEAD | gzip -n -9` з `mtime=0`, то
 
 Milestones і критерії приймання — у [дорожній карті](docs/ROADMAP.md). Frontend інсталятора оцінюється в [issue #10](https://github.com/juv4uk/wsm-desktop/issues/10); Calamares не є зафіксованою залежністю. Напрямок «спершу обладнання, спершу upstream» розкрито в [апаратному preflight](docs/hardware/HWCHECK.md) та [аудиті upstream-інструментів](docs/hardware/UPSTREAM-TOOLING.md). [ADR 0004](docs/decisions/0004-nix-guix-backend-strategy.md) фіксує ратифіковане рішення про backend: перший — GNU Guix, Nix відкладено. Напрямок frontend-а «спершу обладнання» запропоновано в [ADR 0006](docs/decisions/0006-hardware-first-installer-frontend.md); його теж ще не ратифіковано. Поточна оцінка Calamares 3.4.2 — у [docs/CALAMARES-FEASIBILITY.md](docs/CALAMARES-FEASIBILITY.md).
 
-Канонічні issue та документи для кожної теми рішень перелічено в [docs/DECISIONS.md](docs/DECISIONS.md).
+Канонічні issue та документи для кожної теми рішень перелічено в [docs/DECISIONS.md](docs/DECISIONS.md). Загальна картина шарів системи — у [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Технології
 

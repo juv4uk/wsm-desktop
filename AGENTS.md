@@ -8,6 +8,7 @@
 
 - [CONTRIBUTING.md](CONTRIBUTING.md) — внесок, тестування, exact-head CI, merge policy та мовна політика.
 - [LESSONS-FROM-OMARCHY.md](docs/LESSONS-FROM-OMARCHY.md) — перевірені failure modes із Omarchy та WSM-запобіжники.
+- [docs/REVIEW-2026-11-26.md](docs/REVIEW-2026-11-26.md) — зовнішній огляд стану репозиторію; історичний зріз, не контракт.
 - [docs/ECOSYSTEM-PRINCIPLES.md](docs/ECOSYSTEM-PRINCIPLES.md) — критерії когерентності екосистеми: стек, evidence per claim, `fail safely`, антипатерни, Definition of Done.
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — середовище розробки та Guix bring-up.
 - [agents/skills/](agents/skills/) — task-specific процедури; для installer/provisioning читайте [installer-lifecycle.md](agents/skills/installer-lifecycle.md).
@@ -15,6 +16,8 @@
 - [schemas/](schemas/) і відповідні validators — машинно-читані контракти. Не змінюйте їхню версійну семантику мовчки.
 
 Не підтримуйте другу копію списку команд, профілів, станів або acceptance-вимог. Інші документи мають посилатися на канонічного власника.
+
+Новий документ без посилання з документа-власника не потрапить у `main`: `check-doc-ownership` вимагає, щоб кожен документ був досяжний від точки входу, кожен ADR — зареєстрований у `docs/DECISIONS.md`, а кожен переклад — прив'язаний до канонічного оригіналу.
 
 ## Перед багатокроковою роботою
 

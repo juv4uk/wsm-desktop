@@ -136,3 +136,9 @@ Guix configuration має бути єдиним джерелом істини д
 ## Поточний стан
 
 Робочого Calamares settings.conf, module.desc або deployment-коду поки немає. Вони будуть додані після M2, коли ми підтвердимо доступність Calamares, його залежностей та інтерфейс API у цільовому live-середовищі. Див. README у installer/calamares/.
+
+Пов'язані документи:
+
+- [INSTALL-CAPABILITY-MATRIX.md](INSTALL-CAPABILITY-MATRIX.md) — які сценарії встановлення взагалі вважаються перевіреними;
+- [INSTALLER-REPORT-FRESHNESS.md](INSTALLER-REPORT-FRESHNESS.md) — коли звіт про залізо належить поточній live-сесії;
+- [INSTALLER-QEMU-HARNESS.md](INSTALLER-QEMU-HARNESS.md) — як цей шлях перевіряється в QEMU.

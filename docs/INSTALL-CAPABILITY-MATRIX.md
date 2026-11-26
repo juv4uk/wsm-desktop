@@ -159,3 +159,5 @@ WSM спершу повторно використовує підтримува�
 - Поточна policy matrix не є сертифікацією конкретного ПК і не замінює hardware tests #8.
 
 **Висновок:** WSM має відповідати не на абстрактне «чи сумісний цей комп'ютер?», а на точніше питання: «чи достатньо перевірених доказів для цього конкретного способу інсталяції, у цій live-сесії, з цими доступними альтернативами?»
+
+Протоколи перевірки окремих класів сценаріїв: [DISPLAY-COMPATIBILITY.md](testing/DISPLAY-COMPATIBILITY.md), [NETWORK-READINESS.md](testing/NETWORK-READINESS.md), [PCIE-LINK-HEALTH.md](testing/PCIE-LINK-HEALTH.md).

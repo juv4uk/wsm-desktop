@@ -49,3 +49,5 @@ make qemu-acceptance-manual
 - Writable qcow2 та тимчасові файли створюються у приватному тимчасовому каталозі й видаляються після запуску.
 - Немає host disks, host block devices, USB/GPU passthrough, shared host folders або EFI variable store.
 - Harness не запускає Guix/Nix deployment, firmware updater чи installer APPLY.
+
+Документи harness-у: [QEMU-GUEST-CI.md](testing/QEMU-GUEST-CI.md) — CI-джоби й обов'язковий acceptance; [QEMU-HARNESS-INTEGRATION.md](testing/QEMU-HARNESS-INTEGRATION.md) — інтеграційний експеримент; [HWCHECK-QEMU-GUEST.md](testing/HWCHECK-QEMU-GUEST.md) — прогін колектора в гостьовій системі.
