@@ -12,11 +12,14 @@ import ast
 import json
 import re
 import subprocess
+import sys
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(SCRIPTS))
 
 # curl ... | sh, wget ... | bash, and the eval-the-download variants.
 PIPE_TO_SHELL = re.compile(
@@ -242,17 +245,14 @@ class VersionedArtifactTests(unittest.TestCase):
                     f"{path.name} does not pin schema or schema_version with a const",
                 )
 
-    def test_runtime_artifacts_share_the_same_version_convention(self) -> None:
-        """The Python producers must use the same <name>/<major> shape as the schemas."""
-        producers = {
-            "wsm_hwcheck/isa.py": "wsm-cpu-isa/1",
-            "scripts/measure_baseline.py": "wsm-perf-baseline/1",
-            "scripts/verify_live_release.py": "wsm-release-verdict/1",
-        }
-        for relative, expected in producers.items():
-            with self.subTest(producer=relative):
-                text = (ROOT / relative).read_text(encoding="utf-8")
-                self.assertIn(expected, text)
+    def test_runtime_artifact_producers_publish_their_schema_constant(self) -> None:
+        from measure_baseline import SCHEMA as PERF_SCHEMA
+        from verify_live_release import SCHEMA as RELEASE_SCHEMA
+        from wsm_hwcheck.isa import SCHEMA as CPU_ISA_SCHEMA
+
+        self.assertEqual(CPU_ISA_SCHEMA, "wsm-cpu-isa/1")
+        self.assertEqual(PERF_SCHEMA, "wsm-perf-baseline/1")
+        self.assertEqual(RELEASE_SCHEMA, "wsm-release-verdict/1")
 
 
 if __name__ == "__main__":
