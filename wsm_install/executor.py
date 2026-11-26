@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Callable, Sequence
 
 from wsm_install.install_steps import Step
+from wsm_install.journal import Journal  # noqa: F401 - used in the signature
 
 Runner = Callable[[Sequence[str]], subprocess.CompletedProcess]
 Verifier = Callable[[Step], tuple[bool, str]]
@@ -121,6 +122,7 @@ def execute(
     runner: Runner = default_runner,
     verifier: Verifier = default_verifier,
     out: Callable[[str], None] | None = None,
+    journal: "Journal | None" = None,
 ) -> list[StepResult]:
     """Run the steps in order, or refuse before touching anything."""
     emit = out or (lambda line: print(line, file=sys.stderr))
@@ -151,11 +153,17 @@ def execute(
             continue
 
         emit(f"[{index}/{len(steps)}] running: {printable}")
+        if journal is not None:
+            journal.starting(index, len(steps), step.command, step.purpose)
+
         completed = runner(step.command)
         if completed.returncode != 0:
             result.status = "failed"
             result.detail = (completed.stderr or "").strip()[:300] or f"exit {completed.returncode}"
             results.append(result)
+            if journal is not None:
+                journal.finished(index, "failed", result.detail)
+                journal.aborted(f"{printable}: {result.detail}")
             emit(f"  failed: {result.detail}")
             raise ExecutorError("execute.step-failed", f"{printable}: {result.detail}")
 
@@ -164,12 +172,17 @@ def execute(
             result.status = "unverified"
             result.detail = detail
             results.append(result)
+            if journal is not None:
+                journal.finished(index, "unverified", detail)
+                journal.aborted(f"{printable}: {detail}")
             emit(f"  unverified: {detail}")
             raise ExecutorError("execute.step-unverified", f"{printable}: {detail}")
 
         result.status = "done"
         result.detail = detail
         results.append(result)
+        if journal is not None:
+            journal.finished(index, "done", detail)
         emit(f"  ok: {detail}")
 
     return results

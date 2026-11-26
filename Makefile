@@ -5,7 +5,7 @@ GUIX ?= guix
 
 .PHONY: check release-gate check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle check-profiles
 
-check: check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa check-live-acceptance check-profiles-matrix check-perf-baseline check-profile-evidence check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-hygiene check-channels check-executor check-cli-install check-calamares check-guided check-tui check-agent
+check: check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa check-live-acceptance check-profiles-matrix check-perf-baseline check-profile-evidence check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-hygiene check-channels check-executor check-cli-install check-calamares check-guided check-tui check-agent check-journal
 
 check-profiles:
 	$(PYTHON) tests/test_system_profiles.py
@@ -64,6 +64,9 @@ check-tui:
 
 check-agent:
 	$(PYTHON) tests/test_agent.py
+
+check-journal:
+	$(PYTHON) tests/test_journal.py
 
 check-hygiene:
 	$(PYTHON) tests/test_repo_hygiene.py

@@ -36,6 +36,7 @@ from typing import Any, Callable, Sequence
 
 from wsm_install.executor import ExecutorError, default_runner, default_verifier, execute
 from wsm_install.install_steps import Step
+from wsm_install.journal import DEFAULT_JOURNAL, Journal
 
 # Everything the agent is allowed to run. Absolute paths only: a bare name would
 # be resolved through PATH, which is the Omarchy #8172 mistake.
@@ -144,6 +145,8 @@ def run_plan(
             "failing on the first mount",
         )
 
+    journal = None if dry_run else Journal(DEFAULT_JOURNAL)
+
     try:
         execute(
             steps,
@@ -152,6 +155,7 @@ def run_plan(
             dry_run=dry_run,
             runner=runner,
             verifier=verifier,
+            journal=journal,
         )
     except ExecutorError as exc:
         raise AgentError("agent.execution-failed", f"{exc.code}: {exc.message}") from exc
@@ -169,13 +173,27 @@ def build_parser():
             "touches disks."
         ),
     )
-    parser.add_argument("--plan", required=True, type=Path, help="install plan JSON")
+    parser.add_argument("--plan", type=Path, help="install plan JSON (or the journal with --recover)")
     parser.add_argument("--dry-run", action="store_true", help="validate and report only")
+    parser.add_argument(
+        "--recover",
+        action="store_true",
+        help="describe the state a failed install left behind, from the journal",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.recover:
+        from wsm_install.journal import recovery_report
+
+        sys.stdout.write(recovery_report(Path(args.plan)))
+        return 0
+    if args.plan is None:
+        print("wsm-install-agent: --plan is required unless --recover is given", file=sys.stderr)
+        return 2
+
     try:
         document, steps = load_plan(args.plan)
         run_plan(document, steps, args.dry_run)
