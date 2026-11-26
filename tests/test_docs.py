@@ -25,6 +25,18 @@ class DocumentationTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
+class InstallerDocumentationPolicyTests(unittest.TestCase):
+    def test_installer_doc_matches_current_minimal_live_direction(self) -> None:
+        document = (ROOT / "docs" / "INSTALLER.md").read_text(encoding="utf-8")
+        self.assertIn("wsm-install-live", document)
+        self.assertIn("Поточний шлях minimal-live: read-only CLI/TUI preview", document)
+        self.assertIn("Calamares — deprioritized/reference-only", document)
+        self.assertNotIn("| Calamares | опційно", document)
+        self.assertNotIn("Calamares лишається як зручність", document)
+        self.assertNotIn("Початковий кандидат — **Calamares 3.4.2**", document)
+        self.assertIn("Умовний workflow Calamares (не реалізовано)", document)
+
+
 class DocumentationLanguageTests(unittest.TestCase):
     def test_ukrainian_detection(self) -> None:
         self.assertTrue(

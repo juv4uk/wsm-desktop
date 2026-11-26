@@ -209,12 +209,14 @@ class ShellSyntaxTests(unittest.TestCase):
 
 
 class InstallerFrontendTests(unittest.TestCase):
-    """The CLI is the primary path: a GUI installer needs hardware we may not have."""
+    """The current minimal-live path is CLI/TUI; Calamares is reference-only."""
 
-    def test_installer_document_names_the_cli_as_primary(self) -> None:
+    def test_installer_document_matches_the_current_live_path(self) -> None:
         text = (ROOT / "docs" / "INSTALLER.md").read_text(encoding="utf-8")
-        self.assertIn("Два входи, один бекенд", text)
-        self.assertIn("CLI первинний", text)
+        self.assertIn("wsm-install-live", text)
+        self.assertIn("Один typed contract, поточний CLI/TUI шлях", text)
+        self.assertIn("Calamares | **deprioritized/reference-only**", text)
+        self.assertNotIn("| Calamares | опційно", text)
 
     def test_calamares_module_is_marked_optional(self) -> None:
         text = (ROOT / "installer" / "calamares" / "README.md").read_text(encoding="utf-8")
