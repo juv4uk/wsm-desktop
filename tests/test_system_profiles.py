@@ -125,6 +125,7 @@ class DesktopProfileTests(unittest.TestCase):
         self.assertIn("sddm-service-type", self.text)
         self.assertIn("(gnu services xorg)", self.text)
         self.assertIn("(delete gdm-service-type)", self.text)
+        self.assertIn("(gnu services xorg)", self.text)
 
     def test_has_a_desktop_environment(self) -> None:
         self.assertIn("plasma-desktop-service-type", self.text)
