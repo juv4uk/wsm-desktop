@@ -10,15 +10,18 @@
     "profile",
     "report_id",
     "report_schema_version",
+    "isa_level",
     "verified_on",
     "verified_by",
     "verified_functions",
     "known_limitations",
-    "not_assessed"
+    "not_assessed",
+    "profile_source",
+    "artifacts"
   ],
   "properties": {
     "schema": {
-      "const": "wsm-profile-evidence/1"
+      "const": "wsm-profile-evidence/2"
     },
     "profile": {
       "type": "object",
@@ -69,8 +72,12 @@
     },
     "verified_by": {
       "type": "string",
-      "minLength": 1,
-      "description": "Who ran the verification. Personal names and e-mail addresses are not accepted."
+      "enum": [
+        "автори проєкту",
+        "local agent",
+        "web agent"
+      ],
+      "description": "Role label only; personal names and e-mail addresses are not accepted."
     },
     "verified_functions": {
       "type": "array",
@@ -96,6 +103,16 @@
           },
           "note": {
             "type": "string"
+          },
+          "evidence": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Artifact paths that support this specific pass/fail result; the source hardware report alone is provenance, not functional proof."
           }
         }
       }
@@ -123,12 +140,17 @@
         "additionalProperties": false,
         "required": [
           "kind",
+          "path",
           "sha256"
         ],
         "properties": {
           "kind": {
             "type": "string",
-            "minLength": 1
+            "enum": [
+              "wsm-hwcheck-report",
+              "functional-test-log"
+            ],
+            "description": "Closed allowlist. The hwcheck report is provenance only; functional claims require a distinct functional-test-log."
           },
           "sha256": {
             "type": "string",
@@ -136,9 +158,16 @@
           },
           "note": {
             "type": "string"
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Safe relative POSIX path under the profile's artifacts/ directory, e.g. artifacts/functional-test.log.",
+            "pattern": "^artifacts/.+$"
           }
         }
-      }
+      },
+      "minItems": 1
     },
     "hardware_signature": {
       "type": "object",
@@ -167,6 +196,24 @@
         },
         "notes": {
           "type": "string"
+        }
+      }
+    },
+    "profile_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "description": "The exact profile.scm bytes tested by this evidence bundle.",
+      "properties": {
+        "path": {
+          "const": "profile.scm"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
         }
       }
     }
