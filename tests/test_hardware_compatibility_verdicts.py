@@ -133,6 +133,15 @@ class DecisionLevelTests(unittest.TestCase):
         block = section(self.text, "## 4.1")
         self.assertIn("не може непомітно стати `hard-stop`", block)
 
+    def test_certified_has_a_bounded_validity(self) -> None:
+        """`certified` must name what invalidates it, not just what earns it."""
+        block = section(self.text, "## 4.2")
+        self.assertIn("Строк дії `certified`", block)
+        for cause in ("profile.scm", "реліз ядра", "firmware"):
+            with self.subTest(cause=cause):
+                self.assertIn(cause, block)
+        self.assertIn("анулюється", block)
+
     def test_hard_stop_covers_a_report_gap(self) -> None:
         """`not-collected` blocks too, but must not be worded as a machine verdict."""
         block = section(self.text, "## 4.1")
@@ -145,7 +154,9 @@ class DecisionLevelTests(unittest.TestCase):
 
     def test_coarse_tiers_map_only_to_known_evidence_states(self) -> None:
         """A three-word UI vocabulary may not invent a state we do not have."""
-        block = section(self.text, "## 4.2")
+        # Only the mapping table: the validity table further down also starts
+        # its rows with a backticked token.
+        block = section(self.text, "## 4.2").split("### Строк дії")[0]
         rows = [line for line in block.splitlines() if line.startswith("| `")]
         self.assertGreaterEqual(len(rows), 3, rows)
         for line in rows:
