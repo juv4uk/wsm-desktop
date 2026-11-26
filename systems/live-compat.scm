@@ -1,29 +1,29 @@
 ;; SPDX-License-Identifier: LicenseRef-Volnist
 ;;
-;; WSM Desktop — Compatibility live ISO з KDE Plasma та NVIDIA 580.xx.
+;; WSM Desktop — окремий opt-in Compatibility live-профіль з NVIDIA 580.x.
 ;;
-;; Цей профіль призначено для Pascal GP107 (GTX 1050 Ti, device 0x1c82).
-;; 580.xx — остання гілка з підтримкою GPxxx; 590+ GPU не розпізнає.
-;; Використовуємо pins із channels/compatibility.lock.scm.
+;; Ціль цього кандидата: NVIDIA GeForce GTX 1050 Ti, PCI ID 10de:1c82
+;; (Pascal, GP107). Профіль використовує Nonguix з окремого lock
+;; `channels/compatibility.lock.scm`; він не належить до Free profile
+;; і не вмикається за замовчуванням.
 ;;
+;; NVIDIA 580.x обрано для цього точного PCI ID на підставі upstream evidence:
+;; Linux 580.196.11 перелічує GTX 1050 Ti, а в перевіреному списку Linux
+;; 595.45.04 ID 1C82 відсутній. Це обґрунтовує pin для цього target, але
+;; не є загальним твердженням про всі Pascal GPU і не доводить, що pinned
+;; Nonguix package збігається з 580.196.11.
 ;;
-;; Цей файл відповідає образу, який реально зібрано й завантажено в QEMU
-;; 25 листопада 2026 року. Збірка (у ізольованому Guix store):
+;; Стан саме цього профілю на 26.11.2026:
+;; - Guix evaluation: NOT RUN
+;; - Compatibility package closure та image build: NOT RUN
+;; - QEMU BIOS/UEFI boot: NOT RUN
+;; - Physical H170 / GTX 1050 Ti binding та rendering: NOT RUN
+;; Тести нижче перевіряють лише source-level graph overrides; вони не
+;; замінюють Guix evaluation, image build, QEMU або physical acceptance.
 ;;
-;;     guix system image -t uncompressed-iso9660 systems/live-iso.scm
+;; Жодних тверджень про готовий образ, перевірений boot або функціональність
+;; GTX 1050 Ti цей файл зараз не робить.
 ;;
-;; Чому uncompressed-iso9660: звичайний --image-type=iso9660 додає zisofs
-;; level=9 і на цій машині стискався понад 35 хвилин. Нестиснений образ
-;; більший (7,73 GiB), але складається швидко й Ventoy читає його нормально.
-;;
-;; Що є: KDE Plasma, SDDM із автологіном, NetworkManager + WPA supplicant,
-;; наші власні wsm-hwcheck/wsm-install як preflight/dry-run launcher.
-;;
-;; Чого НЕМАЄ: запису на диск (REALIZE/APPLY з docs/INSTALLER-HANDOFF.md),
-;; пропрієтарного firmware чи Nonguix, повної підтримки драйверів на
-;; реальному залізі. Це live-попередній перегляд, не інсталятор усього
-;; дистрибутива.
-
 (use-modules (gnu)
              (gnu services shepherd)
              (gnu packages python)
