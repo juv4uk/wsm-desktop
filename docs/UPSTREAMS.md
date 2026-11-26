@@ -135,6 +135,25 @@ GPL-3.0-or-later, і жодна частина цього репозиторію
   commit `4e5195be20d9b124df8a8bb69213412236e4668e`, який на Codeberg є верхівкою
   `master` станом на 25.11.2026. Це пін, а не доказ того, що зріз збирається.
 
+### Bootloader та initramfs: уроки Omarchy 25.11.2026
+
+- **Omarchy розділила boot backend за firmware mode:** нові UEFI-інсталяції переходять на `systemd-boot`, BIOS зберігає Limine; наявні Limine-системи не перемикаються автоматично. Робота винесена у loader-neutral шар для boot, cmdline, kernel rebuild та restore, а не в один набір прямих записів у конфігурацію конкретного loader.
+- **Secure Boot не слід вважати вже ввімкненим у Omarchy.** Злиття systemd-boot готує сумісний другий етап для підписаного shim, але на дату цього зрізу потрібні окремі підпис kernel/modules, lockdown і enrollment ключів. Сам факт наявності systemd-boot не є доказом Secure Boot.
+- **Повторне використання initramfs має вузьку умову.** Omarchy передає попередньо зібраний initramfs лише для точного kernel/package base і незміненої конфігурації образу. Інші kernel modules, keymap, платформа, shared ESP або будь-які зміни initramfs inputs означають локальну перебудову; за відсутнього/несумісного артефакту використовується штатний builder. Після налаштування boot артефакт видаляється з root image. Upstream вказує приблизно 4 секунди економії на одному конкретному install path; це не універсальна оцінка швидкості.
+- **Поточний WSM не має цього loader backend.** `systems/live-minimal.scm` вибирає `grub-efi-bootloader`, `systems/live-compat.scm` — `grub-bootloader`. Розмітка BIOS/UEFI у `wsm_install/partition.py` і кроки ESP у `wsm_install/install_steps.py` є планувальним контрактом; вони не дають права окремо писати Limine/systemd-boot конфігурацію. Guix лишається власником встановлення bootloader через `bootloader-configuration`.
+- **Межа Guix:** довідник GNU Guix 1.5.0 документує `grub-bootloader`, `grub-efi-bootloader`, removable/netboot варіанти GRUB, `extlinux-bootloader` та `u-boot-bootloader`; `systemd-boot` і Limine не наведені в цьому переліку. Це не замінює перевірку точного commit з channel lock під час Guix evaluation. До появи підтриманого Guix backend або окремого ратифікованого адаптера WSM не повинен додавати власний shell installer для ESP чи EFI boot entries.
+- **Безпечне запозичення initramfs-переваги — Guix-native.** Спочатку виміряти, чи потрібна derivation конкретного initrd уже є в store/substitute closure. Повторне використання допускається лише через той самий Guix derivation та його зафіксовані inputs; Free й Compatibility locks/closures не змішувати. Для Compatibility NVIDIA kernel modules, firmware та module options можуть змінювати initrd, отже Free initramfs не можна вважати взаємозамінним. Жодних ручних копій initramfs на ESP, обхідного unpack/apply або нових substitute trust roots.
+- **Висновок для WSM:** запозичуємо loader-neutral архітектурну межу, строгий fallback і точну перевірку inputs; не переносимо Limine/systemd-boot, snapshot restore або initramfs sidecar. Перехід на інший loader потребуватиме окремого ADR, підтримуваного Guix backend, BIOS/UEFI QEMU acceptance, перевірки interrupted update/rollback та окремих physical evidence. До того часу діє поточний GRUB path без змін.
+
+Джерела:
+- [Omarchy upstream: systemd-boot, BIOS/Limine split та prebuilt initramfs, 25.11.2026](https://omarchyupstream.com/2026-11-25/)
+- [Omarchy: boot through systemd-boot with snapshot boot and restore (#19667)](https://github.com/basecamp/omarchy/pull/19667)
+- [Omarchy ISO: install UEFI machines with systemd-boot (#489)](https://github.com/omacom/omarchy-iso/pull/489)
+- [Omarchy: let systemd-boot install store a pre-built initramfs (#20196)](https://github.com/basecamp/omarchy/pull/20196)
+- [Omarchy ISO: boot systemd-boot installs from a pre-built initramfs (#529)](https://github.com/omacom/omarchy-iso/pull/529)
+- [GNU Guix 1.5.0 Manual — Bootloader Configuration](https://guix.gnu.org/manual/1.5.0/en/html_node/Bootloader-Configuration.html)
+- [WSM Free channel lock](../channels.lock.scm) і [Compatibility channel lock](../channels/compatibility.lock.scm): обидва фіксують Guix commit `4e5195be20d9b124df8a8bb69213412236e4668e`; Compatibility додатково фіксує окремий Nonguix commit.
+
 ### KDE Plasma
 
 - Актуальний stable — **Plasma 6.8.3** (10.11.2026); лінія 6.8 була
