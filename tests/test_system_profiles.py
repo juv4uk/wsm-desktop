@@ -245,18 +245,44 @@ class PublishedIsoTests(unittest.TestCase):
     """
 
     def test_every_live_profile_prints_the_marker(self) -> None:
-        for name in ("live.scm", "live-minimal.scm", "live-iso.scm"):
+        for name in ("live.scm", "live-minimal.scm", "live-iso.scm", "live-compat.scm"):
             with self.subTest(profile=name):
                 self.assertIn("WSM_LIVE_READY", profile(name))
 
     def test_every_live_profile_registers_the_marker_service(self) -> None:
-        for name in ("live.scm", "live-minimal.scm", "live-iso.scm"):
+        for name in ("live.scm", "live-minimal.scm", "live-iso.scm", "live-compat.scm"):
             with self.subTest(profile=name):
                 self.assertIn("wsm-live-ready-marker", profile(name))
 
     def test_the_iso_profile_ships_the_installer_tools(self) -> None:
         """The image must contain what it is supposed to install with."""
         self.assertIn("wsm-live-tools", profile("live-iso.scm"))
+
+
+class CompatibilityImageTests(unittest.TestCase):
+    """The NVIDIA image needs its own lock; the free one cannot resolve (nongnu ...)."""
+
+    def test_compat_profile_uses_nonguix_and_the_nvidia_service(self) -> None:
+        text = profile("live-compat.scm")
+        self.assertIn("(nongnu packages nvidia)", text)
+        self.assertIn("nvidia-service-type", text)
+        self.assertIn("linux-firmware", text)
+
+    def test_compat_profile_ships_the_installer(self) -> None:
+        self.assertIn("wsm-live-tools", profile("live-compat.scm"))
+
+    def test_builder_can_take_a_different_lock(self) -> None:
+        text = (ROOT / "scripts" / "build_iso.sh").read_text(encoding="utf-8")
+        self.assertIn("WSM_CHANNEL_LOCK", text)
+
+    def test_compat_lock_pins_both_channels(self) -> None:
+        import re
+
+        text = (ROOT / "channels" / "compatibility.lock.scm").read_text(encoding="utf-8")
+        names = set(re.findall(r"\(name\s+'(\S+)\)", text))
+        commits = re.findall(r'\(commit\s+"([0-9a-f]{40})"\)', text)
+        self.assertEqual(names, {"guix", "nonguix"})
+        self.assertEqual(len(commits), 2)
 
 
 class AudioConflictTests(unittest.TestCase):

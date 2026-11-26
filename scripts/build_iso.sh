@@ -11,7 +11,15 @@ cd "$ROOT"
 
 PROFILE="${WSM_LIVE_PROFILE:-$ROOT/systems/live.scm}"
 OUTPUT_DIR="${WSM_ISO_DIR:-$ROOT/build}"
-LOCK="$ROOT/channels.lock.scm"
+# Two products, two locks. The Compatibility image needs Nonguix, and building it
+# from the free lock is not a small mistake: the profile imports (nongnu ...)
+# modules that the free channel set cannot resolve, so the build would fail
+# late, after Guix has already been fetched.
+LOCK="${WSM_CHANNEL_LOCK:-$ROOT/channels.lock.scm}"
+case "$LOCK" in
+    /*) ;;
+    *) LOCK="$ROOT/$LOCK" ;;
+esac
 
 case "$PROFILE" in
     /*) ;;
@@ -53,9 +61,14 @@ from pathlib import Path
 
 text = Path(sys.argv[1]).read_text(encoding="utf-8")
 matches = re.findall(r'\(commit\s+"([0-9a-f]{40})"\)', text)
-if len(matches) != 1:
-    raise SystemExit("expected exactly one 40-character channel commit in channels.lock.scm")
+names = re.findall(r"\(name\s+'(\S+)\)", text)
+if not matches:
+    raise SystemExit(f"no 40-character channel commit in {sys.argv[1]}")
+if "nonguix" in names and len(matches) < 2:
+    raise SystemExit("the lock names nonguix but pins fewer than two commits")
+# The first commit is always Guix: the profile language and the store come from it.
 print(matches[0])
+print(",".join(names), file=sys.stderr)
 PY
 )
 
