@@ -231,6 +231,12 @@ jobs:
             echo "gh >= ${MINIMUM_VERSION} is required for exact signer-workflow verification; found ${GH_VERSION:-unknown}." >&2
             exit 1
           fi
+          {
+            echo "### Версія верифікатора provenance"
+            echo ""
+            echo "GitHub CLI: $GH_VERSION"
+            echo "Required minimum: $MINIMUM_VERSION"
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Перевірити provenance артефактів перед публікацією
         run: |
           set -euo pipefail
