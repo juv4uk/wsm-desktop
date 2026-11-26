@@ -98,8 +98,8 @@ class MinimalLiveProfileTests(unittest.TestCase):
         self.assertIn("--draft --prerelease", workflow)
         self.assertIn("--draft=false", workflow)
         self.assertIn('RELEASE_EXISTS=true', workflow)
-        self.assertIn('TARGET_COMMIT != "$GITHUB_SHA"', workflow)
-        self.assertIn('IS_DRAFT != "true"', workflow)
+        self.assertIn('[ "$TARGET_COMMIT" != "$GITHUB_SHA" ]', workflow)
+        self.assertIn('[ "$IS_DRAFT" != "true" ]', workflow)
         self.assertIn("--json assets --jq '.assets[].name'", workflow)
         self.assertIn("Повідомити причину збою", workflow)
 
