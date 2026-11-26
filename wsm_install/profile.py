@@ -158,6 +158,23 @@ def problems(
 
     schema = schema or load_schema()
 
+    # Refuse an unknown bundle version by name, before JSON Schema turns it into
+    # a const mismatch. "This is a /3 bundle and I only read /2" is actionable;
+    # "schema: /schema: 'wsm-profile-evidence/3' was expected" is not, and a
+    # reader that upgrades silently is how a version number stops meaning
+    # anything.
+    expected_version = (
+        schema.get("properties", {}).get("schema", {}).get("const")
+        if isinstance(schema, dict)
+        else None
+    )
+    version = document.get("schema") if isinstance(document, dict) else None
+    if expected_version and version != expected_version:
+        return [
+            f"schema-version: {version!r} is not {expected_version!r}; "
+            f"this reader does not upgrade an unknown bundle version"
+        ]
+
     try:
         import jsonschema
     except ImportError:  # pragma: no cover - jsonschema is a runtime dependency
