@@ -85,14 +85,48 @@ class InstallModeTests(unittest.TestCase):
         self.assertIn("execute.apply-disabled", result.stderr)
         self.assertNotIn("Choose a disk", result.stdout)
 
-    def test_execute_without_acknowledgement_never_reaches_a_command(self) -> None:
-        """The dangerous flag alone must not be enough."""
+    def test_execute_without_acknowledgement_is_disabled_before_planning(self) -> None:
         result = run_cli(
             "--install", "--execute", "--target-disk", "/dev/nvme0n1",
             "--target-size-bytes", str(256 * GIB), "--quiet",
         )
         self.assertEqual(result.returncode, 2)
-        self.assertIn("acknowledgement", result.stderr)
+        self.assertIn("execute.apply-disabled", result.stderr)
+        self.assertEqual(result.stdout, "")
+
+    def test_write_plan_emits_a_valid_preview_only_agent_document(self) -> None:
+        from wsm_install.agent import load_plan, run_plan
+
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "install-plan.json"
+            result = run_cli(
+                "--install", "--target-disk", "/dev/nvme0n1",
+                "--target-size-bytes", str(256 * GIB),
+                "--acknowledge-disk", "/dev/nvme0n1",
+                "--write-plan", str(destination), "--quiet",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(destination.is_file())
+            document, steps = load_plan(destination)
+            self.assertEqual(document["schema"], "wsm-install-plan/1")
+            self.assertGreater(len(steps), 0)
+            self.assertEqual(run_plan(document, steps, dry_run=True), 0)
+            self.assertIn("agent is preview-only", result.stderr)
+
+    def test_write_plan_does_not_overwrite_existing_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "install-plan.json"
+            original = "do not replace this file\n"
+            destination.write_text(original, encoding="utf-8")
+            result = run_cli(
+                "--install", "--target-disk", "/dev/nvme0n1",
+                "--target-size-bytes", str(256 * GIB),
+                "--acknowledge-disk", "/dev/nvme0n1",
+                "--write-plan", str(destination), "--quiet",
+            )
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("cannot write plan", result.stderr)
+            self.assertEqual(destination.read_text(encoding="utf-8"), original)
 
 
 if __name__ == "__main__":
