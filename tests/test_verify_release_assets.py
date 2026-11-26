@@ -71,6 +71,8 @@ class ReleaseAssetVerificationTests(unittest.TestCase):
         self.assertIn("gh version", version_check)
         self.assertIn("2.102.0", version_check)
         self.assertIn("sort -V", version_check)
+        self.assertIn('echo "GitHub CLI: $GH_VERSION"', version_check)
+        self.assertIn('>> "$GITHUB_STEP_SUMMARY"', version_check)
 
         attest = steps[attest_index]
         self.assertEqual(attest["uses"], "actions/attest@v4")
