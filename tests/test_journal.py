@@ -1,68 +1,48 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""A half-finished install must leave a readable trace, not a guess."""
+"""Journal serialization/recovery format tests; no real disk APPLY is active."""
 
 from __future__ import annotations
 
 import json
-import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-
-from wsm_install.executor import ExecutorError, execute  # noqa: E402
-from wsm_install.install_steps import Step  # noqa: E402
-from wsm_install.journal import Journal, read_entries, recovery_report  # noqa: E402
-
-STEPS = [
-    Step(["/usr/sbin/partprobe", "/dev/nvme0n1"], "re-read"),
-    Step(["/usr/sbin/mkfs.ext4", "-F", "/dev/nvme0n1p2"], "format root", destructive=True),
-    Step(["/usr/bin/mount", "/dev/nvme0n1p2", "/mnt"], "mount root"),
-]
-
-
-def ok_runner(command):
-    return subprocess.CompletedProcess(list(command), 0, "", "")
-
-
-def fail_on_mkfs(command):
-    code = 1 if "mkfs" in command[0] else 0
-    return subprocess.CompletedProcess(list(command), code, "", "disk on fire")
+from wsm_install.journal import Journal, read_entries, recovery_report
 
 
 class JournalWritingTests(unittest.TestCase):
-    def test_every_step_is_recorded_before_and_after(self) -> None:
+    def test_each_step_can_be_recorded_before_and_after(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "journal.jsonl"
-            execute(STEPS, "/dev/nvme0n1", acknowledgement="/dev/nvme0n1", dry_run=False,
-                    runner=ok_runner, verifier=lambda step: (True, "ok"),
-                    out=lambda _: None, journal=Journal(path))
+            journal = Journal(path)
+            for index, command in enumerate((
+                ["/run/current-system/profile/sbin/partprobe", "/dev/nvme0n1"],
+                ["/run/current-system/profile/sbin/mkfs.ext4", "-F", "/dev/nvme0n1p2"],
+                ["/run/current-system/profile/bin/mount", "/dev/nvme0n1p2", "/mnt"],
+            ), start=1):
+                journal.starting(index, 3, command, "synthetic recovery fixture")
+                journal.finished(index, "done", "synthetic postcondition")
             entries = read_entries(path)
         events = [entry["event"] for entry in entries]
         self.assertEqual(events.count("step-starting"), 3)
         self.assertEqual(events.count("step-finished"), 3)
-        self.assertTrue(all(e["status"] == "done" for e in entries if e["event"] == "step-finished"))
+        self.assertTrue(all(
+            entry["status"] == "done"
+            for entry in entries if entry["event"] == "step-finished"
+        ))
 
     def test_failure_is_recorded_with_the_reason(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "journal.jsonl"
-            with self.assertRaises(ExecutorError):
-                execute(STEPS, "/dev/nvme0n1", acknowledgement="/dev/nvme0n1", dry_run=False,
-                        runner=fail_on_mkfs, verifier=lambda step: (True, "ok"),
-                        out=lambda _: None, journal=Journal(path))
+            journal = Journal(path)
+            journal.starting(1, 1, ["/run/current-system/profile/sbin/mkfs.ext4", "/dev/vda2"], "format")
+            journal.finished(1, "failed", "synthetic failure")
+            journal.aborted("synthetic failure")
             entries = read_entries(path)
-        aborted = [e for e in entries if e["event"] == "aborted"]
+        aborted = [entry for entry in entries if entry["event"] == "aborted"]
         self.assertEqual(len(aborted), 1)
-        self.assertIn("mkfs", aborted[0]["reason"])
-
-    def test_dry_run_writes_nothing(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            path = Path(temporary) / "journal.jsonl"
-            execute(STEPS, "/dev/nvme0n1", dry_run=True, out=lambda _: None, journal=Journal(path))
-            self.assertFalse(path.exists())
+        self.assertIn("synthetic", aborted[0]["reason"])
 
     def test_journal_is_append_only(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -71,16 +51,15 @@ class JournalWritingTests(unittest.TestCase):
             journal.aborted("first")
             journal.aborted("second")
             entries = read_entries(path)
-        self.assertEqual([e["reason"] for e in entries], ["first", "second"])
+        self.assertEqual([entry["reason"] for entry in entries], ["first", "second"])
 
     def test_truncated_last_line_is_ignored(self) -> None:
-        """A crash mid-write must not make the whole journal unreadable."""
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "journal.jsonl"
             journal = Journal(path)
             journal.aborted("complete")
-            with path.open("a", encoding="utf-8") as handle:
-                handle.write('{"event": "step-star')
+            with path.open("a", encoding="utf-8") as stream:
+                stream.write('{"event": "step-star')
             entries = read_entries(path)
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0]["reason"], "complete")
