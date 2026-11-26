@@ -1,20 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""A pseudo-graphical installer for machines that have a screen but no desktop.
-
-Three frontends, one backend:
-
-* console (`--guided`) - a terminal with no cursor control, or a serial line;
-* pseudo-graphics (`--tui`) - this module: a full-screen box, arrow keys, Enter;
-* Calamares - a real GUI, for machines that can afford Qt.
-
-Why not curses: `curses` is in the standard library but drags terminal
-capability handling and a global screen state that is painful to test and
-breaks on serial consoles. The screen here is a list of lines plus a key
-reader, both injectable, so the whole flow is testable without a terminal.
-
-Why not a real GUI at this level: the point of the middle tier is to work on a
-machine with 1-2 GiB of RAM and no GPU. Box drawing characters cost nothing.
-"""
+"""A dependency-free, preview-only keyboard interface for the WSM installer."""
 
 from __future__ import annotations
 
@@ -26,8 +11,6 @@ from wsm_install.guided import Candidate
 
 BOX_WIDTH = 62
 CLEAR = "\x1b[2J\x1b[H"
-HIDE_CURSOR = "\x1b[?25l"
-SHOW_CURSOR = "\x1b[?25h"
 
 
 class Screen(Protocol):
@@ -37,7 +20,7 @@ class Screen(Protocol):
 
 @dataclass
 class TerminalScreen:
-    """Real terminal: ANSI for drawing, raw single keys for input."""
+    """Minimal POSIX terminal adapter; all drawing/input stays injectable."""
 
     stream: object = sys.stdout
 
@@ -58,49 +41,44 @@ class TerminalScreen:
             tty.setraw(descriptor)
             char = sys.stdin.read(1)
             if char == "\x1b":
-                # Arrow keys arrive as ESC [ A/B/C/D.
                 rest = sys.stdin.read(2)
                 return {"[A": "up", "[B": "down"}.get(rest, "esc")
-            return {"\r": "enter", "\n": "enter", "q": "quit", "j": "down", "k": "up"}.get(
-                char, char
-            )
+            return {"\r": "enter", "\n": "enter", "q": "quit", "j": "down", "k": "up"}.get(char, char)
         finally:
             termios.tcsetattr(descriptor, termios.TCSADRAIN, previous)
 
 
 def box(title: str, body: list[str], width: int = BOX_WIDTH) -> list[str]:
-    """Draw a box. Pure function, so the layout is testable without a terminal."""
     inner = max(width - 4, 10)
     lines = ["┌" + "─" * (width - 2) + "┐"]
-    lines.append("│ " + title[: inner].ljust(inner) + " │")
+    lines.append("│ " + title[:inner].ljust(inner) + " │")
     lines.append("├" + "─" * (width - 2) + "┤")
     for entry in body:
-        lines.append("│ " + entry[: inner].ljust(inner) + " │")
+        lines.append("│ " + entry[:inner].ljust(inner) + " │")
     lines.append("└" + "─" * (width - 2) + "┘")
     return lines
 
 
 def disk_list(candidates: list[Candidate], selected: int) -> list[str]:
-    lines: list[str] = []
+    result: list[str] = []
     for index, disk in enumerate(candidates):
         marker = ">" if index == selected else " "
         removable = "  removable" if disk.removable else ""
-        lines.append(f"{marker} {index + 1}. {disk.path:<16} {disk.human_size():>9}{removable}")
-    return lines
+        result.append(f"{marker} {index + 1}. {disk.path:<16} {disk.human_size():>9}{removable}")
+    return result
 
 
 def run_tui(
     screen: Screen,
     candidates: Iterable[Candidate],
-    plan: Callable[[str, int, str], object],
-    install: Callable[[str, int, bool], object],
+    preview: Callable[[str, int, str], object],
     evidence_note: str = "",
 ) -> int:
-    """Choose a disk with arrow keys, confirm by typing its path. Returns an exit code."""
+    """Choose a disk and display a read-only plan. There is no APPLY callback."""
     disks = list(candidates)
 
     if not disks:
-        screen.render(box("WSM install", [
+        screen.render(box("WSM preview", [
             "No whole disks were found.",
             "If the disk is attached, check that the kernel sees it: lsblk",
             "",
@@ -111,13 +89,12 @@ def run_tui(
 
     selected = 0
     while True:
-        body = ["", "Choose the disk to install onto:", ""]
+        body = ["", "Choose a disk to preview:", ""]
         body += disk_list(disks, selected)
         body += ["", "↑/↓ or j/k to move, Enter to choose, q to quit."]
         if evidence_note:
             body += ["", f"Hardware: {evidence_note}"[: BOX_WIDTH - 4]]
-        screen.render(box("WSM install", body))
-
+        screen.render(box("WSM preview", body))
         key = screen.read_key()
         if key == "quit":
             return 1
@@ -129,12 +106,11 @@ def run_tui(
             break
 
     disk = disks[selected]
-
     firmware = "uefi"
     while True:
         screen.render(box("Firmware", [
             "",
-            f"Disk: {disk.path}  ({disk.human_size()})",
+            f"Preview target: {disk.path} ({disk.human_size()})",
             "",
             f"  [1] UEFI{'  <-' if firmware == 'uefi' else ''}",
             f"  [2] BIOS{'  <-' if firmware == 'bios' else ''}",
@@ -144,9 +120,9 @@ def run_tui(
         key = screen.read_key()
         if key == "quit":
             return 1
-        if key in {"1"}:
+        if key == "1":
             firmware = "uefi"
-        elif key in {"2"}:
+        elif key == "2":
             firmware = "bios"
         elif key == "up":
             firmware = "uefi"
@@ -157,11 +133,11 @@ def run_tui(
 
     typed = ""
     while True:
-        screen.render(box("Confirm", [
+        screen.render(box("Confirm preview", [
             "",
-            f"This will erase {disk.path} ({disk.human_size()}) completely.",
-            "",
-            "Type the disk path to confirm, or q to quit.",
+            f"Target: {disk.path} ({disk.human_size()})",
+            "No disk will be erased or written.",
+            "Type the disk path to confirm this preview, or q to quit.",
             "",
             f"  > {typed}_",
         ]))
@@ -178,26 +154,33 @@ def run_tui(
     if typed != disk.path:
         screen.render(box("Stopped", [
             "",
-            "The path you typed does not match the chosen disk.",
-            "Nothing was changed.",
+            "The path does not match the selected disk.",
+            "No commands were executed.",
         ]))
         screen.read_key()
         return 1
 
-    screen.render(box("Planning", ["", f"Planning {disk.path}..."]))
-    plan(disk.path, disk.size_bytes, firmware)
+    screen.render(box("Planning", ["", f"Preparing a preview for {disk.path}..."]))
+    result = preview(disk.path, disk.size_bytes, firmware)
+    if type(result) is not int or result != 0:
+        detail = f"Preview failed (exit {result})." if type(result) is int else "Preview callback returned no exit code."
+        screen.render(box("Preview failed", [
+            "",
+            detail,
+            "APPLY is disabled. No disk commands were executed.",
+        ]))
+        screen.read_key()
+        return result if type(result) is int and result != 0 else 1
 
-    screen.render(box("Install", [
+    screen.render(box("Preview only", [
         "",
-        f"Plan ready for {disk.path} ({firmware}).",
+        f"Preview completed for {disk.path} ({firmware}).",
         "",
-        "Enter to install, q to stop. Nothing has been written yet.",
+        "APPLY is disabled.",
+        "No disk commands were executed.",
+        "The system is NOT installed.",
+        "",
+        "Press any key to return.",
     ]))
-    if screen.read_key() != "enter":
-        screen.render(box("Stopped", ["", "Stopped after planning. Nothing was changed."]))
-        return 1
-
-    screen.render(box("Installing", ["", f"Writing the system to {disk.path}..."]))
-    install(disk.path, disk.size_bytes, firmware)
-    screen.render(box("Done", ["", "Installation finished.", "Remove the medium and reboot."]))
+    screen.read_key()
     return 0
