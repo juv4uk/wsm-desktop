@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import json
 import os
 import stat
@@ -56,6 +58,8 @@ def build_parser() -> argparse.ArgumentParser:
                          help="request real APPLY (currently refused; no disk commands are run)")
     install.add_argument("--guided", action="store_true",
                          help="walk through disk selection and a read-only install preview")
+    install.add_argument("--tui", action="store_true",
+                         help="full-screen keyboard navigation for a read-only install preview")
     install.add_argument("--acknowledge-disk", metavar="PATH",
                          help="planner acknowledgement only; repeat --target-disk exactly; not APPLY authorization")
     return parser
@@ -160,6 +164,52 @@ class _Console:
         if not line:
             return ""
         return line.rstrip("\n")
+
+
+def _hardware_note(args: argparse.Namespace) -> str:
+    """One line about what the hardware report found, for the chooser screen."""
+    try:
+        report = json.loads(Path(args.report).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, TypeError):
+        return "hardware report could not be read; the install is unverified"
+    devices = report.get("devices") or []
+    return (
+        f"report {report.get('report_id', 'unknown')}, "
+        f"{len(devices)} device(s), "
+        f"{len(report.get('warnings') or [])} warning(s)"
+    )
+
+
+def _run_tui(args: argparse.Namespace) -> int:
+    """Keyboard navigation for a read-only plan; there is no install callback."""
+    from wsm_install.guided import list_disks
+    from wsm_install.tui import TerminalScreen, run_tui
+
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        print("wsm-install: no TTY for pseudo-graphics; using the guided preview", file=sys.stderr)
+        return _run_guided(args)
+
+    def preview(disk_path: str, size: int, firmware: str) -> int:
+        # Keep the CLI JSON payload out of the ANSI TUI screen.
+        with contextlib.redirect_stdout(io.StringIO()):
+            return _run_install(argparse.Namespace(
+                target_disk=disk_path,
+                target_size_bytes=size,
+                firmware=firmware,
+                filesystem=args.filesystem,
+                mount_point=args.mount_point,
+                system_file=args.system_file,
+                acknowledge_disk=disk_path,
+                execute=False,
+                quiet=True,
+            ))
+
+    return run_tui(
+        TerminalScreen(),
+        list_disks(Path("/sys/block")),
+        preview,
+        _hardware_note(args),
+    )
 
 
 def _run_guided(args: argparse.Namespace) -> int:
@@ -307,6 +357,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"wsm-install: {len(errors) - 20} additional schema errors omitted", file=sys.stderr)
         return 2
 
+    if args.tui:
+        return _run_tui(args)
     if args.guided:
         return _run_guided(args)
     if args.install:
