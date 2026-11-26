@@ -1,38 +1,42 @@
-# Integration test for the WSM QEMU boot harness
+# Інтеграційний тест QEMU-harness WSM
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Status: **manual local acceptance; not part of hosted CI**
-- Related: #14 (QEMU integration), #27 (QEMU harness), #35/#38 (resource and path hardening), #34 (generic guest boot)
-- Workflow: ``scripts/qemu_boot_smoke.py` (запускається вручну)`
+- Статус: **ручне локальне приймання; не входить у hosted CI**
+- Пов'язане: [#14](https://github.com/juv4uk/wsm-desktop/issues/14) (QEMU-інтеграція), [#27](https://github.com/juv4uk/wsm-desktop/issues/27) (QEMU harness), [#35](https://github.com/juv4uk/wsm-desktop/issues/35)/[#38](https://github.com/juv4uk/wsm-desktop/issues/38) (обмеження ресурсів і шляхів), [#34](https://github.com/juv4uk/wsm-desktop/issues/34) (загальний гостьовий boot)
+- Виконання: `scripts/qemu_boot_smoke.py` (запускається вручну)
 
-## Purpose
+## Призначення
 
-The generic guest-boot experiment in #34 proves that QEMU TCG can execute a Linux kernel and a minimal `/init`. This experiment goes one step further: it builds a tiny bootable ISO on a Linux host and sends that ISO through the actual `scripts/qemu_boot_smoke.py` program.
+Експеримент із загальним гостьовим boot у #34 доводить, що QEMU TCG здатен виконати ядро Linux і мінімальний `/init`. Цей експеримент іде на крок далі: він збирає крихітний завантажуваний ISO на Linux-хості й пропускає цей ISO через справжню програму `scripts/qemu_boot_smoke.py`.
 
-It therefore exercises the project harness's input validation, disposable qcow2 creation, QEMU command construction, serial capture, marker detection, and JSON result contract.
+Отже перевіряються валідація входу harness-у, створення одноразового qcow2, побудова команди QEMU, захоплення serial, виявлення маркера й контракт JSON-результату.
 
-## Test construction
+## Як побудований тест
 
-The manual test uses the host's existing kernel image, static BusyBox, a minimal initramfs, GRUB and xorriso. The guest `/init` prints the unique marker `WSM_QEMU_HARNESS_ISO_BOOT_OK` to its serial console and powers off. The harness is invoked with a 256 MiB disposable qcow2, 512 MiB guest memory, one vCPU, and a 45-second process timeout.
+Ручний тест використовує наявний образ ядра хоста, статичний BusyBox, мінімальний initramfs, GRUB і xorriso. Гостьовий `/init` друкує унікальний маркер `WSM_QEMU_HARNESS_ISO_BOOT_OK` у serial-консоль і вимикає машину. Harness запускається з одноразовим qcow2 на 256 MiB, пам'яттю гостьової системи 512 MiB, одним vCPU і таймаутом процесу 45 секунд.
 
-The ISO and initramfs are generated locally in a temporary workspace; no external ISO or kernel download is required.
+ISO та initramfs генеруються локально в тимчасовому робочому каталозі; жодного зовнішнього завантаження ISO чи ядра не потрібно.
 
-## Isolation boundary
+## Межа ізоляції
 
-- Linux host and QEMU TCG software emulation only.
-- No network device, KVM, host CPU passthrough, host block device, USB/GPU passthrough, shared folder, or EFI variable store is attached.
-- The only writable guest disk is the newly-created qcow2 file in the harness's temporary directory.
-- The runner kernel image is copied read-only as an input to the synthetic ISO; the host kernel is not installed, replaced, or modified.
-- No repository token or secrets are required.
-- The test does not run Guix, Nix, `wsm-install`, or any installation backend.
+- Лише Linux-хост і програмна емуляція QEMU TCG.
+- Не підключено мережевий пристрій, KVM, host CPU passthrough, блочний пристрій хоста, USB/GPU passthrough, спільну теку чи сховище EFI-змінних.
+- Єдиний writable-диск гостьової системи — щойно створений файл qcow2 у тимчасовому каталозі harness-у.
+- Образ ядра runner-а копіюється лише для читання як вхід синтетичного ISO; ядро хоста не встановлюється, не замінюється і не змінюється.
+- Жодного токена репозиторію чи секретів не потрібно.
+- Тест не запускає Guix, Nix, `wsm-install` або будь-який інсталяційний backend.
 
-## What a pass means
+## Що означає успіх
 
-A pass means the generated ISO booted under QEMU through the actual project harness, the guest's init process emitted the expected marker, and the harness returned a JSON result with the expected isolation flags.
+Успіх означає, що згенерований ISO завантажився під QEMU через справжній harness проєкту, init-процес гостьової системи видав очікуваний маркер, а harness повернув JSON-результат з очікуваними прапорцями ізоляції.
 
-It does **not** prove that a WSM ISO boots, that a Guix/Nix system builds, that `wsm-install` runs inside a WSM guest, or that any physical computer is compatible. Those require separate artifacts and tests.
+Він **не** доводить, що завантажується ISO WSM, що збирається система Guix/Nix, що `wsm-install` працює всередині гостьової системи WSM або що якийсь фізичний комп'ютер сумісний. Для цього потрібні окремі артефакти й тести.
 
-## Failure behavior
+## Поведінка при збої
 
-The manual test fails if it cannot find a suitable host kernel, build the initramfs/ISO, create the disposable qcow2, launch QEMU, observe the guest marker, or validate the harness result. The harness itself enforces the configured disk, memory, CPU, and timeout limits.
+Ручний тест падає, якщо не може знайти придатне ядро хоста, зібрати initramfs/ISO, створити одноразовий qcow2, запустити QEMU, побачити маркер гостьової системи або провалідувати результат harness-у. Сам harness застосовує налаштовані ліміти диска, пам'яті, CPU і таймауту.
+
+---
+
+Англійський переклад цього документа: [QEMU-HARNESS-INTEGRATION.en.md](QEMU-HARNESS-INTEGRATION.en.md). Канонічною є українська версія.

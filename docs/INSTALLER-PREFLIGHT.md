@@ -1,20 +1,20 @@
-# WSM read-only installer preflight prototype
+# Прототип read-only preflight інсталятора WSM
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Status: **prototype / dry-run only**
-- Related: [#12 — handoff contract](https://github.com/juv4uk/wsm-desktop/issues/12), [#13 — preflight prototype](https://github.com/juv4uk/wsm-desktop/issues/13)
-- Hardware input: [report schema v1](hardware/REPORT-FORMAT.md), produced by the read-only collector
+- Статус: **прототип / лише dry-run**
+- Пов'язане: [#12 — контракт handoff](https://github.com/juv4uk/wsm-desktop/issues/12), [#13 — прототип preflight](https://github.com/juv4uk/wsm-desktop/issues/13)
+- Вхідні дані про залізо: [схема звіту v1](hardware/REPORT-FORMAT.md), яку створює read-only колектор
 
-## Purpose
+## Призначення
 
-The `wsm-install` prototype validates a local hardware evidence report, presents observed facts, and emits a deterministic backend-specific draft plan. It does not deploy a system, invoke Guix or Nix, open block devices, partition disks, or change bootloader state.
+Прототип `wsm-install` валідує локальний звіт про апаратні докази, показує спостережені факти й видає детермінований чернетковий план для конкретного backend-а. Він не розгортає систему, не викликає Guix чи Nix, не відкриває блочні пристрої, не розмічає диски й не змінює стан bootloader-а.
 
-The first increment is CLI-only. It deliberately does not select or embed an installer frontend. A graphical/TUI layer can later consume the same report summary and plan functions.
+Перший крок — лише CLI. Він свідомо не вибирає і не вбудовує frontend інсталятора. Графічний/TUI шар може пізніше споживати ті самі функції зведення звіту й плану.
 
-## Usage
+## Використання
 
-Install the pinned runtime dependency from `requirements-install.txt`, then run:
+Встановіть зафіксовану runtime-залежність із `requirements-install.txt`, потім виконайте:
 
 ```sh
 python3 -m wsm_install --preflight \
@@ -22,7 +22,7 @@ python3 -m wsm_install --preflight \
   --backend guix --dry-run
 ```
 
-Write the plan to a file instead of stdout:
+Записати план у файл замість stdout:
 
 ```sh
 python3 -m wsm_install --preflight \
@@ -30,39 +30,43 @@ python3 -m wsm_install --preflight \
   --backend nix --dry-run --plan-output /tmp/wsm-plan.json
 ```
 
-Both `--preflight` and `--dry-run` are mandatory. There is no apply command in this prototype.
+І `--preflight`, і `--dry-run` обов'язкові. Команди apply у цьому прототипі немає.
 
-## Exit codes
+## Коди виходу
 
-- `0` — report validated and draft plan emitted.
-- `2` — CLI usage, file, JSON, or schema error; no plan emitted.
-- `3` — required critical evidence is unresolved; no plan emitted.
+- `0` — звіт провалідовано й видано чернетковий план.
+- `2` — помилка CLI, файлу, JSON або схеми; план не видано.
+- `3` — обов'язкові критичні докази не визначені; план не видано.
 
-## Evidence policy
+## Політика доказовості
 
-The summary repeats only report facts. It does not infer a working driver from a candidate module, infer runtime firmware success from a package candidate, or infer display functionality from advertised modes.
+Зведення повторює лише факти зі звіту. Воно не виводить працездатний драйвер із кандидатного модуля, не виводить успіх runtime firmware з кандидатного пакета і не виводить працездатність дисплея з заявлених режимів.
 
-The v1 prototype treats unknown or not-detected discovery for an explicitly reported critical role as unresolved evidence and refuses to emit a plan. It also checks whether the required `boot-path`, `primary-display`, and `input` roles are represented at all. Missing role records produce a clearly marked `diagnostic-only` plan with `plan_readiness.confirmable=false`; absent records are never interpreted as proof of success.
+Прототип v1 трактує `unknown` або `not-detected` для явно заявленої критичної ролі як невизначені докази й відмовляється видавати план. Він також перевіряє, чи взагалі представлені обов'язкові ролі `boot-path`, `primary-display` і `input`. Відсутні записи ролей дають явно позначений план `diagnostic-only` з `plan_readiness.confirmable=false`; відсутні записи ніколи не інтерпретуються як доказ успіху.
 
-`storage-install-target` is not a role the collector may select. The prototype always marks explicit user target selection and immediate target-identity revalidation as outstanding user actions. Therefore, every v0.1 output is diagnostic-only and never a confirmable deployment plan. Required runtime firmware reported as `missing` or `load-error` blocks only when attached to an explicitly critical role. Network-installation uncertainty is a warning because an offline path may be available.
+`storage-install-target` — це не роль, яку може вибрати колектор. Прототип завжди позначає явний вибір цілі користувачем і негайну повторну перевірку identity цілі як незавершені дії користувача. Тому кожен вивід v0.1 є diagnostic-only і ніколи не є підтверджуваним планом розгортання. Обов'язкова runtime firmware зі станом `missing` або `load-error` блокує лише тоді, коли прив'язана до явно критичної ролі. Невизначеність щодо мережевого встановлення є попередженням, бо може існувати офлайновий шлях.
 
-## Plan determinism and trust
+## Детермінованість і довіра до плану
 
-The plan includes the SHA-256 digest of the exact source-report bytes and report-local JSON Pointer references to the evidence and functional-test records used for each device summary. `plan_sha256` is computed over canonical JSON (UTF-8, sorted keys, no insignificant whitespace) of the plan before the digest field is added. The machine-readable `execution.dry_run` marker is true; plan confirmation, mutation authorization, backend invocation, and disk access are all false.
+План містить SHA-256 дайджест точних байтів вихідного звіту та локальні для звіту посилання JSON Pointer на записи доказів і функціональних тестів, використані для кожного зведення про пристрій. `plan_sha256` обчислюється над канонічним JSON (UTF-8, відсортовані ключі, без незначущих пробілів) плану до додавання поля дайджесту. Машинно-читаний маркер `execution.dry_run` — true; підтвердження плану, авторизація мутацій, виклик backend-а й доступ до диска — false.
 
-The CLI backend aliases are explicit: `guix` maps to `guix-system`, and `nix` maps to `nixos`.
+Псевдоніми backend-ів у CLI явні: `guix` відповідає `guix-system`, `nix` відповідає `nixos`.
 
-A draft plan is not a deployment authorization. A future apply path must independently revalidate the exact target device, backend revision, plan digest, and explicit user confirmation. Report freshness does not replace target-device revalidation.
+Чернетковий план не є авторизацією розгортання. Майбутній шлях apply мусить незалежно перевірити точний цільовий пристрій, ревізію backend-а, дайджест плану й явне підтвердження користувача. Свіжість звіту не замінює повторну перевірку цільового пристрою.
 
-## Safety boundary
+## Межа безпеки
 
-- No subprocess is invoked.
-- No network API or upload is used.
-- No disk discovery or block-device access is performed by `wsm-install`.
-- No package installation, firmware update, module load, or bootloader action is performed.
-- The only optional write is the user-requested JSON plan file.
-- Plan output must be a regular file in an existing directory; symlinks, block/character devices, `/dev`, `/proc`, and `/sys` destinations are refused.
-- The output path must not resolve to or hard-link the source report or schema.
-- The plan is written to a same-directory temporary file and atomically replaced only after serialization succeeds.
+- Жоден subprocess не викликається.
+- Мережевий API чи вивантаження не використовуються.
+- `wsm-install` не виконує виявлення дисків і не звертається до блочних пристроїв.
+- Не виконується встановлення пакетів, оновлення firmware, завантаження модулів чи дія з bootloader-ом.
+- Єдиний необов'язковий запис — файл JSON-плану, який попросив користувач.
+- Вивід плану мусить бути звичайним файлом у наявному каталозі; symlink, блочні/символьні пристрої й призначення в `/dev`, `/proc`, `/sys` відхиляються.
+- Шлях виводу не може вказувати на вихідний звіт чи схему або бути з ними жорстко зв'язаним.
+- План пишеться в тимчасовий файл у тому самому каталозі й атомарно замінюється лише після успішної серіалізації.
 
-The current hardware report schema and collector are consumed as upstream inputs. Changes to their fields belong in #5/#6, not in this prototype.
+Поточна схема звіту про залізо й колектор споживаються як upstream-входи. Зміни їхніх полів належать до [#5](https://github.com/juv4uk/wsm-desktop/issues/5)/[#6](https://github.com/juv4uk/wsm-desktop/issues/6), а не до цього прототипу.
+
+---
+
+Англійський переклад цього документа: [INSTALLER-PREFLIGHT.en.md](INSTALLER-PREFLIGHT.en.md). Канонічною є українська версія.
