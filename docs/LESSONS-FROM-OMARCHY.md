@@ -39,7 +39,7 @@ pacman не вміє володіти: перевключити службу, п
 
 | Правило | Як виконується |
 | --- | --- |
-| Жодного завантаження з негайним виконанням в оболонці — ні в документації, ні в скриптах | policy test знаходить однорядковий і багаторядковий `curl/wget | sh` |
+| Жодного завантаження з негайним виконанням в оболонці — ні в документації, ні в скриптах | policy test знаходить однорядкове й багаторядкове передавання download output безпосередньо shell-інтерпретатору |
 | Python не передає command strings shell-інтерпретатору | AST policy виявляє `os.system/popen`, `subprocess(..., shell=True)`, `asyncio.create_subprocess_shell`, враховуючи import aliases |
 | Shell-скрипти синтаксично розбираються | `bash -n`; це не є runtime acceptance |
 | Поведінку скрипта перевіряє focused test або CI job, що його реально запускає | filename mention не є test coverage; QEMU guest job реально запускає hwcheck |
