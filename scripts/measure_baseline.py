@@ -41,10 +41,11 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from wsm_hwcheck.collector import collect_report  # noqa: E402
 from wsm_hwcheck.isa import IsaError, build_evidence, read_cpuinfo_flags  # noqa: E402
 
 SCHEMA = "wsm-perf-baseline/1"
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 DEFAULT_REPETITIONS = 5
 SYNC_WRITE_BYTES = 64 * 1024 * 1024
 # Above this relative spread a run is not a measurement, it is noise.
@@ -143,6 +144,55 @@ def _read_first(path: str) -> str:
         return "unknown"
 
 
+QEMU_VIRTUALIZATION = frozenset({"qemu", "kvm"})
+
+
+def assess_mode_evidence(mode: str, detected_virtualization: str) -> str:
+    """Compare the requested benchmark mode with read-only collector evidence.
+
+    The collector cannot prove bare metal from the absence of a hypervisor
+    marker. Therefore an unknown result never confirms a physical run.
+    """
+    detected = detected_virtualization.strip().lower()
+    if mode not in MODES or not detected or detected == "unknown":
+        return "unknown"
+    if mode == "physical":
+        return "mismatch"
+    if mode == "qemu" and detected in QEMU_VIRTUALIZATION:
+        return "consistent"
+    return "mismatch"
+
+
+def _virtualization_facts() -> tuple[str, str]:
+    """Reuse the canonical read-only hardware collector; do not add a detector."""
+    report = collect_report()
+    report_environment = report.get("environment")
+    detected = (
+        report_environment.get("virtualization")
+        if isinstance(report_environment, dict)
+        else None
+    )
+    if not isinstance(detected, str) or not detected.strip():
+        detected = "unknown"
+    else:
+        detected = detected.strip().lower()
+
+    source = "unknown"
+    collectors = report.get("collectors")
+    if isinstance(collectors, list):
+        for collector in collectors:
+            if (
+                isinstance(collector, dict)
+                and collector.get("name") == "wsm-hwcheck-sysfs"
+            ):
+                name = collector.get("name")
+                version = collector.get("version")
+                if isinstance(name, str) and isinstance(version, str):
+                    source = f"{name}/{version}"
+                break
+    return detected, source
+
+
 def environment(
     mode: str,
     cpuinfo_path: Path = Path("/proc/cpuinfo"),
@@ -166,8 +216,13 @@ def environment(
     except IsaError as exc:
         isa = {"schema": None, "unavailable": exc.code, "message": exc.message}
 
+    detected_virtualization, virtualization_source = _virtualization_facts()
     return {
+        # "mode" is the requested label, not proof of the execution environment.
         "mode": mode,
+        "detected_virtualization": detected_virtualization,
+        "mode_evidence": assess_mode_evidence(mode, detected_virtualization),
+        "virtualization_source": virtualization_source,
         "kernel_release": platform.release(),
         "machine": platform.machine(),
         "python": platform.python_version(),
@@ -202,18 +257,21 @@ def measure(mode: str, repetitions: int) -> dict[str, Any]:
             samples.append(time.perf_counter() - started)
         results[name] = median_and_spread(samples)
 
+    environment_facts = environment(mode)
     return {
         "schema": SCHEMA,
         "tool_version": VERSION,
         "collected_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
         "mode": mode,
-        "environment": environment(mode),
+        "environment": environment_facts,
+        "comparison_eligible": environment_facts["mode_evidence"] == "consistent",
         "repetitions": repetitions,
         "noise_threshold": NOISE_THRESHOLD,
         "workloads": results,
         "comparable_with": (
-            "only runs with the same schema, the same mode and a recorded ISA level; "
-            "QEMU/TCG numbers are not comparable with physical ones"
+            "only comparison_eligible runs with the same schema, requested mode, "
+            "detected_virtualization and recorded ISA level; QEMU and KVM evidence "
+            "remain distinct, and unknown mode evidence is not comparable"
         ),
         "warnings": [
             workload
@@ -230,7 +288,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
     parser.add_argument("--mode", choices=MODES, required=True,
-                        help="physical or qemu; recorded so the two are never mixed")
+                        help="requested mode: physical or QEMU/KVM guest; read-only evidence is recorded separately")
     parser.add_argument("--repetitions", type=int, default=DEFAULT_REPETITIONS)
     parser.add_argument("--output", metavar="PATH", help="write JSON here instead of stdout")
     parser.add_argument("--compact", action="store_true")
