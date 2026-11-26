@@ -1,24 +1,16 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""x86-64 micro-architecture level evidence, derived from /proc/cpuinfo only.
+"""x86-64 micro-architecture level evidence from kernel-exposed CPU flags.
 
 This is a separate, versioned contract on top of the hardware report (issue
-#148). It does not change report schema 1.0.0 and does not run any external
-command: the collector's promise that it reads sysfs and procfs only still
+#148). It does not change report schema 1.0.0 and does not run external
+commands: the collector's promise that it reads sysfs and procfs only still
 holds.
 
-Why levels and not vendor strings: the x86-64 psABI defines named levels
-(v2, v3, v4) as cumulative sets of CPU features. A chip with AVX but no AVX2
-is v2, not "almost v3". Deciding by vendor or model name would be guessing.
-
-What this module deliberately does not do:
-
-- it does not enable anything. A level is evidence, not a build flag;
-- it does not claim a performance win. The measured gain from v2 to v3 is a few
-  percent for most workloads and larger only for compression, cryptography and
-  numeric code - and those libraries already dispatch at runtime;
-- it does not read /proc/cpuinfo flags as "the CPU can do this". The kernel
-  clears AVX-family flags when OS support (XSAVE/OSXSAVE) is absent, so a
-  missing flag means "not usable now", not "not present in silicon".
+The feature set is the intersection of every processor block reported by
+/proc/cpuinfo. This is deliberately conservative: a process may migrate
+between logical CPUs, so a system-wide dispatch level must be usable on all
+reported processors. Missing flags are an unavailable evidence source, not
+proof that the silicon lacks a feature.
 """
 
 from __future__ import annotations
@@ -32,11 +24,11 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA = "wsm-cpu-isa/1"
-VERSION = "0.1.0"
+VERSION = "0.1.2"
 
 # Cumulative feature sets from the x86-64 psABI. Each level includes every
 # feature of the levels below it; /proc/cpuinfo spellings are used (pni = SSE3,
-# abm = LZCNT on both Intel and AMD under Linux).
+# abm = LZCNT on Linux x86).
 LEVELS: dict[str, tuple[str, ...]] = {
     "x86-64-v2": (
         "cx16",
@@ -79,32 +71,91 @@ class IsaError(Exception):
         self.message = message
 
 
+def _parse_block(block: str) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    for line in block.splitlines():
+        if ":" not in line:
+            continue
+        key, value = (part.strip() for part in line.split(":", 1))
+        if key and key not in fields:
+            fields[key] = value
+    return fields
+
+
 def read_cpuinfo_flags(path: Path) -> tuple[list[str], dict[str, str]]:
-    """Return the flag set of the first processor block plus a few raw fields."""
+    """Return the common flags across all processor blocks.
+
+    A missing or empty flags field in any processor block makes a machine-wide
+    claim unsafe. The caller receives a stable refusal instead of a partial
+    intersection that could overstate what is usable after CPU migration.
+    """
     try:
         text = path.read_text(encoding="utf-8", errors="replace")
     except OSError as exc:
         raise IsaError("cpuinfo.unreadable", f"cannot read {path}: {exc}") from exc
 
-    flags: list[str] = []
-    fields: dict[str, str] = {}
-    for block in text.split("\n\n"):
-        if not block.strip():
-            continue
-        for line in block.splitlines():
-            if ":" not in line:
-                continue
-            key, value = (part.strip() for part in line.split(":", 1))
-            if key == "flags":
-                flags = sorted(set(value.split()))
-            elif key in {"vendor_id", "model name", "cpu family"} and key not in fields:
-                fields[key] = value
-        break  # first processor block only: levels are uniform across sockets
-    return flags, fields
+    blocks = [block for block in text.split("\n\n") if block.strip()]
+    if not blocks:
+        raise IsaError("cpuinfo.empty", f"{path} contains no processor information")
+
+    parsed_blocks = [_parse_block(block) for block in blocks]
+    processor_blocks = [
+        fields for fields in parsed_blocks if "processor" in fields
+    ]
+
+    # A malformed non-empty block must not disappear from a system-wide
+    # intersection. Keep the one-block fallback only for alternate/synthetic
+    # procfs fixtures that have no processor keys at all.
+    if processor_blocks and len(processor_blocks) != len(parsed_blocks):
+        malformed = len(parsed_blocks) - len(processor_blocks)
+        raise IsaError(
+            "cpuinfo.processor-block-incomplete",
+            f"{malformed} non-empty block(s) in {path} do not identify a processor; "
+            "refusing to compute a system-wide ISA verdict from partial input",
+        )
+    if not processor_blocks:
+        if len(parsed_blocks) != 1:
+            raise IsaError(
+                "cpuinfo.processor-block-incomplete",
+                f"{path} contains multiple non-empty blocks but no processor identifiers",
+            )
+        processor_blocks = parsed_blocks
+    flag_sets: list[set[str]] = []
+    missing_flags = 0
+    for fields in processor_blocks:
+        raw_flags = fields.get("flags")
+        if not raw_flags:
+            missing_flags += 1
+        else:
+            flag_sets.append(set(raw_flags.split()))
+
+    if not flag_sets:
+        raise IsaError(
+            "cpuinfo.flags-unavailable",
+            f"no processor block in {path} exposes a non-empty flags field",
+        )
+    if missing_flags:
+        raise IsaError(
+            "cpuinfo.flags-incomplete",
+            f"{missing_flags} of {len(processor_blocks)} processor blocks in {path} "
+            "do not expose a non-empty flags field; refusing a system-wide ISA verdict",
+        )
+
+    # Runtime dispatch must remain safe regardless of which logical CPU runs
+    # the process. Do not infer uniformity from only the first processor.
+    common_flags = set.intersection(*flag_sets)
+
+    result_fields: dict[str, str] = {}
+    for key in ("vendor_id", "model name", "cpu family"):
+        value = processor_blocks[0].get(key)
+        if value:
+            result_fields[key] = value
+    result_fields["logical_processor_count"] = str(len(processor_blocks))
+    return sorted(common_flags), result_fields
 
 
 def evaluate(flags: list[str], architecture: str) -> dict[str, Any]:
-    """Compute level support from a flag list. Pure: no I/O, easy to test."""
+    """Compute cumulative level evidence from kernel-exposed flags."""
     if architecture.lower() not in X86_ARCHITECTURES:
         raise IsaError(
             "isa.not-x86",
@@ -114,7 +165,6 @@ def evaluate(flags: list[str], architecture: str) -> dict[str, Any]:
 
     present = set(flags)
     result: dict[str, Any] = {}
-    # Cumulative: a level counts as supported only if every lower level is too.
     cumulative_ok = True
     for level in ("x86-64-v2", "x86-64-v3", "x86-64-v4"):
         missing = [feature for feature in LEVELS[level] if feature not in present]
@@ -143,15 +193,19 @@ def build_evidence(
     warnings: list[str] = []
     if "osxsave" not in set(flags):
         warnings.append(
-            "osxsave is absent: AVX-family state is not managed by the OS, so "
-            "AVX levels are not usable even if the silicon has them"
+            "osxsave is not exposed in the common kernel flags; an AVX-family "
+            "level is not confirmed by this evidence"
         )
-    if fields.get("vendor_id") and "GenuineIntel" not in fields["vendor_id"] and "AuthenticAMD" not in fields["vendor_id"]:
+    if fields.get("vendor_id") and fields["vendor_id"] not in {
+        "GenuineIntel",
+        "AuthenticAMD",
+    }:
         warnings.append(
             f"unexpected vendor_id {fields['vendor_id']!r}; levels are computed "
-            "from features, not from the vendor, but this is worth noting"
+            "from exposed features, not from the vendor"
         )
 
+    processor_count = int(fields.get("logical_processor_count", "1"))
     return {
         "schema": SCHEMA,
         "tool_version": VERSION,
@@ -159,19 +213,25 @@ def build_evidence(
         "architecture": architecture,
         "vendor": fields.get("vendor_id", "unknown"),
         "model_name": fields.get("model name", "unknown"),
-        "level_semantics": "cumulative x86-64 psABI micro-architecture levels",
+        "level_semantics": (
+            "cumulative x86-64 psABI levels from the intersection of kernel-exposed "
+            "flags across all processor blocks reported by procfs"
+        ),
         "levels": levels,
         "evidence": {
             "source": source,
             "kind": "live-observation",
             "confidence": "confirmed",
+            "scope": "common-kernel-exposed-flags",
+            "logical_processor_count": processor_count,
             "feature_count": len(flags),
         },
         "warnings": warnings,
         "limits": [
-            "a supported level is evidence about the running CPU and kernel, not a build decision",
+            "a supported level is evidence about flags exposed by the running kernel, not a silicon inventory or build decision",
+            "the /proc/cpuinfo flag list is incomplete; an absent flag does not prove the hardware lacks that feature",
+            "the intersection is a conservative set common to all reported logical processors",
             "no performance claim is made: v2-to-v3 gains are workload-dependent",
-            "the kernel clears AVX-family flags when OS support is missing, so absence means 'not usable now'",
         ],
     }
 
@@ -180,8 +240,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="wsm-cpu-isa",
         description=(
-            "Report x86-64 micro-architecture levels from /proc/cpuinfo. "
-            "Read-only: no external commands, no network, no writes outside stdout."
+            "Report common x86-64 micro-architecture levels from all "
+            "/proc/cpuinfo processor blocks. Read-only; no external commands."
         ),
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
@@ -200,9 +260,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     architecture = host_platform.machine()
-    flags, fields = read_cpuinfo_flags(Path(args.cpuinfo))
-
     try:
+        # Reject non-x86 before attempting to parse architecture-specific procfs
+        # fields; ARM/RISC-V must not fail with a misleading missing-flags error.
+        evaluate([], architecture)
+        flags, fields = read_cpuinfo_flags(Path(args.cpuinfo))
         evidence = build_evidence(flags, fields, architecture, f"procfs:{args.cpuinfo}")
     except IsaError as exc:
         parser.exit(2, f"{parser.prog}: {exc}\n")
