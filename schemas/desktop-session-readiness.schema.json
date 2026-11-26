@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/juv4uk/wsm-desktop/blob/main/schemas/desktop-session-readiness.schema.json",
+  "title": "WSM KDE Desktop Session Readiness",
+  "description": "A privacy-minimized observation of the KDE Plasma autostart phase-2 milestone.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "tool_version",
+    "collected_at",
+    "status",
+    "marker",
+    "phase",
+    "session",
+    "timing",
+    "boot_identity",
+    "warnings"
+  ],
+  "properties": {
+    "schema": {
+      "const": "wsm-desktop-session-readiness/1"
+    },
+    "tool_version": {
+      "const": "0.1.0"
+    },
+    "collected_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "status": {
+      "enum": ["available", "partial"]
+    },
+    "marker": {
+      "const": "plasma-autostart-phase-2"
+    },
+    "phase": {
+      "const": 2
+    },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "desktop", "desktop_version"],
+      "properties": {
+        "type": {
+          "enum": ["x11", "wayland", "unknown"]
+        },
+        "desktop": {
+          "const": "KDE"
+        },
+        "desktop_version": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9]{1,8}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "timing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "clock",
+        "source",
+        "session_start_monotonic_us",
+        "phase2_monotonic_us",
+        "login_to_phase2_ms"
+      ],
+      "properties": {
+        "clock": {
+          "const": "CLOCK_MONOTONIC"
+        },
+        "source": {
+          "const": "org.freedesktop.login1.Session.TimestampMonotonic"
+        },
+        "session_start_monotonic_us": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "phase2_monotonic_us": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "login_to_phase2_ms": {
+          "oneOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "boot_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["digest"],
+      "properties": {
+        "digest": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{16}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}
