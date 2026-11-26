@@ -239,6 +239,8 @@ class BootCommandTests(unittest.TestCase):
         self.assertEqual(artifact["manager"]["scope"], "system")
         self.assertEqual(artifact["scope"], "system-boot")
         self.assertEqual(artifact["collection_status"], "available")
+        self.assertTrue(any("unmounted" in warning for warning in artifact["warnings"]))
+        self.assertTrue(any("pinned Guix channel" in warning for warning in artifact["warnings"]))
         self.assertEqual(
             set(artifact["commands"]),
             {"version", "status", "log", "graph"},
