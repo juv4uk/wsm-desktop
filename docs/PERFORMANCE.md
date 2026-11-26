@@ -167,55 +167,70 @@ limits ця telemetry не виконує.
 версія мала 8 MiB для пам'яті й 4 MiB для запису — і дала розкид 716% та 27%
 відповідно. Усі навантаження відкалібровано так, щоб тривати десяті секунди.
 
-### Boot milestones та critical path systemd
+### Boot/service-manager observations: systemd та GNU Shepherd
 
 `scripts/collect_boot_profile.py` — окрема ручна команда для одного поточного
-boot. Вона не входить до hardware preflight, installer, звичайного CI або
-`measure_baseline.py`:
-
+boot. Колектор визначає PID 1 через `/proc/1/comm` і запускає лише backend,
+який відповідає фактичному init/service manager. Він не підміняє Shepherd
+командами systemd і не вважає відсутність systemd помилкою на Guix:
+  
 ```sh
 python3 scripts/collect_boot_profile.py --output boot-profile.json
 ```
 
-Колектор викликає лише фіксований read-only набір `systemd-analyze` команд:
-`--version`, `time`, `blame`, `critical-chain` для default target та
-`critical-chain graphical.target`. Кожний результат зберігає argv, stdout,
-stderr, exit code, тривалість та окремі ознаки timeout/truncation. Командний
-у JSON-артефакті зберігається не більше 64 KiB stdout і stderr на команду;
-timeout кожного виклику за
-замовчуванням 10 секунд і не може перевищувати 60 секунд. Немає shell або
-довільних unit names з аргументів користувача.
+Артефакт `wsm-boot-profile/2` має явні `manager.name` та `manager.scope`.
+Для systemd запускається fixed argv allowlist `systemd-analyze --version/time/blame/critical-chain`;
+default і `graphical.target` critical paths збираються окремо. Для GNU
+Shepherd запускаються тільки read-only `herd --version`, `herd status`,
+`herd log` та `herd graph`. Обидва шляхи зберігають argv, stdout/stderr,
+exit code, тривалість, timeout і truncation; в JSON зберігається не більше
+64 KiB stdout і stderr на команду, timeout за замовчуванням 10 секунд із
+жорсткою межею 60 секунд. Немає shell, довільних unit names, privilege
+escalation або змін manager configuration. Для Shepherd змінну
+`SHEPHERD_SOCKET` з успадкованого середовища прибрано, щоб команда не
+перемикалася непомітно на сторонній socket.
 
-Артефакт `wsm-boot-profile/1` містить kernel/machine, virtualization evidence,
-uptime та короткий digest boot ID замість сирого UUID. Відсутній
-`systemd-analyze`, неактивний system manager, nonzero exit, malformed procfs
-або timeout залишаються `unavailable/partial/unknown`, не нулем і не pass.
-Один артефакт — це одне спостереження конкретного boot; незалежні samples
-збираються між окремими boot-ами, не повторними запусками цієї команди в одній
-сесії.
-
-**Обмеження інтерпретації є частиною контракту:**
+**Systemd — обмеження інтерпретації:**
 
 - `systemd-analyze time` показує kernel/initrd/userspace до моменту, коли
   сервіси були spawned. Це не доводить, що всі вони завершили ініціалізацію,
   desktop готовий або диск idle.
 - `blame` вимірює час у стані `activating`, не показує `Type=simple` та
   execution-queue wait, не включає units на кшталт device units без
-  `activating` і не враховує паралельне виконання. Високий рядок не означає
-  автоматично найбільшу затримку для користувача.
+  `activating` і не враховує паралельне виконання.
 - `critical-chain` показує один time-critical dependency path, але не всі
   паралельні роботи. Socket activation, device units, jobs і timeouts мають
   окремі caveats upstream.
-- Firmware/loader час може з'являтися у `systemd-analyze time`, якщо UEFI
-  bootloader експортує `LoaderTime*` через EFI Boot Loader Interface. Якщо
-  значень немає, це `unknown`, а не нуль; наш колектор не читає і не змінює
-  EFI variables напряму. Для повного виміру cold desktop readiness все одно
-  потрібен окремий session-level marker.
 
-Колектор лише читає поточний стан. Він не змінює units, targets, bootloader,
-EFI variables, диски, governor або power controls. Перегляд і порівняння
-профілів мають зберігати окремі physical/QEMU класи та однакові умови.
-Див. [systemd-analyze upstream documentation](https://www.freedesktop.org/software/systemd/man/latest/systemd-analyze.html).
+**GNU Shepherd — інший тип доказу, не аналог systemd таймінгів:**
+
+- `herd status` — snapshot станів служб у поточному Shepherd instance;
+  `herd log` — наявна історія подій старту/зупинки з часовими позначками;
+  `herd graph` — граф залежностей. Граф не є виміряним critical path.
+- Обсяг `herd log` залежить від історії, яку зберіг менеджер; це не гарантія
+  повного boot timeline. Відсутні або обрізані записи мають залишатися
+  невідомими, а не нульовими часовими вимірами.
+- Запуск від root звертається до system Shepherd; звичайний користувач — до
+  свого user Shepherd instance. Тому `manager.scope=user` записується як
+  `scope=user-service-manager`, а не як системний boot. Колектор не викликає
+  `sudo`; для повного системного спостереження оператор запускає його з
+  потрібними правами явно.
+- Жоден з цих знімків не доводить готовність Plasma/Wayland desktop session.
+  Потрібний окремий session-level marker, пов'язаний із фактичним входом
+  користувача.
+
+Відсутній manager/CLI, недоступний socket, nonzero exit, malformed procfs або
+timeout дають `unavailable/partial/unknown`, не нуль і не pass. Невідомий PID 1
+не змушує колектор вгадувати manager або запускати довільний fallback.
+Один артефакт — це одне спостереження конкретного boot; незалежні samples
+збираються між різними boot-ами, не повторними запусками цієї команди в одній
+сесії.
+
+Колектор лише читає поточний стан. Він не змінює services, targets,
+bootloader, EFI variables, диски, governor або power controls. Порівнювати
+профілі можна лише в межах того самого manager, scope, апаратного класу й
+однакових умов. Джерела: [GNU Shepherd Manual](https://shepherding.services/manual/shepherd.pdf)
+та [systemd-analyze upstream documentation](https://www.freedesktop.org/software/systemd/man/latest/systemd-analyze.html).
 
 ## Як це міряти далі
 
