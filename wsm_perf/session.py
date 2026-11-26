@@ -128,7 +128,9 @@ def _login_session_start(
         return None, None, "loginctl-nonzero-exit"
     try:
         session_id, timestamp = _parse_login_properties(_bounded_text(completed.stdout))
-        if raw_session_id and session_id and session_id != raw_session_id:
+        if session_id is None:
+            return None, None, "session-id-unavailable"
+        if raw_session_id and session_id != raw_session_id:
             return None, None, "session-id-mismatch"
         return session_id, timestamp, None
     except SessionReadinessError:
