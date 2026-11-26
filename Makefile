@@ -150,6 +150,7 @@ check-uefi-preboot-policy:
 
 check-release:
 	$(PYTHON) tests/test_release_artifacts.py
+	$(PYTHON) tests/test_release_metadata.py
 	$(PYTHON) tests/test_release_gate.py
 
 describe-lock:
