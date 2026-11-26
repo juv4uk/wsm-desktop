@@ -40,18 +40,11 @@ def plan_recorder(calls: list):
     return plan
 
 
-def install_recorder(calls: list):
-    def install(path, size, firmware):
-        calls.append(("install", path, size, firmware))
-
-    return install
-
-
 class StopTests(unittest.TestCase):
     def run_flow(self, answers: list[str]):
         calls: list = []
         console = FakeConsole(answers)
-        code = run_guided(console, DISKS, plan_recorder(calls), install_recorder(calls))
+        code = run_guided(console, DISKS, plan_recorder(calls))
         return code, console, calls
 
     def test_enter_at_disk_choice_stops(self) -> None:
@@ -80,30 +73,32 @@ class StopTests(unittest.TestCase):
 
     def test_no_disks_found_stops(self) -> None:
         console = FakeConsole([])
-        code = run_guided(console, [], plan_recorder([]), install_recorder([]))
+        code = run_guided(console, [], plan_recorder([]))
         self.assertEqual(code, 1)
         self.assertIn("No whole disks", console.text())
 
 
-class SuccessTests(unittest.TestCase):
-    def test_full_flow_plans_then_installs_the_chosen_disk(self) -> None:
+class PreviewTests(unittest.TestCase):
+    def test_full_flow_shows_preview_but_never_installs(self) -> None:
         calls: list = []
-        console = FakeConsole(["2", "uefi", "/dev/sda", "install"])
-        code = run_guided(console, DISKS, plan_recorder(calls), install_recorder(calls))
+        console = FakeConsole(["2", "uefi", "/dev/sda"])
+        code = run_guided(console, DISKS, plan_recorder(calls))
         self.assertEqual(code, 0)
-        self.assertEqual([c[0] for c in calls], ["plan", "install"])
+        self.assertEqual([c[0] for c in calls], ["plan"])
         self.assertEqual(calls[0][1], "/dev/sda")
+        self.assertIn("APPLY is disabled", console.text())
+        self.assertIn("WSM was NOT installed", console.text())
 
     def test_firmware_defaults_to_uefi(self) -> None:
         calls: list = []
-        console = FakeConsole(["1", "", "/dev/nvme0n1", "install"])
-        run_guided(console, DISKS, plan_recorder(calls), install_recorder(calls))
+        console = FakeConsole(["1", "", "/dev/nvme0n1"])
+        run_guided(console, DISKS, plan_recorder(calls))
         self.assertEqual(calls[0][3], "uefi")
 
     def test_bios_can_be_chosen(self) -> None:
         calls: list = []
-        console = FakeConsole(["1", "bios", "/dev/nvme0n1", "install"])
-        run_guided(console, DISKS, plan_recorder(calls), install_recorder(calls))
+        console = FakeConsole(["1", "bios", "/dev/nvme0n1"])
+        run_guided(console, DISKS, plan_recorder(calls))
         self.assertEqual(calls[0][3], "bios")
 
 
