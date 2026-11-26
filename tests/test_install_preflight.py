@@ -49,11 +49,18 @@ class InstallerPlanTests(unittest.TestCase):
         self.assertFalse(first["execution"]["backend_invoked"])
         self.assertFalse(first["execution"]["disk_access_performed"])
 
-    def test_unknown_critical_display_refuses_to_emit_plan(self) -> None:
+    def test_non_guix_backends_are_rejected_by_plan_api(self) -> None:
+        report, raw = load_fixture("desktop-observed.json")
+        for backend in ("nix", "nixos"):
+            with self.subTest(backend=backend):
+                with self.assertRaisesRegex(ValueError, "GNU Guix System only"):
+                    build_plan(report, raw, backend)
+
+    def test_unknown_critical_display_refuses_to_emit_guix_plan(self) -> None:
         report, raw = load_fixture("unknown-incomplete.json")
-        plan, blockers, _ = build_plan(report, raw, "nix")
+        plan, blockers, _ = build_plan(report, raw, "guix")
         self.assertTrue(blockers)
-        self.assertEqual(plan["backend"]["id"], "nixos")
+        self.assertEqual(plan["backend"]["id"], "guix-system")
         self.assertFalse(plan["execution"]["mutations_authorized"])
 
     def test_required_network_firmware_error_is_warning_with_offline_fallback(self) -> None:
@@ -68,7 +75,7 @@ class InstallerPlanTests(unittest.TestCase):
             main(["--report", str(FIXTURES / "desktop-observed.json"), "--backend", "guix"])
         self.assertEqual(caught.exception.code, 2)
 
-    def test_cli_validates_report_and_writes_only_draft_plan(self) -> None:
+    def test_cli_rejects_nix_backend_before_emitting_a_plan(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             report_path = Path(directory) / "report.json"
             plan_path = Path(directory) / "plan.json"
@@ -79,9 +86,24 @@ class InstallerPlanTests(unittest.TestCase):
                     "--preflight", "--report", str(report_path), "--backend", "nix",
                     "--dry-run", "--plan-output", str(plan_path),
                 ])
+            self.assertEqual(result, 2)
+            self.assertIn("invalid choice", stderr.getvalue())
+            self.assertFalse(plan_path.exists())
+
+    def test_cli_validates_report_and_writes_only_guix_draft_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            report_path = Path(directory) / "report.json"
+            plan_path = Path(directory) / "plan.json"
+            report_path.write_bytes((FIXTURES / "desktop-observed.json").read_bytes())
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                result = main([
+                    "--preflight", "--report", str(report_path), "--backend", "guix",
+                    "--dry-run", "--plan-output", str(plan_path),
+                ])
             self.assertEqual(result, 0, stderr.getvalue())
             plan = json.loads(plan_path.read_text(encoding="utf-8"))
-            self.assertEqual(plan["backend"]["id"], "nixos")
+            self.assertEqual(plan["backend"]["id"], "guix-system")
             self.assertFalse(plan["execution"]["backend_invoked"])
             self.assertFalse(plan["execution"]["disk_access_performed"])
             self.assertFalse(plan["execution"]["plan_confirmable"])
@@ -177,7 +199,7 @@ class InstallerPlanTests(unittest.TestCase):
     def test_not_detected_critical_device_refuses_to_emit_plan(self) -> None:
         report, raw = load_fixture("unknown-incomplete.json")
         report["devices"][0]["discovery_status"] = "not-detected"
-        _, blockers, _ = build_plan(report, raw, "nix")
+        _, blockers, _ = build_plan(report, raw, "guix")
         self.assertTrue(any("not-detected" in item for item in blockers))
 
 if __name__ == "__main__":
