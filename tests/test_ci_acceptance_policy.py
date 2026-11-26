@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""Regression tests for the single-workflow WSM acceptance contract."""
+"""The hosted CI stays deliberately small; integration acceptance is manual."""
 
 from __future__ import annotations
 
@@ -10,124 +10,68 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
-WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
+WORKFLOW_PATH = ROOT / ".github" / "workflows" / "ci.yml"
+MAKEFILE_PATH = ROOT / "Makefile"
 
 
 class CiAcceptancePolicyTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.workflow = yaml.load(
-            WORKFLOW.read_text(encoding="utf-8"),
-            Loader=yaml.BaseLoader,
-        )
-        cls.jobs = cls.workflow["jobs"]
+        cls.workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
+        cls.workflow = yaml.load(cls.workflow_text, Loader=yaml.BaseLoader)
 
-    def test_required_workflow_events_are_not_path_filtered(self) -> None:
-        events = self.workflow["on"]
-        self.assertIn("push", events)
-        self.assertIn("pull_request", events)
-        self.assertIn("workflow_dispatch", events)
-        self.assertNotIn("paths", events.get("push") or {})
-        self.assertNotIn("paths", events.get("pull_request") or {})
-
-    def test_push_ci_runs_only_on_main_without_path_filters(self) -> None:
-        push = self.workflow["on"]["push"]
-        self.assertEqual(push["branches"], ["main"])
-        self.assertNotIn("paths", push)
-
-    def test_qemu_acceptance_is_unconditional_and_bounded(self) -> None:
-        job = self.jobs["qemu-acceptance"]
-        self.assertNotIn("if", job)
+    def test_only_fast_checks_run_in_hosted_ci(self) -> None:
+        self.assertEqual(set(self.workflow["jobs"]), {"checks"})
+        job = self.workflow["jobs"]["checks"]
         self.assertEqual(job["runs-on"], "ubuntu-24.04")
-        timeout = int(job["timeout-minutes"])
-        self.assertGreater(timeout, 0)
-        self.assertLessEqual(timeout, 30)
+        self.assertLessEqual(int(job["timeout-minutes"]), 10)
 
-    def test_release_gate_scopes_free_product_and_accepts_only_incomplete(self) -> None:
-        steps = self.jobs["checks"]["steps"]
-        gate = next(step for step in steps if step.get("name") == "Release gate (structural)")
-        command = gate.get("run", "")
-        self.assertIn("--product free", command)
-        self.assertIn("--skip-tests --compact", command)
-        self.assertRegex(command, r'\[\s*"\$status"\s+-ne\s+2\s*\]')
-        self.assertNotIn("exit 0", command)
+    def test_ci_runs_for_main_pushes_and_pull_requests(self) -> None:
+        events = self.workflow["on"]
+        self.assertEqual(events["push"]["branches"], ["main"])
+        self.assertIn("pull_request", events)
+        self.assertNotIn("workflow_dispatch", events)
+        self.assertNotIn("paths", events["push"])
+        self.assertNotIn("paths", events["pull_request"] or {})
 
-    def test_qemu_job_runs_all_guest_acceptance_layers(self) -> None:
-        steps = self.jobs["qemu-acceptance"]["steps"]
-        commands = "\n".join(step.get("run", "") for step in steps)
-        for marker in (
-            "scripts/ci_qemu_guest_smoke.sh",
-            "scripts/ci_qemu_hwcheck_guest.py",
-            "scripts/ci_cxl_qemu_guest.py",
-            "scripts/qemu_boot_smoke.py",
-            "WSM_QEMU_HARNESS_ISO_BOOT_OK",
-            "test_install_capability_matrix.py",
-        ):
-            with self.subTest(marker=marker):
-                self.assertIn(marker, commands)
+    def test_ci_runs_the_repository_test_suite_and_docs(self) -> None:
+        steps = self.workflow["jobs"]["checks"]["steps"]
+        commands = "\\n".join(step.get("run", "") for step in steps)
+        self.assertIn("python -m unittest discover -s tests -p 'test_*.py' -v", commands)
+        self.assertIn("python scripts/check_docs.py", commands)
+        self.assertIn("--lock channels.lock.scm --policy free", commands)
+        self.assertIn("--lock channels/compatibility.lock.scm --policy compatibility", commands)
 
-    def test_fast_channel_gate_checks_free_and_compatibility_locks_separately(self) -> None:
-        checks = self.jobs["checks"]["steps"]
-        command = "\n".join(step.get("run", "") for step in checks)
-        self.assertIn("--lock channels.lock.scm --policy free", command)
-        self.assertIn("--lock channels/compatibility.lock.scm --policy compatibility", command)
-
-    def test_qemu_job_installs_every_required_tool(self) -> None:
-        commands = "\n".join(
-            step.get("run", "") for step in self.jobs["qemu-acceptance"]["steps"]
-        )
-        for package in (
-            "qemu-system-x86",
-            "qemu-utils",
-            "busybox-static",
-            "cpio",
-            "zstd",
-            "xz-utils",
-            "kmod",
-            "grub-pc-bin",
-            "xorriso",
-            "mtools",
-        ):
-            with self.subTest(package=package):
-                self.assertIn(package, commands)
-
-    def test_manual_guix_gate_does_not_hide_missing_compatibility_lock(self) -> None:
-        guix = self.jobs["guix"]
-        commands = "\n".join(step.get("run", "") for step in guix["steps"])
-        self.assertIn("workflow_dispatch", guix["if"])
-        self.assertIn("NOT_CONFIGURED", commands)
-        self.assertIn("channels/compatibility.lock.scm", commands)
-        self.assertIn("systems/compatibility.scm", commands)
-        self.assertIn("systems/live-compat.scm", commands)
-        self.assertIn("exit 2", commands)
-
-    def test_aggregate_gate_requires_fast_qemu_and_manual_results(self) -> None:
-        aggregate = self.jobs["acceptance-gates"]
-        self.assertEqual(aggregate["if"], "always()")
-        self.assertEqual(
-            set(aggregate["needs"]),
-            {"checks", "qemu-acceptance", "guix"},
-        )
-        commands = "\n".join(
-            step.get("run", "") for step in aggregate["steps"]
-        )
-        for status in (
-            "CHECKS_RESULT",
-            "QEMU_RESULT",
-            "GUIX_RESULT",
+    def test_slow_or_environmental_acceptance_is_not_in_hosted_ci(self) -> None:
+        forbidden = (
+            "qemu-system",
+            "qemu-acceptance",
+            "grub-mkrescue",
+            "apt-get",
+            "guix-install.sh",
             "workflow_dispatch",
-            "not-run",
-        ):
-            with self.subTest(status=status):
-                self.assertIn(status, commands)
-
-    def test_workflow_has_one_aggregate_gate_and_read_only_permissions(self) -> None:
-        self.assertEqual(self.workflow["permissions"]["contents"], "read")
-        self.assertEqual(
-            [name for name in self.jobs if name == "acceptance-gates"],
-            ["acceptance-gates"],
+            "acceptance-gates",
         )
-        self.assertNotIn("secrets.", WORKFLOW.read_text(encoding="utf-8"))
+        for marker in forbidden:
+            with self.subTest(marker=marker):
+                self.assertNotIn(marker, self.workflow_text)
+
+    def test_ci_has_read_only_permissions_and_no_secrets(self) -> None:
+        self.assertEqual(self.workflow["permissions"]["contents"], "read")
+        self.assertNotIn("secrets.", self.workflow_text)
+
+    def test_heavy_qemu_checks_remain_available_as_manual_commands(self) -> None:
+        makefile = MAKEFILE_PATH.read_text(encoding="utf-8")
+        self.assertIn("qemu-acceptance-manual:", makefile)
+        self.assertIn("scripts/ci_qemu_guest_smoke.sh", makefile)
+        self.assertIn("scripts/ci_qemu_hwcheck_guest.py", makefile)
+        self.assertIn("scripts/ci_cxl_qemu_guest.py", makefile)
+        aggregate = next(
+            line.split(":", 1)[1].split()
+            for line in makefile.splitlines()
+            if line.startswith("check:")
+        )
+        self.assertNotIn("qemu-acceptance-manual", aggregate)
 
 
 if __name__ == "__main__":
