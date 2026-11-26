@@ -126,11 +126,12 @@ Producer tool version `0.3.0` додає до кожного workload резул
   Рядок `full` може бути відсутнім у деяких kernel versions; parser не вимагає
   його для `cpu`. Семантика та одиниці описані в
   [Linux PSI documentation](https://docs.kernel.org/accounting/psi.html).
-- **zram** з `/sys/block/zramX`: активний compressor і backing device,
+- **zram** з `/sys/block/zramX`: активний compressor і лише стан backing
+  device (`none`, `configured` або `unknown`; шлях `/dev/...` не записується),
   `mm_stat` як сирі before/after поля (байтові розміри та page counters без
   спільної дельти), `io_stat` як лічильники подій, а `bd_stat` як лічильники
   обсягів у блоках по 4 KiB з дельтою. Поля відповідають
-  [Linux zram statistics](https://kernel.org/doc/html/v7.3/admin-guide/blockdev/zram.html).
+  [офіційній документації Linux zram](https://docs.kernel.org/admin-guide/blockdev/zram.html).
   Старіша версія ядра з неповним `mm_stat`, відсутній пристрій або reset
   counters лишають доказ `partial/unknown`, не перетворюються на нуль.
 
