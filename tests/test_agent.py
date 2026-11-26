@@ -104,33 +104,25 @@ class PlanTests(unittest.TestCase):
 
 
 class ExecutionTests(unittest.TestCase):
-    def test_dry_run_never_calls_the_runner(self) -> None:
-        calls: list = []
+    def test_dry_run_validates_and_previews_without_execution_api(self) -> None:
         document = plan(GOOD)
         steps = validate_plan(document)
-        code = run_plan(
-            document, steps, dry_run=True,
-            runner=lambda command: calls.append(command),
-            verifier=lambda step: (True, "ok"),
-        )
+        code = run_plan(document, steps, dry_run=True)
         self.assertEqual(code, 0)
-        self.assertEqual(calls, [])
 
-    def test_plan_without_a_disk_is_refused(self) -> None:
+    def test_real_run_is_refused_before_any_runner_can_be_injected(self) -> None:
         document = plan(GOOD)
-        document["disk"] = "nvme0n1"
+        steps = validate_plan(document)
+        with self.assertRaises(AgentError) as caught:
+            run_plan(document, steps, dry_run=False)
+        self.assertEqual(caught.exception.code, "agent.apply-disabled")
+
+    def test_plan_without_a_whole_disk_is_refused(self) -> None:
+        document = plan(GOOD)
+        document["disk"] = "/dev/nvme0n1p1"
         with self.assertRaises(AgentError) as caught:
             run_plan(document, validate_plan(document), dry_run=True)
         self.assertEqual(caught.exception.code, "agent.bad-disk")
-
-    def test_real_run_as_non_root_is_refused(self) -> None:
-        """Fail now with a clear reason, not later on the first mount."""
-        if os.geteuid() == 0:
-            self.skipTest("running as root")
-        document = plan(GOOD)
-        with self.assertRaises(AgentError) as caught:
-            run_plan(document, validate_plan(document), dry_run=False)
-        self.assertEqual(caught.exception.code, "agent.not-root")
 
 
 class CliTests(unittest.TestCase):
@@ -146,7 +138,7 @@ class CliTests(unittest.TestCase):
             path.write_text(json.dumps(plan(GOOD)), encoding="utf-8")
             result = self.run_cli("--plan", str(path), "--dry-run")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("plan accepted", result.stdout)
+        self.assertIn("previewed; APPLY disabled", result.stdout)
 
     def test_plan_with_shell_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
