@@ -253,7 +253,9 @@ def verify_plan(
     if not confirmable_false:
         critical_errors.append("plan_readiness.confirmable must be false")
 
-    expected_backend_id = EXPECTED_BACKEND_IDS[backend]
+    if backend != "guix":
+        raise ValueError("wsm-hardware-check validates GNU Guix System only")
+    expected_backend_id = "guix-system"
     backend_object = plan.get("backend")
     backend_id = backend_object.get("id") if isinstance(backend_object, dict) else None
     if backend_id != expected_backend_id:
