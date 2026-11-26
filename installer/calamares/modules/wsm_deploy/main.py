@@ -153,11 +153,29 @@ def _deploy(dry_run: bool) -> tuple[str, str] | None:
 
 def run() -> tuple[str, str] | None:
     """Calamares entry point."""
-    dry_run = bool(_global("wsmDryRun", False))
-    _log(f"wsm_deploy: starting (dry_run={dry_run})")
-    result = _deploy(dry_run)
-    if result is not None:
+    dry_run = _global("wsmDryRun", None)
+    _log(f"wsm_deploy: starting (dry_run={dry_run!r})")
+
+    if dry_run is not True:
+        result = (
+            "WSM APPLY is disabled",
+            "The required wsm_deploy job refuses missing, false or non-boolean "
+            "wsmDryRun values. No deployment command was executed.",
+        )
         _log(f"wsm_deploy: failed: {result[0]}")
+        return result
+
+    result = _deploy(True)
+    if result is not None:
+        _log(f"wsm_deploy: preview failed: {result[0]}")
+        return result
+
+    result = (
+        "WSM was not installed",
+        "A read-only preview was generated. APPLY is disabled; no partition, "
+        "filesystem, mount or Guix deployment command was executed.",
+    )
+    _log(f"wsm_deploy: preview only; returning failure because installation did not occur")
     return result
 
 
