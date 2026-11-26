@@ -19,10 +19,13 @@
   "source": {
     "repository": "juv4uk/wsm-desktop",
     "source_commit": null,
-    "channel_lock_file": "channels.lock.scm",
+    "channel_lock_file": "channels/compatibility.lock.scm",
     "channel_commit": "4e5195be20d9b124df8a8bb69213412236e4668e",
-    "channel_authentication_evidence": "authenticated-pull-recorded-build-not-evaluated",
-    "notes": "Authenticated pull/channel introduction was recorded for the pinned channel. This profile has not been evaluated or built on that channel; the lock alone is not package or firmware evidence."
+    "channel_authentication_evidence": "not-evaluated",
+    "notes": "This Compatibility lock pins Guix 4e5195be20d9b124df8a8bb69213412236e4668e and Nonguix 6b8897cd6f3223b158c070cdc9cc638279f8c337. The Compatibility lock authentication, package resolution/build, image closure and redistribution review have not been verified; pins establish input identity only.",
+    "additional_channel_commits": {
+      "nonguix": "6b8897cd6f3223b158c070cdc9cc638279f8c337"
+    }
   },
   "kernel": {
     "package_candidate": "linux-libre (candidate only; exact package and closure not evaluated)",
