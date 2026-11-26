@@ -39,8 +39,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     install = parser.add_argument_group(
         "install path",
-        "Plan a disk layout and the steps that would install onto it. Dry run "
-        "unless --execute is given together with --acknowledge-disk.",
+        "Plan a disk layout and show the steps that would install onto it. "
+        "Preview-only: real APPLY is disabled across all installer frontends.",
     )
     install.add_argument("--install", action="store_true",
                          help="plan disk layout and install steps for --target-disk")
