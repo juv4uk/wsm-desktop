@@ -45,7 +45,14 @@ jobs:
         id: release
         run: |
           set -euo pipefail
-          TAG="$(tr -d '[:space:]' < RELEASE-REQUEST.txt)"
+          mapfile -t REQUEST_TAGS < <(
+            sed -e 's/[[:space:]]*#.*$//' -e '/^[[:space:]]*$/d' RELEASE-REQUEST.txt
+          )
+          if [ "${#REQUEST_TAGS[@]}" -ne 1 ]; then
+            echo "RELEASE-REQUEST.txt must contain exactly one non-comment tag." >&2
+            exit 1
+          fi
+          TAG="$(printf '%s' "${REQUEST_TAGS[0]}" | tr -d '[:space:]')"
           test "$TAG" = "0.1.0-rc3-minimal-live"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release already exists; refusing to replace assets." >&2
