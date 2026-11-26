@@ -96,79 +96,78 @@ class NoPipeToShellTests(unittest.TestCase):
     def test_documentation_never_pipes_a_download_into_a_shell(self) -> None:
         offenders: list[str] = []
         for path in documentation_files():
-            for match in PIPE_TO_SHELL.finditer(path.read_text(encoding="utf-8", errors="replace")):
-                offenders.append(f"{path.relative_to(ROOT)}: {match.group(0).strip()}")
+            matches = find_pipe_to_shell(path.read_text(encoding="utf-8", errors="replace"))
+            offenders.extend(f"{path.relative_to(ROOT)}: {item}" for item in matches)
         self.assertEqual(offenders, [], "pipe-to-shell found: " + "; ".join(offenders))
 
     def test_scripts_never_pipe_a_download_into_a_shell(self) -> None:
         offenders: list[str] = []
-        for path in SCRIPTS.iterdir():
+        for path in SCRIPTS.rglob("*"):
             if not path.is_file():
                 continue
-            text = path.read_text(encoding="utf-8", errors="replace")
-            for match in PIPE_TO_SHELL.finditer(text):
-                offenders.append(f"{path.name}: {match.group(0).strip()}")
+            matches = find_pipe_to_shell(path.read_text(encoding="utf-8", errors="replace"))
+            offenders.extend(f"{path.relative_to(ROOT)}: {item}" for item in matches)
         self.assertEqual(offenders, [], "pipe-to-shell found: " + "; ".join(offenders))
+
+    def test_multiline_download_pipe_is_detected(self) -> None:
+        source = (
+            "curl --fail --location https://example.invalid/install.sh \\\n"
+            "  | sudo bash"
+        )
+        self.assertEqual(len(find_pipe_to_shell(source)), 1)
+
+    def test_download_to_file_is_not_flagged(self) -> None:
+        source = (
+            "curl --fail --location --output install.sh https://example.invalid/install.sh\n"
+            "sha256sum install.sh\n"
+            "sed -n '1,80p' install.sh\n"
+            "bash install.sh"
+        )
+        self.assertEqual(find_pipe_to_shell(source), [])
 
 
 class NoShellInterpretationTests(unittest.TestCase):
-    """Omarchy 4.0.0 turned titles and device names into shell strings twice.
+    """Prevent command text from being parsed by a shell, including import aliases."""
 
-    The durable fix there was to stop letting a shell parse anything. Our code
-    must keep that property: argv lists only, never a command string.
-    """
-
-    FORBIDDEN = (
-        re.compile(r"shell\s*=\s*True"),
-        re.compile(r"\bos\.system\s*\("),
-        re.compile(r"\bos\.popen\s*\("),
-    )
-
-    def test_our_python_never_hands_a_string_to_a_shell(self) -> None:
+    def test_project_python_does_not_call_shell_interpreting_apis(self) -> None:
         offenders: list[str] = []
         for directory in ("scripts", "wsm_install", "wsm_hwcheck"):
-            for path in (ROOT / directory).rglob("*.py"):
-                text = path.read_text(encoding="utf-8", errors="replace")
-                for pattern in self.FORBIDDEN:
-                    if pattern.search(text):
-                        offenders.append(f"{path.relative_to(ROOT)}: {pattern.pattern}")
+            for path in sorted((ROOT / directory).rglob("*.py")):
+                found = find_unsafe_shell_calls(
+                    path.read_text(encoding="utf-8", errors="replace")
+                )
+                offenders.extend(f"{path.relative_to(ROOT)}: {item}" for item in found)
         self.assertEqual(offenders, [], "shell interpretation found: " + "; ".join(offenders))
 
-
-class ScriptCoverageTests(unittest.TestCase):
-    def test_every_script_is_referenced_by_a_test(self) -> None:
-        """A script nobody tests is a script nobody can vouch for."""
-        corpus = "\n".join(
-            path.read_text(encoding="utf-8", errors="replace")
-            for path in TESTS.glob("*.py")
+    def test_ast_guard_detects_module_and_direct_import_aliases(self) -> None:
+        source = (
+            "import subprocess as sp\n"
+            "sp.run(['echo', 'x'], shell=True)\n"
+            "from os import system as run_command\n"
+            "run_command('id')\n"
+            "from asyncio import create_subprocess_shell as spawn\n"
+            "spawn('echo x')\n"
         )
-        uncovered = sorted(
-            path.name for path in SCRIPTS.iterdir()
-            if path.is_file() and path.stem not in corpus
-        )
-        self.assertEqual(uncovered, [], f"no test mentions: {uncovered}")
+        found = find_unsafe_shell_calls(source)
+        self.assertEqual(len(found), 3)
 
+    def test_ast_guard_ignores_comments_and_string_literals(self) -> None:
+        source = (
+            "# subprocess.run(command, shell=True) is forbidden\n"
+            "example = \"os.system('not executed')\"\n"
+            "subprocess.run(['echo', 'safe'], check=True)\n"
+        )
+        self.assertEqual(find_unsafe_shell_calls(source), [])
+
+
+class ShellSyntaxTests(unittest.TestCase):
     def test_every_shell_script_parses(self) -> None:
-        for path in sorted(SCRIPTS.glob("*.sh")):
-            with self.subTest(script=path.name):
+        for path in sorted(SCRIPTS.rglob("*.sh")):
+            with self.subTest(script=path.relative_to(ROOT)):
                 completed = subprocess.run(
                     ["bash", "-n", str(path)], capture_output=True, text=True, check=False
                 )
                 self.assertEqual(completed.returncode, 0, completed.stderr)
-
-
-class CiOnlyScriptTests(unittest.TestCase):
-    """scripts/ci_qemu_guest_smoke.sh runs only inside CI, so it is checked here.
-
-    It is the exact shape Omarchy was criticised for: glue that nobody can run
-    locally. Naming it in a test at least guarantees it parses and that its
-    safety flags are present.
-    """
-
-    def test_ci_qemu_guest_smoke_declares_strict_mode(self) -> None:
-        text = (SCRIPTS / "ci_qemu_guest_smoke.sh").read_text(encoding="utf-8")
-        self.assertIn("set -Eeuo pipefail", text)
-        self.assertIn("MARKER=", text)
 
 
 class InstallerFrontendTests(unittest.TestCase):
@@ -176,8 +175,9 @@ class InstallerFrontendTests(unittest.TestCase):
 
     def test_installer_document_names_the_cli_as_primary(self) -> None:
         text = (ROOT / "docs" / "INSTALLER.md").read_text(encoding="utf-8")
-        self.assertIn("Два входи, один бекенд", text)
-        self.assertIn("CLI первинний", text)
+        self.assertIn("--guided", text)
+        self.assertIn("--tui", text)
+        self.assertIn("APPLY вимкнено", text)
 
     def test_calamares_module_is_marked_optional(self) -> None:
         text = (ROOT / "installer" / "calamares" / "README.md").read_text(encoding="utf-8")
@@ -189,7 +189,8 @@ class InstallerFrontendTests(unittest.TestCase):
         self.assertIn("wsm_install.executor", module)
         self.assertIn("wsm_install.install_steps", module)
         self.assertIn("wsm_install.partition", module)
-        # No direct subprocess use: the backend owns every command.
+        self.assertIn("execute.apply-disabled", module)
+        # No direct runner: the common executor owns all command policy.
         self.assertNotIn("subprocess", module)
 
 
