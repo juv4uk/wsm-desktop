@@ -58,3 +58,42 @@ GPL-3.0-or-later, і жодна частина цього репозиторію
 Для джерел та API Calamares використовувати основний Codeberg upstream і релізний тег, а не покладатися на старі GitHub посилання. Інформація про пакетні залежності, що не є частиною тегу, повинна бути окремо позначена як оцінка й перевірена на конкретній ревізії.
 
 Деталі сумісності Guix/Calamares зафіксовані у [CALAMARES-FEASIBILITY.md](CALAMARES-FEASIBILITY.md).
+
+## Стан upstream на 2026-11-26
+
+Датований зріз, а не постійний контракт. Кожен пункт — вхідні дані для рішення,
+не рішення: рішення оформлюється ADR або оновленням канонічного документа теми.
+
+### GNU Guix 1.6.0 у підготовці
+
+- Релізна команда Guix 15.11.2026 оголосила, що major update freeze на `master`
+  **заплановано на 26.11.2026**; до цього, з 10.11.2026, на `master` уже діяв
+  toolchain/transition freeze. Після заморозки на `master` ідуть лише виправлення
+  блокерів і security updates, а решта змін живе в team-гілках.
+- Наслідок для [#39](https://github.com/juv4uk/wsm-desktop/issues/39) і
+  [#210](https://github.com/juv4uk/wsm-desktop/issues/210): доказом
+  відтворюваності лишається **точний commit** у `channels/*.lock.scm`, а не
+  «останній master». Період заморозки — зручне вікно, щоб зафіксувати зріз, але
+  сам факт заморозки не робить рухому гілку піном. Після виходу 1.6.0 рішення
+  «пін до релізу чи на реліз» оформлюється окремо.
+- [`GCD 009`](https://codeberg.org/guix/guix-consensus-documents) — пропозиція
+  узагальнити bootloader subsystem і ввести Guix Bootspec; deliberation тривала
+  13–19.11.2026, результат на 26.11.2026 невідомий. Якщо її приймуть, контракт
+  запису bootloader зміниться на боці upstream. Для WSM це аргумент не будувати
+  власний формат bootloader-конфігурації: наш інсталятор має викликати штатний
+  механізм Guix System, а не писати GRUB/EFI-структури сам.
+- Практичний стан на цю дату: `channels/compatibility.lock.scm` пінить Guix
+  commit `4e5195be20d9b124df8a8bb69213412236e4668e`, який на Codeberg є верхівкою
+  `master` станом на 25.11.2026. Це пін, а не доказ того, що зріз збирається.
+
+### Calamares
+
+- Актуальний stable upstream — **3.4.3** (2026-09-10); деталі provenance,
+  checksums і наслідки для packaging spike зібрані в
+  [CALAMARES-FEASIBILITY.md](CALAMARES-FEASIBILITY.md), а не тут.
+
+Джерела:
+- [Guix 1.6.0 release meeting notes, 15.11.2026](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00088.html)
+- [Guix toolchain/transition freeze, 10.11.2026](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00039.html)
+- [GCD 009 deliberation notice](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00074.html)
+- [Guix repository on Codeberg](https://codeberg.org/guix/guix/)
