@@ -93,15 +93,17 @@ class ChannelTests(unittest.TestCase):
             locks = self._locks(root)
             locks["free"].write_text("(list)", encoding="utf-8")
             with patch("release_gate.CHANNEL_LOCKS", new=locks), patch(
-                "release_gate.run", return_value=(0, "Free structural policy passed")
+                "release_gate.run",
+                side_effect=[(0, "Free structural policy passed"), (0, "Guix authentication passed")],
             ) as run_check:
                 result = check_channels("free")
         self.assertEqual(result["status"], "pass")
         self.assertIn("free product", result["detail"])
         self.assertEqual(run_check.call_count, 2)
-        command = run_check.call_args.args[0]
-        self.assertIn("free", command)
-        self.assertEqual(Path(command[command.index("--lock") + 1]), locks["free"])
+        structural = run_check.call_args_list[0].args[0]
+        authentication = run_check.call_args_list[1].args[0]
+        self.assertEqual(Path(structural[structural.index("--lock") + 1]), locks["free"])
+        self.assertEqual(authentication[:4], ["guix", "time-machine", "-C", str(locks["free"])])
 
     def test_channel_authentication_missing_guix_is_incomplete(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -142,12 +144,13 @@ class ChannelTests(unittest.TestCase):
             locks["compatibility"].parent.mkdir(parents=True, exist_ok=True)
             locks["compatibility"].write_text("(list)", encoding="utf-8")
             with patch("release_gate.CHANNEL_LOCKS", new=locks), patch(
-                "release_gate.run", return_value=(0, "Compatibility structural policy passed")
+                "release_gate.run",
+                side_effect=[(0, "Compatibility structural policy passed"), (0, "Guix authentication passed")],
             ) as run_check:
                 result = check_channels("compatibility")
         self.assertEqual(result["status"], "pass")
-        run_check.assert_called_once()
-        command = run_check.call_args.args[0]
+        self.assertEqual(run_check.call_count, 2)
+        command = run_check.call_args_list[0].args[0]
         self.assertIn("compatibility", command)
         self.assertEqual(Path(command[command.index("--lock") + 1]), locks["compatibility"])
 
@@ -156,24 +159,30 @@ class ChannelTests(unittest.TestCase):
             locks = self._locks(Path(temporary))
             locks["free"].write_text("(list)", encoding="utf-8")
             with patch("release_gate.CHANNEL_LOCKS", new=locks), patch(
-                "release_gate.run", return_value=(0, "Free structural policy passed")
-            ):
+                "release_gate.run",
+                side_effect=[(0, "Free structural policy passed"), (0, "Guix authentication passed")],
+            ) as run_check:
                 result = check_channels("all")
         self.assertEqual(result["status"], "not-run")
         self.assertIn("Compatibility lock NOT_CONFIGURED", result["detail"])
+        self.assertEqual(run_check.call_count, 2)
 
     def test_all_products_requires_both_configured_locks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             locks = self._locks(Path(temporary))
             locks["free"].write_text("(list)", encoding="utf-8")
+            locks["compatibility"].parent.mkdir(parents=True, exist_ok=True)
             locks["compatibility"].write_text("(list)", encoding="utf-8")
             with patch("release_gate.CHANNEL_LOCKS", new=locks), patch(
                 "release_gate.run",
-                side_effect=[(0, "Free pass"), (0, "Compatibility pass")],
+                side_effect=[
+                    (0, "Free structural pass"), (0, "Free authentication pass"),
+                    (0, "Compatibility structural pass"), (0, "Compatibility authentication pass"),
+                ],
             ) as run_check:
                 result = check_channels("all")
         self.assertEqual(result["status"], "pass")
-        self.assertEqual(run_check.call_count, 2)
+        self.assertEqual(run_check.call_count, 4)
 
     def test_missing_required_free_lock_is_a_failure(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
