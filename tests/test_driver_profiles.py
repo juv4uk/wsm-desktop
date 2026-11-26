@@ -180,6 +180,17 @@ class DriverProfileManifestTests(unittest.TestCase):
         self.assertIn("580.196.11", exact_device_evidence["source"])
         self.assertIn("does not prove", exact_device_evidence["summary"])
         self.assertIn("does not prove", exact_device_evidence["summary"])
+        latest_580_evidence = next(
+            item for item in nvidia["evidence"]
+            if item.get("source_url") == "https://www.nvidia.com/en-us/drivers/details/285683/"
+        )
+        self.assertIn("GeForce GTX 1050 Ti", latest_580_evidence["summary"])
+        self.assertIn("580.196.11", latest_580_evidence["source"])
+        exact_device_evidence = next(
+            item for item in nvidia["evidence"]
+            if item.get("source_url") == "https://download.nvidia.com/XFree86/Linux-x86_64/580.126.09/README/supportedchips.html"
+        )
+        self.assertIn("1C82", exact_device_evidence["summary"])
         self.assertEqual(nvidia["package_resolution"], "not-assessed")
         self.assertEqual(nvidia["source_license"], "unknown")
         self.assertEqual(compat_gpu["functional_validation"]["status"], "not-run")
