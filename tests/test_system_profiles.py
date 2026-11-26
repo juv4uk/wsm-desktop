@@ -235,6 +235,7 @@ class DesktopCompletenessTests(unittest.TestCase):
 
     def test_printing_is_configured(self) -> None:
         text = profile("desktop.scm")
+        self.assertIn("(gnu services cups)", text)
         self.assertIn("cups-service-type", text)
         # Without the web interface there is no way to add a network printer:
         # Guix configuration files are read-only, so cupsctl cannot help.
