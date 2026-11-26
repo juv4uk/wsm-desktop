@@ -63,7 +63,7 @@ class ReleaseMetadataContractTests(unittest.TestCase):
         self.assertIn("no installation has completed", excluded)
         self.assertIn("verified bootable iso", excluded)
         self.assertIn("не доводить, що відповідний образ зібрано", RELEASE_NOTES)
-        self.assertIn("не є доказом повного wsm installer boot/install", RELEASE_NOTES)
+        self.assertIn("не є доказом повного wsm installer boot/install", RELEASE_NOTES.lower())
 
 
 if __name__ == "__main__":
