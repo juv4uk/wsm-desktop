@@ -39,13 +39,6 @@ def plan_recorder(calls: list):
     return plan
 
 
-def install_recorder(calls: list):
-    def install(path, size, firmware):
-        calls.append(("install", path, firmware))
-
-    return install
-
-
 def type_path(path: str) -> list[str]:
     return list(path) + ["enter"]
 
@@ -77,20 +70,20 @@ class NavigationTests(unittest.TestCase):
     def test_down_moves_the_selection(self) -> None:
         calls: list = []
         screen = FakeScreen(["down", "enter"] + ["enter"] + type_path("/dev/sda") + ["enter"])
-        code = run_tui(screen, DISKS, plan_recorder(calls), install_recorder(calls))
+        code = run_tui(screen, DISKS, plan_recorder(calls))
         self.assertEqual(code, 0)
         self.assertEqual(calls[0][1], "/dev/sda")
 
     def test_selection_wraps_around(self) -> None:
         calls: list = []
         screen = FakeScreen(["up", "enter"] + ["enter"] + type_path("/dev/sda") + ["enter"])
-        run_tui(screen, DISKS, plan_recorder(calls), install_recorder(calls))
+        run_tui(screen, DISKS, plan_recorder(calls))
         self.assertEqual(calls[0][1], "/dev/sda")
 
     def test_quit_at_disk_choice_changes_nothing(self) -> None:
         calls: list = []
         screen = FakeScreen(["quit"])
-        code = run_tui(screen, DISKS, plan_recorder(calls), install_recorder(calls))
+        code = run_tui(screen, DISKS, plan_recorder(calls))
         self.assertEqual(code, 1)
         self.assertEqual(calls, [])
 
@@ -98,7 +91,7 @@ class NavigationTests(unittest.TestCase):
         """The first disk is selected, so typing the second disk's path must fail."""
         calls: list = []
         screen = FakeScreen(["enter"] + ["enter"] + type_path("/dev/sda") + ["enter"])
-        code = run_tui(screen, DISKS, plan_recorder(calls), install_recorder(calls))
+        code = run_tui(screen, DISKS, plan_recorder(calls))
         self.assertEqual(code, 1)
         self.assertEqual(calls, [])
         self.assertIn("does not match", screen.text())
@@ -108,26 +101,37 @@ class NavigationTests(unittest.TestCase):
         # "/dev/sdX" then backspace then "a"
         keys = ["down", "enter", "enter"] + list("/dev/sdX") + ["backspace", "a", "enter", "enter"]
         screen = FakeScreen(keys)
-        code = run_tui(screen, DISKS, plan_recorder(calls), install_recorder(calls))
+        code = run_tui(screen, DISKS, plan_recorder(calls))
         self.assertEqual(code, 0, screen.text()[-200:])
         self.assertEqual(calls[0][1], "/dev/sda")
 
-    def test_stop_before_install_leaves_the_disk_untouched(self) -> None:
+    def test_tui_only_previews_and_never_offers_install(self) -> None:
         calls: list = []
         screen = FakeScreen(["enter", "enter"] + type_path("/dev/nvme0n1") + ["quit"])
-        code = run_tui(screen, DISKS, plan_recorder(calls), install_recorder(calls))
-        self.assertEqual(code, 1)
+        code = run_tui(screen, DISKS, plan_recorder(calls))
+        self.assertEqual(code, 0)
         self.assertEqual([c[0] for c in calls], ["plan"])
+        self.assertIn("APPLY is disabled", screen.text())
+        self.assertNotIn("This will erase", screen.text())
+        self.assertNotIn("Enter to install", screen.text())
+        self.assertNotIn("Installation finished", screen.text())
+
+    def test_preview_failure_is_not_rendered_as_success(self) -> None:
+        screen = FakeScreen(["enter", "enter"] + type_path("/dev/nvme0n1"))
+        code = run_tui(screen, DISKS, lambda *_: 2)
+        self.assertEqual(code, 2)
+        self.assertIn("Preview failed", screen.text())
+        self.assertNotIn("Preview ready", screen.text())
 
     def test_bios_can_be_selected(self) -> None:
         calls: list = []
         screen = FakeScreen(["enter", "2", "enter"] + type_path("/dev/nvme0n1") + ["enter"])
-        run_tui(screen, DISKS, plan_recorder(calls), install_recorder(calls))
+        run_tui(screen, DISKS, plan_recorder(calls))
         self.assertEqual(calls[0][2], "bios")
 
     def test_no_disks_shows_a_message_and_quits(self) -> None:
         screen = FakeScreen(["q"])
-        code = run_tui(screen, [], plan_recorder([]), install_recorder([]))
+        code = run_tui(screen, [], plan_recorder([]))
         self.assertEqual(code, 1)
         self.assertIn("No whole disks", screen.text())
 
