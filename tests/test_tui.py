@@ -32,16 +32,18 @@ class FakeScreen:
         return "\n".join("\n".join(frame) for frame in self.frames)
 
 
-def plan_recorder(calls: list):
+def plan_recorder(calls: list, status: int = 0):
     def plan(path, size, firmware):
         calls.append(("plan", path, firmware))
+        return status
 
     return plan
 
 
-def install_recorder(calls: list):
+def install_recorder(calls: list, status: int = 0):
     def install(path, size, firmware):
         calls.append(("install", path, firmware))
+        return status
 
     return install
 
@@ -130,6 +132,32 @@ class NavigationTests(unittest.TestCase):
         code = run_tui(screen, [], plan_recorder([]), install_recorder([]))
         self.assertEqual(code, 1)
         self.assertIn("No whole disks", screen.text())
+
+
+class CallbackFailureTests(unittest.TestCase):
+    def test_plan_failure_stops_before_apply_screen(self) -> None:
+        calls: list = []
+        screen = FakeScreen(["enter", "enter"] + type_path("/dev/nvme0n1") + ["enter"])
+        code = run_tui(
+            screen, DISKS, plan_recorder(calls, status=2), install_recorder(calls)
+        )
+        self.assertEqual(code, 2)
+        self.assertEqual([call[0] for call in calls], ["plan"])
+        self.assertIn("План не сформовано", screen.text())
+        self.assertNotIn("Plan ready", screen.text())
+        self.assertNotIn("Done", screen.text())
+
+    def test_apply_failure_never_shows_done(self) -> None:
+        calls: list = []
+        screen = FakeScreen(["enter", "enter"] + type_path("/dev/nvme0n1") + ["enter"])
+        code = run_tui(
+            screen, DISKS, plan_recorder(calls), install_recorder(calls, status=1)
+        )
+        self.assertEqual(code, 1)
+        self.assertEqual([call[0] for call in calls], ["plan", "install"])
+        self.assertIn("APPLY відхилено", screen.text())
+        self.assertIn("Інсталяцію не завершено", screen.text())
+        self.assertNotIn("Installation finished", screen.text())
 
 
 if __name__ == "__main__":
