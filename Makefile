@@ -2,6 +2,7 @@
 
 PYTHON ?= python3
 GUIX ?= guix
+PRODUCT ?= free
 
 .PHONY: check check-guix-eval release-gate check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle check-profiles check-agent check-calamares check-channels check-cli-install check-env-preflight check-evidence-drafter check-executor check-guided check-hygiene check-install-steps check-isa check-journal check-live-acceptance check-makefile check-observation check-partition check-perf-baseline check-profile-evidence check-profile-match check-profiles-matrix check-release-verdict check-state check-syntax check-tui check-licences
 
@@ -84,19 +85,23 @@ check-guix-eval:
 	$(GUIX) time-machine -C channels.lock.scm -- system build systems/desktop.scm --dry-run
 	$(GUIX) time-machine -C channels.lock.scm -- system build systems/live.scm --dry-run
 	$(GUIX) time-machine -C channels.lock.scm -- system build systems/live-minimal.scm --dry-run
+	$(GUIX) time-machine -C channels/compatibility.lock.scm -- system build systems/live-compat.scm --dry-run
 	$(GUIX) time-machine -C channels.lock.scm -- home build systems/home.scm --dry-run
 
 check-hygiene:
 	$(PYTHON) tests/test_repo_hygiene.py
 
 release-gate:
-	$(PYTHON) scripts/release_gate.py $(if $(ISO),--iso $(ISO)) $(if $(BOOT),--boot)
+	$(PYTHON) scripts/release_gate.py --product "$(PRODUCT)" $(if $(ISO),--iso "$(ISO)") $(if $(BOOT),--boot)
 
 check-channels:
 	$(PYTHON) tests/test_check_channels.py
-	$(PYTHON) scripts/check_channels.py --policy free
-	$(PYTHON) scripts/check_channels.py --policy compatibility
-	$(PYTHON) scripts/check_channels.py --policy compatibility --lock channels/compatibility.lock.scm
+	$(PYTHON) scripts/check_channels.py --policy free --lock channels.lock.scm
+	@if test -f channels/compatibility.lock.scm; then \
+		$(PYTHON) scripts/check_channels.py --policy compatibility --lock channels/compatibility.lock.scm; \
+	else \
+		printf '%s\\n' 'check-channels: Compatibility lock NOT_CONFIGURED; no Compatibility PASS'; \
+	fi
 
 check-profiles-matrix:
 	$(PYTHON) tests/test_profiles.py
@@ -145,6 +150,7 @@ check-uefi-preboot-policy:
 
 check-release:
 	$(PYTHON) tests/test_release_artifacts.py
+	$(PYTHON) tests/test_release_gate.py
 
 describe-lock:
 	$(GUIX) time-machine -C channels.lock.scm -- describe -f channels
