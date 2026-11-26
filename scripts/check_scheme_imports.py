@@ -86,6 +86,12 @@ def main(argv: list[str] | None = None) -> int:
         if root.is_file():
             problems.extend(check(root))
             continue
+        if not root.is_dir():
+            # A missing root scans nothing and prints success. That is the same
+            # silent hole as a collector that covers nothing: the check passes
+            # because it did not look, not because there was nothing to find.
+            problems.append(f"{root}: root does not exist, so nothing was scanned")
+            continue
         for path in sorted(root.rglob("*.scm")):
             problems.extend(check(path))
     for problem in problems:
