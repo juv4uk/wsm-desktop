@@ -50,7 +50,7 @@ The v1 prototype treats unknown or not-detected discovery for an explicitly repo
 
 The plan includes the SHA-256 digest of the exact source-report bytes and report-local JSON Pointer references to the evidence and functional-test records used for each device summary. `plan_sha256` is computed over canonical JSON (UTF-8, sorted keys, no insignificant whitespace) of the plan before the digest field is added. The machine-readable `execution.dry_run` marker is true; plan confirmation, mutation authorization, backend invocation, and disk access are all false.
 
-The CLI backend aliases are explicit: `guix` maps to `guix-system`, and `nix` maps to `nixos`.
+The v0.1 CLI accepts only `--backend guix`, which maps to `guix-system`. `nix` and `nixos` are rejected before a plan is emitted; a future Nix/NixOS backend requires a separate ADR decision and a versioned handoff contract.
 
 A draft plan is not a deployment authorization. A future apply path must independently revalidate the exact target device, backend revision, plan digest, and explicit user confirmation. Report freshness does not replace target-device revalidation.
 
