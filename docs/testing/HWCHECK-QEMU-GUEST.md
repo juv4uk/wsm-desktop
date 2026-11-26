@@ -5,7 +5,15 @@
 - Статус: **ручна QEMU runtime-перевірка; не входить у hosted CI**
 - Пов'язано: #3 (hardware preflight), #13 (власний installer CLI), #14 (QEMU integration), #16 (hardware evidence), #64 (bounded serial/stderr capture), #66
 - Runner: `scripts/ci_qemu_hwcheck_guest.py`
-- Команда: `PYTHON=python3.11 make qemu-acceptance-manual`
+- Host dependencies: `qemu-system-x86_64`, `busybox-static`, `cpio`, `kmod` (`modprobe`), `ldd`, `gzip`, `sudo`, `mknod`, `timeout`, `zstd`, `xz`.
+- Підготовка та запуск:
+
+  ```sh
+  python3.11 -m pip install -r requirements-dev.txt
+  make qemu-acceptance-manual
+  ```
+
+  За потреби шлях до інтерпретатора можна перевизначити через `QEMU_PYTHON`; ціль вимагає ABI `cpython-311`.
 
 ## Ланцюг перевірки
 

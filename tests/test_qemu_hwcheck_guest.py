@@ -49,16 +49,24 @@ def write_tar(path: Path, members: list[tuple[str, bytes]]) -> None:
 
 
 class QemuHwcheckGuestSafetyTests(unittest.TestCase):
-    def test_manual_qemu_target_host_python_minor_matches_guest_runtime(self) -> None:
+    def test_manual_qemu_target_checks_host_dependencies_and_guest_abi(self) -> None:
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
         target = makefile.split("qemu-acceptance-manual:", 1)[1].split("\n\n", 1)[0]
         guest_minor = ".".join(guest.PYTHON_ASSET.removeprefix("cpython-").split(".")[:2])
         self.assertEqual(guest_minor, "3.11")
         self.assertIn("QEMU_PYTHON ?= python3.11", makefile)
-        self.assertIn("QEMU_PYTHON", target)
+        self.assertIn("$(QEMU_PYTHON)", target)
         self.assertIn("scripts/ci_qemu_hwcheck_guest.py", target)
         self.assertIn("scripts/ci_cxl_qemu_guest.py", target)
         self.assertIn("sys.version_info[:2] == (3, 11)", target)
+        for tool in ("qemu-system-x86_64", "busybox", "cpio", "modprobe", "ldd", "gzip", "sudo", "mknod", "timeout", "zstd", "xz"):
+            self.assertIn(tool, target)
+
+        documentation = (
+            ROOT / "docs" / "testing" / "HWCHECK-QEMU-GUEST.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("python3.11 -m pip install -r requirements-dev.txt", documentation)
+        self.assertIn("make qemu-acceptance-manual", documentation)
 
     def test_guest_init_template_renders_all_stages_without_placeholders(self) -> None:
         rendered = guest.render_guest_init("/lib:/lib64:/opt/python/lib")
