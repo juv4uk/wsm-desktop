@@ -182,14 +182,16 @@ class PressureTelemetryTests(unittest.TestCase):
             device = root / "zram0"
             device.mkdir()
             (device / "mm_stat").write_text(
-                "100 50 60 1000 70 1 2 3 4\\n", encoding="utf-8"
+                "100 50 60 1000 70 1 2 3 4\n", encoding="utf-8"
             )
-            (device / "io_stat").write_text("1 2 3 4\\n", encoding="utf-8")
-            (device / "bd_stat").write_text("5 6 7\\n", encoding="utf-8")
+            (device / "io_stat").write_text("1 2 3 4\n", encoding="utf-8")
+            (device / "bd_stat").write_text("5 6 7\n", encoding="utf-8")
             snapshot = pressure.read_zram_snapshot(root)
         device_result = snapshot["devices"]["zram0"]
         self.assertEqual(device_result["status"], "partial")
         self.assertEqual(device_result["config"]["status"], "partial")
+        for stat_name in ("mm_stat", "io_stat", "bd_stat"):
+            self.assertEqual(device_result["stats"][stat_name]["status"], "available")
         self.assertEqual(
             device_result["config"]["sources"]["comp_algorithm"]["reason"],
             "not-found",
