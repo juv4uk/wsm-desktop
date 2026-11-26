@@ -46,7 +46,7 @@ def build_parser() -> argparse.ArgumentParser:
                          help="plan disk layout and install steps for --target-disk")
     install.add_argument("--target-disk", metavar="PATH", help="whole block device, e.g. /dev/nvme0n1")
     install.add_argument("--target-size-bytes", type=int,
-                         help="size reported for the disk; drift above 2% is refused")
+                         help="size reported for the disk; drift above 2 percent is refused")
     install.add_argument("--firmware", choices=("uefi", "bios"), default="uefi")
     install.add_argument("--filesystem", choices=("ext4", "btrfs", "xfs"), default="ext4")
     install.add_argument("--mount-point", default="/mnt")
@@ -54,6 +54,8 @@ def build_parser() -> argparse.ArgumentParser:
                          help="Guix system file handed to guix system init")
     install.add_argument("--execute", action="store_true",
                          help="actually run the steps; requires --acknowledge-disk")
+    install.add_argument("--guided", action="store_true",
+                         help="walk through the install in a console, no flags required")
     install.add_argument("--acknowledge-disk", metavar="PATH",
                          help="must repeat --target-disk exactly; there is no --yes")
     return parser
@@ -142,6 +144,71 @@ def _write_plan_atomically(destination: Path, rendered: str) -> None:
         except OSError:
             pass
         raise
+
+
+class _Console:
+    """Minimal console adapter: stdout for writing, stdin for reading."""
+
+    def write(self, text: str) -> None:
+        sys.stdout.write(text)
+        sys.stdout.flush()
+
+    def read(self, prompt: str) -> str:
+        sys.stdout.write(prompt)
+        sys.stdout.flush()
+        line = sys.stdin.readline()
+        if not line:
+            return ""
+        return line.rstrip("\n")
+
+
+def _run_guided(args: argparse.Namespace) -> int:
+    """Console flow: choose a disk, confirm by name, then plan and install."""
+    from wsm_install.guided import list_disks, run_guided
+
+    candidates = list_disks(Path("/sys/block"))
+
+    # The note is the only hardware context the user sees before choosing a
+    # disk, so it says what the report actually found - not that a report exists.
+    evidence_note = "no hardware report was supplied"
+    try:
+        report = json.loads(Path(args.report).read_text(encoding="utf-8"))
+        devices = report.get("devices") or []
+        evidence_note = (
+            f"report {report.get('report_id', 'unknown')}, "
+            f"{len(devices)} device(s), "
+            f"{len(report.get('warnings') or [])} warning(s)"
+        )
+    except (OSError, json.JSONDecodeError, TypeError):
+        evidence_note = "hardware report could not be read; the install is unverified"
+
+    def plan(disk_path: str, size: int, firmware: str) -> None:
+        _run_install(argparse.Namespace(
+            target_disk=disk_path,
+            target_size_bytes=size,
+            firmware=firmware,
+            filesystem=args.filesystem,
+            mount_point=args.mount_point,
+            system_file=args.system_file,
+            acknowledge_disk=disk_path,
+            execute=False,
+            quiet=True,
+        ))
+
+    def install(disk_path: str, size: int, firmware: str) -> None:
+        _run_install(argparse.Namespace(
+            target_disk=disk_path,
+            target_size_bytes=size,
+            firmware=firmware,
+            filesystem=args.filesystem,
+            mount_point=args.mount_point,
+            system_file=args.system_file,
+            acknowledge_disk=disk_path,
+            execute=True,
+            quiet=True,
+        ))
+
+    return run_guided(_Console(), candidates, plan, install, evidence_note)
 
 
 def _run_install(args: argparse.Namespace) -> int:
@@ -239,6 +306,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"wsm-install: {len(errors) - 20} additional schema errors omitted", file=sys.stderr)
         return 2
 
+    if args.guided:
+        return _run_guided(args)
     if args.install:
         return _run_install(args)
 
