@@ -16,6 +16,7 @@ tool closure, and read-only postconditions in disposable QEMU.
 
 from __future__ import annotations
 
+import re
 import shlex
 import sys
 from dataclasses import dataclass
@@ -52,6 +53,15 @@ class StepResult:
         }
 
 
+def _is_target_device_path(disk: str, candidate: str) -> bool:
+    """Accept only the whole target disk or one of its kernel-style partitions."""
+    if candidate == disk:
+        return True
+    separator = "p" if disk[-1].isdigit() else ""
+    prefix = f"{disk}{separator}"
+    return re.fullmatch(re.escape(prefix) + r"[1-9][0-9]*", candidate) is not None
+
+
 def _validate_preview(disk: str, steps: Sequence[Step]) -> None:
     if not isinstance(disk, str) or not DEVICE_PATH.fullmatch(disk):
         raise ExecutorError(
@@ -84,6 +94,17 @@ def _validate_preview(disk: str, steps: Sequence[Step]) -> None:
             raise ExecutorError("execute.purpose", f"step {index} has no purpose")
         if not isinstance(step.destructive, bool):
             raise ExecutorError("execute.destructive", f"step {index} has an invalid flag")
+
+        # Check every explicit block-device reference, including references
+        # embedded in an option such as "--device=/dev/sda1". A preview for one
+        # disk must never display a command that would touch another disk.
+        for argument in step.command:
+            for referenced in re.findall(r"/dev/[A-Za-z0-9._/-]+", argument):
+                if not _is_target_device_path(disk, referenced):
+                    raise ExecutorError(
+                        "execute.device-mismatch",
+                        f"step {index} references {referenced!r}, outside target {disk!r}",
+                    )
 
 
 def execute(
