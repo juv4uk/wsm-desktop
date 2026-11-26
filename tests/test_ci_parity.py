@@ -38,32 +38,53 @@ def scripts_run_by_make_check() -> dict[str, list[str]]:
 def scripts_run_by_ci(
     workflow_text: str,
 ) -> dict[str, list[tuple[str, int, bool]]]:
-    """Return actual Python script commands and whether their steps are conditional."""
+    """Return simple Python script steps and whether their execution is gated.
+
+    This deliberately counts only one-line commands whose first shell token is
+    python/python3 and whose second token is a scripts/*.py path. Complex shell
+    blocks are excluded rather than guessed at.
+    """
     document = yaml.safe_load(workflow_text)
     if not isinstance(document, dict) or not isinstance(document.get("jobs"), dict):
         raise AssertionError("CI workflow has no jobs mapping")
 
     found: dict[str, list[tuple[str, int, bool]]] = {}
+    shell_control = {";", "&&", "||", "|", "&"}
     for job_name, job in document["jobs"].items():
         if not isinstance(job, dict):
             continue
+        job_is_conditional = "if" in job
         steps = job.get("steps", [])
         if not isinstance(steps, list):
             continue
         for index, step in enumerate(steps):
             if not isinstance(step, dict) or not isinstance(step.get("run"), str):
                 continue
-            tokens = shlex.split(step["run"], comments=True)
-            for position, token in enumerate(tokens[:-1]):
-                if Path(token).name not in {"python", "python3"}:
-                    continue
-                script = tokens[position + 1]
-                if script.startswith("scripts/") and script.endswith(".py"):
-                    found.setdefault(script, []).append(
-                        (str(job_name), index, "if" in step)
-                    )
-    return found
+            lines = [line.strip() for line in step["run"].splitlines() if line.strip()]
+            if len(lines) != 1:
+                continue
+            try:
+                tokens = shlex.split(lines[0], comments=True)
+            except ValueError:
+                continue
+            if len(tokens) < 2 or tokens[0] not in {"python", "python3"}:
+                continue
+            script = tokens[1]
+            if not (script.startswith("scripts/") and script.endswith(".py")):
+                continue
 
+            has_shell_control = any(token in shell_control for token in tokens[2:])
+            continue_on_error = step.get("continue-on-error", False)
+            is_conditional = (
+                job_is_conditional
+                or "if" in step
+                or continue_on_error not in (False, None)
+                or has_shell_control
+            )
+            found.setdefault(script, []).append(
+                (str(job_name), index, is_conditional)
+            )
+    return found
 
 class CiParityTests(unittest.TestCase):
     def test_every_make_check_script_runs_unconditionally_in_ci(self) -> None:
@@ -114,6 +135,43 @@ jobs:
         self.assertNotIn(
             "scripts/check_only_in_name.py",
             scripts_run_by_ci(workflow),
+        )
+
+    def test_echo_and_shell_blocks_do_not_count_as_unconditional(self) -> None:
+        workflow = """
+jobs:
+  checks:
+    steps:
+      - name: echo a command
+        run: echo python scripts/fake_check.py
+      - name: conditional shell
+        run: |
+          if false; then
+            python scripts/conditional_check.py
+          fi
+      - name: masked failure
+        run: python scripts/masked_check.py || true
+"""
+        records = scripts_run_by_ci(workflow)
+        self.assertNotIn("scripts/fake_check.py", records)
+        self.assertNotIn("scripts/conditional_check.py", records)
+        self.assertEqual(
+            records["scripts/masked_check.py"],
+            [("checks", 2, True)],
+        )
+
+    def test_job_level_condition_does_not_count_as_unconditional(self) -> None:
+        workflow = """
+jobs:
+  checks:
+    if: false
+    steps:
+      - run: python scripts/job_conditional.py
+"""
+        records = scripts_run_by_ci(workflow)
+        self.assertEqual(
+            records["scripts/job_conditional.py"],
+            [("checks", 0, True)],
         )
 
     def test_conditional_python_step_is_detected_as_conditional(self) -> None:
