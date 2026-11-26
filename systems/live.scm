@@ -82,6 +82,9 @@
   ;; видно на консолі, а не вгадано. console=ttyS0 потрібен і для маркера.
   (kernel-arguments '("console=ttyS0,115200"))
 
+  ;; Keep only the inherited user services here. operating-system-services
+  ;; also instantiates Guix essential services; the new OS adds those itself.
+  ;; Reusing the expanded list would duplicate shepherd-root-service-type.
   (services
    (append (list wsm-live-ready-marker)
-           (operating-system-services base-os))))
+           (operating-system-user-services base-os))))
