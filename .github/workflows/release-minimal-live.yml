@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 concurrency:
   group: minimal-live-release-${{ github.ref }}
@@ -45,6 +47,10 @@ jobs:
         id: release
         run: |
           set -euo pipefail
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "Minimal Live releases may only run from refs/heads/main." >&2
+            exit 1
+          fi
           mapfile -t REQUEST_TAGS < <(
             sed -e 's/[[:space:]]*#.*$//' -e '/^[[:space:]]*$/d' RELEASE-REQUEST.txt
           )
@@ -204,6 +210,55 @@ jobs:
             echo "Tag: `$RELEASE_TAG`"
             echo "Source: `$GITHUB_SHA`"
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Підписати provenance релізних артефактів
+        id: attest-release-artifacts
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            ${{ runner.temp }}/wsm-live-dist/WSM-Desktop-0.1.0-rc3-Minimal-Live.iso
+            ${{ runner.temp }}/wsm-live-dist/SHA256SUMS
+            ${{ runner.temp }}/wsm-live-dist/build-manifest.json
+            ${{ runner.temp }}/wsm-live-dist/release-manifest.json
+            ${{ runner.temp }}/wsm-live-dist/boot-bios.json
+            ${{ runner.temp }}/wsm-live-dist/boot-uefi.json
+          create-storage-record: false
+      - name: Перевірити версію GitHub CLI для перевірки provenance
+        run: |
+          set -euo pipefail
+          GH_VERSION="$(gh version | awk 'NR == 1 { print $3 }')"
+          MINIMUM_VERSION="2.102.0"
+          if [ "$(printf '%s\n' "$MINIMUM_VERSION" "$GH_VERSION" | sort -V | head -n 1)" != "$MINIMUM_VERSION" ]; then
+            echo "gh >= ${MINIMUM_VERSION} is required for exact signer-workflow verification; found ${GH_VERSION:-unknown}." >&2
+            exit 1
+          fi
+      - name: Перевірити provenance артефактів перед публікацією
+        run: |
+          set -euo pipefail
+          BUNDLE="${{ steps.attest-release-artifacts.outputs.bundle-path }}"
+          test -s "$BUNDLE"
+          for ASSET in \
+            "WSM-Desktop-0.1.0-rc3-Minimal-Live.iso" \
+            "SHA256SUMS" \
+            "build-manifest.json" \
+            "release-manifest.json" \
+            "boot-bios.json" \
+            "boot-uefi.json"
+          do
+            gh attestation verify "$release_dist/$ASSET" \
+              --bundle "$BUNDLE" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release-minimal-live.yml" \
+              --source-ref refs/heads/main \
+              --predicate-type "https://slsa.dev/provenance/v1"
+          done
+          {
+            echo "### Криптографічна перевірка походження"
+            echo ""
+            echo "SLSA provenance і точний signer/source ref перевірено для кожного release asset."
+            echo "Signer workflow: $GITHUB_REPOSITORY/.github/workflows/release-minimal-live.yml"
+            echo "Source ref: refs/heads/main"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Опублікувати перевірений GitHub pre-release
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
