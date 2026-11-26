@@ -284,6 +284,12 @@ class ImageTests(unittest.TestCase):
 
 
 class CliTests(unittest.TestCase):
+    def test_release_gate_make_target_defaults_to_free(self) -> None:
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        self.assertIn("PRODUCT ?= free", makefile)
+        self.assertIn('scripts/release_gate.py --product "$(PRODUCT)"', makefile)
+        self.assertIn('$(if $(ISO),--iso "$(ISO)")', makefile)
+
     def test_product_selection_is_required(self) -> None:
         completed = subprocess.run(
             [sys.executable, str(ROOT / "scripts" / "release_gate.py"), "--skip-tests", "--compact"],
