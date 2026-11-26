@@ -12,7 +12,8 @@
 Спільний `wsm_install.executor.execute()` приймає лише preview-запити:
 будь-яке значення `dry_run`, крім буквального `True`, повертає
 `execute.apply-disabled` до виводу або зовнішньої дії. У модулі немає
-`subprocess`, runner-а або verifier-а.
+`subprocess`, runner-а або verifier-а. Результат кроку має статус `not-run`,
+а не `skipped` чи `passed`: команда була показана, але не запускалася.
 
 Привілейований `wsm-install-agent` також відмовляє на `dry_run=False`
 з `agent.apply-disabled`. Allowlist тут використовується для перевірки
