@@ -46,7 +46,7 @@ class InstallModeTests(unittest.TestCase):
         self.assertIn("--target-disk", result.stderr)
 
     def test_install_without_size_is_refused(self) -> None:
-        """Size is how a replaced disk is caught, so it cannot be omitted."""
+        """The estimate is a planner input, not a measured block-device property."""
         result = run_cli("--install", "--target-disk", "/dev/nvme0n1", "--quiet")
         self.assertEqual(result.returncode, 2)
         self.assertIn("--target-size-bytes", result.stderr)
@@ -67,6 +67,29 @@ class InstallModeTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 2)
         self.assertIn("disk.path", result.stderr)
+
+    def test_execute_with_matching_acknowledgement_is_still_disabled(self) -> None:
+        """A matching path string is not target-bound authorization."""
+        result = run_cli(
+            "--install", "--execute", "--target-disk", "/dev/nvme0n1",
+            "--target-size-bytes", str(256 * GIB),
+            "--acknowledge-disk", "/dev/nvme0n1", "--quiet",
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("execute.apply-disabled", result.stderr)
+        self.assertEqual(result.stdout, "")
+
+    def test_guided_execute_request_is_disabled_before_interaction(self) -> None:
+        result = run_cli("--guided", "--execute")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("execute.apply-disabled", result.stderr)
+        self.assertNotIn("Choose a disk", result.stdout)
+
+    def test_tui_execute_request_is_disabled_before_terminal_setup(self) -> None:
+        result = run_cli("--tui", "--execute")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("execute.apply-disabled", result.stderr)
+        self.assertNotIn("Choose the disk", result.stdout)
 
     def test_execute_without_acknowledgement_never_reaches_a_command(self) -> None:
         """The dangerous flag alone must not be enough."""
