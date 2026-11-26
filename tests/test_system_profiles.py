@@ -235,6 +235,35 @@ class DesktopCompletenessTests(unittest.TestCase):
         self.assertNotIn("pulseaudio-service-type", profile("desktop.scm"))
 
 
+class MinimalLiveTests(unittest.TestCase):
+    """A second live image, for hardware that cannot run a graphical installer."""
+
+    def test_minimal_live_has_no_graphical_stack(self) -> None:
+        text = profile("live-minimal.scm")
+        for forbidden in ("plasma-desktop-service-type", "sddm-service-type",
+                          "gnome-desktop-service-type", "calamares"):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, text)
+
+    def test_minimal_live_carries_the_wsm_tools(self) -> None:
+        text = profile("live-minimal.scm")
+        self.assertIn("(wsm packages wsm)", text)
+        self.assertIn("wsm-tools", text)
+
+    def test_minimal_live_prints_the_same_acceptance_marker(self) -> None:
+        """Acceptance is one contract; a second image is not exempt from it."""
+        text = profile("live-minimal.scm")
+        self.assertIn("WSM_LIVE_READY", text)
+        self.assertIn("console=ttyS0", text)
+
+    def test_minimal_live_has_no_audio_printing_or_bluetooth(self) -> None:
+        text = profile("live-minimal.scm")
+        for absent in ("cups-service-type", "bluetooth-service-type",
+                       "pipewire", "pulseaudio"):
+            with self.subTest(absent=absent):
+                self.assertNotIn(absent, text)
+
+
 class HomeEnvironmentTests(unittest.TestCase):
     """Sound is a per-user service in Guix; a system-wide attempt gives two stacks."""
 
