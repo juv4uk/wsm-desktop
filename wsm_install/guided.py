@@ -4,7 +4,8 @@
 The minimal live image has no desktop, so the installer must be usable by
 someone who does not know the exact command line. This module is that flow: it
 lists candidate disks, shows what the hardware report already knows, and asks
-for the one confirmation that matters - typing the disk name.
+the user to confirm which disk the read-only preview describes. This is not
+authorization to write to that disk.
 
 Design rules, all of them consequences of the rest of the repository:
 
