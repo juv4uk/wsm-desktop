@@ -83,7 +83,13 @@ def _read_report() -> tuple[dict | None, bytes | None, str | None]:
 
 
 def _deploy(dry_run: bool) -> tuple[str, str] | None:
-    """Run the plan. Returns a Calamares failure tuple, or None on success."""
+    """Build a preview only. APPLY stays disabled until the target contract is ratified."""
+    if dry_run is not True:
+        return (
+            "WSM APPLY is disabled",
+            "Calamares may preview a deployment plan, but it cannot perform disk writes yet.",
+        )
+
     from wsm_install.executor import ExecutorError, execute
     from wsm_install.install_steps import backend_command, plan_steps, render
     from wsm_install.partition import Disk, Refused, plan as plan_layout
@@ -143,7 +149,7 @@ def _deploy(dry_run: bool) -> tuple[str, str] | None:
             steps,
             disk=str(disk_path),
             acknowledgement=str(disk_path),
-            dry_run=dry_run,
+            dry_run=True,
         )
     except ExecutorError as exc:
         return ("WSM deployment failed", f"{exc.code}: {exc.message}")
@@ -153,9 +159,21 @@ def _deploy(dry_run: bool) -> tuple[str, str] | None:
 
 def run() -> tuple[str, str] | None:
     """Calamares entry point."""
-    dry_run = bool(_global("wsmDryRun", False))
-    _log(f"wsm_deploy: starting (dry_run={dry_run})")
-    result = _deploy(dry_run)
+    dry_run = _global("wsmDryRun", True)
+    if not isinstance(dry_run, bool):
+        return (
+            "Invalid WSM dry-run setting",
+            "wsmDryRun must be a boolean; no disk operation was attempted.",
+        )
+    if dry_run is not True:
+        return (
+            "WSM APPLY is disabled",
+            "The Calamares frontend is preview-only until target identity, "
+            "digest-bound consent, verified tools and QEMU acceptance are complete.",
+        )
+
+    _log("wsm_deploy: starting (dry_run=True; APPLY disabled)")
+    result = _deploy(True)
     if result is not None:
         _log(f"wsm_deploy: failed: {result[0]}")
     return result
