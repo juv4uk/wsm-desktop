@@ -154,6 +154,26 @@ def load_validated_profile_evidence(
                 "profile evidence source-report SHA-256 does not match the exact report bytes"
             )
 
+    # A verified bundle must also identify this hardware. Reuse the canonical
+    # profile matcher; no model-name or partial-ID guessing is allowed.
+    try:
+        from wsm_install.profile_match import match as match_hardware_profile
+
+        matched, ambiguous, skipped = match_hardware_profile(report, [document])
+        profile_slug = document.get("profile", {}).get("slug")
+        if ambiguous:
+            errors.append(
+                "profile hardware signature is ambiguous for this report: "
+                + ", ".join(ambiguous)
+            )
+        elif profile_slug not in matched:
+            detail = "; ".join(skipped) if skipped else "no matching hardware signature"
+            errors.append(
+                "profile hardware signature does not match this report: " + detail
+            )
+    except (AttributeError, TypeError, ValueError) as exc:
+        errors.append(f"profile hardware signature cannot be evaluated: {exc}")
+
     profile_file = root / "profile.scm"
     if root.is_symlink() or profile_file.is_symlink() or not profile_file.is_file():
         errors.append("profile evidence directory has no regular profile.scm")
