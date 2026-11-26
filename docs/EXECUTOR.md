@@ -83,7 +83,10 @@ typed plan і preview. Не запускайте executor на фізичном�
 ## Guided console flow
 
 The guided console and pseudo-graphics TUI entrypoints use the same preview-only executor as CLI and
-Calamares. Its planning and install callbacks return explicit exit codes:
+Calamares. The privileged `wsm-install-agent` also accepts only dry-run: it
+rejects every non-dry-run request, regardless of UID, before invoking the
+shared executor. Its absolute-path allowlist is validation metadata for a
+future protocol, not an authorization to launch those programs today. Its planning and install callbacks return explicit exit codes:
 planning failure stops before the APPLY prompt; an APPLY refusal is propagated
 as a nonzero result and never prints the successful-installation message.
 
