@@ -1,4 +1,4 @@
-;; SPDX-License-Identifier: GPL-3.0-or-later
+;; SPDX-License-Identifier: LicenseRef-Volnist
 ;;
 ;; WSM Desktop — Compatibility live ISO з KDE Plasma та NVIDIA 580.xx.
 ;;

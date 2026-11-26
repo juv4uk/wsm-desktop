@@ -1,6 +1,6 @@
 # Перший завантажувальний WSM KDE ISO
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 Це окремий live-image трек за #169/#170. Він **не змінює** опублікований
 `0.1.0-rc1`: той лишається source-only hardware preview.

@@ -1,4 +1,4 @@
-;; SPDX-License-Identifier: GPL-3.0-or-later
+;; SPDX-License-Identifier: LicenseRef-Volnist
 ;;
 ;; Authenticated Compatibility lock: Guix free snapshot + Nonguix 6b8897c.
 ;; Used for systems/live-compat.scm (NVIDIA 580.xx for Pascal GP107).
