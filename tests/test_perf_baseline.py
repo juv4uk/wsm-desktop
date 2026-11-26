@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import measure_baseline as perf  # noqa: E402
+import wsm_perf.pressure as pressure  # noqa: E402
 
 from measure_baseline import (  # noqa: E402
     NOISE_THRESHOLD,
@@ -21,6 +22,9 @@ from measure_baseline import (  # noqa: E402
     measure,
     median_and_spread,
 )
+
+
+EMPTY_PRESSURE_SNAPSHOT = {"psi": {}, "zram": {"status": "unavailable", "devices": {}}}
 
 
 class SpreadTests(unittest.TestCase):
@@ -59,6 +63,195 @@ class SpreadTests(unittest.TestCase):
         result = median_and_spread(samples)
         self.assertGreaterEqual(result["p90"], result["median"])
         self.assertLessEqual(result["p90"], max(samples))
+
+
+class PressureTelemetryTests(unittest.TestCase):
+    def test_parse_psi_keeps_some_and_full_with_microsecond_totals(self) -> None:
+        parsed = pressure.parse_psi(
+            "some avg10=1.25 avg60=0.80 avg300=0.30 total=1000\n"
+            "full avg10=0.12 avg60=0.10 avg300=0.02 total=250\n"
+        )
+        self.assertEqual(parsed["some"]["total"], 1000)
+        self.assertEqual(parsed["full"]["total"], 250)
+        self.assertEqual(parsed["some"]["avg10"], 1.25)
+
+    def test_parse_psi_accepts_cpu_some_without_full(self) -> None:
+        parsed = pressure.parse_psi(
+            "some avg10=0.00 avg60=0.00 avg300=0.00 total=0\n"
+        )
+        self.assertEqual(set(parsed), {"some"})
+
+    def test_parse_psi_rejects_incomplete_or_out_of_range_fields(self) -> None:
+        with self.assertRaises(ValueError):
+            pressure.parse_psi("some avg10=0.1 total=10\n")
+        with self.assertRaises(ValueError):
+            pressure.parse_psi("some avg10=101 avg60=0 avg300=0 total=10\n")
+
+    def test_read_psi_snapshot_distinguishes_missing_and_invalid_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "cpu").write_text(
+                "some avg10=0 avg60=0 avg300=0 total=10\n", encoding="utf-8"
+            )
+            (root / "memory").write_text("not a PSI line\n", encoding="utf-8")
+            snapshot = pressure.read_psi_snapshot(root)
+        self.assertEqual(snapshot["cpu"]["status"], "available")
+        self.assertEqual(snapshot["memory"]["reason"], "invalid-format")
+        self.assertEqual(snapshot["io"]["reason"], "not-found")
+
+    def test_parse_zram_stats_preserves_field_names_and_older_mm_layout(self) -> None:
+        current = pressure.parse_zram_stat("100 50 60 1000 70 1 2 3 4", "mm_stat")
+        older = pressure.parse_zram_stat("100 50 60 1000 70 1 2 3", "mm_stat")
+        self.assertEqual(current["fields"]["huge_pages_since"], 4)
+        self.assertEqual(older["status"], "partial")
+        self.assertEqual(older["missing_fields"], ["huge_pages_since"])
+        self.assertEqual(
+            pressure.parse_zram_stat("1 2 3 4", "io_stat")["fields"]["failed_writes"],
+            2,
+        )
+
+    def test_read_zram_snapshot_is_read_only_and_records_active_compressor(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            device = root / "zram0"
+            device.mkdir()
+            (device / "mm_stat").write_text(
+                "100 50 60 1000 70 1 2 3 4\n", encoding="utf-8"
+            )
+            (device / "io_stat").write_text("1 2 3 4\n", encoding="utf-8")
+            (device / "bd_stat").write_text("5 6 7\n", encoding="utf-8")
+            (device / "comp_algorithm").write_text(
+                "lzo [zstd] lz4\n", encoding="utf-8"
+            )
+            (device / "backing_dev").write_text("none\n", encoding="utf-8")
+            snapshot = pressure.read_zram_snapshot(root)
+            self.assertEqual(set(path.name for path in root.iterdir()), {"zram0"})
+        self.assertEqual(snapshot["status"], "available")
+        self.assertEqual(
+            snapshot["devices"]["zram0"]["config"]["active_compressor"], "zstd"
+        )
+        self.assertEqual(
+            snapshot["devices"]["zram0"]["stats"]["mm_stat"]["fields"]["orig_data_size"],
+            100,
+        )
+
+    def test_mm_stat_stays_snapshot_while_io_and_bd_are_deltas(self) -> None:
+        def stat(fields: dict[str, int]) -> dict[str, object]:
+            return {"status": "available", "fields": fields}
+
+        before = {
+            "psi": {
+                "memory": {
+                    "status": "available",
+                    "lines": {"some": {"total": 100}, "full": {"total": 50}},
+                }
+            },
+            "zram": {
+                "devices": {
+                    "zram0": {
+                        "stats": {
+                            "mm_stat": stat({"orig_data_size": 100}),
+                            "io_stat": stat({
+                                "failed_reads": 1, "failed_writes": 2,
+                                "invalid_io": 0, "notify_free": 3,
+                            }),
+                            "bd_stat": stat({"bd_count": 5, "bd_reads": 6, "bd_writes": 7}),
+                        }
+                    }
+                }
+            },
+        }
+        after = {
+            "psi": {
+                "memory": {
+                    "status": "available",
+                    "lines": {"some": {"total": 220}, "full": {"total": 70}},
+                }
+            },
+            "zram": {
+                "devices": {
+                    "zram0": {
+                        "stats": {
+                            "mm_stat": stat({"orig_data_size": 150}),
+                            "io_stat": stat({
+                                "failed_reads": 3, "failed_writes": 3,
+                                "invalid_io": 0, "notify_free": 4,
+                            }),
+                            "bd_stat": stat({"bd_count": 5, "bd_reads": 6, "bd_writes": 9}),
+                        }
+                    }
+                }
+            },
+        }
+        result = pressure.compare_pressure_snapshots(before, after)
+        self.assertEqual(result["scope"], "system-wide")
+        self.assertIn("do not attribute pressure", result["interpretation"])
+        self.assertEqual(result["psi"]["memory"]["total_delta_us"]["some"], 120)
+        self.assertEqual(
+            result["zram"]["devices"]["zram0"]["counter_delta"]["io_stat"]["fields"]["failed_reads"],
+            2,
+        )
+        self.assertEqual(
+            result["zram"]["devices"]["zram0"]["counter_delta"]["bd_stat"]["fields"]["bd_writes"],
+            2,
+        )
+        self.assertEqual(
+            result["zram"]["devices"]["zram0"]["mm_stat"]["after"]["fields"]["orig_data_size"],
+            150,
+        )
+
+    def test_older_zram_mm_stat_keeps_snapshot_partial(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            device = root / "zram0"
+            device.mkdir()
+            (device / "mm_stat").write_text(
+                "100 50 60 1000 70 1 2 3\n", encoding="utf-8"
+            )
+            (device / "io_stat").write_text("1 2 3 4\n", encoding="utf-8")
+            (device / "bd_stat").write_text("5 6 7\n", encoding="utf-8")
+            snapshot = pressure.read_zram_snapshot(root)
+        self.assertEqual(snapshot["status"], "partial")
+        self.assertEqual(snapshot["devices"]["zram0"]["status"], "partial")
+
+        interval = pressure.compare_pressure_snapshots(
+            {"psi": {}, "zram": snapshot},
+            {"psi": {}, "zram": snapshot},
+        )
+        self.assertEqual(interval["zram"]["status"], "partial")
+        self.assertEqual(interval["zram"]["devices"]["zram0"]["status"], "partial")
+
+    def test_psi_line_set_change_is_partial_not_complete(self) -> None:
+        before = {
+            "psi": {"memory": {"status": "available", "lines": {
+                "some": {"total": 10}, "full": {"total": 5}
+            }}},
+            "zram": {"devices": {}},
+        }
+        after = {
+            "psi": {"memory": {"status": "available", "lines": {
+                "some": {"total": 20}
+            }}},
+            "zram": {"devices": {}},
+        }
+        result = pressure.compare_pressure_snapshots(before, after)
+        self.assertEqual(result["psi"]["memory"]["status"], "partial")
+
+    def test_counter_reset_is_unknown_not_a_negative_event_count(self) -> None:
+        before = {"status": "available", "fields": {"failed_reads": 10}}
+        after = {"status": "available", "fields": {"failed_reads": 2}}
+        result = pressure._counter_deltas(before, after)
+        self.assertEqual(result["status"], "partial")
+        self.assertIsNone(result["fields"]["failed_reads"])
+        self.assertEqual(result["reason"], "counter-reset")
+
+    def test_missing_psi_and_zram_are_unknown_not_zero(self) -> None:
+        result = pressure.compare_pressure_snapshots(
+            EMPTY_PRESSURE_SNAPSHOT, EMPTY_PRESSURE_SNAPSHOT
+        )
+        self.assertEqual(result["psi"]["memory"]["status"], "unknown")
+        self.assertEqual(result["zram"]["status"], "unavailable")
+        self.assertEqual(result["psi"]["memory"]["total_delta_us"], {})
 
 
 class EnvironmentProvenanceTests(unittest.TestCase):
@@ -195,7 +388,10 @@ class MeasurementTests(unittest.TestCase):
             name: (lambda value=float(index + 1): value)
             for index, name in enumerate(WORKLOADS)
         }
-        with patch.dict(perf.WORKLOADS, synthetic):
+        with (
+            patch.dict(perf.WORKLOADS, synthetic),
+            patch.object(perf, "read_pressure_snapshot", return_value=EMPTY_PRESSURE_SNAPSHOT),
+        ):
             artifact = measure("qemu", 5)
         self.assertEqual(artifact["schema"], "wsm-perf-baseline/1")
         self.assertEqual(artifact["mode"], "qemu")
@@ -210,7 +406,10 @@ class MeasurementTests(unittest.TestCase):
             name: (lambda value=float(index + 1): value)
             for index, name in enumerate(sorted(names))
         }
-        with patch.dict(perf.WORKLOADS, synthetic):
+        with (
+            patch.dict(perf.WORKLOADS, synthetic),
+            patch.object(perf, "read_pressure_snapshot", return_value=EMPTY_PRESSURE_SNAPSHOT),
+        ):
             artifact = measure("physical", 5)
         self.assertEqual(set(artifact["workloads"]), names)
         for name, result in artifact["workloads"].items():
@@ -241,6 +440,7 @@ class MeasurementTests(unittest.TestCase):
                 with (
                     patch.object(perf, "collect_report", return_value=report),
                     patch.dict(perf.WORKLOADS, synthetic),
+                    patch.object(perf, "read_pressure_snapshot", return_value=EMPTY_PRESSURE_SNAPSHOT),
                 ):
                     artifact = measure("qemu", 5)
                 self.assertEqual(artifact["comparison_eligible"], expected)
@@ -262,6 +462,7 @@ class MeasurementTests(unittest.TestCase):
         with (
             patch.object(perf, "collect_report", return_value=report),
             patch.dict(perf.WORKLOADS, synthetic),
+            patch.object(perf, "read_pressure_snapshot", return_value=EMPTY_PRESSURE_SNAPSHOT),
         ):
             artifact = measure("physical", 5)
         self.assertFalse(artifact["comparison_eligible"])
@@ -280,8 +481,14 @@ class MeasurementTests(unittest.TestCase):
             name: tracked(name, float(index + 1))
             for index, name in enumerate(WORKLOADS)
         }
-        with patch.dict(perf.WORKLOADS, synthetic):
-            measure("qemu", 5)
+        with (
+            patch.dict(perf.WORKLOADS, synthetic),
+            patch.object(perf, "read_pressure_snapshot", return_value=EMPTY_PRESSURE_SNAPSHOT) as pressure,
+        ):
+            artifact = measure("qemu", 5)
+        self.assertEqual(pressure.call_count, 2 * len(WORKLOADS))
+        for result in artifact["workloads"].values():
+            self.assertEqual(result["system_pressure"]["scope"], "system-wide")
         self.assertEqual(calls, {name: 6 for name in calls})
 
 

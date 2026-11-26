@@ -5,6 +5,7 @@
 - Статус: **частково реалізовано** (`wsm/systems/performance.scm`), не виміряно
 - Задача: [#151](https://github.com/juv4uk/wsm-desktop/issues/151), батьківська [#147](https://github.com/juv4uk/wsm-desktop/issues/147)
 - План поточного виправлення provenance: [virtualization evidence](superpowers/plans/2026-11-26-perf-virtualization-evidence.md)
+- План пасивних вимірів: [PSI та zram observations](superpowers/plans/2026-11-26-perf-pressure-observations.md)
 - Рішення: [ADR 0007](decisions/0007-clear-linux-principles.md)
 
 ## Головна різниця, яку варто зрозуміти
@@ -113,6 +114,41 @@ evidence і не можуть вважатися придатними для п�
 тому запит `--mode physical` без окремого позитивного джерела залишається
 `unknown` і `comparison_eligible=false`. Benchmark усе одно записує сирі
 вимірювання, але не підвищує їх до підтвердженого фізичного baseline.
+
+### Read-only pressure observations
+
+Producer tool version `0.3.0` додає до кожного workload результат
+`system_pressure`. Після warm-up і безпосередньо перед/після п'яти чи більше
+виміряних повторів harness зчитує:
+
+- **PSI** з `/proc/pressure/{cpu,memory,io}`: наявні рядки `some/full`,
+  середні `avg10/avg60/avg300` та дельту cumulative `total` у мікросекундах.
+  Рядок `full` може бути відсутнім у деяких kernel versions; parser не вимагає
+  його для `cpu`. Семантика та одиниці описані в
+  [Linux PSI documentation](https://docs.kernel.org/accounting/psi.html).
+- **zram** з `/sys/block/zramX`: активний compressor і backing device,
+  `mm_stat` як сирі before/after поля (байтові розміри та page counters без
+  спільної дельти), `io_stat` як лічильники подій, а `bd_stat` як лічильники
+  обсягів у блоках по 4 KiB з дельтою. Поля відповідають
+  [Linux zram statistics](https://kernel.org/doc/html/v7.3/admin-guide/blockdev/zram.html).
+  Старіша версія ядра з неповним `mm_stat`, відсутній пристрій або reset
+  counters лишають доказ `partial/unknown`, не перетворюються на нуль.
+
+PSI й zram — **system-wide** джерела: вони включають активність інших процесів
+і описують інтервал workload, але не доводять причинний зв'язок із конкретним
+процесом. Їх використовуємо як контекст і для виявлення корельованого pressure,
+не як regression threshold та не як автоматичний діагноз. Читання telemetry
+відбувається поза timed region, не змінює самі workload timings і не пише до
+procfs/sysfs. Це виконується лише під час явного запуску benchmark, ніколи в
+hardware preflight.
+
+Артефакти tool version `0.2.0` мають virtualization provenance, але ще не
+містять `system_pressure`; відсутність цих полів у старому результаті означає
+`unknown`, а не нульовий тиск. zswap лишається окремим opt-in експериментом:
+він обмінює CPU cycles на можливе зменшення swap I/O, а не є автоматично
+кращою заміною zram ([Linux zswap documentation](https://www.kernel.org/doc/html/latest/admin-guide/mm/zswap.html)).
+Жодних змін compressor, розміру zram, swappiness, zswap, governor чи power
+limits ця telemetry не виконує.
 
 **Шум визначається, а не приховується.** Прогін вважається шумним, якщо MAD або
 відхилення p90 перевищує 5% медіани. MAD сам по собі не ловить одинака серед

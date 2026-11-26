@@ -42,16 +42,16 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from wsm_hwcheck.collector import collect_report  # noqa: E402
+from wsm_perf.pressure import compare_pressure_snapshots, read_pressure_snapshot  # noqa: E402
 from wsm_hwcheck.isa import IsaError, build_evidence, read_cpuinfo_flags  # noqa: E402
 
 SCHEMA = "wsm-perf-baseline/1"
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 DEFAULT_REPETITIONS = 5
 SYNC_WRITE_BYTES = 64 * 1024 * 1024
 # Above this relative spread a run is not a measurement, it is noise.
 NOISE_THRESHOLD = 0.05
 MODES = ("physical", "qemu")
-
 
 def median_and_spread(samples: list[float]) -> dict[str, float]:
     """Median, p90 and MAD - the issue asks for spread, not a mean of one run."""
@@ -142,7 +142,6 @@ def _read_first(path: str) -> str:
         return Path(path).read_text(encoding="utf-8", errors="replace").strip()
     except OSError:
         return "unknown"
-
 
 QEMU_VIRTUALIZATION = frozenset({"qemu", "kvm"})
 
@@ -250,12 +249,18 @@ def measure(mode: str, repetitions: int) -> dict[str, Any]:
     results: dict[str, Any] = {}
     for name, workload in WORKLOADS.items():
         workload()  # warm-up, discarded: the first call pays for page faults
+        pressure_before = read_pressure_snapshot()
         samples: list[float] = []
         for _ in range(repetitions):
             started = time.perf_counter()
             workload()
             samples.append(time.perf_counter() - started)
-        results[name] = median_and_spread(samples)
+        pressure_after = read_pressure_snapshot()
+        measurement = median_and_spread(samples)
+        measurement["system_pressure"] = compare_pressure_snapshots(
+            pressure_before, pressure_after
+        )
+        results[name] = measurement
 
     environment_facts = environment(mode)
     return {
