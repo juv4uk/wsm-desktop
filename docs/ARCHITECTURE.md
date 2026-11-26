@@ -4,7 +4,7 @@
 
 ## Мета
 
-WSM Desktop — незалежний hardware-oriented настільний дистрибутив. Nix/NixOS і GNU Guix System поки досліджуються як окремі нативні системні backend-и; жоден не оголошений остаточним.
+WSM Desktop — незалежний hardware-oriented настільний дистрибутив. Для першого підтримуваного preview обрано GNU Guix System як єдиний системний backend за ADR 0004. Nix/NixOS залишається окремим відкладеним дослідницьким напрямом і не входить до CLI, plan або release contract v0.1.
 
 Ми не переписуємо пакетний менеджер, init system, ядро, драйвери або firmware заради самого факту власної розробки. Власна робота зосереджується на апаратній базі знань, перевірці сумісності, інтеграції upstream-компонентів, профілях системи, досвіді встановлення та документації.
 
@@ -86,15 +86,15 @@ Guix System configuration описує bootloader. Штатна команда g
 Перші тести виконуються на одноразових qcow2-образах у QEMU. Фізичні диски не є середовищем розробки. Перед будь-якою операцією запису адаптер повинен мати однозначний план і явне підтвердження користувача.
 
 
-## Еволюція архітектури: Nix і GNU Guix
+## Системний backend першого preview
 
-Початковий прототип був орієнтований на Guix System. Тепер WSM досліджує Nix/NixOS та Guix System як **окремі нативні backend-и**.
+GNU Guix System є єдиним обраним backend-ом першого WSM Desktop preview. CLI приймає лише `--backend guix`, а plan v0.1 емітує лише `guix-system`. Nix/NixOS збережено як відкладене дослідження в окремому середовищі; це не допустимий alias, план або залежність продуктового preview.
 
 Спільний рівень WSM має містити UX, hardware inventory, compatibility evidence, профілі користувача, безпечні інсталяційні плани та політику оновлення. Він не повинен намагатися переписати повну семантику NixOS module system або Guix operating-system declaration в універсальну мову.
 
 Одна конкретна інсталяція має одного системного власника. Не допускається паралельне керування тим самим root filesystem, bootloader, системними службами чи activation state двома backend-ами.
 
-Повне рішення поки не прийнято. Див. [ADR 0004](decisions/0004-nix-guix-backend-strategy.md) та [issue #2](https://github.com/juv4uk/wsm-desktop/issues/2).
+Рішення про Guix як перший і єдиний backend прийнято в [ADR 0004](decisions/0004-nix-guix-backend-strategy.md) та відображено в [issue #2](https://github.com/juv4uk/wsm-desktop/issues/2). Майбутнє reconsideration Nix/NixOS потребуватиме окремого рішення, власної перевірки й версійованого handoff contract; воно не може мовчки з'явитися в CLI або plan v0.1.
 
 ## Hardware-first та upstream-first
 
