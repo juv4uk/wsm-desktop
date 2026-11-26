@@ -61,6 +61,16 @@ class UefiPrebootProbePolicyTests(unittest.TestCase):
         self.assertIn("115200", self.lower)
         self.assertIn("30 секунд", self.lower)
 
+    def test_execution_provenance_is_not_self_asserted(self) -> None:
+        self.assertIn("не визначається самим efi application", self.lower)
+        self.assertIn("capture harness", self.lower)
+        self.assertIn("не виводити його з cpuid", self.lower)
+        self.assertIn("physical-uefi", self.lower)
+
+    def test_memory_map_is_not_in_the_first_m0_scope(self) -> None:
+        self.assertIn("не входить у перший m0", self.lower)
+        self.assertIn("allocation", self.lower)
+
     def test_production_schema_is_not_modified_silently(self) -> None:
         self.assertIn("schema v1.0.0", self.lower)
         self.assertIn("окремий pre-boot evidence envelope", self.lower)
