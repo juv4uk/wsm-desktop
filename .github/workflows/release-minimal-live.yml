@@ -144,7 +144,14 @@ jobs:
             "artifact":{"filename":iso_name,"bytes":iso.stat().st_size,"sha256":sha(iso),"maximum_bytes":2147483647},
             "acceptance":{"bios":"pass","uefi":"pass","marker":"WSM_LIVE_READY"},
             "installer":{"entrypoint":"wsm-install-live","mode":"read-only TUI preview","apply_enabled":False},
-            "build_manifest_sha256":sha(bp)      - name: Створити чернетку релізу та завантажити assets
+            "build_manifest_sha256":sha(bp),
+            "boot_evidence":{"bios_sha256":sha(root/"boot-bios.json"),"uefi_sha256":sha(root/"boot-uefi.json")}}
+          (root/"release-manifest.json").write_text(json.dumps(manifest,ensure_ascii=False,indent=2,sort_keys=True)+"\n",encoding="utf-8")
+          files=[iso,bp,root/"release-manifest.json",root/"boot-bios.json",root/"boot-uefi.json"]
+          (root/"SHA256SUMS").write_text("".join(f"{sha(p)}  {p.name}\n" for p in files),encoding="utf-8")
+          PY
+          (cd "$release_dist" && sha256sum -c SHA256SUMS)
+      - name: Створити чернетку релізу та завантажити assets
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
           RELEASE_EXISTS: ${{ steps.release.outputs.release_exists }}
@@ -206,17 +213,6 @@ jobs:
           RELEASE_INFO="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,targetCommitish)"
           test "$(jq -r '.isDraft' <<< "$RELEASE_INFO")" = "false"
           test "$(jq -r '.targetCommitish' <<< "$RELEASE_INFO")" = "$GITHUB_SHA"
-
-run: |
-          set -euo pipefail
-          gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" --prerelease \
-            --title "WSM Desktop 0.1.0-rc3 — Minimal Live Installer Preview" \
-            --notes-file "$release_dist/RELEASE-NOTES.md" \
-            "$release_dist/$release_iso" "$release_dist/SHA256SUMS" \
-            "$release_dist/build-manifest.json" "$release_dist/release-manifest.json" \
-            "$release_dist/boot-bios.json" "$release_dist/boot-uefi.json"
-
       - name: Повідомити причину збою
         if: failure()
         env:
