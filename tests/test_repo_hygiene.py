@@ -2,7 +2,7 @@
 """Repository hygiene rules learned from Omarchy, enforced at real boundaries.
 
 Static source checks protect narrow policies; runtime behavior belongs in
-focused tests or the CI workflow that executes it. A filename appearing in a
+focused tests or an explicitly launched acceptance run that executes it. A filename appearing in a
 test is not evidence that the script works.
 """
 
