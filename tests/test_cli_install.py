@@ -77,6 +77,19 @@ class InstallModeTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("acknowledgement", result.stderr)
 
+    def test_execute_with_valid_disk_acknowledgement_is_still_disabled(self) -> None:
+        """Matching a path string does not authorize a real disk write."""
+        result = run_cli(
+            "--install", "--execute",
+            "--target-disk", "/dev/nvme0n1",
+            "--target-size-bytes", str(256 * GIB),
+            "--acknowledge-disk", "/dev/nvme0n1",
+            "--quiet",
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("execute.apply-disabled", result.stderr)
+        self.assertEqual(result.stdout, "")
+
 
 if __name__ == "__main__":
     unittest.main()
