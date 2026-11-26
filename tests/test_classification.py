@@ -73,6 +73,13 @@ def make_profile_bundle(root: Path, report: dict, report_bytes: bytes) -> Path:
         },
         "report_id": report["report_id"],
         "report_schema_version": report["schema_version"],
+        "hardware_signature": {
+            "pci_ids": [
+                f"{str(report['devices'][0]['identity']['vendor_id']).removeprefix('0x').lower()}:"
+                f"{str(report['devices'][0]['identity']['device_id']).removeprefix('0x').lower()}"
+            ],
+            "match": "all",
+        },
         "isa_level": "x86-64-v3",
         "verified_on": "2026-11-26",
         "verified_by": "web agent",
@@ -228,6 +235,16 @@ class ProfileEvidenceTests(unittest.TestCase):
                 "graphics",
                 {"verified_functions": [{"name": "graphics", "status": "pass"}]},
             )
+
+    def test_profile_without_hardware_signature_cannot_certify(self) -> None:
+        report, raw = one_gpu_report()
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence_path = make_profile_bundle(Path(temporary), report, raw)
+            document = json.loads(evidence_path.read_text(encoding="utf-8"))
+            document.pop("hardware_signature")
+            evidence_path.write_text(json.dumps(document), encoding="utf-8")
+            with self.assertRaisesRegex(ClassificationEvidenceError, "hardware signature"):
+                load_validated_profile_evidence(report, raw, evidence_path)
 
     def test_profile_bundle_with_another_report_id_is_rejected(self) -> None:
         report, raw = one_gpu_report()
