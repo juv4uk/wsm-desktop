@@ -145,6 +145,20 @@ Core collector має випускати лише `kernel-exposed` та обер
 
 Джерело визначення canonical sysfs paths: [Linux sysfs rules](https://docs.kernel.org/admin-guide/sysfs-rules.html). Межі стабільності ABI: [ABI overview](https://docs.kernel.org/admin-guide/abi.html), [testing ABI](https://docs.kernel.org/admin-guide/abi-testing.html).
 
+### 3.1 Опційне доповнення locality через hwloc
+
+[hwloc 2.16.0](https://www.open-mpi.org/software/hwloc/) може доповнювати hardware inventory структурною інформацією про CPU, NUMA, кеші та locality I/O-пристроїв. Для WSM це лише **опційний provider локальності**, а не власник canonical topology relationships:
+
+- Базові вузли й зв'язки WSM спочатку формуються з canonical sysfs paths, resolved symlinks та ancestry. hwloc не замінює доказ USB interface → parent, PCI/USB function → driver або DRM connector → card.
+- I/O discovery у hwloc за замовчуванням вимкнений (крім lstopo) через вартість збору. Повніше розпізнавання PCI-пристроїв може потребувати libpciaccess; actual I/O locality upstream описує як Linux-specific. Відсутність об'єкта в hwloc output тому не є доказом відсутності пристрою або зв'язку.
+- hwloc OS indexes можуть бути непослідовними й змінюватися після оновлення BIOS або системи. Logical indexes є зручним порядком лише всередині одного topology snapshot. Жоден з цих індексів не можна використовувати як stable ID, report-local ID між звітами або зовнішній ключ; допустиме лише тимчасове зіставлення в тому самому snapshot.
+- hwloc надає структурну модель, а не виміряну performance model. NUMA distances, memory attributes (наприклад DRAM/HBM) і CPU kinds, якщо доступні, зберігаються як окремі факти зі своїм source/version/time; не виводити з дерева гарантії bandwidth, latency або працездатності пристрою.
+- Якщо optional provider відсутній, не може прочитати дані або повертає неповне дерево, canonical sysfs graph залишається доступним, а locality — unknown/not-collected. Locality enrichment не задовольняє installation-critical gate і не змінює hardware verdict.
+
+Отже, рекомендована послідовність: **sysfs topology → semantic validation → optional hwloc locality annotation**. Не додавати hwloc до обов'язкової залежності першого live preflight лише заради locality metadata.
+
+Джерела: [hwloc 2.16.0](https://www.open-mpi.org/software/hwloc/), [I/O device discovery](https://www.open-mpi.org/projects/hwloc/doc/v2.16.0/iodevices.html), [FAQ про індекси та structural model](https://www.open-mpi.org/projects/hwloc/doc/v2.16.0/faq.html).
+
 ## 4. Особливі правила для дисплеїв
 
 - `/sys/class/drm/cardN/device` та connector device links треба resolve-ити; зв'язок connector → card створюється лише після перевірки відповідної device ancestry.
