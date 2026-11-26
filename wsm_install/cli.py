@@ -29,8 +29,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--preflight", action="store_true", help="run report preflight")
     parser.add_argument("--report", required=True, metavar="PATH", help="hardware report JSON")
     parser.add_argument(
-        "--backend", required=True, choices=("guix", "nix"),
-        help="backend alias: guix -> guix-system; nix -> nixos",
+        "--backend", required=True, choices=("guix",),
+        help="the first WSM preview supports GNU Guix System only",
     )
     parser.add_argument("--dry-run", action="store_true", help="required; never deploys or writes disks")
     parser.add_argument("--schema", type=Path, default=DEFAULT_SCHEMA, help=argparse.SUPPRESS)
