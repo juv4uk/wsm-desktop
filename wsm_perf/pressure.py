@@ -179,7 +179,7 @@ def read_zram_snapshot(root: Path = Path("/sys/block")) -> dict[str, Any]:
             if algorithm.get("status") == "available"
             and active_match is not None
             and backing.get("status") == "available"
-            and bool(backing_device)
+            and bool(backing_text)
             else "partial"
         )
         config = {
