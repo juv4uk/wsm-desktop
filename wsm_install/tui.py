@@ -1,19 +1,16 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""A pseudo-graphical installer for machines that have a screen but no desktop.
+"""Український TUI для minimal-live preview на консолі без desktop.
 
-Three frontends, one backend:
+Поточний шлях minimal-live: `wsm-install-live` відкриває цей TUI після
+hardware preflight. `--guided` є альтернативним текстовим входом у той
+самий typed planning contract. Calamares лишається лише reference-only:
+він не входить до поточного minimal-live шляху й не є обраним frontend-ом.
 
-* console (`--guided`) - a read-only target selector;
-* pseudo-graphics (`--tui`) - a full-screen read-only preview;
-* Calamares - an optional GUI shell with the same disabled-APPLY contract.
+Малювання представлено списком рядків, а введення — ін'єктованим читачем
+клавіш. Це дає змогу тестувати весь сценарій без реального термінала й
+працювати через serial console.
 
-Why not curses: `curses` is in the standard library but drags terminal
-capability handling and a global screen state that is painful to test and
-breaks on serial consoles. The screen here is a list of lines plus a key
-reader, both injectable, so the whole flow is testable without a terminal.
-
-Why not a real GUI at this level: the point of the middle tier is to work on a
-machine with 1-2 GiB of RAM and no GPU. Box drawing characters cost nothing.
+Цей рівень не потребує desktop або GPU; APPLY вимкнено.
 """
 
 from __future__ import annotations
@@ -68,10 +65,20 @@ class TerminalScreen:
             tty.setraw(descriptor)
             char = sys.stdin.read(1)
             if char == "\x1b":
-                # Arrow keys arrive as ESC [ A/B/C/D.
-                rest = sys.stdin.read(2)
-                return {"[A": "up", "[B": "down"}.get(rest, "esc")
-            return normalize_key(char)
+                # A standalone Esc cancels path confirmation. Arrow sequences
+                # have a short continuation window so Esc never blocks forever.
+                import select
+
+                if not select.select([sys.stdin], [], [], 0.05)[0]:
+                    return "esc"
+                prefix = sys.stdin.read(1)
+                if prefix != "[":
+                    return "esc"
+                if not select.select([sys.stdin], [], [], 0.05)[0]:
+                    return "esc"
+                direction = sys.stdin.read(1)
+                return {"A": "up", "B": "down"}.get(direction, "esc")
+            return {"\r": "enter", "\n": "enter"}.get(char, char)
         finally:
             termios.tcsetattr(descriptor, termios.TCSADRAIN, previous)
 
@@ -168,12 +175,14 @@ def run_tui(
             "",
             f"Ціль перегляду: {disk.path} ({disk.human_size()}).",
             "",
-            "Диск не змінюватиметься. Введіть його шлях для підтвердження або q/й для виходу.",
+            "Диск не змінюватиметься. Введіть його шлях; Esc — скасувати.",
             "",
             f"  > {typed}_",
         ]))
-        key = normalize_key(screen.read_key())
-        if key == "quit":
+        # У полі шляху не нормалізуємо q/j/k/й/о/л: це звичайні
+        # символи назв пристроїв і точного підтвердження. Esc скасовує ввід.
+        key = screen.read_key()
+        if key == "esc":
             return 1
         if key == "enter":
             break
