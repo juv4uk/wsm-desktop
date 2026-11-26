@@ -27,7 +27,7 @@ STATUSES = {"covered", "partial", "not-covered", "out-of-scope"}
 EVIDENCE_STATUSES = {"covered", "partial"}
 ROW = re.compile(r"^\|\s*(?P<row>.+?)\s*\|\s*$")
 EVIDENCE = re.compile(r"`(?P<path>tests/[\w./-]+\.py)::(?P<method>test_\w+)`")
-MINIMUM_ROWS = 13
+MINIMUM_ROWS = 14
 
 
 def register_rows(text: str) -> list[list[str]]:
@@ -135,6 +135,21 @@ class OmarchyRegisterTest(unittest.TestCase):
     def test_boot_update_esp_identity_is_not_claimed_covered_without_updater(self) -> None:
         row = self._row_for_source("Omarchy #15435")
         self.assertIn("не-booted ESP", row[0])
+        self.assertEqual(row[3].strip("`"), "out-of-scope")
+        self.assertEqual(row[4], "—")
+
+    def test_fixed_tmp_path_guard_is_only_partial_coverage_of_omarchy_19965(self) -> None:
+        row = self._row_for_source("Omarchy #19965")
+        self.assertEqual(row[3].strip("`"), "partial")
+        self.assertIn("не доводить", row[2])
+        self.assertIn(
+            "tests/test_temp_path_containment.py::test_fixed_tmp_paths_exist_only_inside_the_guest_script",
+            row[4],
+        )
+
+    def test_non_regular_lock_path_hardening_is_out_of_scope_without_lock_manager(self) -> None:
+        row = self._row_for_source("Omarchy #19998")
+        self.assertIn("lock", row[0].lower())
         self.assertEqual(row[3].strip("`"), "out-of-scope")
         self.assertEqual(row[4], "—")
 
