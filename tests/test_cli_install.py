@@ -111,6 +111,20 @@ class InstallModeTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("write-plan.refused", result.stderr)
 
+    def test_write_plan_refuses_symlink_to_a_device_node(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "plan.json"
+            destination.symlink_to("/dev/null")
+            result = run_cli(
+                "--install", "--target-disk", "/dev/nvme0n1",
+                "--target-size-bytes", str(256 * GIB),
+                "--acknowledge-disk", "/dev/nvme0n1",
+                "--write-plan", str(destination), "--quiet",
+            )
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("write-plan.refused", result.stderr)
+            self.assertTrue(destination.is_symlink())
+
     def test_write_plan_refuses_to_overwrite_the_report(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             report = Path(temporary) / "report.json"
