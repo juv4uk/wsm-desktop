@@ -73,8 +73,8 @@ def _ask(console: Console, prompt: str, default: str = "") -> str:
 def run_guided(
     console: Console,
     candidates: Iterable[Candidate],
-    plan: Callable[[str, int, str], object],
-    install: Callable[[str, int, bool], object],
+    plan: Callable[[str, int, str], int],
+    install: Callable[[str, int, str], int],
     evidence_note: str = "",
 ) -> int:
     """Walk the user through choosing a disk and confirming it. Returns an exit code."""
@@ -121,13 +121,27 @@ def run_guided(
         return 1
 
     console.write("\nPlanning...\n")
-    plan(disk.path, disk.size_bytes, firmware)
+    plan_status = plan(disk.path, disk.size_bytes, firmware)
+    if type(plan_status) is not int or plan_status != 0:
+        status = plan_status if type(plan_status) is int and plan_status > 0 else 1
+        console.write(
+            f"Planning failed (exit code {status}). Nothing was changed.\n"
+        )
+        return status
 
-    answer = _ask(console, "Install now? Type 'install' to begin, Enter to stop: ")
+    answer = _ask(console, "Install now? Type 'install' to request APPLY, or Enter to stop: ")
     if answer != "install":
         console.write("Stopped after planning. Nothing was changed.\n")
         return 1
 
-    install(disk.path, disk.size_bytes, firmware)
+    install_status = install(disk.path, disk.size_bytes, firmware)
+    if type(install_status) is not int or install_status != 0:
+        status = install_status if type(install_status) is int and install_status > 0 else 1
+        console.write(
+            f"Installation did not complete (exit code {status}). "
+            "No successful installation is claimed.\n"
+        )
+        return status
+
     console.write("Installation finished. Remove the medium and reboot.\n")
     return 0
