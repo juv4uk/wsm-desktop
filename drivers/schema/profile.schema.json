@@ -129,7 +129,10 @@
           "pattern": "^[0-9a-f]{40}$"
         },
         "channel_lock_file": {
-          "const": "channels.lock.scm"
+          "enum": [
+            "channels.lock.scm",
+            "channels/compatibility.lock.scm"
+          ]
         },
         "channel_commit": {
           "const": "4e5195be20d9b124df8a8bb69213412236e4668e"
@@ -144,6 +147,18 @@
         },
         "notes": {
           "type": "string"
+        },
+        "additional_channel_commits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "nonguix"
+          ],
+          "properties": {
+            "nonguix": {
+              "const": "6b8897cd6f3223b158c070cdc9cc638279f8c337"
+            }
+          }
         }
       }
     },
@@ -556,5 +571,61 @@
         "$ref": "#/$defs/evidence"
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "profile_class": {
+            "const": "compatibility"
+          }
+        },
+        "required": [
+          "profile_class"
+        ]
+      },
+      "then": {
+        "properties": {
+          "source": {
+            "required": [
+              "additional_channel_commits"
+            ],
+            "properties": {
+              "channel_lock_file": {
+                "const": "channels/compatibility.lock.scm"
+              },
+              "additional_channel_commits": {
+                "required": [
+                  "nonguix"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "profile_class": {
+            "const": "free"
+          }
+        },
+        "required": [
+          "profile_class"
+        ]
+      },
+      "then": {
+        "properties": {
+          "source": {
+            "properties": {
+              "channel_lock_file": {
+                "const": "channels.lock.scm"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }
