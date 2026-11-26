@@ -241,5 +241,29 @@ class CliTests(unittest.TestCase):
         self.assertEqual(statuses["checksum"], "pass")
 
 
+
+class RecordedVerdictTests(unittest.TestCase):
+    """The verdict committed to the repository must match the tool's schema."""
+
+    def test_recorded_iso_verdict_is_wellformed(self) -> None:
+        path = ROOT / "docs" / "artifacts" / "iso-verdict-0.1.0-rc2-live-iso.json"
+        verdict = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(verdict["schema"], "wsm-release-verdict/1")
+        self.assertIn(verdict["overall"], {"pass", "fail", "incomplete"})
+        ids = {item["id"] for item in verdict["criteria"]}
+        for expected in ("checksum", "iso-structure", "boot-records"):
+            self.assertIn(expected, ids)
+        self.assertEqual(verdict["artifact"], "wsm-desktop-kde-hardened-20261125.iso")
+
+    def test_recorded_verdict_does_not_claim_a_pass(self) -> None:
+        """It was never booted; claiming otherwise would be the exact failure mode."""
+        path = ROOT / "docs" / "artifacts" / "iso-verdict-0.1.0-rc2-live-iso.json"
+        verdict = json.loads(path.read_text(encoding="utf-8"))
+        self.assertNotEqual(verdict["overall"], "pass")
+        statuses = {item["id"]: item["status"] for item in verdict["criteria"]}
+        self.assertEqual(statuses["boot-bios"], "not-run")
+        self.assertEqual(statuses["boot-uefi"], "not-run")
+
+
 if __name__ == "__main__":
     unittest.main()
