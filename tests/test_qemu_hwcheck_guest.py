@@ -10,6 +10,7 @@ import tarfile
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,6 +49,19 @@ def write_tar(path: Path, members: list[tuple[str, bytes]]) -> None:
 
 
 class QemuHwcheckGuestSafetyTests(unittest.TestCase):
+    def test_manual_qemu_target_requires_guest_compatible_python_abi(self) -> None:
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        self.assertEqual(guest.GUEST_VALIDATION_ABI, "cpython-311")
+        self.assertIn(
+            '$(PYTHON) -c \'import sys; assert sys.implementation.cache_tag == "cpython-311"',
+            makefile,
+        )
+        self.assertIn("$(PYTHON) scripts/ci_qemu_hwcheck_guest.py", makefile)
+        documentation = (
+            ROOT / "docs" / "testing" / "HWCHECK-QEMU-GUEST.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("PYTHON=python3.11 make qemu-acceptance-manual", documentation)
+
     def test_guest_init_template_renders_all_stages_without_placeholders(self) -> None:
         rendered = guest.render_guest_init("/lib:/lib64:/opt/python/lib")
 
@@ -59,14 +73,105 @@ class QemuHwcheckGuestSafetyTests(unittest.TestCase):
             "WSM_HWCHECK_REPORT_BEGIN",
             "WSM_HWCHECK_REPORT_END",
             "WSM_HWCHECK_GUEST_FAILURE:",
+            "WSM_INSTALL_STAGE_START",
+            "WSM_INSTALL_STAGE_DONE",
+            "WSM_INSTALL_PLAN_RESULT:",
         ):
             self.assertIn(marker, rendered)
 
         self.assertIn("guest_fail() {", rendered)
         self.assertIn("export LD_LIBRARY_PATH=/lib:/lib64:/opt/python/lib", rendered)
         self.assertIn("guest report exceeds the 512 KiB report ceiling", rendered)
+        self.assertIn("--preflight", rendered)
+        self.assertIn("--dry-run", rendered)
+        self.assertEqual(rendered.count("export WSM_HWCHECK_REPORT=/tmp/hardware-report.json"), 1)
+        self.assertEqual(rendered.count('--output "$WSM_HWCHECK_REPORT"'), 1)
+        self.assertEqual(rendered.count('"--report", os.environ["WSM_HWCHECK_REPORT"]'), 1)
+        self.assertEqual(rendered.count('Path(os.environ["WSM_HWCHECK_REPORT"])'), 2)
+        self.assertNotIn("desktop-observed.json", rendered)
+        self.assertNotIn("/opt/wsm/fixtures", rendered)
+        self.assertIn("socket.create_connection = deny_host_io", rendered)
+        self.assertIn("subprocess.Popen = deny_host_io", rendered)
+        self.assertNotIn("{max_installer_plan_bytes}", rendered)
         self.assertNotIn("{ld_library_path}", rendered)
         self.assertNotIn("{max_report_bytes}", rendered)
+
+    def test_guest_validator_requires_matching_cpython_abi(self) -> None:
+        guest._require_guest_validation_abi("cpython-311")
+        with self.assertRaisesRegex(RuntimeError, "requires host ABI cpython-311"):
+            guest._require_guest_validation_abi("cpython-312")
+
+    def test_guest_validator_dependency_allowlist_is_explicit(self) -> None:
+        self.assertEqual(guest.GUEST_JSONSCHEMA_VERSION, "4.26.0")
+        for name in (
+            "jsonschema", "jsonschema-specifications", "referencing", "rpds-py",
+            "attrs", "fqdn", "idna", "isoduration", "rfc3339-validator", "rfc3987",
+            "uri-template", "webcolors", "jsonpointer", "arrow", "python-dateutil",
+            "six", "typing-extensions", "tzdata",
+        ):
+            self.assertIn(name, guest.GUEST_VALIDATION_DISTRIBUTIONS)
+        self.assertNotIn("pip", guest.GUEST_VALIDATION_DISTRIBUTIONS)
+
+    def test_guest_distribution_copy_rejects_path_escape(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source" / "site-packages"
+            destination = root / "guest-root" / "site-packages"
+            (source / "jsonschema").mkdir(parents=True)
+            (source / "jsonschema" / "__init__.py").write_text("SAFE = True", encoding="utf-8")
+            (source.parent / "outside.py").write_text("UNSAFE = True", encoding="utf-8")
+            distribution = SimpleNamespace(
+                files=(Path("jsonschema/__init__.py"), Path("../outside.py")),
+                locate_file=lambda entry: source / Path(str(entry)),
+            )
+            copied = guest._copy_guest_distribution_files(distribution, source, destination)
+            self.assertEqual(copied, 1)
+            self.assertEqual(
+                (destination / "jsonschema" / "__init__.py").read_text(encoding="utf-8"),
+                "SAFE = True",
+            )
+            self.assertFalse((destination.parent / "outside.py").exists())
+            self.assertEqual((source.parent / "outside.py").read_text(encoding="utf-8"), "UNSAFE = True")
+
+    def test_guest_installer_plan_marker_accepts_only_non_confirmable_dry_run(self) -> None:
+        marker = (
+            "WSM_INSTALL_PLAN_RESULT:status=diagnostic-only;confirmable=false;"
+            "backend=guix-system;dry_run=true;mutations_authorized=false;"
+            "backend_invoked=false;disk_access_performed=false;plan_sha256=" + "a" * 64
+        )
+        serial = "WSM_INSTALL_STAGE_START\n" + marker + "\nWSM_INSTALL_STAGE_DONE\n"
+        result = guest._validate_installer_plan_result(serial)
+        self.assertEqual(result["status"], "diagnostic-only")
+        self.assertEqual(result["backend"], "guix-system")
+        self.assertEqual(result["backend_invoked"], "false")
+        with self.assertRaisesRegex(RuntimeError, "violated backend_invoked"):
+            guest._validate_installer_plan_result(
+                serial.replace("backend_invoked=false", "backend_invoked=true")
+            )
+        with self.assertRaisesRegex(RuntimeError, "missing or unexpected fields"):
+            guest._validate_installer_plan_result(
+                serial.replace(";plan_sha256=" + "a" * 64, "")
+            )
+        with self.assertRaisesRegex(RuntimeError, "missing or unexpected fields"):
+            guest._validate_installer_plan_result(
+                serial.replace(";plan_sha256=" + "a" * 64, ";extra=unexpected;plan_sha256=" + "a" * 64)
+            )
+        with self.assertRaisesRegex(RuntimeError, "valid canonical plan digest"):
+            guest._validate_installer_plan_result(
+                serial.replace("plan_sha256=" + "a" * 64, "plan_sha256=not-a-digest")
+            )
+
+    def test_guest_installer_plan_marker_rejects_missing_or_duplicate_markers(self) -> None:
+        marker = (
+            "WSM_INSTALL_PLAN_RESULT:status=diagnostic-only;confirmable=false;"
+            "backend=guix-system;dry_run=true;mutations_authorized=false;"
+            "backend_invoked=false;disk_access_performed=false;plan_sha256=" + "b" * 64
+        )
+        with self.assertRaisesRegex(RuntimeError, "stage markers"):
+            guest._validate_installer_plan_result("WSM_INSTALL_STAGE_START\n" + marker)
+        valid = "WSM_INSTALL_STAGE_START\n" + marker + "\nWSM_INSTALL_STAGE_DONE\n"
+        with self.assertRaisesRegex(RuntimeError, "expected one"):
+            guest._validate_installer_plan_result(valid + marker + "\n")
 
     def test_busybox_links_cover_every_init_command(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
