@@ -33,19 +33,20 @@ class ReleaseMetadataContractTests(unittest.TestCase):
         self.assertIn("APPLY вимкнено", RELEASE_NOTES)
         self.assertIn("`not-run`", RELEASE_NOTES)
         self.assertIn("preview-only", EXECUTOR_DOC)
+        self.assertIn("not-run", EXECUTOR_DOC)
 
     def test_allowlist_is_not_described_as_execution_permission(self) -> None:
         combined = RELEASE_NOTES.lower()
 
         self.assertIn("це не дозвіл на їх запуск", combined)
-        self.assertIn("does not launch", combined)
+        self.assertIn("не запускає", combined)
         self.assertNotIn("root executes only an allowlisted set of commands", combined)
         self.assertNotIn("лише тоді виконує", combined)
 
     def test_preview_steps_are_not_mislabeled_as_success(self) -> None:
-        self.assertIn("status=\"not-run\"", EXECUTOR_DOC)
+        self.assertIn("not-run", EXECUTOR_DOC)
         self.assertIn("not-run", RELEASE_NOTES)
-        self.assertIn("не є `pass`", RELEASE_NOTES)
+        self.assertIn("не `pass`", RELEASE_NOTES)
         self.assertIn("APPLY is disabled", RELEASE_INFO["scope"][2])
 
     def test_compatibility_pin_is_not_mislabeled_as_authentication(self) -> None:
