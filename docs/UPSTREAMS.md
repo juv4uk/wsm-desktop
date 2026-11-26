@@ -86,6 +86,24 @@ GPL-3.0-or-later, і жодна частина цього репозиторію
   commit `4e5195be20d9b124df8a8bb69213412236e4668e`, який на Codeberg є верхівкою
   `master` станом на 25.11.2026. Це пін, а не доказ того, що зріз збирається.
 
+### KDE Plasma
+
+- Актуальний stable — **Plasma 6.8.3** (10.11.2026); лінія 6.8 вийшла
+  14.10.2026, а 6.7 знято з підтримки того ж дня. Паралельно живе LTS-лінія
+  **6.6** (6.6.7 станом на 16.10.2026).
+- **Plasma 6.8 прибирає X11-сесію.** Для WSM це не косметика: у live-сесії не
+  буде fallback на X11, тому дефект, який проявляється лише під Wayland, стає
+  блокером, а не «обійдемо іншим сеансом».
+- WSM не вибирає версію Plasma сам: `plasma-desktop-service-type` приходить із
+  зафіксованого Guix-зрізу, тому фактична версія — похідна від піна каналу
+  ([#39](https://github.com/juv4uk/wsm-desktop/issues/39)). **Відкритий пункт:**
+  перевірити, яку саме версію несе поточний пін. Без цього не можна
+  стверджувати ні «у нас 6.8+», ні «у нас LTS».
+- Практичний наслідок для вже відомого: виправлення введення з клавіатури для
+  QML-модулів Calamares під Wayland (3.4.3, див.
+  [CALAMARES-FEASIBILITY.md](CALAMARES-FEASIBILITY.md)) — не «приємно мати», а
+  умова роботи GUI, якщо зріз несе 6.8+.
+
 ### Calamares
 
 - Актуальний stable upstream — **3.4.3** (2026-09-10); деталі provenance,
@@ -97,3 +115,5 @@ GPL-3.0-or-later, і жодна частина цього репозиторію
 - [Guix toolchain/transition freeze, 10.11.2026](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00039.html)
 - [GCD 009 deliberation notice](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00074.html)
 - [Guix repository on Codeberg](https://codeberg.org/guix/guix/)
+- [KDE Plasma 6.8.3, bugfix release 10.11.2026](https://kde.org/announcements/plasma/6/6.8.3/)
+- [KDE Plasma 6.8 announcement, 14.10.2026](https://kde.org/announcements/plasma/6/6.8.0/)
