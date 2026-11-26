@@ -271,6 +271,30 @@ class UefiEvidenceTests(unittest.TestCase):
             self.assertEqual(status,2)
             self.assertIn("--ovmf-vars",error.getvalue())
 
+class FailureReporterTests(unittest.TestCase):
+    """When a step fails, the reason must end up where it can be read.
+
+    Job logs need authentication this project's tools do not have. The commit
+    comment is the only channel that survives, so the reporter must not depend
+    on knowing in advance which step failed.
+    """
+
+    def test_reporter_dumps_every_log_in_the_build_directory(self) -> None:
+        text = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
+        self.assertIn('"$RUNNER_TEMP"/wsm-live-build/*.log', text)
+        self.assertIn('"$RUNNER_TEMP"/wsm-live-dist/*.json', text)
+
+    def test_reporter_lists_the_build_directory(self) -> None:
+        """A step can fail before writing any log at all."""
+        text = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
+        self.assertIn("ls -la", text)
+
+    def test_reporter_posts_a_commit_comment(self) -> None:
+        text = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
+        self.assertIn("/commits/$GITHUB_SHA/comments", text)
+        self.assertIn("if: failure()", text)
+
+
 
 if __name__ == "__main__":
     unittest.main()
