@@ -95,7 +95,7 @@ class BootCommandTests(unittest.TestCase):
                 artifact = boot.collect_boot_profile(
                     proc_root=proc_root,
                     runner=self.successful_runner(calls),
-                    which=lambda name: "/usr/bin/systemd-analyze",
+                    which=lambda name, **_kwargs: "/usr/bin/systemd-analyze",
                 )
 
         self.assertEqual(len(calls), len(boot.COMMANDS))
@@ -133,7 +133,7 @@ class BootCommandTests(unittest.TestCase):
         runner = unittest.mock.Mock()
         artifact = boot.collect_boot_profile(
             runner=runner,
-            which=lambda name: None,
+            which=lambda name, **_kwargs: None,
         )
         self.assertEqual(artifact["collection_status"], "unavailable")
         self.assertTrue(
@@ -156,7 +156,7 @@ class BootCommandTests(unittest.TestCase):
 
         artifact = boot.collect_boot_profile(
             runner=run,
-            which=lambda name: "/usr/bin/systemd-analyze",
+            which=lambda name, **_kwargs: "/usr/bin/systemd-analyze",
         )
         command = artifact["commands"]["time"]
         self.assertEqual(command["status"], "timeout")
@@ -173,7 +173,7 @@ class BootCommandTests(unittest.TestCase):
 
         artifact = boot.collect_boot_profile(
             runner=run,
-            which=lambda name: "/usr/bin/systemd-analyze",
+            which=lambda name, **_kwargs: "/usr/bin/systemd-analyze",
         )
         self.assertEqual(artifact["commands"]["blame"]["status"], "failed")
         self.assertEqual(artifact["commands"]["blame"]["exit_code"], 7)
@@ -189,7 +189,7 @@ class BootCommandTests(unittest.TestCase):
 
         artifact = boot.collect_boot_profile(
             runner=run,
-            which=lambda name: "/usr/bin/systemd-analyze",
+            which=lambda name, **_kwargs: "/usr/bin/systemd-analyze",
         )
         command = artifact["commands"]["blame"]
         self.assertLessEqual(len(command["stdout"].encode("utf-8")), boot.MAX_OUTPUT_BYTES)
@@ -218,15 +218,22 @@ class BootCommandTests(unittest.TestCase):
             }[argv[-1]]
             return subprocess.CompletedProcess(argv, 0, stdout=output, stderr="")
 
+        lookup = unittest.mock.Mock(return_value="/gnu/store/herd/bin/herd")
         with (
             patch.object(boot, "_detect_manager", return_value="shepherd"),
             patch.object(boot, "_manager_scope", return_value="system"),
-            patch.dict(boot.os.environ, {"SHEPHERD_SOCKET": "/tmp/not-pid1-shepherd.sock"}),
+            patch.dict(
+                boot.os.environ,
+                {
+                    "SHEPHERD_SOCKET": "/tmp/not-pid1-shepherd.sock",
+                    "PATH": "/tmp/untrusted:/usr/bin",
+                },
+            ),
         ):
-            artifact = boot.collect_boot_profile(
-                runner=run,
-                which=lambda name: "/gnu/store/herd/bin/herd" if name == "herd" else None,
-            )
+            artifact = boot.collect_boot_profile(runner=run, which=lookup)
+        lookup.assert_called_once_with(
+            "herd", path=boot.SYSTEM_EXECUTABLE_PATH
+        )
 
         self.assertEqual(artifact["manager"]["name"], "shepherd")
         self.assertEqual(artifact["manager"]["scope"], "system")
@@ -253,14 +260,16 @@ class BootCommandTests(unittest.TestCase):
             self.assertLessEqual(kwargs["timeout"], boot.MAX_TIMEOUT_SECONDS)
 
     def test_unprivileged_shepherd_observation_is_not_claimed_as_system_boot(self) -> None:
+        lookup = unittest.mock.Mock(return_value="/home/user/.guix-home/profile/bin/herd")
         with (
             patch.object(boot, "_detect_manager", return_value="shepherd"),
             patch.object(boot, "_manager_scope", return_value="user"),
         ):
             artifact = boot.collect_boot_profile(
                 runner=lambda argv, **kwargs: subprocess.CompletedProcess(argv, 0, "ok", ""),
-                which=lambda name: "/usr/bin/herd",
+                which=lookup,
             )
+        lookup.assert_called_once_with("herd")
         self.assertEqual(artifact["manager"]["scope"], "user")
         self.assertEqual(artifact["scope"], "user-service-manager")
         self.assertTrue(any("user Shepherd instance" in item for item in artifact["warnings"]))
@@ -280,13 +289,27 @@ class BootCommandTests(unittest.TestCase):
         lookup.assert_not_called()
         runner.assert_not_called()
 
+    def test_systemd_manager_uses_the_fixed_system_executable_path(self) -> None:
+        lookup = unittest.mock.Mock(return_value="/usr/bin/systemd-analyze")
+        with (
+            patch.object(boot, "_detect_manager", return_value="systemd"),
+            patch.object(boot, "_manager_scope", return_value="system"),
+        ):
+            boot.collect_boot_profile(
+                runner=lambda argv, **kwargs: subprocess.CompletedProcess(argv, 0, "ok", ""),
+                which=lookup,
+            )
+        lookup.assert_called_once_with(
+            "systemd-analyze", path=boot.SYSTEM_EXECUTABLE_PATH
+        )
+
     def test_missing_herd_is_unavailable_not_zero(self) -> None:
         runner = unittest.mock.Mock()
         with (
             patch.object(boot, "_detect_manager", return_value="shepherd"),
             patch.object(boot, "_manager_scope", return_value="system"),
         ):
-            artifact = boot.collect_boot_profile(runner=runner, which=lambda name: None)
+            artifact = boot.collect_boot_profile(runner=runner, which=lambda name, **_kwargs: None)
         self.assertEqual(artifact["manager"]["name"], "shepherd")
         self.assertEqual(artifact["collection_status"], "unavailable")
         self.assertTrue(
@@ -320,7 +343,7 @@ class BootIdentityTests(unittest.TestCase):
                         argv, 0, stdout="ok", stderr=""
                     )
                 ),
-                which=lambda name: "/usr/bin/systemd-analyze",
+                which=lambda name, **_kwargs: "/usr/bin/systemd-analyze",
             )
         self.assertEqual(identity["status"], "available")
         self.assertEqual(
@@ -354,7 +377,7 @@ class BootIdentityTests(unittest.TestCase):
         with patch.object(boot, "collect_report", return_value={}):
             artifact = boot.collect_boot_profile(
                 runner=unittest.mock.Mock(return_value=subprocess.CompletedProcess([], 0, "ok", "")),
-                which=lambda name: "/usr/bin/systemd-analyze",
+                which=lambda name, **_kwargs: "/usr/bin/systemd-analyze",
             )
         warnings = "\n".join(artifact["warnings"])
         self.assertIn("spawned", warnings)

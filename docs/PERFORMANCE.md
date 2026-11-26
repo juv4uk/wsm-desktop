@@ -186,9 +186,13 @@ Shepherd запускаються тільки read-only `herd --version`, `herd
 exit code, тривалість, timeout і truncation; в JSON зберігається не більше
 64 KiB stdout і stderr на команду, timeout за замовчуванням 10 секунд із
 жорсткою межею 60 секунд. Немає shell, довільних unit names, privilege
-escalation або змін manager configuration. Для Shepherd змінну
-`SHEPHERD_SOCKET` з успадкованого середовища прибрано, щоб команда не
-перемикалася непомітно на сторонній socket.
+escalation або змін manager configuration. Для system-scope executable
+знаходиться лише в довірених системних каталогах, а не через успадкований
+користувацький `PATH`; для user Shepherd використовується PATH цього
+непривілейованого користувача, щоб знаходити його власний Guix/Home profile.
+Це повторно застосовує урок Omarchy #8172 про підміну root-команди через
+user-writable PATH. Для Shepherd змінну `SHEPHERD_SOCKET` з успадкованого
+середовища прибрано, щоб команда не перемикалася непомітно на сторонній socket.
 
 **Systemd — обмеження інтерпретації:**
 

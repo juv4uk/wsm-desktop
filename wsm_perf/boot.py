@@ -22,6 +22,12 @@ DEFAULT_TIMEOUT_SECONDS = 10.0
 MAX_TIMEOUT_SECONDS = 60.0
 MAX_OUTPUT_BYTES = 64 * 1024
 
+# System-manager executables must never be selected from an inherited, user-writable PATH.
+# Guix System exposes its trusted package profile here; standard systemd hosts use /usr/bin.
+SYSTEM_EXECUTABLE_PATH = os.pathsep.join(
+    ("/run/current-system/profile/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin")
+)
+
 # Fixed argument allowlists. No shell, user-supplied unit names or arbitrary argv.
 SYSTEMD_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("version", ("--version",)),
@@ -321,7 +327,16 @@ def collect_boot_profile(
             "or a complete desktop-readiness measurement.",
         )
 
-    executable = executable_lookup(program) if program is not None else None
+    if program is None:
+        executable = None
+    elif scope == "system":
+        # Root observes PID 1. Do not resolve a privileged executable through
+        # the inherited PATH: an earlier user-writable directory could replace it.
+        executable = executable_lookup(program, path=SYSTEM_EXECUTABLE_PATH)
+    else:
+        # User Shepherd is deliberately unprivileged and may live in the user's
+        # Guix/Home profile, so resolve it in that user's own PATH.
+        executable = executable_lookup(program)
     commands = {
         name: _command_result(program, args, executable, timeout_seconds, command_runner)
         for name, args in command_set
