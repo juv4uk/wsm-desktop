@@ -54,15 +54,22 @@ jobs:
           fi
           TAG="$(printf '%s' "${REQUEST_TAGS[0]}" | tr -d '[:space:]')"
           test "$TAG" = "0.1.0-rc3-minimal-live"
+          RELEASE_EXISTS=false
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release already exists; refusing to replace assets." >&2
-            exit 1
-          fi
-          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
-            echo "Tag already exists; refusing to reuse it." >&2
+            RELEASE_INFO="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,targetCommitish)"
+            IS_DRAFT="$(jq -r '.isDraft' <<< "$RELEASE_INFO")"
+            TARGET_COMMIT="$(jq -r '.targetCommitish' <<< "$RELEASE_INFO")"
+            if [ "$IS_DRAFT" != "true" ] || [ "$TARGET_COMMIT" != "$GITHUB_SHA" ]; then
+              echo "Existing release is published or targets another commit; refusing to reuse it." >&2
+              exit 1
+            fi
+            RELEASE_EXISTS=true
+          elif git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag exists without a matching draft release; refusing to reuse it." >&2
             exit 1
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "release_exists=$RELEASE_EXISTS" >> "$GITHUB_OUTPUT"
       - name: Зібрати мінімальний ISO через locked Guix
         env:
           WSM_ISO_DIR: ${{ runner.temp }}/wsm-live-build
@@ -144,19 +151,68 @@ jobs:
           (root/"SHA256SUMS").write_text("".join(f"{sha(p)}  {p.name}\n" for p in files),encoding="utf-8")
           PY
           (cd "$release_dist" && sha256sum -c SHA256SUMS)
-      - name: Опублікувати GitHub pre-release
+      - name: Створити чернетку релізу та завантажити assets
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_EXISTS: ${{ steps.release.outputs.release_exists }}
+        run: |
+          set -euo pipefail
+          ASSETS=(
+            "$release_dist/$release_iso"
+            "$release_dist/SHA256SUMS"
+            "$release_dist/build-manifest.json"
+            "$release_dist/release-manifest.json"
+            "$release_dist/boot-bios.json"
+            "$release_dist/boot-uefi.json"
+          )
+          if [ "$RELEASE_EXISTS" = "true" ]; then
+            # Resume only a draft tied to this exact source commit. Remove every
+            # old upload so an interrupted/previous attempt cannot leave extras.
+            while IFS= read -r ASSET_NAME; do
+              [ -n "$ASSET_NAME" ] || continue
+              gh release delete-asset "$RELEASE_TAG" "$ASSET_NAME" \
+                --repo "$GITHUB_REPOSITORY" --yes
+            done < <(
+              gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+                --json assets --jq '.assets[].name'
+            )
+          else
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" --draft --prerelease \
+              --title "WSM Desktop 0.1.0-rc3 — Minimal Live Installer Preview" \
+              --notes-file "$release_dist/RELEASE-NOTES.md"
+          fi
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" "${ASSETS[@]}"
+      - name: Перевірити завантажені assets до публікації
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           set -euo pipefail
-          gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" --prerelease \
-            --title "WSM Desktop 0.1.0-rc3 — Minimal Live Installer Preview" \
-            --notes-file "$release_dist/RELEASE-NOTES.md" \
-            "$release_dist/$release_iso" "$release_dist/SHA256SUMS" \
-            "$release_dist/build-manifest.json" "$release_dist/release-manifest.json" \
-            "$release_dist/boot-bios.json" "$release_dist/boot-uefi.json"
-
+          REMOTE_DIR="$RUNNER_TEMP/wsm-live-remote-assets"
+          rm -rf -- "$REMOTE_DIR"
+          install -d -m 0700 "$REMOTE_DIR"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir "$REMOTE_DIR"
+          python scripts/verify_release_assets.py \
+            --expected-dir "$release_dist" --downloaded-dir "$REMOTE_DIR"
+          RELEASE_INFO="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,targetCommitish)"
+          test "$(jq -r '.isDraft' <<< "$RELEASE_INFO")" = "true"
+          test "$(jq -r '.targetCommitish' <<< "$RELEASE_INFO")" = "$GITHUB_SHA"
+          {
+            echo "### Перевірка release assets"
+            echo ""
+            echo "Чернетку завантажено назад із GitHub; точний набір файлів і SHA-256 збігаються."
+            echo "Tag: `$RELEASE_TAG`"
+            echo "Source: `$GITHUB_SHA`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Опублікувати перевірений GitHub pre-release
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+          RELEASE_INFO="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,targetCommitish)"
+          test "$(jq -r '.isDraft' <<< "$RELEASE_INFO")" = "false"
+          test "$(jq -r '.targetCommitish' <<< "$RELEASE_INFO")" = "$GITHUB_SHA"
       - name: Повідомити причину збою
         if: failure()
         env:
