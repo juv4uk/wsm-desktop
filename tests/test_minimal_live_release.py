@@ -77,6 +77,23 @@ class MinimalLiveProfileTests(unittest.TestCase):
         self.assertIn('${#REQUEST_TAGS[@]}', workflow)
         self.assertIn("sed -e 's/[[:space:]]*#.*$//'", workflow)
 
+    def test_release_assets_are_verified_before_draft_publication(self) -> None:
+        workflow = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
+        upload = workflow.index("gh release upload")
+        create = workflow.index("gh release create")
+        download = workflow.index("gh release download")
+        verify = workflow.index("scripts/verify_release_assets.py")
+        publish = workflow.index("gh release edit")
+        self.assertLess(create, download)
+        self.assertLess(upload, download)
+        self.assertLess(download, verify)
+        self.assertLess(verify, publish)
+        self.assertIn("--draft --prerelease", workflow)
+        self.assertIn("--clobber", workflow)
+        self.assertIn("--draft=false", workflow)
+        self.assertIn("targetCommitish", workflow)
+        self.assertIn('RELEASE_EXISTS=true', workflow)
+
 
 class LiveInstallerLauncherTests(unittest.TestCase):
     def test_launcher_runs_preflight_and_tui_then_cleans_private_report(self) -> None:
