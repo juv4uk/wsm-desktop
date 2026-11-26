@@ -165,17 +165,38 @@ def read_zram_snapshot(root: Path = Path("/sys/block")) -> dict[str, Any]:
         algorithm = _read_text_status(device / "comp_algorithm")
         backing = _read_text_status(device / "backing_dev")
         algorithm_text = algorithm.get("text", "")
-        active_match = re.search(r"\[([A-Za-z0-9_-]+)\]", algorithm_text)
-        devices[device.name] = {
-            "status": "available" if all(
-                value.get("status") == "available"
-                for value in stats.values()
-            ) else "partial",
-            "config": {
-                "active_compressor": active_match.group(1) if active_match else "unknown",
-                "compressor_report": algorithm_text or "unknown",
-                "backing_device": backing.get("text", "unknown"),
+        active_match = re.search(r"\\[([A-Za-z0-9_-]+)\\]", algorithm_text)
+        backing_device = backing.get("text", "unknown")
+        config_status = (
+            "available"
+            if algorithm.get("status") == "available"
+            and active_match is not None
+            and backing.get("status") == "available"
+            and bool(backing_device)
+            else "partial"
+        )
+        config = {
+            "status": config_status,
+            "active_compressor": active_match.group(1) if active_match else "unknown",
+            "compressor_report": algorithm_text or "unknown",
+            "backing_device": backing_device,
+            "sources": {
+                "comp_algorithm": {
+                    "status": algorithm.get("status", "unknown"),
+                    "reason": algorithm.get("reason"),
+                },
+                "backing_dev": {
+                    "status": backing.get("status", "unknown"),
+                    "reason": backing.get("reason"),
+                },
             },
+        }
+        devices[device.name] = {
+            "status": "available" if (
+                config_status == "available"
+                and all(value.get("status") == "available" for value in stats.values())
+            ) else "partial",
+            "config": config,
             "stats": stats,
         }
 
