@@ -62,6 +62,8 @@ def validate_command(command: Sequence[str]) -> None:
     if not command:
         raise AgentError("agent.empty-command", "a step has no command")
     program = command[0]
+    if not isinstance(program, str):
+        raise AgentError("agent.bad-program", f"non-string executable: {program!r}")
     if program not in ALLOWED_PROGRAMS:
         raise AgentError(
             "agent.not-allowed",
