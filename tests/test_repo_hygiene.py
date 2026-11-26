@@ -8,6 +8,7 @@ works, and installing by piping a download into a shell is not an installer.
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 import subprocess
@@ -16,13 +17,72 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
-TESTS = ROOT / "tests"
 
 # curl ... | sh, wget ... | bash, and the eval-the-download variants.
 PIPE_TO_SHELL = re.compile(
-    r"(curl|wget)[^\n|]*\|\s*(sudo\s+)?(ba)?sh\b",
+    r"\b(?:curl|wget)\b[^|\n]*\|\s*(?:sudo\s+)?(?:bash|sh)\b",
     re.IGNORECASE,
 )
+
+
+def find_pipe_to_shell(source: str) -> list[str]:
+    """Find download-to-shell pipes, including backslash-newline continuation."""
+    normalized = re.sub(r"\\\r?\n[ \t]*", " ", source)
+    return [match.group(0) for match in PIPE_TO_SHELL.finditer(normalized)]
+
+
+def _call_name(
+    node: ast.AST,
+    module_aliases: dict[str, str],
+    direct_imports: dict[str, str],
+) -> str | None:
+    if isinstance(node, ast.Name):
+        return direct_imports.get(node.id, module_aliases.get(node.id, node.id))
+    if isinstance(node, ast.Attribute):
+        parent = _call_name(node.value, module_aliases, direct_imports)
+        return f"{parent}.{node.attr}" if parent else None
+    return None
+
+
+def find_unsafe_shell_calls(source: str) -> list[str]:
+    """Find known Python APIs that interpret a string as shell code."""
+    tree = ast.parse(source)
+    module_aliases: dict[str, str] = {}
+    direct_imports: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name in {"os", "subprocess", "asyncio"}:
+                    module_aliases[alias.asname or alias.name] = alias.name
+        elif isinstance(node, ast.ImportFrom) and node.module in {
+            "os", "subprocess", "asyncio"
+        }:
+            for alias in node.names:
+                direct_imports[alias.asname or alias.name] = f"{node.module}.{alias.name}"
+
+    always_shell = {
+        "os.system", "os.popen", "subprocess.getoutput",
+        "subprocess.getstatusoutput", "asyncio.create_subprocess_shell",
+    }
+    shell_keyword_apis = {
+        "subprocess.run", "subprocess.Popen", "subprocess.call",
+        "subprocess.check_call", "subprocess.check_output",
+    }
+    offenders: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        name = _call_name(node.func, module_aliases, direct_imports)
+        if name in always_shell:
+            offenders.append(f"line {node.lineno}: {name}")
+        elif name in shell_keyword_apis and any(
+            keyword.arg == "shell"
+            and isinstance(keyword.value, ast.Constant)
+            and keyword.value.value is True
+            for keyword in node.keywords
+        ):
+            offenders.append(f"line {node.lineno}: {name}(shell=True)")
+    return offenders
 
 
 def documentation_files() -> list[Path]:
