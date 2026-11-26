@@ -180,26 +180,49 @@ GPL-3.0-or-later, і жодна частина цього репозиторію
   необхідно перевірити на reference hardware; відсутність X11 fallback не
   можна компенсувати припущенням про сумісність.
 
-### GCD 009: Guix Bootspec (deliberation, не прийнято)
+### GCD 009: Guix Bootspec (прийнято; upstream implementation ще не змерджено)
 
-Guix переробляє підсистему завантажувача. Зараз її інтерфейс називається
-загальним, але насправді сформований навколо GRUB: згенеровані конфігураційні
-файли, menu entries й колбеки інсталятора протікають крізь абстракцію. GCD 009
-пропонує *Guix Bootspec* — версійований, незалежний від завантажувача контракт
-запуску системного покоління: закрите ядро плюс типізовані розширення з
-просторами імен, а конфігурація конкретного завантажувача відокремлюється від
-самих поколінь. Окремо обговорюється, що `guix system image` має падати, коли
-коренева файлова система несумісна з обраним завантажувачем.
+Guix переробляє підсистему завантажувача. Нинішній інтерфейс формально загальний,
+але його семантика й потік даних значною мірою сформовані навколо GRUB:
+конфігураційні файли, menu entries та відновлення політики bootloader-а
+протікають крізь абстракцію. GCD 009 вводить *Guix Bootspec* як версійований
+проміжний контракт між реалізованим поколінням системи та інструментами, які
+публікують його для конкретного bootloader-а. Ідея — відокремити вимоги
+покоління до запуску від політики bootloader-а й deployment environment,
+а backend-ам залишити перетворення цього опису у власний формат.
 
-- Стан на 26.11.2026: **draft**, deliberation розпочато 13.11.2026. Це не
-  прийняте рішення і не те, на що можна спиратися.
-- Чому це наша тема: інсталятор WSM пише конфігурацію завантажувача для
-  покоління. Якщо абстракція зміниться, припущення про menu entries й
-  згенеровані файли стануть хибними — а ми їх поки не маємо, тому встигаємо
-  зорієнтуватися раніше.
-- Що робимо: **нічого в коді**. Записуємо як вхідні дані й перевіряємо статус
-  перед тим, як будувати власний bootloader-контракт. Якщо GCD ухвалять до
-  нашого першого релізу, він стане upstream-вимогою, а не нашим рішенням.
+**Результат консенсусу:** deliberation завершилася 18.11.2026. Участь взяли
+23 з 83 учасників команди: 7 голосів `I support`, 16 — `I accept`,
+0 disapprovals. Автор оголосив GCD прийнятим 20.11.2026. Це вже не draft
+без рішення. Водночас Codeberg PR [#15](https://codeberg.org/guix/guix-consensus-documents/pulls/15)
+на момент цієї перевірки все ще відкритий і очікує upstream merge; прийняття
+консенсусного документа не означає, що реалізація вже потрапила до Guix main.
+
+**Що це означає для WSM:**
+- Поточний Guix pin у `channels.lock.scm` —
+  `4e5195be20d9b124df8a8bb69213412236e4668e` (25.11.2026). У перевіреному
+  `gnu/bootloader.scm` він усе ще експонує GRUB-shaped `bootloader-configuration`
+  та `menu-entry` API; в `gnu/system.scm` і `gnu/bootloader.scm` немає
+  Bootspec migration. Не приписувати цьому snapshot новий контракт лише тому,
+  що GCD вже прийнятий.
+- WSM ще не виконує встановлення/оновлення bootloader-а й не керує
+  міжпоколінною політикою. Тому зараз не переписуємо installer, не створюємо
+  власний Bootspec writer/reader і не додаємо припущень про новий Scheme API:
+  точні backend records/procedures залишені upstream implementation-у.
+- Тримаємо bootloader boundary ізольованою. Коли Guix implementation потрапить
+  до каналу, який ми реально розглядаємо для WSM, окремо перевірити: версію та
+  serialization Bootspec, сумісність legacy generations через compatibility
+  reader, backend preflight для core/extensions/resources, відокремлення
+  bootloader policy від generation history та поведінку `guix system image`
+  для несумісної root filesystem.
+- До такої перевірки наші profile/installer contracts залишаються прив'язаними
+  до фактичного pinned Guix API. GCD — прийнятий upstream direction, але ще не
+  runtime/build evidence для WSM.
+
+Джерела: [GCD 009 proposal та статус](https://codeberg.org/guix/guix-consensus-documents/pulls/15),
+[офіційний запис про прийняття: 23/83, 7 support, 16 accept, 0 disapprovals
+(20.11.2026)](https://codeberg.org/guix/guix-consensus-documents/pulls/15#issuecomment-28116399),
+[оголошення початку deliberation](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00074.html).
 
 ### GNU Shepherd (init system Guix System)
 
@@ -294,7 +317,7 @@ Unified Kernel Image — один PE-файл, у який складені stub
 - [Guix 1.6.0 release meeting notes, 15.11.2026](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00088.html)
 - [Guix toolchain/transition freeze, 10.11.2026](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00039.html)
 - [Guix 1.6.0 release schedule, 15.11.2026](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00091.html)
-- [GCD 009 deliberation notice](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00074.html)
+- [GCD 009 deliberation notice](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00074.html) and [acceptance record](https://codeberg.org/guix/guix-consensus-documents/pulls/15#issuecomment-28116399)
 - [Guix repository on Codeberg](https://codeberg.org/guix/guix/)
 - [GCD 009 — Guix Bootspec (deliberation)](https://codeberg.org/guix/guix-consensus-documents/pulls/15)
 - [ArchWiki: Unified kernel image](https://wiki.archlinux.org/title/Unified_kernel_image)
