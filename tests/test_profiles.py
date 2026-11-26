@@ -88,7 +88,15 @@ class DesktopProfileConsistencyTests(unittest.TestCase):
         text = DESKTOP_PROFILE.read_text(encoding="utf-8")
         declared = set(matrix()["profiles"]["desktop"]["system_packages"])
         fonts = {name for name in declared if name.startswith("font-")}
-        self.assertTrue(fonts, "matrix lists no fonts")
+        expected = {
+            "font-dejavu",
+            "font-liberation",
+            "font-google-noto",
+            "font-google-noto-sans-cjk",
+        }
+        self.assertEqual(fonts, expected)
+        self.assertNotIn("font-noto", declared)
+        self.assertNotIn("font-noto-cjk", declared)
         for font in fonts:
             with self.subTest(font=font):
                 self.assertIn(font, text)
