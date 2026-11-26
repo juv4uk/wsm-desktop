@@ -166,7 +166,14 @@ def read_zram_snapshot(root: Path = Path("/sys/block")) -> dict[str, Any]:
         backing = _read_text_status(device / "backing_dev")
         algorithm_text = algorithm.get("text", "")
         active_match = re.search(r"\\[([A-Za-z0-9_-]+)\\]", algorithm_text)
-        backing_device = backing.get("text", "unknown")
+        backing_text = backing.get("text", "")
+        if backing.get("status") != "available" or not backing_text:
+            backing_device = "unknown"
+        elif backing_text == "none":
+            backing_device = "none"
+        else:
+            # Do not export /dev node names or storage topology into baseline artifacts.
+            backing_device = "configured"
         config_status = (
             "available"
             if algorithm.get("status") == "available"
