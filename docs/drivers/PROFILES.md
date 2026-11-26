@@ -62,6 +62,8 @@ firmware в live rootfs/initrd; жоден functional test не позначен
 
 - **Compatibility-шлях NVIDIA:** NVIDIA визначає Linux 580.x як останню Unix-гілку для Pascal ([строки підтримки](https://nvidia.custhelp.com/app/answers/detail/a_id/3142/kw/windows%20supported/related/1)). Для Pascal потрібен proprietary kernel-module flavor; відкриті NVIDIA kernel modules доступні лише для Turing і новіших поколінь ([офіційний посібник](https://docs.nvidia.com/datacenter/tesla/driver-installation-guide/610/kernel-modules.html)). Не підміняти цю залежність open-module пакетом.
 
+Станом на 2026-11-26 офіційна сторінка Linux 580.196.11 (реліз 23.11.2026) прямо перелічує GeForce GTX 1050 Ti у Supported Products: [NVIDIA 580.196.11](https://www.nvidia.com/en-us/drivers/details/285683/). Це лише product-list evidence; pinned Nonguix revision не означає, що package version дорівнює 580.196.11.
+
 Це лише upstream references. У профілях навмисно залишаються `package_resolution: not-assessed`, `kernel_config: not-assessed`, `runtime_binding: unknown`, `functional_validation: not-run` та невизначені license/redistribution. Наступний доказ — точний Guix package/closure і ABI на зафіксованому channel; після цього окремо потрібні image/rootfs/initrd inspection та фактичний тест. Не використовувати developer override як production acceptance.
 
 ## Валідація
