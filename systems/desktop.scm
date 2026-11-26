@@ -24,9 +24,11 @@
              (gnu system locale)
              (wsm systems performance)
              (gnu services desktop)
+             (gnu services xorg)
              (gnu services networking)
              (gnu services sddm)
              (gnu services sound)
+             (gnu services cups)
              (gnu packages fonts))
 ;; (gnu packages kde-plasma) не потрібен: пакет plasma приходить через
 ;; plasma-desktop-service-type, а не через поле packages.
@@ -74,7 +76,7 @@
   ;; Шрифти з кирилицею — обов'язкові, інакше український інтерфейс
   ;; показується квадратами.
   (packages
-   (append (list font-dejavu font-liberation font-noto font-noto-cjk)
+   (append (list font-dejavu font-liberation font-google-noto font-google-noto-sans-cjk)
            %base-packages))
 
   (services
