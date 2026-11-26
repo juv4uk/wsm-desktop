@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""Collect a read-only systemd boot profile for one current boot."""
+"""Collect a read-only boot profile from the active systemd or Shepherd manager."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="wsm-boot-profile",
         description=(
-            "Collect read-only systemd boot milestones and service critical paths "
+            "Collect read-only boot/service-manager evidence for the current boot "
             "for the current boot."
         ),
     )
