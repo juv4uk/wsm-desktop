@@ -16,7 +16,7 @@ from typing import Any, Callable
 
 from wsm_hwcheck.collector import collect_report
 
-SCHEMA = "wsm-boot-profile/1"
+SCHEMA = "wsm-boot-profile/2"
 VERSION = "0.2.0"
 DEFAULT_TIMEOUT_SECONDS = 10.0
 MAX_TIMEOUT_SECONDS = 60.0
@@ -36,7 +36,7 @@ SYSTEMD_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
 SHEPHERD_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("version", ("--version",)),
     ("status", ("status",)),
-    ("log", ("--log-history=500", "log")),
+    ("log", ("log",)),
     ("graph", ("graph",)),
 )
 # Backward-compatible name for existing systemd-focused test fixtures.
@@ -58,8 +58,9 @@ SYSTEMD_WARNINGS = (
 SHEPHERD_WARNINGS = (
     "herd status is a snapshot of the services visible through the current "
     "Shepherd socket; it is not a historical boot timeline.",
-    "herd log is limited to the most recent 500 service events. It can be "
-    "incomplete after history rotation or if the system manager was not observed.",
+    "herd log reports the event history retained by the current Shepherd instance; "
+    "it is not guaranteed to cover the complete boot if history was rotated or "
+    "collection started after services were already running.",
     "herd graph reports service dependencies, not measured critical-path duration "
     "or proof that a graphical desktop session is ready.",
     "When run as a non-root user, herd observes that user's Shepherd instance, "
@@ -145,6 +146,8 @@ def _command_result(
     environment = os.environ.copy()
     environment["LC_ALL"] = "C"
     environment["LANG"] = "C"
+    # Do not let an inherited socket override redirect herd away from PID 1.
+    environment.pop("SHEPHERD_SOCKET", None)
     started = time.monotonic()
     try:
         completed = runner(
