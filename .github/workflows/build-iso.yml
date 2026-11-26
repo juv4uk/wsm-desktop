@@ -27,18 +27,19 @@ jobs:
 
       - name: Install Guix
         run: |
-          set -euo pipefail
           wget -q https://git.savannah.gnu.org/cgit/guix.git/plain/etc/guix-install.sh
           chmod +x guix-install.sh
-          # The installer asks several questions; empty answers take the default.
-          yes '' | sudo ./guix-install.sh || true
-          echo "--- what the installer left behind"
+          # Empty answers accept every default. The output is captured and echoed
+          # as ::error:: lines, because the job log is not reachable through the
+          # API available here - annotations are.
+          yes '' | sudo ./guix-install.sh > install.log 2>&1
+          status=$?
+          echo "installer exit: $status"
+          while IFS= read -r line; do printf '::error::INSTALLER %s\n' "$line"; done < <(tail -40 install.log)
           ls -la /usr/local/bin/guix || true
-          ls -la /var/guix 2>/dev/null | head -5 || true
-          systemctl is-active guix-daemon || sudo systemctl start guix-daemon || true
-          systemctl status guix-daemon --no-pager | head -20 || true
-          command -v guix || true
+          sudo systemctl is-active guix-daemon || sudo systemctl start guix-daemon || true
           /usr/local/bin/guix --version || true
+          exit 0
 
       - name: Install QEMU and OVMF
         run: |
@@ -49,6 +50,7 @@ jobs:
         run: |
           set -euo pipefail
           export PATH="/usr/local/bin:$PATH"
+          guix --version || { echo "::error::NO GUIX: the installer did not leave a usable guix"; exit 1; }
           mkdir -p build
           guix time-machine -C channels.lock.scm -- \
             system image --image-type=iso9660 systems/live-minimal.scm \
