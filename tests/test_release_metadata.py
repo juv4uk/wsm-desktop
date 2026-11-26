@@ -66,5 +66,23 @@ class ReleaseMetadataContractTests(unittest.TestCase):
         self.assertIn("не є доказом повного wsm installer boot/install", RELEASE_NOTES.lower())
 
 
+    def test_previous_iso_artifact_evidence_is_scoped_and_does_not_claim_boot(self) -> None:
+        notes = RELEASE_NOTES.lower()
+        evidence = VERIFIED_ARTIFACTS.lower()
+
+        self.assertIn("[реєстрі перевірених артефактів](docs/verified-artifacts.md)", notes)
+        self.assertIn("wsm-desktop-kde-hardened-20261125.iso", notes)
+        self.assertIn("d1a000f8c465b496565b0f611ae6f65095086a8457c663f212ca5b17073fd7ef", evidence)
+        self.assertIn("wsm_live_ready", evidence)
+        self.assertIn("завантаження в bios", evidence)
+        self.assertIn("завантаження в uefi", evidence)
+        self.assertIn("не перевірено", evidence)
+        self.assertIn("інсталятор у образі не запускався", evidence)
+
+    def test_release_notes_do_not_claim_rc4_artifact_is_published(self) -> None:
+        self.assertIn("не створює й не публікує rc4", RELEASE_NOTES.lower())
+        self.assertIn("не були побудовані", RELEASE_INFO["excluded"][-1] if False else " ".join(RELEASE_INFO["excluded"]))
+
+
 if __name__ == "__main__":
     unittest.main()
