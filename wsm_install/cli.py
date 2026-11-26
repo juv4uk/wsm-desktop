@@ -322,8 +322,7 @@ def _run_install(args: argparse.Namespace) -> int:
         results = execute(
             steps,
             disk=disk.path,
-            acknowledgement=args.acknowledge_disk,
-            dry_run=not args.execute,
+            dry_run=True,
         )
     except ExecutorError as exc:
         print(f"wsm-install: {exc.code}: {exc.message}", file=sys.stderr)
@@ -331,7 +330,8 @@ def _run_install(args: argparse.Namespace) -> int:
 
     print(json.dumps(
         {
-            "mode": "execute" if args.execute else "dry-run",
+            "mode": "dry-run",
+            "target_size_source": "user-supplied planning estimate; not read from the block device",
             "disk": disk.path,
             "firmware": args.firmware,
             "filesystem": args.filesystem,
