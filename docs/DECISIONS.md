@@ -53,6 +53,7 @@
 | UEFI pre-boot evidence | [#92](https://github.com/juv4uk/wsm-desktop/issues/92) | [UEFI pre-boot audit](hardware/UEFI-PREBOOT-PROBE-AUDIT.md), PR [#102](https://github.com/juv4uk/wsm-desktop/pull/102) | web agent | audit merged; provider not implemented | Наявний probe з `wsm-os` не переносити як є; ліцензійна межа, окремий evidence envelope та OVMF fixture ще потребують роботи. |
 | Синтетична CXL topology evidence | [#94](https://github.com/juv4uk/wsm-desktop/issues/94), related [#18](https://github.com/juv4uk/wsm-desktop/issues/18) | [CXL synthetic topology](testing/CXL-SYNTHETIC-TOPOLOGY.md) | both agents | feasibility / guest test in progress | QEMU enumeration, `cxl_test` та synthetic sysfs fixtures — різні рівні доказу; не є physical CXL compatibility. |
 | Канонічність документів | [#54](https://github.com/juv4uk/wsm-desktop/issues/54) | цей файл | local agent | proposed | Додати topic рядок тут замість нового процесного ADR. |
+| Принципи когерентності екосистеми | [#325](https://github.com/juv4uk/wsm-desktop/issues/325) | [PR #323](https://github.com/juv4uk/wsm-desktop/pull/323), [docs/ECOSYSTEM-PRINCIPLES.md](ECOSYSTEM-PRINCIPLES.md) | обидва агенти | `proposed` — не ратифіковано | Єдиний власник критеріїв когерентності; деталі команд, тестів, ліцензій і доказів залишаються у відповідних канонічних документах. |
 
 ## Що не є темою для нового рядка
 
