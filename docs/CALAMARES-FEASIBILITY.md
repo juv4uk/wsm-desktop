@@ -2,10 +2,20 @@
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Дата перевірки: 2026-11-25
-- Розглянута версія: Calamares 3.4.2
-- Статус: дослідження джерел; локальна збірка ще не виконувалася
-- Рішення: 3.4.2 — кандидат для першого прототипу, не підтверджений release target
+## Поточна позиція WSM — 2026-11-26
+
+- Calamares не є обраним frontend для поточного WSM minimal-live RC3. Канонічний напрямок першого preview — **read-only CLI/TUI** поверх preflight → plan → typed Guix handoff; Calamares залишається deprioritized/reference-only до окремого рішення.
+- Детальний CMake/Qt/KF6/KPMcore розбір нижче стосується **лише тегу v3.4.2**. Його не можна переносити на v3.4.3 без diff review та повторної перевірки конкретного source tag.
+- Calamares 3.4.3 Stable — новіший upstream-кандидат, але не підтверджений Guix build target. Опублікований upstream SHA, Debian repack SHA та hash власного завантаження — різні типи даних; WSM має перевірити саме отримані upstream bytes і підпис.
+- Немає доказу, що Calamares 3.4.2 або 3.4.3 зібраний у Guix, що partition module реально встановлено, що Python job API працює в live image або що сценарій пройшов QEMU. Package index і release notes не є build/acceptance evidence.
+- Будь-яке повернення до packaging spike потребує окремого перегляду issue #10 та ADR 0008; воно не може непомітно змінити поточний frontend direction або створити другий owner для partitioning, bootloader чи system activation.
+
+
+- Дата перевірки: 2026-11-26
+- Історична версія детального CMake-аналізу: Calamares 3.4.2
+- Поточний upstream-кандидат: Calamares 3.4.3 Stable
+- Статус: дослідження джерел; локальна Guix-збірка та runtime acceptance не виконувалися
+- Рішення: Calamares **deprioritized**, лише умовний reference; не є обраним frontend або release target
 
 ## Висновок
 
@@ -133,9 +143,9 @@ FS resizer також використовує KPMcore; його доступн�
 - [ ] Calamares стартує з WSM configuration у disposable VM.
 - [ ] Результат тесту зафіксований разом із Guix channel revision та повним build manifest.
 
-## Рекомендація
+## Історична рекомендація (замінена 2026-11-26)
 
-Продовжити з невеликого packaging spike для Calamares 3.4.2 у власному WSM Guix channel. Спершу довести dependency closure і набір модулів. Не починати розробку великого backend, поки не підтверджено, що live-середовище може надійно запускати сам Calamares.
+Цей текст відображає попередню оцінку після аналізу Calamares 3.4.2. Він **не є поточним завданням або рішенням**: packaging spike для 3.4.2 не схвалений і не запускався. Поточна позиція WSM наведена на початку документа; Calamares deprioritized, а minimal-live RC3 використовує read-only CLI/TUI поверх спільного handoff contract.
 
 Цей документ не засвідчує фактичної збірки, запуску або сумісності на фізичному обладнанні.
 
