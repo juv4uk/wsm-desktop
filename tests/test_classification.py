@@ -277,5 +277,46 @@ class CoverageAndPolicyTests(unittest.TestCase):
         self.assertNotIn("installation stopped", message.lower())
 
 
+class ExplanationTests(unittest.TestCase):
+    def test_known_problem_is_not_described_as_incomplete_evidence(self) -> None:
+        failed = device(
+            "wifi-0",
+            "network",
+            functional_tests=[
+                {
+                    "capability": "wifi-connectivity",
+                    "status": "failed",
+                    "tested_at": "2026-11-26T15:00:00Z",
+                    "method": "association + DHCP probe",
+                    "result": "association timed out",
+                }
+            ],
+        )
+        message = explain(classify(report(failed), ["network"]))
+
+        self.assertIn("Виявлено явні проблеми у функціях", message)
+        self.assertIn("wifi-connectivity", message)
+        self.assertIn("wifi-0", message)
+        self.assertIn("метод: association + DHCP probe", message)
+        self.assertIn("дата: 2026-11-26T15:00:00Z", message)
+        self.assertIn("результат: association timed out", message)
+        self.assertNotIn("Підсистеми з неповними доказами", message)
+
+    def test_not_run_function_remains_in_the_incomplete_evidence_group(self) -> None:
+        untested = device(
+            "wifi-0",
+            "network",
+            driver_status="unknown",
+            bound_driver=None,
+            functional_tests=[
+                {"capability": "wifi-connectivity", "status": "not-run"}
+            ],
+        )
+        message = explain(classify(report(untested), ["network"]))
+
+        self.assertIn("Підсистеми з неповними доказами: network", message)
+        self.assertNotIn("Виявлено явні проблеми у функціях", message)
+
+
 if __name__ == "__main__":
     unittest.main()
