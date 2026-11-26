@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/juv4uk/wsm-desktop/schemas/hardware-classification.schema.json",
+  "title": "WSM hardware classification summary",
+  "description": "Diagnostic summary of how much is known about each subsystem of one machine. It is not an installation verdict: the scenario decides what a gap means.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "subsystems",
+    "counts",
+    "decision_policy",
+    "note"
+  ],
+  "properties": {
+    "schema": {
+      "const": "wsm-hardware-classification/2"
+    },
+    "subsystems": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "subsystem",
+          "level",
+          "devices",
+          "reasons",
+          "coverage",
+          "observation",
+          "evidence_states",
+          "functional_tests",
+          "device_evidence"
+        ],
+        "properties": {
+          "subsystem": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+          },
+          "level": {
+            "enum": [
+              "certified",
+              "known",
+              "unknown"
+            ]
+          },
+          "devices": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "coverage": {
+            "type": "string",
+            "minLength": 1
+          },
+          "observation": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidence_states": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "functional_tests": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "device_evidence": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "certified",
+        "known",
+        "unknown"
+      ],
+      "properties": {
+        "certified": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "known": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unknown": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "decision_policy": {
+      "type": "string",
+      "minLength": 1
+    },
+    "note": {
+      "type": "string",
+      "minLength": 20
+    }
+  }
+}

@@ -8,6 +8,7 @@ hardware-report v1.0.0 and release-info v1 contracts.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import importlib.util
 import json
@@ -155,6 +156,33 @@ class ReleaseInfoVersionTests(unittest.TestCase):
             any("wsm-release-info/2" in item for item in found),
             found,
         )
+
+
+class ClassificationVersionTests(unittest.TestCase):
+    def setUp(self) -> None:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "check_classification", ROOT / "scripts" / "check_classification.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        self.checker = module
+        from wsm_install.classification import classify
+
+        self.document = classify({"devices": []})
+
+    def test_current_version_is_accepted(self) -> None:
+        self.assertEqual(self.checker.problems(self.document), [])
+
+    def test_next_version_is_refused_by_name(self) -> None:
+        document = copy.deepcopy(self.document)
+        major, _, minor = document["schema"].rpartition("/")
+        future = f"{major}/{int(minor) + 1}"
+        document["schema"] = future
+        found = self.checker.problems(document)
+        self.assertTrue(any(future in item for item in found), found)
 
 
 if __name__ == "__main__":
