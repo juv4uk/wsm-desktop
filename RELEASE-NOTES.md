@@ -1,58 +1,56 @@
-# WSM Desktop RC3 — три інсталятори
+# WSM Desktop RC4 — installer preview
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Версія: `0.1.0-rc3` (`RELEASE-INFO.json`)
+- Версія: `0.1.0-rc4` (`RELEASE-INFO.json`)
 - Дата: 2026-11-26
-- Статус: **pre-release / installer source, never executed**
-- Вихідний коміт: див. `release-manifest.json` у релізних артефактах
+- Статус: **pre-release / source preview; installer APPLY disabled**
+- Вихідний коміт: точний SHA та хеші артефактів записуються в `release-manifest.json`
 
-## Що змінилося від RC2
+## Що змінилося від RC3
 
-**Три інсталятори над одним бекендом.** Це головне в цьому релізі.
+- Виправлено межу привілеїв у release claims: root-агент лише валідовує план і показує preview; він не запускає install-команди.
+- Усі заплановані кроки мають статус `not-run`; APPLY вимкнено в усіх installer entrypoints.
+- Версію source bundle, назву архіву та `RELEASE-INFO.json` узгоджено на RC4. Опублікований RC3 та його assets не переписуються.
+- Статус Free та Compatibility channel inputs розділено: pin і structural policy не є самі по собі доказом криптографічної автентифікації чи успішної збірки Compatibility image.
 
-| Вхід | Коли | Вартість |
+## Єдиний контракт інсталятора: план і preview
+
+WSM має один спільний typed-plan та preview-контракт. CLI, Guided, TUI і Calamares integration — це входи до цього контракту, а не чотири незалежні реалізації встановлення й не чотири підтверджені шляхи інсталяції.
+
+| Вхід | Що робить | Фактична межа |
 | --- | --- | --- |
-| `wsm-install --guided` | послідовна консоль, скрипт, сліпий термінал | нуль |
-| `wsm-install --tui` | екран і клавіатура без робочого столу | символи рамок |
-| модуль Calamares `wsm_deploy` | машина, яка тягне Qt | Qt і KDE-стек |
+| `wsm-install --install` | Перевіряє план і показує його | Лише preview |
+| `wsm-install --guided` | Покроково збирає дані й показує план | Лише preview |
+| `wsm-install --tui` | Дає текстову навігацію та preview | Лише preview |
+| Calamares `wsm_deploy` | Передає WSM plan у спільний preview executor | Лише preview; job не підтверджує встановлення |
 
-Усі три викликають ті самі `partition.py`, `install_steps.py` і `executor.py`.
-Це не три інсталятори, а три обличчя одного.
+Calamares integration у цьому RC не є окремим backend-ом і не ратифікує Calamares як остаточно обраний product frontend. Канонічний стан вибору frontend-а залишається в [реєстрі рішень](docs/DECISIONS.md).
 
-**Розділення привілеїв.** Непривілейована частина пише план у файл; root-агент
-перевіряє кожну команду за allowlist (лише `partprobe`, `udevadm`, `mkfs.*`,
-`mount`, `mkdir`, з абсолютними шляхами) і лише тоді виконує. `sh`, `dd` і
-`guix` у allowlist немає навмисно.
+**Межа привілеїв.** Непривілейована частина формує план. `wsm-install-agent` перевіряє його структуру та викликає спільний preview executor. Список `ALLOWED_PROGRAMS` використовується лише для перевірки форми команд у плані — це не дозвіл на їх запуск. Агент не запускає `partprobe`, `mkfs`, `mount`, `guix` або інші install-команди, не змінює розділи й не розгортає систему. `dry_run=false` відхиляється.
 
-**Журнал і відновлення.** Кожен крок пишеться до і після, з `fsync`. Після збою
-`wsm-install-agent --recover` показує, що завершилось, що впало й на чому, і що
-робити далі. Відкату немає — відкат напівзаписаного диска неможливий, і
-вдавати інше гірше, ніж дати точний стан.
+**Статус кожного кроку.** Усі кроки повертаються як `not-run` із поясненням, що команда не виконувалась. Це не `pass`, не доказ готовності диска і не успішна інсталяція. Див. [канонічний контракт executor-а](docs/EXECUTOR.md).
 
-**Перевірка середовища.** `--check-env` перевіряє інструменти, `guix`, root,
-точку монтування, системний файл, звіт про залізо й рівень ISA — до першого
-дотику до диска.
+**Журнал і відновлення.** Recovery utilities можуть читати явно переданий журнал і пояснювати його записи. Оскільки цей RC не виконує disk mutations, він не створює доказу реального форматування/монтування, не підтверджує встановлення та не обіцяє автоматичний rollback. Межі відновлення описано в [RECOVERY.md](docs/RECOVERY.md).
 
-**Другий live-образ.** `systems/live-minimal.scm` — консоль, мережа й
-інструменти WSM, без Plasma, Qt і Calamares. Для машин, де графічний інсталятор
-не піднімається.
+**Environment preflight.** Перевірки середовища аналізують наявність потрібних інструментів і вхідних даних до будь-якого майбутнього APPLY. У preview-only режимі вони не є приводом запускати disk-writing команди.
 
-**Compatibility lock.** `channels/compatibility.lock.scm` — Guix і Nonguix,
-обидва з `introduction` і на повному коміті. Перевіряється політикою
-`compatibility` у `make check-channels`.
+## Канали, походження та ліцензії
 
-**Ліцензія.** Сім файлів у main мали заголовки GPL-3.0-or-later і CC-BY-SA-4.0.
-Виправлено на `LicenseRef-Volnist`; тест не дає цьому повторитись.
+- `channels.lock.scm` — зафіксований Free Guix channel snapshot; свідчення автентифікованого отримання зафіксовані в [#39](https://github.com/juv4uk/wsm-desktop/issues/39).
+- `channels/compatibility.lock.scm` — окремий pin для Compatibility/Nonguix. Наявність pin і проходження structural policy не доводять криптографічної автентифікації: це має окремо підтвердити Guix release gate на точному lock.
+- Наявність source recipe або lock-файлу не доводить, що відповідний образ зібрано, завантажено чи перевірено на фізичному обладнанні.
+- WSM Desktop використовує ліцензію ВОЛЬНІСТЬ (`LicenseRef-Volnist`). Ліцензії Guix, Calamares, Linux, драйверів і firmware залишаються власними; умови розповсюдження перевіряються окремо. Див. [LICENSING.md](docs/LICENSING.md).
 
-## Чого в цьому релізі немає
+## Що цей RC не доводить
 
-**Жодного встановлення.** Інсталятор жодного разу не запускався — ні в QEMU, ні
-на залізі. Код шляху повний і покритий тестами, але доказу роботи немає.
-
-**Жодного образу, зібраного тут.** Профілі входять як вихідний текст.
-
-**Жодного вимірювання швидкості.** Harness існує, фізичних прогонів немає.
+- Немає реального APPLY: жодна partition, filesystem, mount, EFI або bootloader операція не виконується.
+- Немає підтвердженої інсталяції WSM у QEMU або на фізичному ПК.
+- Немає твердження, що KDE desktop/live recipes з цього source bundle зібрані в перевірений WSM ISO.
+- Для окремого ISO `wsm-desktop-kde-hardened-20261125.iso` є обмежений запис у [docs/VERIFIED-ARTIFACTS.md](docs/VERIFIED-ARTIFACTS.md): перевірено SHA-256, ISO9660 і вміст; BIOS/UEFI boot та запуск інсталятора не перевірялися. Це не доказ завантажуваного WSM installer або успішного встановлення.
+- QEMU CI smoke, синтетичний harness ISO та запуск read-only hardware collector у no-disk guest не є доказом повного WSM installer boot/install.
+- Немає сертифікації сумісності reference hardware без окремого physical-hardware evidence record.
+- Немає вимірювання продуктивності на фізичному обладнанні.
 
 ## Що змінилося від RC1 (архів)
 **Ліцензія.** Робота проєкту перейшла з GPL-3.0-or-later (код) і CC-BY-SA-4.0
