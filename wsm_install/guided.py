@@ -73,25 +73,24 @@ def _ask(console: Console, prompt: str, default: str = "") -> str:
 def run_guided(
     console: Console,
     candidates: Iterable[Candidate],
-    plan: Callable[[str, int, str], object],
-    install: Callable[[str, int, bool], object],
+    preview: Callable[[str, int, str], object],
     evidence_note: str = "",
 ) -> int:
-    """Walk the user through choosing a disk and confirming it. Returns an exit code."""
+    """Choose a target and show a read-only preview; real APPLY is disabled."""
     disks = list(candidates)
-    console.write("WSM install\n\n")
+    console.write("WSM install preview\n\n")
 
     if evidence_note:
         console.write(f"Hardware: {evidence_note}\n\n")
 
     if not disks:
         console.write(
-            "No whole disks were found. Nothing can be installed.\n"
+            "No whole disks were found. No installation can be planned.\n"
             "If the disk is attached, check that the kernel sees it: lsblk\n"
         )
         return 1
 
-    console.write("Disks that can be used:\n")
+    console.write("Disks available for preview:\n")
     for index, disk in enumerate(disks, start=1):
         removable = " (removable)" if disk.removable else ""
         console.write(f"  {index}) {disk.path}  {disk.human_size()}{removable}\n")
@@ -106,28 +105,32 @@ def run_guided(
         return 1
 
     disk = disks[int(choice) - 1]
-
     firmware = _ask(console, "Firmware [uefi/bios] (default uefi): ", "uefi").lower()
     if firmware not in {"uefi", "bios"}:
         console.write("Unknown firmware. Stopped. Nothing was changed.\n")
         return 1
 
     console.write("\n")
-    console.write(f"This will erase {disk.path} ({disk.human_size()}) completely.\n")
-    console.write("Type the disk path to confirm, or press Enter to stop: ")
-    typed = console.read("").strip()
+    console.write(
+        f"Preview target: {disk.path} ({disk.human_size()}). "
+        "No disk will be changed.\n"
+    )
+    typed = console.read("Type the disk path to confirm this preview, or press Enter to stop: ").strip()
     if typed != disk.path:
         console.write("Confirmation does not match. Stopped. Nothing was changed.\n")
         return 1
 
-    console.write("\nPlanning...\n")
-    plan(disk.path, disk.size_bytes, firmware)
+    console.write("\nPreparing a read-only preview...\n")
+    result = preview(disk.path, disk.size_bytes, firmware)
+    if isinstance(result, int) and result != 0:
+        console.write(
+            f"Preview could not be generated (exit {result}). "
+            "APPLY is disabled; nothing was changed.\n"
+        )
+        return result
 
-    answer = _ask(console, "Install now? Type 'install' to begin, Enter to stop: ")
-    if answer != "install":
-        console.write("Stopped after planning. Nothing was changed.\n")
-        return 1
-
-    install(disk.path, disk.size_bytes, firmware)
-    console.write("Installation finished. Remove the medium and reboot.\n")
+    console.write(
+        "Preview complete. APPLY is disabled; no disk commands were executed "
+        "and WSM was NOT installed.\n"
+    )
     return 0

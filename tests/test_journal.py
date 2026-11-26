@@ -3,8 +3,8 @@
 
 from __future__ import annotations
 
+import inspect
 import json
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -24,46 +24,28 @@ STEPS = [
 ]
 
 
-def ok_runner(command):
-    return subprocess.CompletedProcess(list(command), 0, "", "")
-
-
-def fail_on_mkfs(command):
-    code = 1 if "mkfs" in command[0] else 0
-    return subprocess.CompletedProcess(list(command), code, "", "disk on fire")
-
-
-class JournalWritingTests(unittest.TestCase):
-    def test_every_step_is_recorded_before_and_after(self) -> None:
+class ApplyDisabledJournalTests(unittest.TestCase):
+    def test_apply_is_refused_before_journal_file_is_created(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "journal.jsonl"
-            execute(STEPS, "/dev/nvme0n1", acknowledgement="/dev/nvme0n1", dry_run=False,
-                    runner=ok_runner, verifier=lambda step: (True, "ok"),
-                    out=lambda _: None, journal=Journal(path))
-            entries = read_entries(path)
-        events = [entry["event"] for entry in entries]
-        self.assertEqual(events.count("step-starting"), 3)
-        self.assertEqual(events.count("step-finished"), 3)
-        self.assertTrue(all(e["status"] == "done" for e in entries if e["event"] == "step-finished"))
-
-    def test_failure_is_recorded_with_the_reason(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            path = Path(temporary) / "journal.jsonl"
-            with self.assertRaises(ExecutorError):
-                execute(STEPS, "/dev/nvme0n1", acknowledgement="/dev/nvme0n1", dry_run=False,
-                        runner=fail_on_mkfs, verifier=lambda step: (True, "ok"),
-                        out=lambda _: None, journal=Journal(path))
-            entries = read_entries(path)
-        aborted = [e for e in entries if e["event"] == "aborted"]
-        self.assertEqual(len(aborted), 1)
-        self.assertIn("mkfs", aborted[0]["reason"])
-
-    def test_dry_run_writes_nothing(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            path = Path(temporary) / "journal.jsonl"
-            execute(STEPS, "/dev/nvme0n1", dry_run=True, out=lambda _: None, journal=Journal(path))
+            with self.assertRaises(ExecutorError) as caught:
+                execute(STEPS, "/dev/nvme0n1", dry_run=False)
+            self.assertEqual(caught.exception.code, "execute.apply-disabled")
             self.assertFalse(path.exists())
 
+    def test_executor_has_no_runner_verifier_acknowledgement_or_journal_api(self) -> None:
+        parameters = set(inspect.signature(execute).parameters)
+        self.assertEqual(parameters, {"steps", "disk", "dry_run", "out"})
+        self.assertTrue({"starting", "finished", "aborted"}.issubset(set(dir(Journal))))
+
+    def test_dry_run_writes_no_journal(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "journal.jsonl"
+            execute(STEPS, "/dev/nvme0n1", dry_run=True, out=lambda _: None)
+            self.assertFalse(path.exists())
+
+
+class JournalUtilityTests(unittest.TestCase):
     def test_journal_is_append_only(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "journal.jsonl"

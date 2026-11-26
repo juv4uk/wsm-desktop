@@ -2,6 +2,11 @@
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
+> **Поточний стан: read-only preview.** CLI, guided, TUI, Calamares та
+> privileged agent не виконують запис на диск. `--execute` і будь-який
+> `dry_run=False` відхиляються. Успішний preview не означає, що WSM
+> встановлено; рішення про installer frontend лишається окремим ADR.
+
 > Цей документ описує початковий Guix-oriented deployment design. Nix/NixOS backend потребуватиме окремого adapter design; Guix-specific кроки не можна переносити до нього.
 
 ## Два входи, один бекенд

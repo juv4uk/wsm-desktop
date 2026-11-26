@@ -75,7 +75,7 @@ class FailureTests(unittest.TestCase):
         sys.modules.pop("libcalamares", None)
 
     def test_missing_report_fails_closed(self) -> None:
-        install_fake_libcalamares({"wsmTargetDisk": "/dev/nvme0n1", "wsmTargetSizeBytes": 256 * GIB})
+        install_fake_libcalamares({"wsmTargetDisk": "/dev/nvme0n1", "wsmTargetSizeBytes": 256 * GIB, "wsmDryRun": True})
         result = load_module().run()
         self.assertIsNotNone(result)
         message, details = result
@@ -85,14 +85,14 @@ class FailureTests(unittest.TestCase):
     def test_missing_disk_is_refused(self) -> None:
         """WSM never chooses a disk for the user."""
         report = report_file(self.directory)
-        install_fake_libcalamares({"wsmReportPath": str(report), "wsmTargetSizeBytes": 256 * GIB})
+        install_fake_libcalamares({"wsmReportPath": str(report), "wsmTargetSizeBytes": 256 * GIB, "wsmDryRun": True})
         result = load_module().run()
         self.assertIsNotNone(result)
         self.assertIn("disk", result[0].lower())
 
     def test_missing_size_is_refused(self) -> None:
         report = report_file(self.directory)
-        install_fake_libcalamares({"wsmReportPath": str(report), "wsmTargetDisk": "/dev/nvme0n1"})
+        install_fake_libcalamares({"wsmReportPath": str(report), "wsmTargetDisk": "/dev/nvme0n1", "wsmDryRun": True})
         result = load_module().run()
         self.assertIsNotNone(result)
         self.assertIn("size", result[0].lower())
@@ -117,6 +117,7 @@ class FailureTests(unittest.TestCase):
             "wsmReportPath": str(report),
             "wsmTargetDisk": "/dev/nvme0n1",
             "wsmTargetSizeBytes": 256 * GIB,
+            "wsmDryRun": True,
             "wsmProfileEvidence": str(evidence),
         })
         result = load_module().run()
@@ -124,7 +125,7 @@ class FailureTests(unittest.TestCase):
         self.assertIn("evidence", result[0].lower())
 
 
-class SuccessTests(unittest.TestCase):
+class PreviewOutcomeTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.directory = Path(self.temporary.name)
@@ -134,14 +135,45 @@ class SuccessTests(unittest.TestCase):
         self.temporary.cleanup()
         sys.modules.pop("libcalamares", None)
 
-    def test_dry_run_returns_none_and_runs_nothing(self) -> None:
-        install_fake_libcalamares({
+    def values(self, **extra):
+        return {
             "wsmReportPath": str(self.report),
             "wsmTargetDisk": "/dev/nvme0n1",
             "wsmTargetSizeBytes": 256 * GIB,
-            "wsmDryRun": True,
-        })
-        self.assertIsNone(load_module().run())
+            **extra,
+        }
+
+    def test_explicit_preview_returns_non_success_not_none(self) -> None:
+        from unittest.mock import patch
+
+        install_fake_libcalamares(self.values(wsmDryRun=True))
+        with patch("wsm_install.executor.execute", return_value=[] ) as execute:
+            result = load_module().run()
+        self.assertIsNotNone(result)
+        self.assertIn("not installed", result[0].lower())
+        execute.assert_called_once()
+        self.assertIs(execute.call_args.kwargs["dry_run"], True)
+        self.assertNotIn("acknowledgement", execute.call_args.kwargs)
+
+    def test_explicit_false_dry_run_is_refused_before_preview(self) -> None:
+        from unittest.mock import patch
+
+        install_fake_libcalamares(self.values(wsmDryRun=False))
+        with patch("wsm_install.executor.execute") as execute:
+            result = load_module().run()
+        self.assertIsNotNone(result)
+        self.assertIn("APPLY is disabled", result[0])
+        execute.assert_not_called()
+
+    def test_missing_dry_run_is_refused_not_success(self) -> None:
+        from unittest.mock import patch
+
+        install_fake_libcalamares(self.values())
+        with patch("wsm_install.executor.execute") as execute:
+            result = load_module().run()
+        self.assertIsNotNone(result)
+        self.assertIn("APPLY is disabled", result[0])
+        execute.assert_not_called()
 
     def test_pretty_name_is_defined(self) -> None:
         install_fake_libcalamares({})
