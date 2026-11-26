@@ -148,6 +148,20 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("agent.not-allowed", result.stderr)
 
+    def test_recover_requires_a_journal_path(self) -> None:
+        result = self.run_cli("--recover")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--plan is required with --recover", result.stderr)
+
+    def test_apply_without_dry_run_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "plan.json"
+            path.write_text(json.dumps(plan(GOOD)), encoding="utf-8")
+            result = self.run_cli("--plan", str(path))
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("agent.apply-disabled", result.stderr)
+        self.assertNotIn("executed", result.stdout)
+
     def test_allowlist_is_not_empty_and_all_absolute(self) -> None:
         self.assertTrue(ALLOWED_PROGRAMS)
         for program in ALLOWED_PROGRAMS:
