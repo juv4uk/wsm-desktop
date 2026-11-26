@@ -432,7 +432,7 @@ case " $* " in
         fi
         printf '%s\\n' '(list (channel (name guix) (commit test)))'
         exit 0 ;;
-    *" -L $WSM_TEST_LOAD_PATH -- system image "*)
+    *" -L $WSM_TEST_LOAD_PATH -- system -L $WSM_TEST_LOAD_PATH image "*)
         for argument in "$@"; do
             case "$argument" in --root=*) root=${argument#--root=} ;; esac
         done
@@ -484,7 +484,7 @@ exit 8
             lock = ROOT / "channels.lock.scm"
             self.assertIn(f"CALL|time-machine|-C|{lock}|-L|{ROOT}|--|--version", calls)
             self.assertIn(f"CALL|time-machine|-C|{lock}|-L|{ROOT}|--|describe|-f|channels", calls)
-            self.assertIn(f"CALL|time-machine|-C|{lock}|-L|{ROOT}|--|system|image", calls)
+            self.assertIn(f"CALL|time-machine|-C|{lock}|-L|{ROOT}|--|system|-L|{ROOT}|image", calls)
             self.assertIn(f"--root={expected}", calls)
             self.assertIn("--no-grafts", calls)
             self.assertIn("--image-type=iso9660", calls)
@@ -514,7 +514,7 @@ exit 8
                 manifest["build"]["command"],
                 [
                     "guix", "time-machine", "-C", str(lock), "-L", str(ROOT), "--",
-                    "system", "image",
+                    "system", "-L", str(ROOT), "image",
                     "--no-grafts", f"--root={expected}", "--image-type=iso9660",
                     "--system=x86_64-linux", str(ROOT / "systems" / "live.scm"),
                 ],
