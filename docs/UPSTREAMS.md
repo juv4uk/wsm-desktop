@@ -161,6 +161,24 @@ GPL-3.0-or-later, і жодна частина цього репозиторію
   необхідно перевірити на reference hardware; відсутність X11 fallback не
   можна компенсувати припущенням про сумісність.
 
+### SBOM із `guix graph`
+
+- З Guix **1.5.0** `guix graph` має бекенди `graphml` і `cyclonedx-json`, тобто
+  вміє видавати Software Bill of Materials для замикання пакетів. Для WSM це
+  єдиний відомий спосіб отримати SBOM, який сягає аж до bootstrap-бінарників,
+  без власного коду.
+- Формат — CycloneDX JSON, який читають сканери вразливостей (наприклад
+  Dependency-Track). Це доповнює наш `release-manifest.json`, а не замінює
+  його: manifest каже «що ми зібрали і з якого коміту», SBOM каже «з чого це
+  складається».
+- Обмеження, назване автором зміни в upstream: у SBOM поки є лише ім'я й версія
+  кожної залежності, чого може не вистачити для точного зіставлення з базою
+  вразливостей; а для графів, де вузли — імена файлів у store, версію
+  доведеться не виводити взагалі.
+- Статус для WSM: **вхідні дані**, не рішення. Додавання SBOM у релізний
+  конвеєр — окреме рішення з власним ADR, бо воно змінює склад артефактів і
+  те, що ми обіцяємо перевіряти.
+
 ### Calamares
 
 - Актуальний stable upstream — **3.4.3** (2026-09-10); деталі provenance,
@@ -173,6 +191,8 @@ GPL-3.0-or-later, і жодна частина цього репозиторію
 - [Guix 1.6.0 release schedule, 15.11.2026](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00091.html)
 - [GCD 009 deliberation notice](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00074.html)
 - [Guix repository on Codeberg](https://codeberg.org/guix/guix/)
+- [guix graph: CycloneDX backend, PR #2405](https://codeberg.org/guix/guix/pulls/2405)
+- [GNU Guix 1.5.0 release announcement](https://guix.gnu.org/en/blog/2026/gnu-guix-1.5.0-released/)
 - [KDE Plasma 6.8.3, 10.11.2026](https://kde.org/announcements/plasma/6/6.8.3/)
 - [KDE Plasma 6.8 announcement, 14.10.2026](https://kde.org/announcements/plasma/6/6.8.0/)
 - [KDE Plasma 6.7.6, 03.11.2026](https://kde.org/announcements/plasma/6/6.7.6/)
