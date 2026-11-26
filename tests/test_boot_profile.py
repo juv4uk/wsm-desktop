@@ -250,7 +250,6 @@ class BootCommandTests(unittest.TestCase):
             self.assertEqual(kwargs["stdin"], subprocess.DEVNULL)
             self.assertEqual(kwargs["env"]["LC_ALL"], "C")
             self.assertNotIn("SHEPHERD_SOCKET", kwargs["env"])
-            self.assertNotIn("SHEPHERD_SOCKET", kwargs["env"])
             self.assertLessEqual(kwargs["timeout"], boot.MAX_TIMEOUT_SECONDS)
 
     def test_unprivileged_shepherd_observation_is_not_claimed_as_system_boot(self) -> None:
