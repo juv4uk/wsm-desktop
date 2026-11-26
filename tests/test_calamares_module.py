@@ -134,14 +134,59 @@ class SuccessTests(unittest.TestCase):
         self.temporary.cleanup()
         sys.modules.pop("libcalamares", None)
 
-    def test_dry_run_returns_none_and_runs_nothing(self) -> None:
+    def test_dry_run_preview_is_not_reported_as_successful_installation(self) -> None:
         install_fake_libcalamares({
             "wsmReportPath": str(self.report),
             "wsmTargetDisk": "/dev/nvme0n1",
             "wsmTargetSizeBytes": 256 * GIB,
             "wsmDryRun": True,
         })
-        self.assertIsNone(load_module().run())
+        result = load_module().run()
+        self.assertIsNotNone(result)
+        self.assertIn("preview only", result[0].lower())
+        self.assertIn("no installation was performed", result[1].lower())
+
+    def test_missing_or_none_dry_run_defaults_to_refusal_not_success(self) -> None:
+        for values in (
+            {
+                "wsmReportPath": str(self.report),
+                "wsmTargetDisk": "/dev/nvme0n1",
+                "wsmTargetSizeBytes": 256 * GIB,
+            },
+            {
+                "wsmReportPath": str(self.report),
+                "wsmTargetDisk": "/dev/nvme0n1",
+                "wsmTargetSizeBytes": 256 * GIB,
+                "wsmDryRun": None,
+            },
+        ):
+            with self.subTest(values=values):
+                install_fake_libcalamares(values)
+                result = load_module().run()
+                self.assertIsNotNone(result)
+                self.assertIn("execute.apply-disabled", result[1])
+
+    def test_non_boolean_dry_run_setting_is_refused(self) -> None:
+        install_fake_libcalamares({
+            "wsmReportPath": str(self.report),
+            "wsmTargetDisk": "/dev/nvme0n1",
+            "wsmTargetSizeBytes": 256 * GIB,
+            "wsmDryRun": "false",
+        })
+        result = load_module().run()
+        self.assertIsNotNone(result)
+        self.assertIn("Invalid WSM dry-run setting", result[0])
+
+    def test_apply_request_is_refused_when_dry_run_is_false(self) -> None:
+        install_fake_libcalamares({
+            "wsmReportPath": str(self.report),
+            "wsmTargetDisk": "/dev/nvme0n1",
+            "wsmTargetSizeBytes": 256 * GIB,
+            "wsmDryRun": False,
+        })
+        result = load_module().run()
+        self.assertIsNotNone(result)
+        self.assertIn("execute.apply-disabled", result[1])
 
     def test_pretty_name_is_defined(self) -> None:
         install_fake_libcalamares({})
