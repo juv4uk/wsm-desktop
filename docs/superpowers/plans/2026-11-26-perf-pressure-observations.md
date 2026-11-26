@@ -4,7 +4,7 @@
 
 - Дата: 2026-11-26
 - Канонічна задача: [#151 — вимірюваний baseline boot, services і desktop workloads](https://github.com/juv4uk/wsm-desktop/issues/151)
-- Базовий `main`: `c50f09ca661bf1dd27948c4be42fa1fbea9a792d`
+- Базовий `main`: `a7a17de7f31b2300327993eaa408be59bebbd3e9`
 
 ## Мета
 
