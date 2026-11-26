@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""The Calamares jobmodule must fail closed and stay thin.
+"""The Calamares jobmodule must fail closed and never call preview success.
 
 Calamares injects ``libcalamares`` at runtime, so these tests substitute a fake
-module with the same shape. That is the only way to test a jobmodule without a
-running installer, and it keeps the module's contract honest: ``None`` on
-success, ``(message, details)`` on failure, never a silent pass.
+module with the same shape. The current WSM deploy job is preview-only: because
+Calamares interprets ``None`` as success, preview must return an explicit
+failure/status tuple saying that no system was installed.
 """
 
 from __future__ import annotations
