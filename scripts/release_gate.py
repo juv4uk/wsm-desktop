@@ -31,7 +31,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 CHANNEL_LOCKS = {
     "free": ROOT / "channels.lock.scm",
-    "compatibility": ROOT / "channels.compatibility.lock.scm",
+    "compatibility": ROOT / "channels" / "compatibility.lock.scm",
 }
 
 SCHEMA = "wsm-release-gate/1"
@@ -107,7 +107,28 @@ def check_channels(product: str) -> dict[str, str]:
             ]
         )
         status = "pass" if code == 0 else "not-run" if code == 127 else "fail"
-        results.append((policy, status, detail))
+        results.append((policy, status, f"structural policy: {detail}"))
+        if status != "pass":
+            continue
+
+        # Structural validation pins the expected introduction metadata but
+        # does not verify signatures. Guix must independently authenticate and
+        # resolve the exact lock before a release can claim channel trust.
+        auth_code, auth_detail = run(
+            [
+                "guix",
+                "time-machine",
+                "-C",
+                str(lock),
+                "--",
+                "describe",
+                "-f",
+                "channels",
+            ],
+            timeout=900,
+        )
+        auth_status = "pass" if auth_code == 0 else "not-run" if auth_code == 127 else "fail"
+        results.append((f"{policy}-authentication", auth_status, auth_detail))
 
     failures = [f"{policy}: {detail}" for policy, status, detail in results if status == "fail"]
     if failures:
