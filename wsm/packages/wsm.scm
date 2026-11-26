@@ -24,7 +24,7 @@
 (define-public wsm-tools
   (package
     (name "wsm-tools")
-    (version "0.1.0-rc1")
+    (version "0.1.0-rc3")
     ;; Relative paths in local-file are resolved against this file, so "../.."
     ;; is the repository root. select? keeps .git and build output out of the
     ;; store: without it the source would embed the whole git directory, which
@@ -50,14 +50,26 @@
                      (site (string-append out "/lib/python"
                                           #$(version-major+minor
                                              (package-version python))
-                                          "/site-packages")))
+                                          "/site-packages"))
+                     (bin (string-append out "/bin")))
                 (copy-recursively "wsm_hwcheck"
                                   (string-append site "/wsm_hwcheck"))
                 (copy-recursively "wsm_install"
                                   (string-append site "/wsm_install"))
                 (copy-recursively "schemas"
-                                  (string-append site "/schemas"))))))))
-    (propagated-inputs (list python-jsonschema))
+                                  (string-append site "/schemas"))
+                (mkdir-p bin)
+                (copy-file "scripts/wsm-hwcheck.sh"
+                           (string-append bin "/wsm-hwcheck"))
+                (copy-file "scripts/wsm-install.sh"
+                           (string-append bin "/wsm-install"))
+                (copy-file "scripts/wsm-install-live.sh"
+                           (string-append bin "/wsm-install-live"))
+                ;; copy-file does not promise to preserve executable bits.
+                (for-each (lambda (name)
+                            (chmod (string-append bin "/" name) #o555))
+                          '("wsm-hwcheck" "wsm-install" "wsm-install-live"))))))))
+    (propagated-inputs (list python python-jsonschema))
     (synopsis "Read-only hardware evidence tools for WSM Desktop")
     (description
      "Collects a read-only hardware report from sysfs and procfs, validates it

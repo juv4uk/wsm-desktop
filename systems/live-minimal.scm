@@ -12,13 +12,14 @@
 ;; достатньо заліза, — не залізоорієнтованість.
 ;;
 ;; Тут немає: графічного середовища, дисплейного менеджера, звуку, друку,
-;; Bluetooth. Є: консоль на ttyS0 і tty1, інструменти WSM і маркер готовності.
+;; Bluetooth. Є: консоль на ttyS0/tty1, мережа, WSM CLI/TUI та вхід wsm на tty2.
 ;;
 ;; Встановлення веде `wsm-install` (CLI). Calamares сюди не входить навмисно:
 ;; він потребує Qt, а вся суть цього образу — обійтися без нього.
 
 (use-modules (gnu)
              (gnu services)
+             (gnu services base)
              (gnu services networking)
              (gnu services shepherd)
              (gnu system nss)
@@ -81,15 +82,19 @@
                     %base-packages))
 
   (services
-   (append (list
-            wsm-live-ready-marker
-
-            ;; Мережа потрібна інсталятору: Guix тягне заміни з серверів.
-            (service network-manager-service-type)
-
-            ;; DHCP-клієнт, щоб мережа піднімалась без ручних команд.
-            (service dhcp-client-service-type))
-
-           %base-services))
+   (modify-services
+    (append (list
+             wsm-live-ready-marker
+             (service network-manager-service-type)
+             (service wpa-supplicant-service-type)
+             (service dhcp-client-service-type))
+            %base-services)
+    ;; tty1 і serial лишаються для boot logs; live-сесія доступна на tty2.
+    (mingetty-service-type config =>
+      (if (string=? (mingetty-configuration-tty config) "tty2")
+          (mingetty-configuration
+           (inherit config)
+           (auto-login "wsm"))
+          config))))
 
   (kernel-arguments '("console=ttyS0,115200" "console=tty1")))
