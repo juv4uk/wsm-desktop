@@ -127,6 +127,7 @@ class PressureTelemetryTests(unittest.TestCase):
             snapshot = pressure.read_zram_snapshot(root)
             self.assertEqual(set(path.name for path in root.iterdir()), {"zram0"})
         self.assertEqual(snapshot["status"], "available")
+        self.assertEqual(snapshot["devices"]["zram0"]["config"]["status"], "available")
         self.assertEqual(
             snapshot["devices"]["zram0"]["config"]["active_compressor"], "zstd"
         )
@@ -156,6 +157,29 @@ class PressureTelemetryTests(unittest.TestCase):
         )
         self.assertNotIn("/dev/nvme0n1p3", str(snapshot))
 
+    def test_zram_snapshot_is_partial_when_configuration_is_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            device = root / "zram0"
+            device.mkdir()
+            (device / "mm_stat").write_text(
+                "100 50 60 1000 70 1 2 3 4\\n", encoding="utf-8"
+            )
+            (device / "io_stat").write_text("1 2 3 4\\n", encoding="utf-8")
+            (device / "bd_stat").write_text("5 6 7\\n", encoding="utf-8")
+            snapshot = pressure.read_zram_snapshot(root)
+        device_result = snapshot["devices"]["zram0"]
+        self.assertEqual(device_result["status"], "partial")
+        self.assertEqual(device_result["config"]["status"], "partial")
+        self.assertEqual(
+            device_result["config"]["sources"]["comp_algorithm"]["reason"],
+            "not-found",
+        )
+        self.assertEqual(
+            device_result["config"]["sources"]["backing_dev"]["reason"],
+            "not-found",
+        )
+
     def test_mm_stat_stays_snapshot_while_io_and_bd_are_deltas(self) -> None:
         def stat(fields: dict[str, int]) -> dict[str, object]:
             return {"status": "available", "fields": fields}
@@ -170,6 +194,12 @@ class PressureTelemetryTests(unittest.TestCase):
             "zram": {
                 "devices": {
                     "zram0": {
+                        "status": "available",
+                        "config": {
+                            "status": "available",
+                            "active_compressor": "zstd",
+                            "backing_device": "none",
+                        },
                         "stats": {
                             "mm_stat": stat({"orig_data_size": 100}),
                             "io_stat": stat({
@@ -192,6 +222,12 @@ class PressureTelemetryTests(unittest.TestCase):
             "zram": {
                 "devices": {
                     "zram0": {
+                        "status": "available",
+                        "config": {
+                            "status": "available",
+                            "active_compressor": "zstd",
+                            "backing_device": "none",
+                        },
                         "stats": {
                             "mm_stat": stat({"orig_data_size": 150}),
                             "io_stat": stat({
@@ -220,6 +256,11 @@ class PressureTelemetryTests(unittest.TestCase):
             result["zram"]["devices"]["zram0"]["mm_stat"]["after"]["fields"]["orig_data_size"],
             150,
         )
+        self.assertEqual(result["zram"]["devices"]["zram0"]["status"], "available")
+        after["zram"]["devices"]["zram0"]["config"]["active_compressor"] = "lz4"
+        changed = pressure.compare_pressure_snapshots(before, after)
+        self.assertEqual(changed["zram"]["devices"]["zram0"]["status"], "partial")
+        self.assertTrue(changed["zram"]["devices"]["zram0"]["config"]["changed"])
 
     def test_older_zram_mm_stat_keeps_snapshot_partial(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -265,6 +306,17 @@ class PressureTelemetryTests(unittest.TestCase):
         self.assertEqual(result["status"], "partial")
         self.assertIsNone(result["fields"]["failed_reads"])
         self.assertEqual(result["reason"], "counter-reset")
+
+    def test_counter_field_set_change_is_partial(self) -> None:
+        before = {
+            "status": "available",
+            "fields": {"failed_reads": 1, "failed_writes": 2},
+        }
+        after = {"status": "available", "fields": {"failed_reads": 3}}
+        result = pressure._counter_deltas(before, after)
+        self.assertEqual(result["status"], "partial")
+        self.assertEqual(result["reason"], "field-set-changed")
+        self.assertEqual(result["missing_after_fields"], ["failed_writes"])
 
     def test_missing_psi_and_zram_are_unknown_not_zero(self) -> None:
         result = pressure.compare_pressure_snapshots(
@@ -510,6 +562,7 @@ class MeasurementTests(unittest.TestCase):
         self.assertEqual(pressure.call_count, 2 * len(WORKLOADS))
         for result in artifact["workloads"].values():
             self.assertEqual(result["system_pressure"]["scope"], "system-wide")
+            self.assertGreater(result["system_pressure"]["sample_window_seconds"], 0.0)
         self.assertEqual(calls, {name: 6 for name in calls})
 
 
