@@ -92,8 +92,7 @@ def disk_list(candidates: list[Candidate], selected: int) -> list[str]:
 def run_tui(
     screen: Screen,
     candidates: Iterable[Candidate],
-    plan: Callable[[str, int, str], object],
-    install: Callable[[str, int, bool], object],
+    preview: Callable[[str, int, str], object],
     evidence_note: str = "",
 ) -> int:
     """Choose a disk with arrow keys, confirm by typing its path. Returns an exit code."""
@@ -159,7 +158,7 @@ def run_tui(
     while True:
         screen.render(box("Confirm", [
             "",
-            f"This will erase {disk.path} ({disk.human_size()}) completely.",
+            f"Preview target: {disk.path} ({disk.human_size()}). No disk will be changed.",
             "",
             "Type the disk path to confirm, or q to quit.",
             "",
@@ -184,20 +183,22 @@ def run_tui(
         screen.read_key()
         return 1
 
-    screen.render(box("Planning", ["", f"Planning {disk.path}..."]))
-    plan(disk.path, disk.size_bytes, firmware)
+    screen.render(box("Planning", ["", f"Preparing a read-only preview for {disk.path}..."]))
+    result = preview(disk.path, disk.size_bytes, firmware)
+    if isinstance(result, int) and not isinstance(result, bool) and result != 0:
+        screen.render(box("Preview failed", [
+            "",
+            f"Preview exited with status {result}.",
+            "APPLY is disabled. No disk commands were executed.",
+            "Nothing was changed.",
+        ]))
+        return result
 
-    screen.render(box("Install", [
+    screen.render(box("Preview complete", [
         "",
-        f"Plan ready for {disk.path} ({firmware}).",
-        "",
-        "Enter to install, q to stop. Nothing has been written yet.",
+        f"Plan prepared for {disk.path} ({firmware}).",
+        "APPLY is disabled.",
+        "No disk commands were executed.",
+        "Nothing was changed.",
     ]))
-    if screen.read_key() != "enter":
-        screen.render(box("Stopped", ["", "Stopped after planning. Nothing was changed."]))
-        return 1
-
-    screen.render(box("Installing", ["", f"Writing the system to {disk.path}..."]))
-    install(disk.path, disk.size_bytes, firmware)
-    screen.render(box("Done", ["", "Installation finished.", "Remove the medium and reboot."]))
     return 0
