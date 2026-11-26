@@ -113,6 +113,14 @@ class CompatibilityNvidiaOverrideTests(unittest.TestCase):
         self.assertIn('(replace "egl-x11" egl-x11-fixed)', driver)
         self.assertIn('(replace "mesa" mesa-for-nvda-fixed)', driver)
 
+    def test_egl_wayland_binding_is_imported_from_the_pinned_xorg_module(self) -> None:
+        imports = PROFILE.split("(use-service-modules", 1)[0]
+        self.assertIn("(gnu packages xorg)", imports)
+        self.assertIn(
+            "(define egl-wayland-fixed (with-fixed-mesa egl-wayland))",
+            PROFILE,
+        )
+
     def test_fixed_wayland_package_wraps_the_pinned_egl_wayland_name(self) -> None:
         wayland = scheme_definition(PROFILE, "egl-wayland-fixed")
 
