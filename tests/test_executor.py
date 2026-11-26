@@ -70,6 +70,23 @@ class PreviewValidationTests(unittest.TestCase):
             execute(STEPS, "/dev/nvme0n1p1", dry_run=True, out=lambda _: None)
         self.assertEqual(caught.exception.code, "execute.disk-path")
 
+    def test_command_device_must_match_target_disk(self) -> None:
+        wrong_device = [Step(["/usr/sbin/mkfs.ext4", "-F", "/dev/sda1"], "format root", destructive=True)]
+        with self.assertRaises(ExecutorError) as caught:
+            execute(wrong_device, "/dev/nvme0n1", dry_run=True, out=lambda _: None)
+        self.assertEqual(caught.exception.code, "execute.device-mismatch")
+
+    def test_embedded_device_argument_must_match_target_disk(self) -> None:
+        wrong_device = [Step(["/usr/bin/tool", "--device=/dev/sda1"], "foreign device")]
+        with self.assertRaises(ExecutorError) as caught:
+            execute(wrong_device, "/dev/nvme0n1", dry_run=True, out=lambda _: None)
+        self.assertEqual(caught.exception.code, "execute.device-mismatch")
+
+    def test_sata_partition_naming_matches_target_disk(self) -> None:
+        sata_step = [Step(["/usr/bin/mount", "/dev/sda1", "/mnt"], "mount root")]
+        results = execute(sata_step, "/dev/sda", dry_run=True, out=lambda _: None)
+        self.assertEqual(results[0].status, "skipped")
+
     def test_non_step_item_is_rejected(self) -> None:
         with self.assertRaises(ExecutorError) as caught:
             execute(["/bin/true"], "/dev/nvme0n1", dry_run=True, out=lambda _: None)
