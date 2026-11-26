@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT))
 
 from wsm_install.agent import (  # noqa: E402
     ALLOWED_PROGRAMS,
+    MAX_PLAN_BYTES,
     AgentError,
     load_plan,
     run_plan,
@@ -120,6 +121,25 @@ class PlanTests(unittest.TestCase):
         with self.assertRaises(AgentError) as caught:
             load_plan(Path("/nonexistent/plan.json"))
         self.assertEqual(caught.exception.code, "agent.unreadable-plan")
+
+    def test_symlink_plan_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = root / "target.json"
+            target.write_text(json.dumps(plan(GOOD)), encoding="utf-8")
+            link = root / "plan.json"
+            link.symlink_to(target)
+            with self.assertRaises(AgentError) as caught:
+                load_plan(link)
+        self.assertEqual(caught.exception.code, "agent.unsafe-plan-path")
+
+    def test_oversized_plan_is_refused_before_json_parse(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "plan.json"
+            path.write_bytes(b" " * (MAX_PLAN_BYTES + 1))
+            with self.assertRaises(AgentError) as caught:
+                load_plan(path)
+        self.assertEqual(caught.exception.code, "agent.plan-too-large")
 
 
 class ExecutionTests(unittest.TestCase):
