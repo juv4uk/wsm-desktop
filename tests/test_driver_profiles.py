@@ -172,6 +172,12 @@ class DriverProfileManifestTests(unittest.TestCase):
             "https://docs.nvidia.com/datacenter/tesla/driver-installation-guide/610/kernel-modules.html",
             urls,
         )
+        exact_device_evidence = next(
+            item for item in nvidia["evidence"]
+            if item.get("source_url") == "https://download.nvidia.com/XFree86/Linux-x86_64/580.126.09/README/supportedchips.html"
+        )
+        self.assertIn("1C82", exact_device_evidence["summary"])
+        self.assertIn("does not prove", exact_device_evidence["summary"])
         self.assertEqual(nvidia["package_resolution"], "not-assessed")
         self.assertEqual(nvidia["source_license"], "unknown")
         self.assertEqual(compat_gpu["functional_validation"]["status"], "not-run")
