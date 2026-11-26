@@ -137,6 +137,23 @@ wsm-install --preflight --report report.json --backend guix --dry-run \
 - **Перевірки, що `report_id` справді існує** в якомусь звіті. Для цього потрібне сховище звітів, якого поки немає.
 - **Зв'язки матчера з планом.** PCI matcher є і покритий тестами, але `build_plan` його ще не викликає: автоматичний вибір відкладається до появи реального профілю й physical evidence.
 
+## Driver/firmware manifests — окремий шар
+
+[Профілі драйверів і firmware](drivers/PROFILES.md) описують кандидатні
+package/kernel/firmware/runtime stages для конкретної апаратної цілі. Це
+машиночитний каталог сумісності, а не evidence bundle і не дозвіл
+інсталятору оголосити пристрій підтримуваним.
+
+Зв'язок між форматами навмисно односторонньо-послідовний: driver manifest
+може посилатися на фактичні результати package query, build та image
+inspection; функціональні твердження `pass`/`fail` мають окремо
+підтверджуватися `wsm-profile-evidence/2` bundle з точними bytes
+hardware report, hash профілю та functional-test artifacts. Сам manifest
+або Windows-observed PCI ID не доводить Linux binding, firmware у rootfs/
+initrd чи працездатність desktop session. Поки ці артефакти відсутні,
+H170 профілі залишаються `draft`, `not-assessed`, `unknown` та
+`not-run` відповідно.
+
 ## Дослідницькі довідки — не hardware profiles
 
 Датовані спостереження про машину власника з Windows/WSL зберігаються окремо:
