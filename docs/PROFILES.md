@@ -172,8 +172,10 @@ python3 scripts/check_channels.py --policy compatibility --lock channels.compati
 назву каналу, allow-listed repository URL, pinned commit та canonical
 introduction. Він **не перевіряє криптографічний підпис конкретного commit**.
 Це окремо робить GNU Guix channel authentication із увімкненою автентифікацією.
-Поки реальний Compatibility lock відсутній і його authentication result не
-зафіксований, не можна називати Nonguix commit або драйвер автентифікованим.
+Lock уже присутній у `channels/compatibility.lock.scm`, але сам факт його
+наявності або structural PASS не доводить GPG/channel authentication. До
+release PASS потрібен результат `guix time-machine` для точного lock і
+evaluation `systems/live-compat.scm` у Guix gate.
 
 ### Що це означає для lock-файлів
 
