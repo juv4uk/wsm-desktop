@@ -184,7 +184,7 @@ check-locked-system:
 
 # Компактний консольний live-носій із WSM CLI/TUI.
 image-live-minimal:
-	WSM_LIVE_PROFILE=systems/live-minimal.scm ./scripts/build_iso.sh
+	WSM_LIVE_PROFILE=systems/live-minimal.scm sh ./scripts/build_iso.sh
 
 # Повні QEMU runtime checks запускаються лише вручну, не в `make check` і не в CI.
 qemu-acceptance-manual:

@@ -23,6 +23,7 @@ class MinimalLiveProfileTests(unittest.TestCase):
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
         self.assertIn("image-live-minimal:", makefile)
         self.assertIn("WSM_LIVE_PROFILE=systems/live-minimal.scm", makefile)
+        self.assertIn("WSM_LIVE_PROFILE=systems/live-minimal.scm sh ./scripts/build_iso.sh", makefile)
 
     def test_profile_has_a_dedicated_unprivileged_console_login(self) -> None:
         profile = (ROOT / "systems" / "live-minimal.scm").read_text(encoding="utf-8")
