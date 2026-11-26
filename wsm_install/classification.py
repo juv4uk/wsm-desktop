@@ -285,20 +285,64 @@ def classify(
 
 
 def explain(result: dict[str, Any]) -> str:
-    """Explain evidence coverage without making an installation decision."""
-    unknown = [
-        item["subsystem"]
-        for item in result.get("subsystems", [])
-        if item.get("level") == UNKNOWN
-    ]
-    known = [
-        item["subsystem"]
-        for item in result.get("subsystems", [])
-        if item.get("level") == KNOWN
-    ]
+    """Explain explicit function failures separately from missing evidence."""
+
+    def display_value(value: Any, *, limit: int = 180) -> str | None:
+        if value is None:
+            return None
+        rendered = " ".join(str(value).split())
+        if not rendered:
+            return None
+        if len(rendered) > limit:
+            return rendered[: limit - 1] + "…"
+        return rendered
+
+    unknown: list[str] = []
+    known: list[str] = []
+    problems: list[str] = []
+
+    for item in result.get("subsystems", []):
+        if not isinstance(item, dict):
+            continue
+        subsystem = str(item.get("subsystem", "unknown"))
+        tests = item.get("functional_tests", [])
+        if not isinstance(tests, list):
+            tests = []
+
+        subsystem_has_problem = False
+        for test in tests:
+            if not isinstance(test, dict) or test.get("evidence_state") != "known-problem":
+                continue
+            subsystem_has_problem = True
+            device_id = display_value(test.get("device_id")) or "?"
+            capability = display_value(test.get("capability")) or "unknown"
+            details: list[str] = []
+            for field_name, label in (
+                ("method", "метод"),
+                ("tested_at", "дата"),
+                ("result", "результат"),
+            ):
+                value = display_value(test.get(field_name))
+                if value is not None:
+                    details.append(f"{label}: {value}")
+            summary = f"{subsystem}: {capability} (пристрій {device_id})"
+            if details:
+                summary += " — " + "; ".join(details)
+            problems.append(summary)
+
+        level = item.get("level")
+        if level == KNOWN:
+            known.append(subsystem)
+        elif level == UNKNOWN and not subsystem_has_problem:
+            # An explicit failing capability is not merely incomplete evidence.
+            # Keep that distinction visible in the short CLI explanation.
+            unknown.append(subsystem)
+
     parts = []
     if known:
         parts.append("Підсистеми з відомим driver binding або candidate: " + ", ".join(known))
+    if problems:
+        parts.append("Виявлено явні проблеми у функціях: " + "; ".join(problems))
     if unknown:
         parts.append("Підсистеми з неповними доказами: " + ", ".join(unknown))
     if not parts:
