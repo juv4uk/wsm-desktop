@@ -79,3 +79,10 @@ Calamares frontend: звичайний режим — preview, реальне в
 
 До виконання цих умов підтримуваний шлях закінчується на read-only preflight,
 typed plan і preview. Не запускайте executor на фізичному диску.
+
+## Guided console flow
+
+The guided console entrypoint uses the same preview-only executor as CLI and
+Calamares. Its planning and install callbacks return explicit exit codes:
+planning failure stops before the APPLY prompt; an APPLY refusal is propagated
+as a nonzero result and never prints the successful-installation message.
