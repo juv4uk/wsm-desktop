@@ -60,8 +60,8 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/check_channels.py --policy free --lock channels.lock.scm
-          if [ -f channels.compatibility.lock.scm ]; then
-            python scripts/check_channels.py --policy compatibility --lock channels.compatibility.lock.scm
+          if [ -f channels/compatibility.lock.scm ]; then
+            python scripts/check_channels.py --policy compatibility --lock channels/compatibility.lock.scm
           else
             printf '%s\\n' 'Compatibility lock NOT_CONFIGURED; no Compatibility claim is made'
           fi
