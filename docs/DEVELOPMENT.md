@@ -14,7 +14,17 @@
 
     make check
 
-Команда перевіряє внутрішні Markdown-посилання. Вона не є перевіркою Guix-конфігурації.
+Команда запускає автоматичні перевірки Python, документації, схем, installer contracts та структурних channel locks. Вона не збирає Guix System, ISO й не запускає QEMU guest.
+
+
+## Повільні acceptance — лише вручну
+
+Звичайний `make check` і hosted CI не встановлюють QEMU/Guix та не запускають гостьові системи. Коли потрібна runtime-перевірка, запускайте її явно:
+
+    make qemu-acceptance-manual
+    make check-guix-eval
+
+Для перевірки конкретного ISO використовуйте `python scripts/qemu_boot_smoke.py --iso /absolute/path/to/image.iso`. Деталі й межі доказів — у [ручних QEMU runtime-перевірках](testing/QEMU-GUEST-CI.md).
 
 ## Guix bring-up
 
