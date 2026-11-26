@@ -1,3 +1,3 @@
 # Один непорожній рядок із tag запитує одну збірку; рядки з # є коментарями.
 0.1.0-rc3-minimal-live
-# Повторна RC3-збірка після load-path на обох рівнях і locale import (#439), read-back перевірка assets — #438.
+# Повторний RC3 після виправлення Guix `dhcp-client-service-type` (run 45805914710); NetworkManager лишається єдиним власником DHCP.
