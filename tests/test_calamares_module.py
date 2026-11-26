@@ -134,14 +134,28 @@ class SuccessTests(unittest.TestCase):
         self.temporary.cleanup()
         sys.modules.pop("libcalamares", None)
 
-    def test_dry_run_returns_none_and_runs_nothing(self) -> None:
+    def test_dry_run_preview_is_not_reported_as_successful_install(self) -> None:
         install_fake_libcalamares({
             "wsmReportPath": str(self.report),
             "wsmTargetDisk": "/dev/nvme0n1",
             "wsmTargetSizeBytes": 256 * GIB,
             "wsmDryRun": True,
         })
-        self.assertIsNone(load_module().run())
+        result = load_module().run()
+        self.assertIsNotNone(result)
+        self.assertIn("APPLY is disabled", result[0])
+        self.assertIn("NOT installed", result[0])
+        self.assertIn("No disk commands were executed", result[1])
+
+    def test_missing_dry_run_setting_fails_closed(self) -> None:
+        install_fake_libcalamares({
+            "wsmReportPath": str(self.report),
+            "wsmTargetDisk": "/dev/nvme0n1",
+            "wsmTargetSizeBytes": 256 * GIB,
+        })
+        result = load_module().run()
+        self.assertIsNotNone(result)
+        self.assertIn("execute.apply-disabled", result[1])
 
     def test_apply_request_is_refused_when_dry_run_is_false(self) -> None:
         install_fake_libcalamares({
