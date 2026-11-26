@@ -72,12 +72,29 @@ farm може не мати цієї мікроархітектури. Тобт�
 ```sh
 python3 scripts/measure_baseline.py --mode physical --output baseline.json
 python3 scripts/measure_baseline.py --mode qemu --output qemu-baseline.json
+
+`--mode` задає очікуваний режим; це не override detector-а. Для QEMU-гостя
+запис `comparison_eligible` можливий лише після позитивного read-only evidence.
+Для фізичного host поточний collector може повернути лише `unknown`, якщо не
+має достатнього джерела bare-metal evidence — не підміняйте це припущенням.
 ```
 
 Що зафіксовано в артефакті, окрім чисел:
 
-- **режим** (`physical` або `qemu`) — фізичні й QEMU-числа не змішуються, і
-  артефакт сам каже, з чим його можна порівнювати;
+- **запитаний режим** (`mode`) — лише заява оператора, а не доказ середовища;
+- **виявлена віртуалізація** (`detected_virtualization`) і
+  `virtualization_source` — значення з read-only
+  `wsm_hwcheck.collector.collect_report()`, джерело
+  `wsm-hwcheck-sysfs/0.2.0`;
+- **узгодженість режиму** (`mode_evidence`): `consistent`, `mismatch` або
+  `unknown`. `physical` з будь-яким позитивним VM evidence — `mismatch`;
+  відсутність hypervisor marker — лише `unknown`, не доказ bare metal.
+  `qemu` приймає виявлені `qemu` або `kvm`; VMware, Hyper-V, Xen та інші
+  VM-платформи не зараховуються як QEMU;
+- **придатність до порівняння** (`comparison_eligible`) — `true` лише за
+  `mode_evidence=consistent`. Для порівнянь додатково мають збігатися точний
+  `detected_virtualization`, ISA та інші умови. Значення `qemu` і `kvm`
+  зберігаються окремо: ця перевірка не доводить режим TCG/KVM acceleration;
 - ядро, машина, версія Python, модель CPU, **рівень ISA** (з контракту
   `wsm-cpu-isa/1`), пам'ять, governor;
 - клас сховища — свідомо `unknown`: угадувати «ssd» з імені пристрою було б
@@ -88,6 +105,13 @@ python3 scripts/measure_baseline.py --mode qemu --output qemu-baseline.json
   без інтерполяції. За типової кількості п'ять повторів p90 закономірно є
   п'ятим значенням (максимумом цієї малої вибірки), а не оцінкою 90-го
   перцентиля генерального розподілу.
+
+Артефакти, створені до tool version `0.2.0`, не містять virtualization
+evidence і не можуть вважатися придатними для підтвердженого порівняння режимів.
+Наразі collector не доводить bare-metal лише за відсутністю ознак гіпервізора;
+тому запит `--mode physical` без окремого позитивного джерела залишається
+`unknown` і `comparison_eligible=false`. Benchmark усе одно записує сирі
+вимірювання, але не підвищує їх до підтвердженого фізичного baseline.
 
 **Шум визначається, а не приховується.** Прогін вважається шумним, якщо MAD або
 відхилення p90 перевищує 5% медіани. MAD сам по собі не ловить одинака серед
