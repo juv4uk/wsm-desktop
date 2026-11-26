@@ -1,16 +1,9 @@
 name: CI
 
-# One workflow, two jobs, no ceremony.
-#
-# The previous setup had seven workflows and produced nothing: runs queued for
-# hours and the ones that completed were cancellations. A pipeline that never
-# finishes is worse than no pipeline, because it looks like coverage.
-#
-# Rules kept deliberately simple:
-#   * `checks` runs on every push and pull request, takes seconds, needs nothing
-#     but Python;
-#   * `guix` is manual only - it downloads Guix and evaluates the Scheme, which
-#     takes minutes and should never block a normal change.
+# One workflow, bounded gates. Fast policy/tests run separately from disposable
+# QEMU guest acceptance; Guix evaluation remains a manual, slower operation.
+# QEMU is intentionally not path-filtered: a required guest gate must not be
+# silently skipped when a new path is added.
 
 on:
   push:
@@ -57,16 +50,124 @@ jobs:
       - name: Check documentation
         run: python scripts/check_docs.py
 
-      - name: Check the channel lock
+      - name: Check both authenticated product channel locks
         run: |
-          python scripts/check_channels.py --policy free
-          python scripts/check_channels.py --policy compatibility
+          python scripts/check_channels.py --lock channels.lock.scm --policy free
+          python scripts/check_channels.py --lock channels/compatibility.lock.scm --policy compatibility
 
       - name: Release gate (structural)
         # No ISO in CI, so the image criterion is `not-run` and the verdict is
         # `incomplete` - which is the honest answer, not a failure.
         run: python scripts/release_gate.py --skip-tests --compact
 
+  qemu-acceptance:
+    name: QEMU guest acceptance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install disposable QEMU and guest tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            qemu-system-x86 qemu-utils busybox-static cpio gzip \
+            zstd xz-utils kmod grub-common grub-pc-bin xorriso mtools
+      - name: Install host-side report validator
+        run: python -m pip install --quiet 'jsonschema[format]==4.26.0'
+      - name: Test QEMU harness, CXL guest and installer policy
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p 'test_qemu_boot_smoke.py' -v
+          python -m unittest discover -s tests -p 'test_qemu_hwcheck_guest.py' -v
+          python -m unittest discover -s tests -p 'test_cxl_qemu_guest.py' -v
+          python -m unittest discover -s tests -p 'test_install_capability_matrix.py' -v
+      - name: Boot a generic Linux kernel in a no-disk guest
+        run: bash scripts/ci_qemu_guest_smoke.sh
+      - name: Run the actual WSM hardware collector in a no-disk guest
+        run: python scripts/ci_qemu_hwcheck_guest.py
+      - name: Enumerate an emulated CXL Type 3 device in a disposable guest
+        run: python scripts/ci_cxl_qemu_guest.py --timeout 90
+      - name: Build and boot a synthetic ISO through the WSM harness
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          readonly MARKER="WSM_QEMU_HARNESS_ISO_BOOT_OK"
+          readonly WORK_DIR="$(mktemp -d "${RUNNER_TEMP:-/tmp}/wsm-qemu-harness-iso.XXXXXX")"
+          readonly ISO_ROOT="$WORK_DIR/iso-root"
+          readonly ROOTFS="$WORK_DIR/rootfs"
+          readonly ISO_PATH="$WORK_DIR/wsm-qemu-harness.iso"
+          readonly RESULT="$WORK_DIR/result.json"
+          cleanup() { rm -rf "$WORK_DIR"; }
+          trap cleanup EXIT
+          mkdir -p "$ISO_ROOT/boot/grub" "$ROOTFS/bin" "$ROOTFS/dev"
+          mapfile -t KERNEL_IMAGES < <(find /boot -maxdepth 1 -type f -name "vmlinuz-*" -print | sort -V)
+          (("${#KERNEL_IMAGES[@]}" > 0)) || { echo "runner kernel image is unavailable" >&2; exit 1; }
+          KERNEL_IMAGE="${KERNEL_IMAGES[-1]}"
+          sudo cat "$KERNEL_IMAGE" > "$ISO_ROOT/boot/vmlinuz"
+          chmod 0644 "$ISO_ROOT/boot/vmlinuz"
+          cp "$(command -v busybox)" "$ROOTFS/bin/busybox"
+          ln -s busybox "$ROOTFS/bin/sh"
+          sudo mknod -m 600 "$ROOTFS/dev/console" c 5 1
+          cat > "$ROOTFS/init" <<'INIT'
+          #!/bin/sh
+          echo WSM_QEMU_HARNESS_ISO_BOOT_OK > /dev/console
+          /bin/busybox poweroff -f
+          INIT
+          chmod 0755 "$ROOTFS/init"
+          (
+            cd "$ROOTFS"
+            find . -print0 | sort -z | cpio --null --create --format=newc
+          ) | gzip -9 > "$ISO_ROOT/boot/initramfs.cpio.gz"
+          cat > "$ISO_ROOT/boot/grub/grub.cfg" <<'GRUB'
+          set timeout=0
+          set default=0
+          serial --unit=0 --speed=115200 --word=8 --parity=no --stop=1
+          terminal_input serial
+          terminal_output serial
+          menuentry "WSM QEMU harness integration guest" {
+              linux /boot/vmlinuz console=ttyS0,115200 rdinit=/init panic=-1 loglevel=3
+              initrd /boot/initramfs.cpio.gz
+          }
+          GRUB
+          grub-mkrescue --output="$ISO_PATH" "$ISO_ROOT"
+          test -s "$ISO_PATH"
+          set +e
+          python scripts/qemu_boot_smoke.py \
+            --iso "$ISO_PATH" \
+            --timeout-seconds 45 \
+            --memory-mib 512 \
+            --cpus 1 \
+            --disk-size 256M \
+            --boot-marker "$MARKER" \
+            > "$RESULT"
+          HARNESS_STATUS=$?
+          set -e
+          cat "$RESULT"
+          if [[ "$HARNESS_STATUS" -ne 0 ]]; then
+            echo "WSM QEMU harness exited with status $HARNESS_STATUS" >&2
+            exit "$HARNESS_STATUS"
+          fi
+          python - "$RESULT" "$MARKER" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          marker = sys.argv[2]
+          assert payload["mode"] == "qemu-boot-smoke", payload
+          assert payload["boot_confirmed"] is True, payload
+          assert payload["boot_marker_configured"] is True, payload
+          assert marker in payload["serial_output_tail"], payload
+          assert payload["host_device_passthrough"] is False, payload
+          assert payload["network_enabled"] is False, payload
+          assert payload["efi_variable_store"] is False, payload
+          assert payload["guest_installer_execution"] is False, payload
+          print("PASS: project QEMU harness booted the synthetic ISO and observed the guest marker.")
+          print("Scope: generic harness integration only; not a WSM ISO or physical hardware test.")
+          PY
   guix:
     name: evaluate the Guix system files
     if: github.event_name == 'workflow_dispatch'
@@ -99,3 +200,69 @@ jobs:
         run: |
           /usr/local/bin/guix time-machine -C channels.lock.scm -- \
             home build systems/home.scm --dry-run
+
+      - name: Evaluate Compatibility systems with their separate authenticated lock
+        run: |
+          set -euo pipefail
+          if [[ ! -f channels/compatibility.lock.scm ]]; then
+            echo "::error title=NOT_CONFIGURED::channels/compatibility.lock.scm is absent; Compatibility cannot be evaluated."
+            echo "NOT_CONFIGURED: the dedicated Nonguix lock has not been merged." >&2
+            exit 2
+          fi
+          python scripts/check_channels.py \
+            --lock channels/compatibility.lock.scm \
+            --policy compatibility
+          for file in systems/compatibility.scm systems/live-compat.scm; do
+            echo "::group::evaluating $file"
+            /usr/local/bin/guix time-machine -C channels/compatibility.lock.scm -- \
+              system build "$file" --dry-run
+            echo "::endgroup::"
+          done
+
+  acceptance-gates:
+    name: required acceptance gates
+    if: always()
+    needs: [checks, qemu-acceptance, guix]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Require every applicable gate and publish the three-state summary
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          QEMU_RESULT: ${{ needs.qemu-acceptance.result }}
+          GUIX_RESULT: ${{ needs.guix.result }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## WSM acceptance summary"
+            echo
+            echo "| Gate | Result |"
+            echo "| --- | --- |"
+            echo "| Python, docs, channel policy and structural release gate | $CHECKS_RESULT |"
+            echo "| QEMU guest acceptance | $QEMU_RESULT |"
+            if [[ "$GUIX_RESULT" == "skipped" ]]; then
+              echo "| Guix evaluation (manual only) | not-run |"
+            else
+              echo "| Guix evaluation (manual only) | $GUIX_RESULT |"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          [[ "$CHECKS_RESULT" == "success" ]] || {
+            echo "::error::tests-and-docs gate is $CHECKS_RESULT"
+            exit 1
+          }
+          [[ "$QEMU_RESULT" == "success" ]] || {
+            echo "::error::QEMU acceptance gate is $QEMU_RESULT"
+            exit 1
+          }
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            [[ "$GUIX_RESULT" == "success" ]] || {
+              echo "::error::manual Guix evaluation is $GUIX_RESULT (Compatibility lock may be NOT_CONFIGURED)"
+              exit 1
+            }
+          else
+            [[ "$GUIX_RESULT" == "skipped" ]] || {
+              echo "::error::manual-only Guix job unexpectedly returned $GUIX_RESULT"
+              exit 1
+            }
+          fi
