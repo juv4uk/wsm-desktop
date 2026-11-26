@@ -14,8 +14,10 @@ concurrency:
   group: build-iso-${{ github.ref }}
   cancel-in-progress: true
 
+# contents: write is needed only to publish the release from the workflow's own
+# token. It is the workflow token, not the app token used during development.
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   minimal:
@@ -61,13 +63,20 @@ jobs:
 
       - name: Build the image from the pinned channels
         run: |
-          set -euo pipefail
+          set -uo pipefail
           export PATH="/usr/local/bin:$PATH"
-          guix --version || { echo "::error::NO GUIX: the installer did not leave a usable guix"; exit 1; }
           mkdir -p build
+          # -L "$PWD" is not optional: the profile imports (wsm packages wsm),
+          # which lives in this repository, not in the Guix channel.
           guix time-machine -C channels.lock.scm -- \
-            system image --image-type=iso9660 systems/live-minimal.scm \
-            > build/image-path.txt
+            system image --image-type=iso9660 -L "$PWD" \
+            systems/live-minimal.scm > build/build.log 2>&1
+          status=$?
+          while IFS= read -r line; do printf '::error::BUILD %s\n' "$line"; done < <(tail -60 build/build.log)
+          if [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
+          tail -n1 build/build.log > build/image-path.txt
           cat build/image-path.txt
           IMAGE=$(tail -n1 build/image-path.txt)
           cp "$IMAGE" build/wsm-desktop-minimal.iso
@@ -104,3 +113,33 @@ jobs:
             build/verdict.json
           retention-days: 7
           if-no-files-found: error
+
+      - name: Split the image for release upload
+        run: |
+          set -euo pipefail
+          cd build
+          # GitHub caps a release asset at 2 GB, so the image is published as
+          # parts with a checksum file and a reassembly script - the same shape
+          # the previous ISO release used.
+          split -b 1900M -d -a 3 wsm-desktop-minimal.iso wsm-desktop-minimal.iso.part
+          sha256sum wsm-desktop-minimal.iso > ISO-CHECKSUMS.sha256
+          cp ../scripts/reassemble-iso.sh .
+          ls -la
+
+      - name: Publish the parts as a pre-release
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="iso-minimal-$(date -u +%Y%m%d-%H%M)"
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --prerelease \
+            --title "WSM minimal live ISO $TAG" \
+            --notes "Built from commit $GITHUB_SHA by the Build live ISO workflow. The verdict next to the parts says what was verified and what was not." \
+            build/wsm-desktop-minimal.iso.part* \
+            build/ISO-CHECKSUMS.sha256 \
+            build/verdict.json \
+            build/reassemble-iso.sh
+          echo "::notice::published $TAG"
