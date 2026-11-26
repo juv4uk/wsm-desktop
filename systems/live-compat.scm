@@ -157,7 +157,12 @@
      (arguments
       (substitute-keyword-arguments (package-arguments mesa-for-nvda)
         ((#:configure-flags flags #~'())
-         #~(cons* "-Dlibdir=lib" #$flags)))))))
+         #~(cons* "-Dlibdir=lib" #$flags))))
+     ;; mesa-for-nvda propagates libglvnd-for-nvda. Replace that propagated
+     ;; input too, so runtime closure and NVIDIA patch inputs use one libdir.
+     (propagated-inputs
+      (modify-inputs (package-propagated-inputs mesa-for-nvda)
+        (replace "libglvnd" libglvnd-for-nvda-fixed))))))
 
 ;; Meson у цьому snapshot-і типово встановлює бібліотеки в $out/lib64,
 ;; а патч-фази Nonguix шукають $out/lib. Фіксуємо libdir для всіх meson-пакетів
@@ -172,9 +177,11 @@
      (modify-inputs (package-inputs p)
        (replace "mesa" mesa-for-nvda-fixed)))))
 
+;; У pinned Nonguix 6b8897cd драйвер 580 успадковує egl-wayland
+;; через nvidia-driver-390; egl-wayland2 належить іншим driver variants.
 (define egl-gbm-fixed (with-fixed-mesa egl-gbm))
 (define egl-x11-fixed (with-fixed-mesa egl-x11))
-(define egl-wayland2-fixed (with-fixed-mesa egl-wayland2))
+(define egl-wayland-fixed (with-fixed-mesa egl-wayland))
 
 (define nvidia-driver-580-fixed
   (package/inherit nvidia-driver-580
@@ -185,7 +192,8 @@
        (prepend libglvnd-for-nvda-fixed)
        (replace "mesa" mesa-for-nvda-fixed)
        (replace "egl-gbm" egl-gbm-fixed)
-       (replace "egl-x11" egl-x11-fixed)))))
+       (replace "egl-x11" egl-x11-fixed)
+       (replace "egl-wayland" egl-wayland-fixed)))))
 
 (define nv-codec-headers-fixed
   (package/inherit nv-codec-headers
