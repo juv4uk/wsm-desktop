@@ -48,7 +48,7 @@ def build_parser() -> argparse.ArgumentParser:
     install.add_argument("--target-size-bytes", type=int,
                          help="size reported for the disk; drift above 2 percent is refused")
     install.add_argument("--firmware", choices=("uefi", "bios"), default="uefi")
-    install.add_argument("--filesystem", choices=("ext4", "btrfs", "xfs"), default="ext4")
+    install.add_argument("--filesystem", choices=("ext4",), default="ext4", help="root filesystem declared by systems/desktop.scm")
     install.add_argument("--mount-point", default="/mnt")
     install.add_argument("--system-file", default="systems/desktop.scm",
                          help="Guix system file handed to guix system init")
