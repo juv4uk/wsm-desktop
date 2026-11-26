@@ -4,9 +4,9 @@ PYTHON ?= python3
 GUIX ?= guix
 PRODUCT ?= free
 
-.PHONY: check check-guix-eval release-gate check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle check-profiles check-agent check-calamares check-channels check-cli-install check-env-preflight check-evidence-drafter check-executor check-guided check-hygiene check-install-steps check-isa check-journal check-live-acceptance check-makefile check-observation check-partition check-perf-baseline check-profile-evidence check-profile-match check-profiles-matrix check-release-verdict check-state check-syntax check-tui check-licences image-live-minimal
+.PHONY: check check-ci-policy check-guix-eval release-gate check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle check-profiles check-agent check-calamares check-channels check-cli-install check-env-preflight check-evidence-drafter check-executor check-guided check-hygiene check-install-steps check-isa check-journal check-live-acceptance check-makefile check-observation check-partition check-perf-baseline check-profile-evidence check-profile-match check-profiles-matrix check-release-verdict check-state check-syntax check-tui check-licences image-live-minimal
 
-check: check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa check-live-acceptance check-profiles-matrix check-perf-baseline check-profile-evidence check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-hygiene check-channels check-executor check-cli-install check-calamares check-guided check-tui check-agent check-journal check-env-preflight check-observation check-licences
+check: check-ci-policy check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa check-live-acceptance check-profiles-matrix check-perf-baseline check-profile-evidence check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-hygiene check-channels check-executor check-cli-install check-calamares check-guided check-tui check-agent check-journal check-env-preflight check-observation check-licences
 
 check-profiles:
 	$(PYTHON) tests/test_system_profiles.py
@@ -62,6 +62,9 @@ check-guided:
 
 check-tui:
 	$(PYTHON) tests/test_tui.py
+
+check-ci-policy:
+	$(PYTHON) tests/test_ci_acceptance_policy.py
 
 check-agent:
 	$(PYTHON) tests/test_agent.py
@@ -161,6 +164,17 @@ check-locked-system:
 # Компактний консольний live-носій із WSM CLI/TUI.
 image-live-minimal:
 	WSM_LIVE_PROFILE=systems/live-minimal.scm ./scripts/build_iso.sh
+
+# Повні QEMU runtime checks запускаються лише вручну, не в `make check` і не в CI.
+qemu-acceptance-manual:
+	command -v qemu-system-x86_64 >/dev/null
+	command -v busybox >/dev/null
+	command -v cpio >/dev/null
+	command -v modprobe >/dev/null
+	$(PYTHON) -c 'import jsonschema'
+	bash scripts/ci_qemu_guest_smoke.sh
+	$(PYTHON) scripts/ci_qemu_hwcheck_guest.py
+	$(PYTHON) scripts/ci_cxl_qemu_guest.py --timeout 90
 
 release-bundle: check
 	$(PYTHON) scripts/build_release_bundle.py
