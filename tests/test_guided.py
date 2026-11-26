@@ -69,8 +69,8 @@ class StopTests(unittest.TestCase):
         code, console, calls = self.run_flow(["1", "uefi", "/dev/nvme0n1"])
         self.assertEqual(code, 0)
         self.assertEqual([c[0] for c in calls], ["plan"])
-        self.assertIn("APPLY is disabled", console.text())
-        self.assertIn("WSM was NOT installed", console.text())
+        self.assertIn("APPLY вимкнено", console.text())
+        self.assertIn("WSM НЕ встановлено", console.text())
 
     def test_no_disks_found_stops(self) -> None:
         console = FakeConsole([])
@@ -96,8 +96,8 @@ class PreviewTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual([c[0] for c in calls], ["plan"])
         self.assertEqual(calls[0][1], "/dev/sda")
-        self.assertIn("APPLY is disabled", console.text())
-        self.assertIn("WSM was NOT installed", console.text())
+        self.assertIn("APPLY вимкнено", console.text())
+        self.assertIn("WSM НЕ встановлено", console.text())
 
     def test_firmware_defaults_to_uefi(self) -> None:
         calls: list = []
