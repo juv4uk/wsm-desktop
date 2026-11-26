@@ -51,6 +51,7 @@ GUEST_VALIDATION_DISTRIBUTIONS = (
     "webcolors", "jsonpointer", "arrow", "python-dateutil", "six", "typing-extensions", "tzdata",
 )
 GUEST_JSONSCHEMA_VERSION = "4.26.0"
+GUEST_VALIDATION_ABI = "cpython-311"
 MAX_INSTALLER_PLAN_BYTES = 64 * 1024
 QEMU_TIMEOUT_SECONDS = 90
 GUEST_MEMORY_MIB = 2048
@@ -320,8 +321,18 @@ def _copy_guest_distribution_files(
     return copied
 
 
+def _require_guest_validation_abi(cache_tag: str | None = None) -> None:
+    """Require native validator wheels compatible with the pinned CPython 3.11 guest."""
+    host_abi = cache_tag or getattr(sys.implementation, "cache_tag", None)
+    if host_abi != GUEST_VALIDATION_ABI:
+        raise RuntimeError(
+            f"guest validation wheels require host ABI {GUEST_VALIDATION_ABI}, found {host_abi!r}"
+        )
+
+
 def _copy_guest_validation_packages(rootfs: Path) -> tuple[Path, tuple[str, ...]]:
-    """Copy the exact jsonschema[format] runtime closure installed on the host."""
+    """Copy a CPython 3.11-compatible jsonschema[format] runtime closure."""
+    _require_guest_validation_abi()
     source_site = Path(sysconfig.get_paths()["purelib"]).resolve(strict=True)
     destination_site = rootfs / "opt" / "python" / "lib" / "python3.11" / "site-packages"
     destination_site.mkdir(parents=True, exist_ok=True)
