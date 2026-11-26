@@ -15,11 +15,23 @@
 | Розбиття диска | Calamares (kpmcore) | — |
 | Перевірка заліза й докази | **WSM** | `modules/wsm_deploy/main.py` |
 | Вибір профілю | **WSM** | те саме |
-| Запис системи | **WSM** | `wsm_install/install_steps.py` + `executor.py` |
+| Планування / preview системи | **WSM** | `wsm_install/install_steps.py` + `executor.py` |
 
 Модуль навмисно тонкий: він не форматує й не монтує нічого сам, а викликає ті
 самі модулі, що й CLI. Одна реалізація кожної небезпечної операції, Calamares —
 лише обличчя.
+
+## Поточна безпекова межа
+
+Модуль Calamares поки **не встановлює систему**. Він передає typed plan до
+спільного preview-only executor. Якщо глобальний ключ wsmDryRun дорівнює false,
+executor повертає execute.apply-disabled; модуль повертає помилку jobmodule.
+Calamares не має окремого шляху до sgdisk, mkfs, mount чи guix system init.
+
+Ця межа однакова для CLI, --guided і --tui. Повторне введення шляху диска
+підтверджує лише вибір цілі для preview, а не destructive consent. Реальний
+APPLY потребуватиме окремого reviewed контракту, перевірки block-device
+identity та destructive acceptance на одноразових QEMU-дисках.
 
 ## Контракт jobmodule
 
@@ -31,13 +43,17 @@
 невирішений блокер, невалідні докази, відсутній диск або розмір — усе це кортеж
 з поясненням.
 
+Усі frontend-и зараз завершуються read-only preview. Розмір у globalstorage
+використовується для розрахунку макета, а не для підтвердження фактичної
+місткості пристрою: модуль не читає block-device identity або sysfs topology.
+
 ## Ключі globalstorage, які читає модуль
 
 | Ключ | Звідки | Навіщо |
 | --- | --- | --- |
 | `wsmReportPath` | крок preflight | звіт `wsm-hwcheck` |
 | `wsmTargetDisk` | Calamares | цільовий диск; WSM ніколи не обирає сам |
-| `wsmTargetSizeBytes` | Calamares | розмір — те, чим ловиться підмінений диск |
+| `wsmTargetSizeBytes` | Calamares | введена оцінка для побудови layout; не вимірює block device |
 | `wsmProfileEvidence` | крок вибору профілю | bundle доказів заліза |
 | `wsmSystemFile` | крок вибору профілю | який `.scm` віддати Guix |
 | `wsmDryRun` | налаштування | прогін без запису |
