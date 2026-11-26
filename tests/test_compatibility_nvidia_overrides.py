@@ -39,7 +39,7 @@ def scheme_definition(source: str, name: str) -> str:
         if in_string:
             if escaped:
                 escaped = False
-            elif char == "\\\\":
+            elif char == "\\":
                 escaped = True
             elif char == '"':
                 in_string = False
@@ -73,7 +73,7 @@ class CompatibilityNvidiaOverrideTests(unittest.TestCase):
     def test_mesa_runtime_closure_uses_the_fixed_libglvnd_variant(self) -> None:
         mesa = scheme_definition(PROFILE, "mesa-for-nvda-fixed")
 
-        self.assertIn('" -Dlibdir=lib"', mesa.replace('"', '"'))
+        self.assertIn('"-Dlibdir=lib"', mesa)
         self.assertIn("(package-propagated-inputs mesa-for-nvda)", mesa)
         self.assertIn(
             '(replace "libglvnd" libglvnd-for-nvda-fixed)',
