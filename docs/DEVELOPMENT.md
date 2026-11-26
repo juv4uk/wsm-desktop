@@ -69,7 +69,7 @@ The hardware report contract uses JSON Schema Draft 2020-12. The test suite vali
 тому пропущений `(srfi srfi-1)` доїхав до main — файл читається очима, а падає
 на завантаженні.
 
-`.github/workflows/guix-eval.yml` закриває це: раннер ставить Guix, авторизує
+``make check-guix-eval` (manual, needs Guix)` закриває це: раннер ставить Guix, авторизує
 ключ підстановок і виконує
 
 ```sh

@@ -5,7 +5,7 @@
 - Статус: **CI experiment**
 - Пов'язано: #3 (hardware preflight), #16 (driver/runtime firmware evidence), #61 (generic QEMU guest), #64 (bounded serial/stderr capture), #66
 - Runner: scripts/ci_qemu_hwcheck_guest.py
-- Workflow: .github/workflows/hwcheck-qemu-guest.yml
+- Workflow: `scripts/ci_qemu_hwcheck_guest.py` (запускається вручну)
 
 ## Що саме перевіряється
 
