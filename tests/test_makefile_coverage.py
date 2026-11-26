@@ -47,7 +47,7 @@ class MakefileCoverageTests(unittest.TestCase):
         self.python_targets = self.all_targets - self.guix_targets
 
     def test_every_check_target_is_phony(self) -> None:
-        match = re.search(r"^\\.PHONY:\\s*(.*)$", self.text, re.MULTILINE)
+        match = re.search(r"^\.PHONY:\s*(.*)$", self.text, re.MULTILINE)
         self.assertIsNotNone(match, "Makefile must declare .PHONY targets")
         phony = set(match.group(1).split())
         missing = sorted(self.all_targets - phony)
