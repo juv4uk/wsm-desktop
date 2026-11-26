@@ -4,12 +4,12 @@
 
 - Статус: **preview-only; реальний APPLY вимкнено**
 - Код: [`wsm_install/executor.py`](../wsm_install/executor.py), [`wsm_install/cli.py`](../wsm_install/cli.py)
-- Frontends: CLI, `--guided`, опційний Calamares
-- Тести: `tests/test_executor.py`, `tests/test_cli_install.py`, `tests/test_guided.py`, `tests/test_calamares_module.py`
+- Frontends: CLI, `--guided`, `--tui`, опційний Calamares
+- Тести: `tests/test_executor.py`, `tests/test_cli_install.py`, `tests/test_guided.py`, `tests/test_tui.py`, `tests/test_calamares_module.py`
 
 ## Поточна межа
 
-Усі три входи використовують один `wsm_install.executor.execute()`. Він приймає лише
+Усі чотири входи використовують один `wsm_install.executor.execute()`. Він приймає лише
 preview-запити: будь-який `dry_run`, відмінний від буквального `True`, повертає
 `execute.apply-disabled` **до будь-якого виводу або зовнішньої дії**. У ньому немає
 runner-а, verifier-а, `subprocess` чи shell-викликів.
@@ -18,12 +18,13 @@ CLI додатково відхиляє `--execute` до читання звіт
 `--install --execute` і `--guided --execute` не доходять до планувальника.
 Збіг рядків `--target-disk` та `--acknowledge-disk` не є дозволом на запис.
 
-## Три входи — одна межа
+## Чотири входи — одна межа
 
 | Вхід | Дозволена дія | Поведінка APPLY |
 | --- | --- | --- |
 | `wsm-install --install` | Побудувати й показати argv-план | `--execute` відхиляється |
 | `wsm-install --guided` | Вибрати ціль і показати read-only preview | Немає кроку «Install now» чи install callback |
+| `wsm-install --tui` | Псевдографічний вибір цілі й read-only preview | Немає екрана «Enter to install» чи install callback |
 | Calamares `wsm_deploy` | Передати план спільному executor-у | `wsmDryRun=false` відхиляється executor-ом |
 
 У guided mode повторне введення шляху диска підтверджує лише те, для якого
@@ -34,8 +35,8 @@ CLI додатково відхиляє `--execute` до читання звіт
 
 - У unit/CLI tests перевіряється, що навіть **правильний** matching
   `--acknowledge-disk` не дозволяє APPLY.
-- Guided tests перевіряють, що flow викликає лише preview callback, не показує
-  «Install now» і не викликає жодного install callback.
+- Guided і TUI tests перевіряють, що flow викликає лише preview callback, не показує
+  install confirmation screen і не викликає жодного install callback.
 - Calamares test перевіряє, що `wsmDryRun=false` повертає
   `execute.apply-disabled`.
 - Це не є доказом безпеки майбутнього APPLY і не є QEMU install acceptance.
