@@ -7,6 +7,7 @@
 - План поточного виправлення provenance: [virtualization evidence](superpowers/plans/2026-11-26-perf-virtualization-evidence.md)
 - План пасивних вимірів: [PSI та zram observations](superpowers/plans/2026-11-26-perf-pressure-observations.md)
 - План Guix-native повторного використання артефактів: [підписані derivations і substitutes](superpowers/plans/2026-11-26-guix-native-artifact-reuse.md)
+- План boot-мірок: [read-only boot profile collector](superpowers/plans/2026-11-26-boot-profile-collector.md)
 - Рішення: [ADR 0007](decisions/0007-clear-linux-principles.md)
 
 ## Головна різниця, яку варто зрозуміти
@@ -165,6 +166,56 @@ limits ця telemetry не виконує.
 Навантаження, яке триває кілька мілісекунд, міряє таймер, а не машину. Перша
 версія мала 8 MiB для пам'яті й 4 MiB для запису — і дала розкид 716% та 27%
 відповідно. Усі навантаження відкалібровано так, щоб тривати десяті секунди.
+
+### Boot milestones та critical path systemd
+
+`scripts/collect_boot_profile.py` — окрема ручна команда для одного поточного
+boot. Вона не входить до hardware preflight, installer, звичайного CI або
+`measure_baseline.py`:
+
+```sh
+python3 scripts/collect_boot_profile.py --output boot-profile.json
+```
+
+Колектор викликає лише фіксований read-only набір `systemd-analyze` команд:
+`--version`, `time`, `blame`, `critical-chain` для default target та
+`critical-chain graphical.target`. Кожний результат зберігає argv, stdout,
+stderr, exit code, тривалість та окремі ознаки timeout/truncation. Командний
+у JSON-артефакті зберігається не більше 64 KiB stdout і stderr на команду;
+timeout кожного виклику за
+замовчуванням 10 секунд і не може перевищувати 60 секунд. Немає shell або
+довільних unit names з аргументів користувача.
+
+Артефакт `wsm-boot-profile/1` містить kernel/machine, virtualization evidence,
+uptime та короткий digest boot ID замість сирого UUID. Відсутній
+`systemd-analyze`, неактивний system manager, nonzero exit, malformed procfs
+або timeout залишаються `unavailable/partial/unknown`, не нулем і не pass.
+Один артефакт — це одне спостереження конкретного boot; незалежні samples
+збираються між окремими boot-ами, не повторними запусками цієї команди в одній
+сесії.
+
+**Обмеження інтерпретації є частиною контракту:**
+
+- `systemd-analyze time` показує kernel/initrd/userspace до моменту, коли
+  сервіси були spawned. Це не доводить, що всі вони завершили ініціалізацію,
+  desktop готовий або диск idle.
+- `blame` вимірює час у стані `activating`, не показує `Type=simple` та
+  execution-queue wait, не включає units на кшталт device units без
+  `activating` і не враховує паралельне виконання. Високий рядок не означає
+  автоматично найбільшу затримку для користувача.
+- `critical-chain` показує один time-critical dependency path, але не всі
+  паралельні роботи. Socket activation, device units, jobs і timeouts мають
+  окремі caveats upstream.
+- Firmware/loader час може з'являтися у `systemd-analyze time`, якщо UEFI
+  bootloader експортує `LoaderTime*` через EFI Boot Loader Interface. Якщо
+  значень немає, це `unknown`, а не нуль; наш колектор не читає і не змінює
+  EFI variables напряму. Для повного виміру cold desktop readiness все одно
+  потрібен окремий session-level marker.
+
+Колектор лише читає поточний стан. Він не змінює units, targets, bootloader,
+EFI variables, диски, governor або power controls. Перегляд і порівняння
+профілів мають зберігати окремі physical/QEMU класи та однакові умови.
+Див. [systemd-analyze upstream documentation](https://www.freedesktop.org/software/systemd/man/latest/systemd-analyze.html).
 
 ## Як це міряти далі
 
