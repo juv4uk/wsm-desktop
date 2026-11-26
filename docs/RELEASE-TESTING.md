@@ -149,7 +149,7 @@ guix time-machine -C channels.lock.scm -- system vm --no-graphic systems/minimal
 python3 scripts/release_gate.py --product free --iso build/wsm-desktop.iso --boot
 ```
 
-Запускає всі перевірки для явно вибраного продукту й пише `wsm-release-gate/1`.
+Запускає всі перевірки для явно вибраного продукту й пише `wsm-release-gate/1`. Ім'я `artifact` та `artifact_sha256` у nested live-image verdict звіряються з назвою й фактичними байтами переданого ISO; verdict від іншого образу не приймається.
 
 Параметр `--product` обов'язковий: `free`, `compatibility` або `all`. Це не дозволяє приписати Free ISO стан необраного Compatibility продукту. Для першого Free ISO використовуйте `--product free`; для окремої перевірки Compatibility потрібен її власний lock; `all` перевіряє обидва продукти.
 
