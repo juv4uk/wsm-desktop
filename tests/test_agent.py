@@ -1,10 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""The privileged worker is a narrow door: these tests are the door frame."""
+"""The privileged worker is a plan validator, not a disk writer."""
 
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 import tempfile
@@ -18,10 +17,13 @@ from wsm_install.agent import (  # noqa: E402
     ALLOWED_PROGRAMS,
     AgentError,
     load_plan,
+    main,
     run_plan,
     validate_command,
     validate_plan,
 )
+from wsm_install.install_steps import TRUSTED_TOOLS  # noqa: E402
+from wsm_install.journal import DEFAULT_JOURNAL
 
 
 def plan(*commands: list[str], disk: str = "/dev/nvme0n1") -> dict:
@@ -35,15 +37,18 @@ def plan(*commands: list[str], disk: str = "/dev/nvme0n1") -> dict:
     }
 
 
-GOOD = ["/usr/sbin/mkfs.ext4", "-F", "/dev/nvme0n1p2"]
+GOOD = [TRUSTED_TOOLS["mkfs.ext4"], "-F", "/dev/nvme0n1p2"]
 
 
 class AllowlistTests(unittest.TestCase):
+    def test_agent_allowlist_is_the_planners_tool_table(self) -> None:
+        expected = {value for value in TRUSTED_TOOLS.values() if isinstance(value, str)}
+        self.assertEqual(ALLOWED_PROGRAMS, frozenset(expected))
+
     def test_allowed_program_passes(self) -> None:
         validate_command(GOOD)
 
     def test_shell_is_refused(self) -> None:
-        """A compromised UI must not be able to run a shell through the agent."""
         with self.assertRaises(AgentError) as caught:
             validate_command(["/bin/sh", "-c", "rm -rf /"])
         self.assertEqual(caught.exception.code, "agent.not-allowed")
@@ -53,18 +58,22 @@ class AllowlistTests(unittest.TestCase):
             validate_command(["/usr/bin/dd", "if=/dev/zero", "of=/dev/nvme0n1"])
 
     def test_bare_name_is_refused(self) -> None:
-        """PATH lookup in a root context is the Omarchy #8172 mistake."""
         with self.assertRaises(AgentError):
             validate_command(["mkfs.ext4", "-F", "/dev/nvme0n1p2"])
 
+    def test_non_string_program_is_refused(self) -> None:
+        with self.assertRaises(AgentError) as caught:
+            validate_command([["/usr/sbin/mkfs.ext4"]])  # type: ignore[list-item]
+        self.assertEqual(caught.exception.code, "agent.not-allowed")
+
     def test_shell_metacharacter_in_argument_is_refused(self) -> None:
         with self.assertRaises(AgentError) as caught:
-            validate_command(["/usr/bin/mount", "/dev/sda1; rm -rf /", "/mnt"])
+            validate_command([TRUSTED_TOOLS["mount"], "/dev/sda1; rm -rf /", "/mnt"])
         self.assertEqual(caught.exception.code, "agent.shell-metacharacter")
 
     def test_command_substitution_is_refused(self) -> None:
         with self.assertRaises(AgentError):
-            validate_command(["/usr/bin/mount", "$(reboot)", "/mnt"])
+            validate_command([TRUSTED_TOOLS["mount"], "$(reboot)", "/mnt"])
 
     def test_empty_command_is_refused(self) -> None:
         with self.assertRaises(AgentError):
@@ -73,7 +82,7 @@ class AllowlistTests(unittest.TestCase):
 
 class PlanTests(unittest.TestCase):
     def test_good_plan_is_accepted(self) -> None:
-        steps = validate_plan(plan(GOOD, ["/usr/bin/mount", "/dev/nvme0n1p2", "/mnt"]))
+        steps = validate_plan(plan(GOOD, [TRUSTED_TOOLS["mount"], "/dev/nvme0n1p2", "/mnt"]))
         self.assertEqual(len(steps), 2)
         self.assertTrue(steps[0].destructive)
 
@@ -102,35 +111,33 @@ class PlanTests(unittest.TestCase):
             load_plan(Path("/nonexistent/plan.json"))
         self.assertEqual(caught.exception.code, "agent.unreadable-plan")
 
+    def test_bad_step_types_are_refused(self) -> None:
+        document = plan(GOOD)
+        document["steps"][0]["purpose"] = ["not", "text"]
+        with self.assertRaises(AgentError) as caught:
+            validate_plan(document)
+        self.assertEqual(caught.exception.code, "agent.bad-step")
+
 
 class ExecutionTests(unittest.TestCase):
-    def test_dry_run_never_calls_the_runner(self) -> None:
-        calls: list = []
+    def test_dry_run_only_previews_the_plan(self) -> None:
         document = plan(GOOD)
         steps = validate_plan(document)
-        code = run_plan(
-            document, steps, dry_run=True,
-            runner=lambda command: calls.append(command),
-            verifier=lambda step: (True, "ok"),
-        )
+        code = run_plan(document, steps, dry_run=True)
         self.assertEqual(code, 0)
-        self.assertEqual(calls, [])
 
-    def test_plan_without_a_disk_is_refused(self) -> None:
+    def test_apply_is_refused_before_runner_or_verifier_can_exist(self) -> None:
         document = plan(GOOD)
-        document["disk"] = "nvme0n1"
+        steps = validate_plan(document)
+        with self.assertRaises(AgentError) as caught:
+            run_plan(document, steps, dry_run=False)
+        self.assertEqual(caught.exception.code, "agent.apply-disabled")
+
+    def test_plan_without_whole_disk_is_refused(self) -> None:
+        document = plan(GOOD, disk="/dev/nvme0n1p2")
         with self.assertRaises(AgentError) as caught:
             run_plan(document, validate_plan(document), dry_run=True)
         self.assertEqual(caught.exception.code, "agent.bad-disk")
-
-    def test_real_run_as_non_root_is_refused(self) -> None:
-        """Fail now with a clear reason, not later on the first mount."""
-        if os.geteuid() == 0:
-            self.skipTest("running as root")
-        document = plan(GOOD)
-        with self.assertRaises(AgentError) as caught:
-            run_plan(document, validate_plan(document), dry_run=False)
-        self.assertEqual(caught.exception.code, "agent.not-root")
 
 
 class CliTests(unittest.TestCase):
@@ -146,7 +153,47 @@ class CliTests(unittest.TestCase):
             path.write_text(json.dumps(plan(GOOD)), encoding="utf-8")
             result = self.run_cli("--plan", str(path), "--dry-run")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("plan accepted", result.stdout)
+        self.assertIn("preview generated", result.stdout)
+        self.assertIn("no disk commands", result.stdout)
+
+    def test_apply_without_dry_run_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "plan.json"
+            path.write_text(json.dumps(plan(GOOD)), encoding="utf-8")
+            result = self.run_cli("--plan", str(path))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("agent.apply-disabled", result.stderr)
+
+    def test_recover_reads_journal_without_invoking_apply(self) -> None:
+        import contextlib
+        import io
+
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "journal.jsonl"
+            path.write_text(
+                json.dumps({"event": "step-starting", "index": 1, "total": 1,
+                            "command": [GOOD[0], "-F", "/dev/nvme0n1p2"], "purpose": "preview"}) + "\\n",
+                encoding="utf-8",
+            )
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                result = main(["--recover", "--plan", str(path)])
+        self.assertEqual(result, 0)
+        self.assertIn("never reported back", output.getvalue())
+        self.assertIn("Do not rerun the installer", output.getvalue())
+
+    def test_recover_without_plan_uses_the_default_journal_read_only(self) -> None:
+        import contextlib
+        import io
+        from unittest.mock import patch
+        from wsm_install import agent
+
+        output = io.StringIO()
+        with patch.object(agent, "DEFAULT_JOURNAL", Path("/nonexistent/wsm-install.jsonl")):
+            with contextlib.redirect_stdout(output):
+                result = main(["--recover"])
+        self.assertEqual(result, 0)
+        self.assertIn("Do not assume the disk is untouched", output.getvalue())
 
     def test_plan_with_shell_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -155,11 +202,6 @@ class CliTests(unittest.TestCase):
             result = self.run_cli("--plan", str(path), "--dry-run")
         self.assertEqual(result.returncode, 1)
         self.assertIn("agent.not-allowed", result.stderr)
-
-    def test_allowlist_is_not_empty_and_all_absolute(self) -> None:
-        self.assertTrue(ALLOWED_PROGRAMS)
-        for program in ALLOWED_PROGRAMS:
-            self.assertTrue(program.startswith("/"), program)
 
 
 if __name__ == "__main__":
