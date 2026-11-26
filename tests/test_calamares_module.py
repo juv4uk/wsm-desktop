@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""The Calamares jobmodule must fail closed and stay thin.
+"""The Calamares jobmodule must fail closed and never call preview success.
 
 Calamares injects ``libcalamares`` at runtime, so these tests substitute a fake
-module with the same shape. That is the only way to test a jobmodule without a
-running installer, and it keeps the module's contract honest: ``None`` on
-success, ``(message, details)`` on failure, never a silent pass.
+module with the same shape. The current WSM deploy job is preview-only: because
+Calamares interprets ``None`` as success, preview must return an explicit
+failure/status tuple saying that no system was installed.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ import sys
 import tempfile
 import types
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -75,7 +76,7 @@ class FailureTests(unittest.TestCase):
         sys.modules.pop("libcalamares", None)
 
     def test_missing_report_fails_closed(self) -> None:
-        install_fake_libcalamares({"wsmTargetDisk": "/dev/nvme0n1", "wsmTargetSizeBytes": 256 * GIB})
+        install_fake_libcalamares({"wsmTargetDisk": "/dev/nvme0n1", "wsmTargetSizeBytes": 256 * GIB, "wsmDryRun": True})
         result = load_module().run()
         self.assertIsNotNone(result)
         message, details = result
@@ -85,14 +86,14 @@ class FailureTests(unittest.TestCase):
     def test_missing_disk_is_refused(self) -> None:
         """WSM never chooses a disk for the user."""
         report = report_file(self.directory)
-        install_fake_libcalamares({"wsmReportPath": str(report), "wsmTargetSizeBytes": 256 * GIB})
+        install_fake_libcalamares({"wsmReportPath": str(report), "wsmTargetSizeBytes": 256 * GIB, "wsmDryRun": True})
         result = load_module().run()
         self.assertIsNotNone(result)
         self.assertIn("disk", result[0].lower())
 
     def test_missing_size_is_refused(self) -> None:
         report = report_file(self.directory)
-        install_fake_libcalamares({"wsmReportPath": str(report), "wsmTargetDisk": "/dev/nvme0n1"})
+        install_fake_libcalamares({"wsmReportPath": str(report), "wsmTargetDisk": "/dev/nvme0n1", "wsmDryRun": True})
         result = load_module().run()
         self.assertIsNotNone(result)
         self.assertIn("size", result[0].lower())
@@ -118,6 +119,7 @@ class FailureTests(unittest.TestCase):
             "wsmTargetDisk": "/dev/nvme0n1",
             "wsmTargetSizeBytes": 256 * GIB,
             "wsmProfileEvidence": str(evidence),
+            "wsmDryRun": True,
         })
         result = load_module().run()
         self.assertIsNotNone(result)
@@ -134,14 +136,71 @@ class SuccessTests(unittest.TestCase):
         self.temporary.cleanup()
         sys.modules.pop("libcalamares", None)
 
-    def test_dry_run_returns_none_and_runs_nothing(self) -> None:
+    def test_preview_is_never_reported_as_successful_installation(self) -> None:
         install_fake_libcalamares({
             "wsmReportPath": str(self.report),
             "wsmTargetDisk": "/dev/nvme0n1",
             "wsmTargetSizeBytes": 256 * GIB,
             "wsmDryRun": True,
         })
-        self.assertIsNone(load_module().run())
+        with patch("wsm_install.executor.execute", return_value=[] ) as execute_mock:
+            result = load_module().run()
+        self.assertIsNotNone(result)
+        self.assertIn("APPLY is disabled", result[0])
+        self.assertIn("NOT installed", result[1])
+        execute_mock.assert_called_once()
+        self.assertIs(execute_mock.call_args.kwargs["dry_run"], True)
+
+    def test_missing_dry_run_flag_fails_instead_of_using_implicit_success(self) -> None:
+        install_fake_libcalamares({
+            "wsmReportPath": str(self.report),
+            "wsmTargetDisk": "/dev/nvme0n1",
+            "wsmTargetSizeBytes": 256 * GIB,
+        })
+        with patch("wsm_install.executor.execute") as execute_mock:
+            result = load_module().run()
+        self.assertIsNotNone(result)
+        self.assertIn("APPLY is disabled", result[0])
+        execute_mock.assert_not_called()
+
+    def test_none_dry_run_flag_fails_closed(self) -> None:
+        install_fake_libcalamares({
+            "wsmReportPath": str(self.report),
+            "wsmTargetDisk": "/dev/nvme0n1",
+            "wsmTargetSizeBytes": 256 * GIB,
+            "wsmDryRun": None,
+        })
+        with patch("wsm_install.executor.execute") as execute_mock:
+            result = load_module().run()
+        self.assertIsNotNone(result)
+        self.assertIn("APPLY is disabled", result[0])
+        execute_mock.assert_not_called()
+
+    def test_false_dry_run_flag_fails_closed(self) -> None:
+        install_fake_libcalamares({
+            "wsmReportPath": str(self.report),
+            "wsmTargetDisk": "/dev/nvme0n1",
+            "wsmTargetSizeBytes": 256 * GIB,
+            "wsmDryRun": False,
+        })
+        with patch("wsm_install.executor.execute") as execute_mock:
+            result = load_module().run()
+        self.assertIsNotNone(result)
+        self.assertIn("APPLY is disabled", result[0])
+        execute_mock.assert_not_called()
+
+    def test_non_boolean_dry_run_flag_fails_closed(self) -> None:
+        install_fake_libcalamares({
+            "wsmReportPath": str(self.report),
+            "wsmTargetDisk": "/dev/nvme0n1",
+            "wsmTargetSizeBytes": 256 * GIB,
+            "wsmDryRun": "true",
+        })
+        with patch("wsm_install.executor.execute") as execute_mock:
+            result = load_module().run()
+        self.assertIsNotNone(result)
+        self.assertIn("APPLY is disabled", result[0])
+        execute_mock.assert_not_called()
 
     def test_pretty_name_is_defined(self) -> None:
         install_fake_libcalamares({})
