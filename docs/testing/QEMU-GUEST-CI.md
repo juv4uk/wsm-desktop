@@ -4,7 +4,7 @@
 
 **Status:** CI experiment. This is a generic Linux guest boot smoke test, not a WSM installer image test.
 
-Workflow job: `qemu-guest-smoke` in `.github/workflows/checks.yml`  
+Workflow job: `qemu-guest-smoke` in ``make check``  
 Runner script: `scripts/ci_qemu_guest_smoke.sh`
 
 ## What the experiment proves

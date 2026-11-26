@@ -3,7 +3,7 @@
 PYTHON ?= python3
 GUIX ?= guix
 
-.PHONY: check release-gate check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle check-profiles
+.PHONY: check check-guix-eval release-gate check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle check-profiles
 
 check: check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa check-live-acceptance check-profiles-matrix check-perf-baseline check-profile-evidence check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-hygiene check-channels check-executor check-cli-install check-calamares check-guided check-tui check-agent check-journal check-env-preflight check-observation
 
@@ -73,6 +73,15 @@ check-env-preflight:
 
 check-observation:
 	$(PYTHON) tests/test_observation_principles.py
+
+# Manual, needs Guix: evaluates the Scheme without building anything.
+# Not part of `check` on purpose - a contributor without Guix must still pass.
+check-guix-eval:
+	$(GUIX) time-machine -C channels.lock.scm -- system build systems/minimal.scm --dry-run
+	$(GUIX) time-machine -C channels.lock.scm -- system build systems/desktop.scm --dry-run
+	$(GUIX) time-machine -C channels.lock.scm -- system build systems/live.scm --dry-run
+	$(GUIX) time-machine -C channels.lock.scm -- system build systems/live-minimal.scm --dry-run
+	$(GUIX) time-machine -C channels.lock.scm -- home build systems/home.scm --dry-run
 
 check-hygiene:
 	$(PYTHON) tests/test_repo_hygiene.py

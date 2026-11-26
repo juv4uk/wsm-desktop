@@ -4,7 +4,7 @@
 
 - Status: **CI experiment**
 - Related: #14 (QEMU integration), #27 (QEMU harness), #35/#38 (resource and path hardening), #34 (generic guest boot)
-- Workflow: `.github/workflows/qemu-harness-iso-integration.yml`
+- Workflow: ``scripts/qemu_boot_smoke.py` (запускається вручну)`
 
 ## Purpose
 

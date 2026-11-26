@@ -1,0 +1,97 @@
+name: CI
+
+# One workflow, two jobs, no ceremony.
+#
+# The previous setup had seven workflows and produced nothing: runs queued for
+# hours and the ones that completed were cancellations. A pipeline that never
+# finishes is worse than no pipeline, because it looks like coverage.
+#
+# Rules kept deliberately simple:
+#   * `checks` runs on every push and pull request, takes seconds, needs nothing
+#     but Python;
+#   * `guix` is manual only - it downloads Guix and evaluates the Scheme, which
+#     takes minutes and should never block a normal change.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: tests and docs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: python -m pip install --quiet 'jsonschema[format]==4.26.0' pyyaml
+
+      - name: Run every test suite
+        run: |
+          set -euo pipefail
+          status=0
+          for test in tests/test_*.py; do
+            echo "::group::$test"
+            python "$test" || status=1
+            echo "::endgroup::"
+          done
+          exit $status
+
+      - name: Check documentation
+        run: python scripts/check_docs.py
+
+      - name: Check the channel lock
+        run: |
+          python scripts/check_channels.py --policy free
+          python scripts/check_channels.py --policy compatibility
+
+      - name: Release gate (structural)
+        # No ISO in CI, so the image criterion is `not-run` and the verdict is
+        # `incomplete` - which is the honest answer, not a failure.
+        run: python scripts/release_gate.py --skip-tests --compact
+
+  guix:
+    name: evaluate the Guix system files
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Guix
+        run: |
+          set -euo pipefail
+          wget -q https://git.savannah.gnu.org/cgit/guix.git/plain/etc/guix-install.sh
+          chmod +x guix-install.sh
+          printf 'n\n' | ./guix-install.sh || true
+          /usr/local/bin/guix --version
+
+      - name: Evaluate every system file
+        run: |
+          set -euo pipefail
+          status=0
+          for file in systems/minimal.scm systems/desktop.scm systems/live.scm systems/live-minimal.scm; do
+            echo "::group::$file"
+            /usr/local/bin/guix time-machine -C channels.lock.scm -- \
+              system build "$file" --dry-run || status=1
+            echo "::endgroup::"
+          done
+          exit $status
+
+      - name: Evaluate the home environment
+        run: |
+          /usr/local/bin/guix time-machine -C channels.lock.scm -- \
+            home build systems/home.scm --dry-run
