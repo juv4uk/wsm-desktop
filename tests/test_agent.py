@@ -123,14 +123,18 @@ class ExecutionTests(unittest.TestCase):
             run_plan(document, validate_plan(document), dry_run=True)
         self.assertEqual(caught.exception.code, "agent.bad-disk")
 
-    def test_real_run_as_non_root_is_refused(self) -> None:
-        """Fail now with a clear reason, not later on the first mount."""
-        if os.geteuid() == 0:
-            self.skipTest("running as root")
+    def test_real_apply_is_refused_even_for_root_and_never_calls_runner(self) -> None:
+        calls: list = []
         document = plan(GOOD)
         with self.assertRaises(AgentError) as caught:
-            run_plan(document, validate_plan(document), dry_run=False)
-        self.assertEqual(caught.exception.code, "agent.not-root")
+            run_plan(
+                document,
+                validate_plan(document),
+                dry_run=False,
+                runner=lambda command: calls.append(command),
+            )
+        self.assertEqual(caught.exception.code, "agent.apply-disabled")
+        self.assertEqual(calls, [])
 
 
 class CliTests(unittest.TestCase):
