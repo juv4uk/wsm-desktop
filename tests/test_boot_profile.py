@@ -99,7 +99,7 @@ class BootCommandTests(unittest.TestCase):
                 )
 
         self.assertEqual(len(calls), len(boot.COMMANDS))
-        self.assertEqual(artifact["schema"], "wsm-boot-profile/1")
+        self.assertEqual(artifact["schema"], "wsm-boot-profile/2")
         self.assertEqual(artifact["collection_status"], "available")
         self.assertIn("multi-user.target reached", artifact["commands"]["time"]["stdout"])
         self.assertIn("example.service", artifact["commands"]["blame"]["stdout"])
@@ -110,6 +110,7 @@ class BootCommandTests(unittest.TestCase):
             self.assertEqual(kwargs["stdin"], subprocess.DEVNULL)
             self.assertTrue(kwargs["capture_output"])
             self.assertEqual(kwargs["env"]["LC_ALL"], "C")
+            self.assertNotIn("SHEPHERD_SOCKET", kwargs["env"])
             self.assertLessEqual(kwargs["timeout"], boot.MAX_TIMEOUT_SECONDS)
             self.assertEqual(argv[0], "/usr/bin/systemd-analyze")
 
@@ -236,10 +237,12 @@ class BootCommandTests(unittest.TestCase):
         )
         self.assertEqual(
             artifact["commands"]["log"]["argv"],
-            ["herd", "--log-history=500", "log"],
+            ["herd", "log"],
         )
         self.assertIn("wsm-live-ready", artifact["commands"]["graph"]["stdout"])
         self.assertEqual(len(calls), 4)
+        self.assertEqual(artifact["commands"]["status"]["argv"], ["herd", "status"])
+        self.assertEqual(artifact["commands"]["graph"]["argv"], ["herd", "graph"])
         for argv, kwargs in calls:
             self.assertEqual(argv[0], "/gnu/store/herd/bin/herd")
             self.assertNotIn("shell", kwargs)
@@ -362,7 +365,7 @@ class BootCliTests(unittest.TestCase):
     def test_cli_writes_json_artifact_to_explicit_path(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "boot-profile.json"
-            artifact = {"schema": "wsm-boot-profile/1", "collection_status": "unavailable"}
+            artifact = {"schema": "wsm-boot-profile/2", "collection_status": "unavailable"}
             with patch.object(cli, "collect_boot_profile", return_value=artifact):
                 result = cli.main(["--output", str(output), "--compact"])
             self.assertEqual(result, 0)
