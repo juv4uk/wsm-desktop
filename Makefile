@@ -3,7 +3,7 @@
 PYTHON ?= python3
 GUIX ?= guix
 
-.PHONY: check release-gate check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle
+.PHONY: check check-calamares check-channels check-cli-install check-docs check-evidence-drafter check-executor check-hardware-providers check-hardware-schema check-hwcheck check-hygiene check-install-steps check-installer check-isa check-live-acceptance check-locked-system check-makefile check-minimal-system check-partition check-perf-baseline check-profile-evidence check-profile-match check-profiles check-profiles-matrix check-qemu-harness check-release check-release-verdict check-state check-syntax check-system check-uefi-preboot-policy check-validation-protocols describe-lock release-bundle release-gate vm-system vm-system-serial
 
 check: check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa check-live-acceptance check-profiles-matrix check-perf-baseline check-profile-evidence check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-hygiene check-channels check-executor check-cli-install check-calamares
 
