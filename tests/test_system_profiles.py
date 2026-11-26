@@ -267,6 +267,67 @@ class PublishedIsoTests(unittest.TestCase):
         self.assertIn("wsm-live-tools", profile("live-iso.scm"))
 
 
+class CompatibilityBuildTargetTests(unittest.TestCase):
+    """Make targets must keep Compatibility on its own authenticated lock."""
+
+    def make_dry_run(self, target: str) -> str:
+        result = subprocess.run(
+            ["make", "--no-print-directory", "-n", target],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + chr(10) + result.stderr)
+        return result.stdout
+
+    def test_compatibility_evaluation_uses_its_lock_and_real_profile(self) -> None:
+        output = self.make_dry_run("check-compatibility-eval")
+        self.assertIn(
+            "scripts/check_channels.py --policy compatibility --lock channels/compatibility.lock.scm",
+            output,
+        )
+        self.assertIn(
+            "guix time-machine -C channels/compatibility.lock.scm -L . -- describe -f channels",
+            output,
+        )
+        self.assertIn(
+            "guix time-machine -C channels/compatibility.lock.scm -L . -- system -L . build systems/live-compat.scm --dry-run",
+            output,
+        )
+        self.assertNotIn(" -C channels.lock.scm ", output)
+        self.assertNotIn("--disable-authentication", output)
+
+    def test_compatibility_store_build_is_not_a_dry_run(self) -> None:
+        output = self.make_dry_run("build-compatibility-system")
+        self.assertIn(
+            "guix time-machine -C channels/compatibility.lock.scm -L . -- system -L . build systems/live-compat.scm",
+            output,
+        )
+        self.assertNotIn("--dry-run", output)
+        self.assertNotIn("channels.lock.scm", output)
+
+    def test_compatibility_image_target_passes_both_profile_and_lock(self) -> None:
+        output = self.make_dry_run("image-live-compat")
+        self.assertIn(
+            "WSM_LIVE_PROFILE=systems/live-compat.scm WSM_CHANNEL_LOCK=channels/compatibility.lock.scm sh ./scripts/build_iso.sh",
+            output,
+        )
+        self.assertNotIn("WSM_LIVE_PROFILE=systems/live-minimal.scm", output)
+
+    def test_free_minimal_image_target_stays_on_free_builder_defaults(self) -> None:
+        output = self.make_dry_run("image-live-minimal")
+        self.assertIn(
+            "WSM_LIVE_PROFILE=systems/live-minimal.scm sh ./scripts/build_iso.sh",
+            output,
+        )
+        self.assertNotIn("channels/compatibility.lock.scm", output)
+
+    def test_general_guix_evaluation_delegates_to_the_separate_compatibility_gate(self) -> None:
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        self.assertIn("$(MAKE) check-compatibility-eval", makefile)
+
+
 class CompatibilityImageTests(unittest.TestCase):
     """The NVIDIA image needs its own lock; the free one cannot resolve (nongnu ...)."""
 
