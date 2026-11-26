@@ -14,15 +14,21 @@
 ;; Nonguix package збігається з 580.196.11.
 ;;
 ;; Стан саме цього профілю на 26.11.2026:
-;; - Guix evaluation: NOT RUN
-;; - Compatibility package closure та image build: NOT RUN
-;; - QEMU BIOS/UEFI boot: NOT RUN
-;; - Physical H170 / GTX 1050 Ti binding та rendering: NOT RUN
+;; - pinned Guix/Nonguix package graph та ISO build: локально зібрано в
+;;   ізольованому store; точні commit-и й результати наведено в ISO-RELEASE.md.
+;; - в ISO перевірено наявність kernel NVIDIA 580.178.04 modules і GP107
+;;   firmware; це перевірка складу образу, не доказ завантаження драйвера.
+;; - QEMU TCG BIOS boot: гість досяг login prompt; ранній Guile init segfault
+;;   лишається зафіксованим діагностичним сигналом. TCG не емулює GTX 1050 Ti.
+;; - QEMU UEFI acceptance: окремого доказу наразі немає.
+;; - Compatibility .part001–.part006: ще не завантажено до GitHub Release.
+;; - Physical H170 / GTX 1050 Ti binding, DRM, Vulkan/OpenGL та rendering:
+;;   NOT RUN; потрібен окремий boot на цільовій машині.
 ;; Тести нижче перевіряють лише source-level graph overrides; вони не
-;; замінюють Guix evaluation, image build, QEMU або physical acceptance.
+;; замінюють повторне Guix evaluation, image rebuild, UEFI або physical acceptance.
 ;;
-;; Жодних тверджень про готовий образ, перевірений boot або функціональність
-;; GTX 1050 Ti цей файл зараз не робить.
+;; Жодних тверджень про підтримку GTX 1050 Ti на реальному обладнанні цей
+;; файл не робить.
 ;;
 (use-modules (gnu)
              (gnu services shepherd)
