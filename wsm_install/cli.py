@@ -64,10 +64,7 @@ def build_parser() -> argparse.ArgumentParser:
     install.add_argument("--guided", action="store_true",
                          help="choose a target and show a read-only preview in the console")
     install.add_argument("--classify", action="store_true",
-                         help="classify this machine as certified / known / unknown and stop")
-    install.add_argument("--accept-degraded", action="store_true",
-                         help="continue when a non-critical subsystem is unknown; "
-                              "the user takes responsibility for what will not work")
+                         help="print a read-only evidence summary; does not decide install readiness")
     install.add_argument("--check-env", action="store_true",
                          help="verify this machine can install at all, then stop")
     install.add_argument("--write-plan", metavar="PATH",
@@ -264,17 +261,18 @@ def _run_guided(args: argparse.Namespace) -> int:
     )
 
 
-def _run_classification(args: argparse.Namespace) -> dict:
-    """Classify the machine from the report; the caller decides what to do."""
+def _run_classification(report: dict[str, Any]) -> dict:
+    """Summarize report evidence only; scenario policy is evaluated elsewhere."""
     from wsm_install.classification import classify
 
-    report, _, error = _load_json(Path(args.report))
-    if error:
-        raise SystemExit(f"wsm-install: {error}")
     return classify(report)
 
 
-def _run_install(args: argparse.Namespace) -> int:
+def _run_install(
+    args: argparse.Namespace,
+    report: dict[str, Any],
+    report_bytes: bytes,
+) -> int:
     """Build and render a disk plan; real APPLY is disabled."""
     if args.execute:
         print(
@@ -299,22 +297,21 @@ def _run_install(args: argparse.Namespace) -> int:
         )
         return 2
 
-    # The classification runs before anything touches a disk: a machine whose
-    # storage or firmware is unknown must not be installed blind, and a machine
-    # with an unverified GPU needs an explicit yes rather than a silent install.
-    from wsm_install.classification import STOP, WARN, explain
-
-    verdict = _run_classification(args)
-    if verdict["decision"] == STOP:
-        print(f"wsm-install: classification.stop: {explain(verdict)}", file=sys.stderr)
-        return 3
-    if verdict["decision"] == WARN and not args.accept_degraded:
+    # A subsystem summary is diagnostic, not an installation policy. Reuse the
+    # existing report planner for its explicit critical-role and firmware
+    # blockers; do not derive stop/warn/proceed from a global subsystem label.
+    _plan, blockers, warnings = build_plan(report, report_bytes, args.backend)
+    if blockers:
+        for blocker in blockers:
+            print(f"wsm-install: plan.blocked: {blocker}", file=sys.stderr)
         print(
-            f"wsm-install: classification.warn: {explain(verdict)}\n"
-            "Pass --accept-degraded to continue anyway.",
+            "wsm-install: no preview plan emitted because required critical evidence is unresolved",
             file=sys.stderr,
         )
         return 3
+    if not args.quiet:
+        for warning in warnings:
+            print(f"WARNING: {warning}", file=sys.stderr)
 
     disk = Disk(
         path=args.target_disk,
@@ -443,7 +440,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     if args.profile_evidence is not None and (
-        args.check_env or args.install or args.guided or args.tui
+        args.classify or args.check_env or args.install or args.guided or args.tui
     ):
         print(
             "wsm-install: --profile-evidence is accepted only by the read-only preflight planner",
@@ -452,7 +449,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     if args.classify:
-        print(json.dumps(_run_classification(args), ensure_ascii=False, indent=2, sort_keys=True))
+        print(json.dumps(_run_classification(report), ensure_ascii=False, indent=2, sort_keys=True))
         return 0
     if args.check_env:
         return _run_env_check(args)
@@ -461,7 +458,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.guided:
         return _run_guided(args)
     if args.install:
-        return _run_install(args)
+        assert raw is not None
+        return _run_install(args, report, raw)
 
     assert raw is not None
     profile_evidence = None
