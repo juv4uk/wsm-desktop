@@ -153,6 +153,7 @@ def verdict(criteria: list[dict[str, str]], iso: Path) -> dict[str, Any]:
         "tool_version": VERSION,
         "collected_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
         "artifact": iso.name,
+        "artifact_sha256": sha256_of(iso),
         "overall": overall,
         "criteria": criteria,
         "note": "incomplete is not a pass: a criterion that could not run proves nothing",
@@ -219,7 +220,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         sys.stdout.write(rendered)
 
-    return 1 if result["overall"] == "fail" else 0
+    return {"pass": 0, "fail": 1, "incomplete": 2}[result["overall"]]
 
 
 if __name__ == "__main__":
