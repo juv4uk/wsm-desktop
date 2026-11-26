@@ -292,7 +292,7 @@ Linux [hwmon sysfs ABI](https://docs.kernel.org/hwmon/sysfs-interface.html) да
 
 Джерела: [Guix VM: single operating-system derivation](https://www.mail-archive.com/guix-commits%40gnu.org/msg405644.html), [Guix VM: writable store by default](https://www.mail-archive.com/guix-commits%40gnu.org/msg405638.html).
 
-## QEMU як окремий інструмент CI/VM-перевірок
+## QEMU як окремий інструмент ручних VM-перевірок
 
 QEMU не є hardware-discovery provider і не має бути обов'язковою залежністю live preflight. Це контрольоване середовище для integration tests:
 
