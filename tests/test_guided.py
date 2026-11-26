@@ -40,13 +40,6 @@ def plan_recorder(calls: list):
     return plan
 
 
-def install_recorder(calls: list):
-    def install(path, size, firmware):
-        calls.append(("install", path, size, firmware))
-
-    return install
-
-
 class StopTests(unittest.TestCase):
     def run_flow(self, answers: list[str]):
         calls: list = []
