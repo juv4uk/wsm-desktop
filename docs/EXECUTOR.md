@@ -1,71 +1,43 @@
-# Виконання кроків
+# Виконавець кроків інсталятора
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Статус: **реалізовано, на реальному диску не запускалось**
-- Код: [`wsm_install/executor.py`](../wsm_install/executor.py)
-- Тести: `tests/test_executor.py` (9)
+- Статус: **preview-only; реальний APPLY вимкнено**
+- Код: `wsm_install/executor.py`
+- Тести: `tests/test_executor.py`, `tests/test_cli_install.py`, `tests/test_guided.py`, `tests/test_calamares_module.py`
 
-## Чотири правила
+## Чому виконання зараз вимкнене
 
-Це єдиний модуль інсталятора, який щось виконує. Тому правила тут
-безкомпромісні.
+Попередній executor приймав довільний список `Step.command`, окремий рядок acknowledgement і запускав команди через subprocess. Рядковий збіг `--target-disk == --acknowledge-disk` не доводить, що block device лишився тим самим між плануванням і виконанням. Так само успішний exit code не доводить, що postcondition справді настав.
 
-**1. Dry-run типово.** Реальний запуск вимагає підтвердження, яке **називає
-диск**: `--wipe /dev/nvme0n1`, а не `--yes`.
+Тому поточний executor:
+- валідовує форму preview-кроків;
+- повертає кожен argv з позначенням `skipped`;
+- явно повідомляє, що команда не виконувалася;
+- відмовляє на `dry_run=False` з `execute.apply-disabled`;
+- не має subprocess runner, verifier injection або journal side effect для реального виконання.
 
-**2. Підтвердження перевіряється перед кожною руйнівною дією**, а не один раз на
-початку. Згода, дана для першого кроку, не має мовчки покривати сьомий.
+Це тимчасова безпечна межа, а не готовий інсталятор.
 
-**3. Кожен крок перевіряється перед наступним.** `mkfs`, який повернув 0 і
-нічого не створив, — це не успіх. Перевірка читає систему, а не код виходу:
+## Всі frontend-и мають однакову межу
 
-| Крок | Що перевіряється |
-| --- | --- |
-| `partprobe` | вузли розділів з'явилися |
-| `mkfs.*` | `blkid` повідомляє очікувану файлову систему |
-| `mount` | пристрій справді є в `/proc/mounts` за цією точкою |
-| `mkdir` | тека існує |
+CLI `--execute` відхиляється до читання report і disk discovery. Guided flow і TUI можуть тільки сформувати preview. TUI не приймає install callback і не показує «Installation finished». Calamares повертає failure tuple для preview, оскільки `None` означає успішне завершення jobmodule.
 
-**4. Перший збій зупиняє все.** Продовжити після невдалого монтування й
-відформатувати щось інше — це як машина лишається без системи й без пояснення.
+Privileged `wsm-install-agent` також відмовляє на `dry_run=False`, зокрема коли викликається від root. Жоден frontend не може обійти спільну межу.
 
-## Чому перевірка, а не код виходу
+## Що потрібно для майбутнього APPLY
 
-`mkfs.ext4` повертає 0 і в разі, коли диск насправді недописався через збій
-носія. `mount` повертає 0, а потім точка зникає через помилку в `fstab`.
-Код виходу говорить «команда не поскаржилась», а не «система в потрібному
-стані». Тому кожен крок підтверджується окремо.
+Перед окремим рішенням про відновлення APPLY мають бути реалізовані та протестовані:
+1. Immutable typed plan із digest усіх параметрів, filesystem labels, firmware/layout і exact Guix configuration.
+2. Фактична block-device identity (major/minor, stable sysfs identity, size/geometry/topology) і повторна перевірка перед кожною destructive операцією.
+3. ACK, прив'язаний до plan digest + target identity, а не рядка шляху.
+4. Точний allowlist команд/argv та підтверджений live package closure; абсолютний шлях сам по собі не доводить, що binary присутній.
+5. Обов'язкові typed postconditions для GPT, partition nodes, filesystem type+label, mount source identity, Guix generation та boot artifact.
+6. Переривання після кожного кроку, recovery journal, target revalidation та disposable qcow2 QEMU acceptance.
+7. Installed boot і post-boot health verification до стану COMPLETE.
 
-## Тестованість
+До проходження цих критеріїв `execute.apply-disabled` не повинен мати feature flag, environment override або Calamares global-storage bypass.
 
-`execute()` приймає `runner` і `verifier` як параметри. Тому весь модуль
-перевіряється без диска, root і QEMU: тести підставляють фальшиві виконавці й
-перевіряють порядок, зупинку на збої й відмови.
+## Журнал recovery
 
-## Чого ще немає
-
-- **Запуску на реальному диску.** Жодного разу.
-- **Відкату.** Якщо крок упав посередині, план відновлення не описаний.
-- **Роботи з UUID.** `/dev/nvme0n1p2` може стати іншим після перезавантаження.
-- **Перевірки, що диск не змінився** між плануванням і виконанням — зараз є лише
-  звірка розміру в планувальнику.
-
-## Як це запускається
-
-```sh
-# подивитись план, нічого не роблячи
-wsm-install --preflight --dry-run --report hw.json --backend guix \
-    --install --target-disk /dev/nvme0n1 --target-size-bytes 274877906944 \
-    --acknowledge-disk /dev/nvme0n1
-
-# виконати (лише з явним підтвердженням)
-wsm-install ... --install --execute --acknowledge-disk /dev/nvme0n1
-```
-
-Без `--execute` — dry-run: кроки перелічуються зі статусом `skipped`, нічого не
-виконується. `--execute` без `--acknowledge-disk` відхиляється до того, як
-прозвучить перша команда.
-
-`--target-size-bytes` обов'язковий навмисно: розмір — це те, чим ловиться
-підмінений диск, і вгадувати його не можна.
+`wsm_install/journal.py` містить JSONL writer/parser та recovery report, але не підключений до активного APPLY. Його unit tests перевіряють формат і стійкість читання; вони не доводять, що будь-який диск уже встановлювався або що журнал атомарно описує реальне виконання. При майбутньому APPLY journal open/write/fsync failure має зупиняти транзакцію до першої destructive команди.
