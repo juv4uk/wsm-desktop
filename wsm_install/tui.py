@@ -3,9 +3,9 @@
 
 Three frontends, one backend:
 
-* console (`--guided`) - a terminal with no cursor control, or a serial line;
-* pseudo-graphics (`--tui`) - this module: a full-screen box, arrow keys, Enter;
-* Calamares - a real GUI, for machines that can afford Qt.
+* console (`--guided`) - a read-only target selector;
+* pseudo-graphics (`--tui`) - a full-screen read-only preview;
+* Calamares - an optional GUI shell with the same disabled-APPLY contract.
 
 Why not curses: `curses` is in the standard library but drags terminal
 capability handling and a global screen state that is painful to test and
@@ -92,11 +92,10 @@ def disk_list(candidates: list[Candidate], selected: int) -> list[str]:
 def run_tui(
     screen: Screen,
     candidates: Iterable[Candidate],
-    plan: Callable[[str, int, str], object],
-    install: Callable[[str, int, bool], object],
+    preview: Callable[[str, int, str], object],
     evidence_note: str = "",
 ) -> int:
-    """Choose a disk with arrow keys, confirm by typing its path. Returns an exit code."""
+    """Choose a target with arrow keys and render a preview; never install."""
     disks = list(candidates)
 
     if not disks:
@@ -111,7 +110,7 @@ def run_tui(
 
     selected = 0
     while True:
-        body = ["", "Choose the disk to install onto:", ""]
+        body = ["", "Choose a disk to preview:", ""]
         body += disk_list(disks, selected)
         body += ["", "↑/↓ or j/k to move, Enter to choose, q to quit."]
         if evidence_note:
@@ -159,9 +158,9 @@ def run_tui(
     while True:
         screen.render(box("Confirm", [
             "",
-            f"This will erase {disk.path} ({disk.human_size()}) completely.",
+            f"Preview target: {disk.path} ({disk.human_size()}).",
             "",
-            "Type the disk path to confirm, or q to quit.",
+            "No disk will be changed. Type the path to confirm this preview, or q to quit.",
             "",
             f"  > {typed}_",
         ]))
@@ -184,20 +183,22 @@ def run_tui(
         screen.read_key()
         return 1
 
-    screen.render(box("Planning", ["", f"Planning {disk.path}..."]))
-    plan(disk.path, disk.size_bytes, firmware)
+    screen.render(box("Preview", ["", f"Preparing a read-only preview for {disk.path}..."]))
+    result = preview(disk.path, disk.size_bytes, firmware)
+    if isinstance(result, int) and result != 0:
+        screen.render(box("Preview failed", [
+            "",
+            f"Preview could not be generated (exit {result}).",
+            "APPLY is disabled. Nothing was changed.",
+        ]))
+        return result
 
-    screen.render(box("Install", [
+    screen.render(box("Preview complete", [
         "",
-        f"Plan ready for {disk.path} ({firmware}).",
+        f"Plan prepared for {disk.path} ({firmware}).",
         "",
-        "Enter to install, q to stop. Nothing has been written yet.",
+        "APPLY is disabled.",
+        "No disk commands were executed.",
+        "WSM was NOT installed.",
     ]))
-    if screen.read_key() != "enter":
-        screen.render(box("Stopped", ["", "Stopped after planning. Nothing was changed."]))
-        return 1
-
-    screen.render(box("Installing", ["", f"Writing the system to {disk.path}..."]))
-    install(disk.path, disk.size_bytes, firmware)
-    screen.render(box("Done", ["", "Installation finished.", "Remove the medium and reboot."]))
     return 0
