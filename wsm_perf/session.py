@@ -16,6 +16,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+from wsm_perf.boot import SYSTEM_EXECUTABLE_PATH
+
 SCHEMA = "wsm-desktop-session-readiness/1"
 VERSION = "0.1.0"
 MARKER = "plasma-autostart-phase-2"
@@ -81,7 +83,7 @@ def _login_session_start(
     environment: Mapping[str, str],
     *,
     runner: Callable[..., Any],
-    which: Callable[[str], str | None],
+    which: Callable[..., str | None],
 ) -> tuple[str | None, int | None, str | None]:
     raw_session_id = environment.get("XDG_SESSION_ID")
     if raw_session_id:
@@ -92,7 +94,9 @@ def _login_session_start(
         # loginctl's "self" resolves the session containing this process.
         session_ref = "self"
 
-    executable = which("loginctl")
+    # Resolve privileged/session-manager tooling only from trusted system paths.
+    # A user-controlled PATH must not be able to forge the monotonic start time.
+    executable = which("loginctl", path=SYSTEM_EXECUTABLE_PATH)
     if executable is None:
         return None, None, "loginctl-not-found"
 
@@ -142,7 +146,7 @@ def collect_session_readiness(
     environment: Mapping[str, str] | None = None,
     proc_root: Path = Path("/proc"),
     runner: Callable[..., Any] | None = None,
-    which: Callable[[str], str | None] | None = None,
+    which: Callable[..., str | None] | None = None,
     monotonic_ns: Callable[[], int] | None = None,
 ) -> dict[str, Any]:
     """Capture the point at which Plasma reaches X-KDE-autostart-phase 2.
