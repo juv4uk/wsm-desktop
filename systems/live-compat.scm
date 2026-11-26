@@ -30,6 +30,7 @@
              (gnu packages python)
              (gnu packages python-xyz)
              (gnu packages screen)
+             (gnu packages xorg)
              (guix build-system trivial)
              (guix gexp)
              ((guix licenses) #:prefix license:)
@@ -237,6 +238,14 @@
 (operating-system
   ;; Proprietary NVIDIA modules require the non-libre Linux kernel.
   (kernel wsm-linux-gp107)
+  ;; Guix base-initrd hard-codes a generic module list (hid-apple, isci, ...).
+  ;; localmodconfig intentionally drops those, so name only modules that this
+  ;; hardware-targeted kernel actually ships. NVMe and ext4 are built in.
+  (initrd-modules
+   (list "ahci" "usb-storage" "uas" "usbhid" "hid-generic"
+         "virtio_pci" "virtio_balloon" "virtio_blk" "virtio_net"
+         "virtio_console" "virtio_scsi" "isofs" "squashfs"
+         "overlay" "nls_utf8" "alx"))
   (host-name "wsm-kde")
   (timezone "Europe/Kyiv")
   (locale "en_US.utf8")
