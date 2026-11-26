@@ -270,13 +270,13 @@ class LockSelectionTests(unittest.TestCase):
 
     def test_compatibility_default_does_not_fall_back_to_free_lock(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            missing = Path(temporary) / "channels.compatibility.lock.scm"
+            missing = Path(temporary) / "compatibility.lock.scm"
             with patch.dict(POLICY_LOCKS, {"compatibility": missing}):
                 stderr = io.StringIO()
                 with contextlib.redirect_stderr(stderr):
                     result = main(["--policy", "compatibility"])
         self.assertEqual(result, 2)
-        self.assertIn("channels.compatibility.lock.scm", stderr.getvalue())
+        self.assertIn("compatibility.lock.scm", stderr.getvalue())
 
     def test_makefile_checks_compatibility_only_when_its_own_lock_exists(self) -> None:
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
@@ -288,6 +288,24 @@ class LockSelectionTests(unittest.TestCase):
 
 
 class RepositoryTests(unittest.TestCase):
+    def test_committed_compatibility_lock_passes_structural_policy_only(self) -> None:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "scripts" / "check_channels.py"),
+                "--policy",
+                "compatibility",
+                "--lock",
+                str(ROOT / "channels" / "compatibility.lock.scm"),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("structural", completed.stdout)
+        self.assertIn("NOT verified", completed.stdout)
+
     def test_committed_free_lock_passes_structural_policy_only(self) -> None:
         completed = subprocess.run(
             [
