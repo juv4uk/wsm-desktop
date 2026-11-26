@@ -92,11 +92,10 @@ def disk_list(candidates: list[Candidate], selected: int) -> list[str]:
 def run_tui(
     screen: Screen,
     candidates: Iterable[Candidate],
-    plan: Callable[[str, int, str], object],
-    install: Callable[[str, int, bool], object],
+    preview: Callable[[str, int, str], object],
     evidence_note: str = "",
 ) -> int:
-    """Choose a disk with arrow keys, confirm by typing its path. Returns an exit code."""
+    """Choose a disk and show a read-only preview; real APPLY is unavailable."""
     disks = list(candidates)
 
     if not disks:
@@ -111,7 +110,7 @@ def run_tui(
 
     selected = 0
     while True:
-        body = ["", "Choose the disk to install onto:", ""]
+        body = ["", "Choose a disk to preview:", ""]
         body += disk_list(disks, selected)
         body += ["", "↑/↓ or j/k to move, Enter to choose, q to quit."]
         if evidence_note:
@@ -159,9 +158,9 @@ def run_tui(
     while True:
         screen.render(box("Confirm", [
             "",
-            f"This will erase {disk.path} ({disk.human_size()}) completely.",
+            f"Preview target: {disk.path} ({disk.human_size()}).",
             "",
-            "Type the disk path to confirm, or q to quit.",
+            "This does not authorize writes. Type the path to preview, or q to quit.",
             "",
             f"  > {typed}_",
         ]))
@@ -184,20 +183,23 @@ def run_tui(
         screen.read_key()
         return 1
 
-    screen.render(box("Planning", ["", f"Planning {disk.path}..."]))
-    plan(disk.path, disk.size_bytes, firmware)
+    screen.render(box("Planning preview", ["", f"Preparing a read-only preview for {disk.path}..."]))
+    result = preview(disk.path, disk.size_bytes, firmware)
+    if isinstance(result, int) and result != 0:
+        screen.render(box("Preview failed", [
+            "",
+            f"Could not generate the preview (exit {result}).",
+            "APPLY is disabled. Nothing was changed.",
+        ]))
+        return result
 
-    screen.render(box("Install", [
+    screen.render(box("Preview only", [
         "",
-        f"Plan ready for {disk.path} ({firmware}).",
+        f"Preview prepared for {disk.path} ({firmware}).",
         "",
-        "Enter to install, q to stop. Nothing has been written yet.",
+        "APPLY is disabled.",
+        "No disk commands were executed; nothing was changed.",
+        "Press q to close.",
     ]))
-    if screen.read_key() != "enter":
-        screen.render(box("Stopped", ["", "Stopped after planning. Nothing was changed."]))
-        return 1
-
-    screen.render(box("Installing", ["", f"Writing the system to {disk.path}..."]))
-    install(disk.path, disk.size_bytes, firmware)
-    screen.render(box("Done", ["", "Installation finished.", "Remove the medium and reboot."]))
+    screen.read_key()
     return 0
