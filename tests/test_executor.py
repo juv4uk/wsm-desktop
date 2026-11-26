@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""The executor is where an installer destroys data, so the tests come first."""
+"""The shared executor is preview-only until target binding and consent exist."""
 
 from __future__ import annotations
 
-import subprocess
+import inspect
 import sys
 import unittest
 from pathlib import Path
@@ -21,92 +21,75 @@ STEPS = [
 ]
 
 
-def ok_runner(calls: list[list[str]]):
-    def runner(command):
-        calls.append(list(command))
-        return subprocess.CompletedProcess(list(command), 0, "", "")
-
-    return runner
-
-
-def ok_verifier(step):
-    return True, "verified"
-
-
-def failing_runner(command):
-    return subprocess.CompletedProcess(list(command), 1, "", "boom")
-
-
 class DryRunTests(unittest.TestCase):
-    def test_dry_run_executes_nothing(self) -> None:
-        calls: list[list[str]] = []
-        results = execute(STEPS, "/dev/nvme0n1", dry_run=True, runner=ok_runner(calls), verifier=ok_verifier, out=lambda _: None)
-        self.assertEqual(calls, [])
-        self.assertTrue(all(r.status == "skipped" for r in results))
-        self.assertEqual(len(results), 3)
+    def test_dry_run_returns_skipped_results_and_prints_intent_only(self) -> None:
+        output: list[str] = []
+        results = execute(STEPS, "/dev/nvme0n1", dry_run=True, out=output.append)
+        self.assertEqual(len(results), len(STEPS))
+        self.assertTrue(all(result.status == "skipped" for result in results))
+        self.assertTrue(all("not executed" in result.detail for result in results))
+        self.assertEqual(len(output), len(STEPS))
+        self.assertTrue(any("DESTRUCTIVE" in line for line in output))
+        self.assertTrue(any("mkfs.ext4" in line for line in output))
 
-    def test_dry_run_needs_no_acknowledgement(self) -> None:
-        execute(STEPS, "/dev/nvme0n1", dry_run=True, runner=ok_runner([]), verifier=ok_verifier, out=lambda _: None)
+    def test_dry_run_needs_no_disk_acknowledgement(self) -> None:
+        execute(STEPS, "/dev/nvme0n1", dry_run=True, out=lambda _: None)
+
+    def test_unknown_command_is_only_rendered_not_executed(self) -> None:
+        output: list[str] = []
+        arbitrary = [Step(["/bin/sh", "-c", "touch /tmp/not-run"], "untrusted preview")]
+        results = execute(arbitrary, "/dev/nvme0n1", dry_run=True, out=output.append)
+        self.assertEqual(results[0].status, "skipped")
+        self.assertIn("/bin/sh", output[0])
 
 
-class RefusalTests(unittest.TestCase):
-    def test_real_run_without_acknowledgement_is_refused(self) -> None:
+class ApplyRefusalTests(unittest.TestCase):
+    def test_any_non_true_dry_run_value_is_refused_before_output(self) -> None:
+        for value in (False, None, 0, "false"):
+            output: list[str] = []
+            with self.subTest(value=value), self.assertRaises(ExecutorError) as caught:
+                execute(STEPS, "/dev/nvme0n1", dry_run=value, out=output.append)
+            self.assertEqual(caught.exception.code, "execute.apply-disabled")
+            self.assertEqual(output, [])
+
+    def test_correct_disk_name_does_not_enable_apply(self) -> None:
+        output: list[str] = []
         with self.assertRaises(ExecutorError) as caught:
-            execute(STEPS, "/dev/nvme0n1", dry_run=False, runner=ok_runner([]), verifier=ok_verifier, out=lambda _: None)
-        self.assertEqual(caught.exception.code, "execute.acknowledgement")
+            execute(STEPS, "/dev/nvme0n1", dry_run=False, out=output.append)
+        self.assertEqual(caught.exception.code, "execute.apply-disabled")
+        self.assertEqual(output, [])
 
-    def test_acknowledgement_for_another_disk_is_refused(self) -> None:
-        with self.assertRaises(ExecutorError):
-            execute(STEPS, "/dev/nvme0n1", acknowledgement="/dev/sda", dry_run=False,
-                    runner=ok_runner([]), verifier=ok_verifier, out=lambda _: None)
+    def test_api_has_no_runner_verifier_or_acknowledgement_parameter(self) -> None:
+        parameters = set(inspect.signature(execute).parameters)
+        self.assertEqual(parameters, {"steps", "disk", "dry_run", "out"})
 
-    def test_plan_without_destructive_steps_is_refused_for_a_real_run(self) -> None:
-        """A "real" run with nothing to destroy means the plan is wrong."""
-        harmless = [Step(["/usr/sbin/partprobe", "/dev/x"], "re-read")]
+
+class PreviewValidationTests(unittest.TestCase):
+    def test_partition_device_is_not_a_whole_disk_target(self) -> None:
         with self.assertRaises(ExecutorError) as caught:
-            execute(harmless, "/dev/x", acknowledgement="/dev/x", dry_run=False,
-                    runner=ok_runner([]), verifier=ok_verifier, out=lambda _: None)
-        self.assertEqual(caught.exception.code, "execute.no-destructive-steps")
+            execute(STEPS, "/dev/nvme0n1p1", dry_run=True, out=lambda _: None)
+        self.assertEqual(caught.exception.code, "execute.disk-path")
 
-
-class ExecutionTests(unittest.TestCase):
-    def test_steps_run_in_order(self) -> None:
-        calls: list[list[str]] = []
-        execute(STEPS, "/dev/nvme0n1", acknowledgement="/dev/nvme0n1", dry_run=False,
-                runner=ok_runner(calls), verifier=ok_verifier, out=lambda _: None)
-        self.assertEqual([c[0] for c in calls],
-                         ["/usr/sbin/partprobe", "/usr/sbin/mkfs.ext4", "/usr/bin/mount"])
-
-    def test_first_failure_stops_everything(self) -> None:
-        calls: list[list[str]] = []
-
-        def runner(command):
-            calls.append(list(command))
-            return subprocess.CompletedProcess(list(command), 1 if "mkfs" in command[0] else 0, "", "boom")
-
+    def test_non_step_item_is_rejected(self) -> None:
         with self.assertRaises(ExecutorError) as caught:
-            execute(STEPS, "/dev/nvme0n1", acknowledgement="/dev/nvme0n1", dry_run=False,
-                    runner=runner, verifier=ok_verifier, out=lambda _: None)
-        self.assertEqual(caught.exception.code, "execute.step-failed")
-        # The mount after the failed format must never have been attempted.
-        self.assertFalse(any("mount" in c[0] for c in calls))
+            execute(["/bin/true"], "/dev/nvme0n1", dry_run=True, out=lambda _: None)
+        self.assertEqual(caught.exception.code, "execute.step-type")
 
-    def test_a_step_that_exits_zero_but_did_nothing_is_unverified(self) -> None:
-        """Exit codes lie; verification reads the system instead."""
-        def verifier(step):
-            return (False, "no filesystem found") if "mkfs" in step.command[0] else (True, "ok")
-
+    def test_empty_command_is_rejected(self) -> None:
         with self.assertRaises(ExecutorError) as caught:
-            execute(STEPS, "/dev/nvme0n1", acknowledgement="/dev/nvme0n1", dry_run=False,
-                    runner=ok_runner([]), verifier=verifier, out=lambda _: None)
-        self.assertEqual(caught.exception.code, "execute.step-unverified")
+            execute([Step([], "empty")], "/dev/nvme0n1", dry_run=True, out=lambda _: None)
+        self.assertEqual(caught.exception.code, "execute.command")
 
-    def test_results_record_what_happened(self) -> None:
-        results = execute(STEPS, "/dev/nvme0n1", acknowledgement="/dev/nvme0n1", dry_run=False,
-                          runner=ok_runner([]), verifier=ok_verifier, out=lambda _: None)
-        self.assertTrue(all(r.status == "done" for r in results))
-        self.assertTrue(results[1].destructive)
-        self.assertFalse(results[0].destructive)
+    def test_control_character_in_argument_is_rejected(self) -> None:
+        with self.assertRaises(ExecutorError) as caught:
+            execute([Step(["/bin/echo", "bad\nargument"], "bad arg")],
+                    "/dev/nvme0n1", dry_run=True, out=lambda _: None)
+        self.assertEqual(caught.exception.code, "execute.command")
+
+    def test_empty_purpose_is_rejected(self) -> None:
+        with self.assertRaises(ExecutorError) as caught:
+            execute([Step(["/bin/true"], " ")], "/dev/nvme0n1", dry_run=True, out=lambda _: None)
+        self.assertEqual(caught.exception.code, "execute.purpose")
 
 
 if __name__ == "__main__":
