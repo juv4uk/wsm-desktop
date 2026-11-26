@@ -64,9 +64,41 @@ class Layout:
     firmware: str
     disk: str
     partitions: list[dict[str, Any]] = field(default_factory=list)
+    # Carry consent and inventory identity into every downstream plan stage.
+    acknowledgement: str | None = None
+    disk_size_bytes: int | None = None
+
+    def validate_confirmation(self) -> None:
+        """Refuse a destructive layout unless consent and observed size travel with it."""
+        _require(
+            bool(DEVICE_PATH.fullmatch(self.disk)),
+            "disk.path",
+            f"{self.disk!r} is not a whole block device",
+        )
+        _require(
+            self.acknowledgement == self.disk,
+            "disk.acknowledgement",
+            "destructive partition-table replacement requires confirmation naming "
+            f"exactly {self.disk!r}",
+        )
+        _require(
+            isinstance(self.disk_size_bytes, int)
+            and not isinstance(self.disk_size_bytes, bool)
+            and self.disk_size_bytes > 0,
+            "disk.size-unrecorded",
+            "layout does not retain the observed target disk size",
+        )
+        minimum_size = (MIN_ROOT_MIB + ESP_MIB) * 1024 * 1024
+        _require(
+            self.disk_size_bytes >= minimum_size,
+            "disk.too-small",
+            f"{self.disk} is {self.disk_size_bytes} bytes; the smallest supported "
+            f"layout needs {MIN_ROOT_MIB + ESP_MIB} MiB",
+        )
 
     def commands(self) -> list[list[str]]:
         """sgdisk invocations as data. The caller decides whether to run them."""
+        self.validate_confirmation()
         steps: list[list[str]] = [["sgdisk", "--zap-all", self.disk]]
         for partition in self.partitions:
             steps.append([
@@ -107,13 +139,15 @@ def validate_target(disk: Disk, acknowledgement: str | None, firmware: str) -> N
         f"{disk.path} is {disk.size_bytes} bytes; the smallest supported layout needs "
         f"{MIN_ROOT_MIB + ESP_MIB} MiB",
     )
-    if disk.has_existing_data:
-        _require(
-            acknowledgement == disk.path,
-            "disk.acknowledgement",
-            f"{disk.path} contains data; refusing without an acknowledgement that names "
-            f"exactly this disk (got {acknowledgement!r})",
-        )
+    # Layout.commands() always starts with sgdisk --zap-all. That replaces the
+    # existing partition table even when inventory reports no recognised data.
+    # Absence of discovered filesystems is not consent to erase the disk.
+    _require(
+        acknowledgement == disk.path,
+        "disk.acknowledgement",
+        f"refusing destructive partition-table replacement without an acknowledgement "
+        f"that names exactly {disk.path!r} (got {acknowledgement!r})",
+    )
 
 
 def plan(
@@ -134,7 +168,12 @@ def plan(
             f"expected ({drift:.1%} drift); the disk may have been replaced",
         )
 
-    layout = Layout(firmware=firmware, disk=disk.path)
+    layout = Layout(
+        firmware=firmware,
+        disk=disk.path,
+        acknowledgement=acknowledgement,
+        disk_size_bytes=disk.size_bytes,
+    )
     cursor = 1
     if firmware == "bios":
         layout.partitions.append({
