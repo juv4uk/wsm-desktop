@@ -42,10 +42,29 @@ Calamares лишається як зручність для тих, кому в�
 
 | Ризик графічного майстра | Наша компенсація |
 | --- | --- |
-| Випадково обрано не той диск | підтвердження мусить **назвати** диск; `--yes` не існує |
-| Диск підмінили між планом і записом | звірка розміру, дрейф понад 2% — відмова |
-| Помилка посеред розбиття | перший збій зупиняє все, кожен крок перевіряється |
-| «Зелена» галочка на несправному кроці | перевірка читає систему (`blkid`, `/proc/mounts`), а не код виходу |
+| Випадково обрано не той диск | CLI/guided показує явний target і вимагає повторно ввести його шлях лише для підтвердження preview; це не дозвіл на запис |
+| Диск підмінили між планом і записом | **ще не виявляється**: `--target-size-bytes` — введена оцінка, не прочитана властивість пристрою |
+| Помилка посеред розбиття | APPLY вимкнено, тому зараз жодного кроку запису не запускається |
+| «Зелена» галочка на несправному кроці | preview показує argv і намір, але не заявляє, що команда запускалась або postcondition виконано |
+
+## Поточна межа безпеки інсталятора
+
+Усі frontend-и — звичайний CLI, `--guided`, `--tui` та Calamares — завершуються
+read-only preview. Спільний `wsm_install.executor.execute()` відхиляє
+`dry_run=False` з `execute.apply-disabled`; CLI додатково відхиляє
+`--execute` до переходу в будь-який frontend. Guided mode не має кроку
+«Install now» і не викликає окремий install callback. TUI також завершується після
+preview та не показує «Done» або «Installation finished». Calamares із
+`wsmDryRun=false` також отримує відмову від того самого executor.
+
+Тому наведені нижче розділи про розмітку, монтування та Guix handoff описують
+архітектурний намір і preview argv, а не можливість виконати інсталяцію.
+Жодні `sgdisk`, `mkfs`, `mount` чи `guix system init` цим шляхом не
+запускаються. Реальний APPLY вимагатиме окремого reviewed контракту:
+immutable typed plan, повторного читання block-device identity, digest-bound
+consent, перевіреної Guix tool closure, справжніх postconditions та
+destructive acceptance на одноразових QEMU-дисках. Детальніше — у
+[EXECUTOR.md](EXECUTOR.md).
 
 ## Поточний стан: інсталятор не вибрано
 
@@ -130,4 +149,4 @@ Guix configuration має бути єдиним джерелом істини д
 
 ## Поточний стан
 
-Робочого Calamares settings.conf, module.desc або deployment-коду поки немає. Вони будуть додані після M2, коли ми підтвердимо доступність Calamares, його залежностей та інтерфейс API у цільовому live-середовищі. Див. README у installer/calamares/.
+Python jobmodule wsm_deploy і module.desc уже є в репозиторії, але settings.conf та реальний запуск Calamares не підтверджені. Модуль наразі preview-only: explicit wsmDryRun=false відхиляється, true повертає non-success статус «APPLY disabled». Жодний frontend не має підтримуваного APPLY; див. README у installer/calamares/ та EXECUTOR.md.
