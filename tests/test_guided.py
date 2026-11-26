@@ -73,6 +73,13 @@ class StopTests(unittest.TestCase):
         self.assertNotIn("Install now", console.text())
         self.assertNotIn("This will erase", console.text())
 
+    def test_preview_without_exit_code_is_not_reported_as_success(self) -> None:
+        console = FakeConsole(["1", "uefi", "/dev/nvme0n1"])
+        code = run_guided(console, DISKS, lambda *_args: None)
+        self.assertEqual(code, 1)
+        self.assertIn("Preview could not be generated", console.text())
+        self.assertNotIn("Preview complete", console.text())
+
     def test_no_disks_found_stops(self) -> None:
         console = FakeConsole([])
         code = run_guided(console, [], plan_recorder([]))
