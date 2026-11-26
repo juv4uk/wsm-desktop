@@ -1,44 +1,46 @@
-# Запуск WSM hardware checker у гостьовій Linux-системі QEMU
+# Запуск WSM hardware checker та installer preflight у гостьовій Linux-системі QEMU
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 - Статус: **ручна QEMU runtime-перевірка; не входить у hosted CI**
-- Пов'язано: #3 (hardware preflight), #16 (driver/runtime firmware evidence), #61 (generic QEMU guest), #64 (bounded serial/stderr capture), #66
-- Скрипт: `scripts/ci_qemu_hwcheck_guest.py`
-- Ручний запуск окремого етапу: `python scripts/ci_qemu_hwcheck_guest.py`
-- Повний набір: `make qemu-acceptance-manual`
+- Пов'язано: #3 (hardware preflight), #13 (власний installer CLI), #14 (QEMU integration), #16 (hardware evidence), #64 (bounded serial/stderr capture), #66
+- Runner: `scripts/ci_qemu_hwcheck_guest.py`
+- Команда: `PYTHON=python3.11 make qemu-acceptance-manual`
 
-## Що саме перевіряється
+## Ланцюг перевірки
 
-Linux host готує тимчасовий initramfs із runner kernel, BusyBox та CPython runtime. Усередині QEMU-гостя виконується реальний код python -m wsm_hwcheck з цього repository commit. Гість читає власні /sys і /proc, формує Hardware Evidence Report v1.0.0 та передає стислий звіт через serial. Host розпаковує payload і перевіряє його офіційною JSON Schema з репозиторію.
+Linux host готує тимчасовий initramfs із runner kernel, BusyBox та pinned CPython runtime. Усередині QEMU-гостя запускається справжній `wsm_hwcheck`: він читає власні read-only `/sys` і `/proc` та записує Hardware Evidence Report у єдиний шлях `WSM_HWCHECK_REPORT`.
 
-Це не підмінює collector shell-імітатором і не підставляє host /sys чи /proc: колектор запускається у власному Linux guest kernel і бачить тільки його псевдофайлові системи.
+Після collector-а той самий гість виконує власний `wsm-install --preflight --report <той самий файл> --backend guix --dry-run --quiet`. Жодного synthetic report або host `/sys` замість guest evidence не підставляється. CLI smoke перевіряє, що план залишається:
 
-## Runtime CPython
+- `plan_status=diagnostic-only`;
+- `plan_readiness.confirmable=false`;
+- `execution.dry_run=true`;
+- `mutations_authorized=false`;
+- `backend_invoked=false`;
+- `disk_access_performed=false`.
 
-Для цієї ручної QEMU-перевірки використовується незмінний upstream release python-build-standalone tag 20261123:
+Звіт прив'язується до точних raw bytes через SHA-256; canonical plan має окремий `plan_sha256`. Host приймає рівно один bounded serial marker із фіксованим набором полів.
 
-- CPython 3.11.18, target x86_64-unknown-linux-gnu;
-- archive install_only_stripped;
-- SHA-256: 75b92c55bc6a5f58fe4d08fc5261c983b2b17930192d62946fe7c9cf6fd66316;
-- завантаження відбувається лише на host,  з перевіркою digest перед розпакуванням.
+## Runtime Python та ABI
 
-GNU/Linux build не називається static. Runner перевіряє ELF-об'єкти у pinned runtime через ldd, відмовляється від unresolved libraries та копіює до initramfs лише виявлені зовнішні shared-library dependencies. Host /lib цілком не копіюється. Python runtime не додається до WSM Guix/Nix closure або production image у межах цього experiment.
+Guest використовує незмінний upstream `python-build-standalone` tag `20261123`:
 
-## Межі ізоляції
+- CPython 3.11.18, target `x86_64-unknown-linux-gnu`;
+- archive `install_only_stripped`;
+- SHA-256: `75b92c55bc6a5f58fe4d08fc5261c983b2b17930192d62946fe7c9cf6fd66316`.
 
-- QEMU TCG, 2 GiB guest RAM, 1 vCPU, обмежений wall-clock timeout.
-- Гість завантажується з -kernel та initramfs; віртуального диска або CD-ROM немає.
-- -nic none; немає host block device, USB/GPU passthrough, shared folders або EFI variable store.
-- Python archive завантажується host runner до створення guest; гість не має мережевого інтерфейсу.
-- Завантаження CPython обмежено 40 MiB; tar — 50 000 записів і 256 MiB розпакованих файлів; initramfs — 256 MiB; JSON-звіт — 512 KiB до gzip/base64.
-- Serial і stderr читаються через спільний bounded QEMU reader (1 MiB serial, 256 KiB stderr); зберігаються лише обмежені хвости. Переповнення capture — hard failure, частковий звіт не приймається.
-- JSON Schema перевіряється на host. У гості немає jsonschema, pip чи package manager.
+Для копіювання native validator wheels host також має працювати під CPython 3.11 з ABI `cpython-311`. Запускайте повну перевірку явно як `PYTHON=python3.11 make qemu-acceptance-manual`. Runner fail-closed відмовляється копіювати wheels з іншою ABI — зокрема CPython 3.12 extension не можна імпортувати в Python 3.11 guest. `jsonschema[format]` обмежено версією 4.26.0; повний allowlist distributions формується на host і копіюється до тимчасового initramfs. Усередині гостя немає pip, package manager або мережі.
 
-## Acceptance та інтерпретація
+GNU/Linux runtime не називається static. Скрипт перевіряє ELF-залежності через `ldd`, відмовляється від unresolved libraries та копіює лише знайдені зовнішні shared libraries.
 
-Успіх означає, що справжній guest kernel запустив /init, CPython імпортував потрібні стандартні модулі, wsm_hwcheck прочитав guest /sys і /proc, згенерував звіт, а host успішно перевірив schema v1.0.0 та privacy flags.
+## Ізоляція й обмеження
 
-Перевірка вимагає network_requests_performed=false, network_upload_performed=false і не дозволяє inventory-only run видати functional test зі статусом passed. Стани unknown або відсутність functional tests залишаються невизначеністю, а не доказом несумісності чи позитивної працездатності.
+- QEMU TCG, 2 GiB guest RAM, 1 vCPU та bounded wall-clock timeout.
+- Гість завантажується з kernel та initramfs; віртуального диска немає.
+- `-nic none`; немає host block device, USB/GPU passthrough, shared folders або EFI variable store.
+- Python archive обмежено 40 MiB; tar — 50 000 записів і 256 MiB розпакованих файлів; initramfs — 256 MiB; report — 512 KiB; installer plan — 64 KiB.
+- Serial і stderr мають фіксовані ліміти; переповнення capture або відсутній/дубльований marker — hard failure.
+- CLI блокує `subprocess.run/Popen` та мережеві socket APIs; Guix backend не викликається.
 
-Це QEMU guest runtime validation, а не WSM ISO boot, Guix system build, інсталяція на диск, physical hardware test або глобальна сертифікація сумісності.
+Успіх доводить лише, що QEMU guest collector створив звіт і власний `wsm-install` сформував на ньому read-only, non-confirmable diagnostic plan. Це **не** WSM ISO boot, authenticated Guix channel build, Guix deployment, запис на диск, інсталяція або фізична перевірка H170/GTX 1050 Ti. Для цього потрібен окремий WSM-owned ISO та disposable-disk end-to-end сценарій; цей harness його не замінює.

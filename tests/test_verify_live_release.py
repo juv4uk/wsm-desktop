@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from verify_live_release import (  # noqa: E402
+    check_boot_records,
     ISO_MAGIC_OFFSET,
     check_checksum,
     check_iso_structure,
@@ -42,6 +43,75 @@ def verdict_for(criteria: list[dict[str, str]]) -> dict:
         iso = Path(temporary) / "x.iso"
         iso.write_bytes(b"release-verdict fixture")
         return verdict(criteria, iso)
+
+
+def make_bootable_iso(path: Path, platforms: tuple[int, ...] = (0, 0xEF)) -> None:
+    """Write a minimal ISO9660 + El Torito image with the given firmware entries."""
+    import struct
+
+    size = 24 * 2048
+    data = bytearray(size)
+    data[0x8001:0x8006] = b"CD001"
+    # Primary volume descriptor.
+    data[16 * 2048] = 1
+    data[16 * 2048 + 1:16 * 2048 + 6] = b"CD001"
+    # Boot record descriptor pointing at a catalogue on sector 20.
+    boot = 17 * 2048
+    data[boot] = 0
+    data[boot + 1:boot + 6] = b"CD001"
+    data[boot + 7:boot + 30] = b"EL TORITO SPECIFICATION"
+    data[boot + 71:boot + 75] = struct.pack("<I", 20)
+    # Catalogue.
+    catalogue = 20 * 2048
+    data[catalogue] = 1
+    data[catalogue + 1] = platforms[0]
+    entry = catalogue + 32
+    data[entry] = 0x88
+    data[entry + 6:entry + 8] = struct.pack("<H", 4)
+    data[entry + 8:entry + 12] = struct.pack("<I", 100)
+    position = catalogue + 64
+    for index, platform in enumerate(platforms[1:]):
+        final = 0x90 if index == len(platforms) - 2 else 0x91
+        data[position] = final
+        data[position + 1] = platform
+        data[position + 2:position + 4] = struct.pack("<H", 1)
+        sub = position + 32
+        data[sub] = 0x88
+        data[sub + 6:sub + 8] = struct.pack("<H", 5760)
+        data[sub + 8:sub + 12] = struct.pack("<I", 200)
+        position += 64
+    path.write_bytes(bytes(data))
+
+
+class BootRecordTests(unittest.TestCase):
+    def test_bios_and_uefi_is_a_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            iso = Path(temporary) / "x.iso"
+            make_bootable_iso(iso, (0, 0xEF))
+            result = check_boot_records(iso)
+        self.assertEqual(result["status"], "pass", result["detail"])
+        self.assertIn("UEFI", result["detail"])
+
+    def test_only_bios_is_a_failure(self) -> None:
+        """Acceptance requires both firmwares; one is not enough."""
+        with tempfile.TemporaryDirectory() as temporary:
+            iso = Path(temporary) / "x.iso"
+            make_bootable_iso(iso, (0,))
+            result = check_boot_records(iso)
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("only one firmware", result["detail"])
+
+    def test_image_without_boot_record_is_a_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            iso = Path(temporary) / "x.iso"
+            iso.write_bytes(b"\0" * (24 * 2048))
+            result = check_boot_records(iso)
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("not bootable media", result["detail"])
+
+    def test_missing_file_is_a_failure_not_a_crash(self) -> None:
+        result = check_boot_records(Path("/nonexistent.iso"))
+        self.assertEqual(result["status"], "fail")
 
 
 class ChecksumTests(unittest.TestCase):
@@ -154,7 +224,11 @@ class CliTests(unittest.TestCase):
     def test_missing_boot_flag_is_recorded_as_not_run(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
-            iso = make_iso(directory)
+            # A bootable image, so that only the missing --boot flag makes the
+            # verdict incomplete. A non-bootable fixture would fail the
+            # boot-records criterion and hide what this test is about.
+            iso = directory / "wsm-desktop-test.iso"
+            make_bootable_iso(iso, (0, 0xEF))
             (directory / "SHA256SUMS").write_text(
                 f"{digest(iso)}  {iso.name}\n", encoding="utf-8"
             )
