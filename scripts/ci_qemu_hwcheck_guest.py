@@ -9,6 +9,7 @@ from io import BytesIO
 import gzip
 import hashlib
 import json
+from importlib import metadata
 import os
 import re
 import shutil
@@ -16,8 +17,10 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import sysconfig
 import urllib.request
 from pathlib import Path, PurePosixPath
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -42,6 +45,13 @@ MAX_TAR_EXPANDED_BYTES = 256 * 1024 * 1024
 MAX_INITRAMFS_BYTES = 256 * 1024 * 1024
 MAX_REPORT_BYTES = 512 * 1024
 BUSYBOX_APPLETS = ("sh", "mount", "mkdir", "poweroff", "sleep", "sync")
+GUEST_VALIDATION_DISTRIBUTIONS = (
+    "jsonschema", "jsonschema-specifications", "referencing", "rpds-py", "attrs",
+    "fqdn", "idna", "isoduration", "rfc3339-validator", "rfc3987", "uri-template",
+    "webcolors", "jsonpointer", "arrow", "python-dateutil", "six", "typing-extensions", "tzdata",
+)
+GUEST_JSONSCHEMA_VERSION = "4.26.0"
+MAX_INSTALLER_PLAN_BYTES = 64 * 1024
 QEMU_TIMEOUT_SECONDS = 90
 GUEST_MEMORY_MIB = 2048
 
@@ -58,19 +68,20 @@ echo WSM_HWCHECK_STAGE_INIT > /dev/console
 mount -t proc -o ro,nosuid,nodev,noexec proc /proc || guest_fail "proc-mount"
 mount -t sysfs -o ro,nosuid,nodev,noexec sysfs /sys || guest_fail "sysfs-mount"
 mkdir -p /tmp
+export WSM_HWCHECK_REPORT=/tmp/hardware-report.json
 
 export PATH=/opt/python/bin:/bin
 export PYTHONHOME=/opt/python
-export PYTHONPATH=/opt/wsm
+export PYTHONPATH=/opt/wsm:/opt/python/lib/python3.11/site-packages
 export LD_LIBRARY_PATH={ld_library_path}
 
 PYTHON=/opt/python/bin/python3.11
 echo WSM_HWCHECK_STAGE_PYTHON_IMPORT > /dev/console
-if ! "$PYTHON" -S -c 'import json, selectors, subprocess, pathlib, gzip, base64' > /dev/console 2>&1; then
+if ! "$PYTHON" -S -c 'import json, selectors, subprocess, pathlib, gzip, base64, jsonschema; import wsm_hwcheck, wsm_install.cli' > /dev/console 2>&1; then
     guest_fail "python-import-smoke"
 fi
 echo WSM_HWCHECK_STAGE_COLLECTOR_START > /dev/console
-if ! "$PYTHON" -S -m wsm_hwcheck --compact --output /tmp/hardware-report.json > /dev/console 2>&1; then
+if ! "$PYTHON" -S -m wsm_hwcheck --compact --output "$WSM_HWCHECK_REPORT" > /dev/console 2>&1; then
     guest_fail "wsm-hwcheck-execution"
 fi
 if [ ! -s /tmp/hardware-report.json ]; then
@@ -78,13 +89,82 @@ if [ ! -s /tmp/hardware-report.json ]; then
 fi
 echo WSM_HWCHECK_STAGE_COLLECTOR_DONE > /dev/console
 
+echo WSM_INSTALL_STAGE_START > /dev/console
+if ! "$PYTHON" -S - <<'PYINSTALL' > /tmp/wsm-install-plan.json 2> /tmp/wsm-install.stderr
+import os
+import socket
+import subprocess
+
+def deny_host_io(*args, **kwargs):
+    raise RuntimeError("process and network APIs are disabled in the guest installer smoke")
+
+subprocess.run = deny_host_io
+subprocess.Popen = deny_host_io
+socket.socket = deny_host_io
+socket.create_connection = deny_host_io
+from wsm_install.cli import main
+raise SystemExit(main([
+    "--preflight",
+    "--report", os.environ["WSM_HWCHECK_REPORT"],
+    "--backend", "guix",
+    "--dry-run",
+    "--quiet",
+]))
+PYINSTALL
+then
+    guest_fail "wsm-install-preflight"
+fi
+if ! "$PYTHON" -S - <<'PYPLAN' > /dev/console
+import hashlib
+import json
+import os
+from pathlib import Path
+
+report_path = Path(os.environ["WSM_HWCHECK_REPORT"])
+plan_path = Path("/tmp/wsm-install-plan.json")
+if plan_path.stat().st_size > {max_installer_plan_bytes}:
+    raise SystemExit("installer plan exceeds the 64 KiB ceiling")
+report_bytes = report_path.read_bytes()
+plan = json.loads(plan_path.read_bytes())
+if plan.get("plan_status") != "diagnostic-only":
+    raise SystemExit("installer plan status is not diagnostic-only")
+if plan.get("backend", {{}}).get("id") != "guix-system":
+    raise SystemExit("installer plan selected an unexpected backend")
+if plan.get("plan_readiness", {{}}).get("confirmable") is not False:
+    raise SystemExit("installer plan must remain non-confirmable")
+execution = plan.get("execution", {{}})
+if execution.get("dry_run") is not True:
+    raise SystemExit("installer plan is not marked dry-run")
+for field in ("plan_confirmable", "mutations_authorized", "backend_invoked", "disk_access_performed"):
+    if execution.get(field) is not False:
+        raise SystemExit("installer plan unexpectedly enabled " + field)
+expected_report_sha = hashlib.sha256(report_bytes).hexdigest()
+if plan.get("source_report", {{}}).get("sha256") != expected_report_sha:
+    raise SystemExit("installer plan is not bound to the exact guest report bytes")
+body = dict(plan)
+plan_digest = body.pop("plan_sha256", None)
+canonical = json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+if plan_digest != hashlib.sha256(canonical).hexdigest():
+    raise SystemExit("installer plan digest does not match canonical JSON")
+print(
+    "WSM_INSTALL_PLAN_RESULT:status=diagnostic-only;confirmable=false;"
+    "backend=guix-system;dry_run=true;mutations_authorized=false;"
+    "backend_invoked=false;disk_access_performed=false;plan_sha256=" + plan_digest
+)
+PYPLAN
+then
+    guest_fail "wsm-install-plan-validation"
+fi
+echo WSM_INSTALL_STAGE_DONE > /dev/console
+
 echo {report_begin} > /dev/console
 if ! "$PYTHON" -S - <<'PYREPORT' > /dev/console 2>&1
 import base64
 import gzip
+import os
 from pathlib import Path
 
-report_path = Path("/tmp/hardware-report.json")
+report_path = Path(os.environ["WSM_HWCHECK_REPORT"])
 if report_path.stat().st_size > {max_report_bytes}:
     raise SystemExit("guest report exceeds the 512 KiB report ceiling")
 raw = report_path.read_bytes()
@@ -210,46 +290,112 @@ def render_guest_init(library_path: str) -> str:
         report_prefix=REPORT_PREFIX,
         report_end=REPORT_END,
         max_report_bytes=MAX_REPORT_BYTES,
+        max_installer_plan_bytes=MAX_INSTALLER_PLAN_BYTES,
     )
 
 
-def _copy_runtime_dependencies(python_home: Path, rootfs: Path) -> list[Path]:
-    """Copy only external shared libraries reported by ldd for the pinned runtime."""
-    home_resolved = python_home.resolve()
-    dependencies: set[Path] = set()
-    elf_count = 0
-    for binary in _elf_files(python_home):
-        elf_count += 1
-        completed = subprocess.run(
-            ["ldd", str(binary)],
-            check=False,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=10,
-        )
-        output = completed.stdout + completed.stderr
-        if "not a dynamic executable" in output or "statically linked" in output:
+def _copy_guest_distribution_files(
+    distribution: Any,
+    source_site_packages: Path,
+    destination_site_packages: Path,
+) -> int:
+    """Copy one installed distribution without following paths outside site-packages."""
+    source_root = source_site_packages.resolve(strict=True)
+    copied = 0
+    for entry in distribution.files or ():
+        relative = Path(str(entry))
+        if relative.is_absolute() or ".." in relative.parts:
             continue
-        if completed.returncode not in (0, 1):
-            raise RuntimeError(f"ldd failed for pinned runtime object {binary}: {output[-1200:]}")
-        found, missing = _parse_ldd_paths(output)
-        if missing:
+        try:
+            source = Path(distribution.locate_file(entry)).resolve(strict=True)
+            source_relative = source.relative_to(source_root)
+        except (OSError, ValueError):
+            continue
+        if not source.is_file():
+            continue
+        destination = destination_site_packages / source_relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+        copied += 1
+    return copied
+
+
+def _copy_guest_validation_packages(rootfs: Path) -> tuple[Path, tuple[str, ...]]:
+    """Copy the exact jsonschema[format] runtime closure installed on the host."""
+    source_site = Path(sysconfig.get_paths()["purelib"]).resolve(strict=True)
+    destination_site = rootfs / "opt" / "python" / "lib" / "python3.11" / "site-packages"
+    destination_site.mkdir(parents=True, exist_ok=True)
+    versions: list[str] = []
+    for name in GUEST_VALIDATION_DISTRIBUTIONS:
+        try:
+            distribution = metadata.distribution(name)
+        except metadata.PackageNotFoundError as exc:
+            raise RuntimeError(f"required guest validator dependency is not installed: {name}") from exc
+        if name == "jsonschema" and distribution.version != GUEST_JSONSCHEMA_VERSION:
             raise RuntimeError(
-                f"unresolved shared libraries for {binary}: {'; '.join(missing)}"
+                f"guest jsonschema version must be {GUEST_JSONSCHEMA_VERSION}, found {distribution.version}"
             )
-        for library in found:
-            try:
-                resolved = library.resolve(strict=True)
-            except OSError as exc:
-                raise RuntimeError(f"ldd reported a missing library path {library}") from exc
-            if resolved == home_resolved or home_resolved in resolved.parents:
+        copied = _copy_guest_distribution_files(distribution, source_site, destination_site)
+        if copied == 0:
+            raise RuntimeError(f"no package files copied for guest validator dependency: {name}")
+        versions.append(f"{name}=={distribution.version}")
+    return destination_site, tuple(versions)
+
+
+def _copy_runtime_dependencies(
+    python_home: Path,
+    rootfs: Path,
+    *,
+    extra_scan_roots: tuple[Path, ...] = (),
+) -> list[Path]:
+    """Copy external shared libraries for CPython and optional guest packages."""
+    home_resolved = python_home.resolve()
+    rootfs_resolved = rootfs.resolve()
+    dependencies: set[Path] = set()
+    seen_binaries: set[Path] = set()
+    elf_count = 0
+    for scan_root in (python_home, *extra_scan_roots):
+        for binary in _elf_files(scan_root):
+            resolved_binary = binary.resolve()
+            if resolved_binary in seen_binaries:
                 continue
-            dependencies.add(library)
+            seen_binaries.add(resolved_binary)
+            elf_count += 1
+            completed = subprocess.run(
+                ["ldd", str(binary)],
+                check=False,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=10,
+            )
+            output = completed.stdout + completed.stderr
+            if "not a dynamic executable" in output or "statically linked" in output:
+                continue
+            if completed.returncode not in (0, 1):
+                raise RuntimeError(f"ldd failed for runtime object {binary}: {output[-1200:]}")
+            found, missing = _parse_ldd_paths(output)
+            if missing:
+                raise RuntimeError(
+                    f"unresolved shared libraries for {binary}: {'; '.join(missing)}"
+                )
+            for library in found:
+                try:
+                    resolved = library.resolve(strict=True)
+                except OSError as exc:
+                    raise RuntimeError(f"ldd reported a missing library path {library}") from exc
+                if (
+                    resolved == home_resolved
+                    or home_resolved in resolved.parents
+                    or resolved == rootfs_resolved
+                    or rootfs_resolved in resolved.parents
+                ):
+                    continue
+                dependencies.add(library)
 
     if elf_count == 0:
-        raise RuntimeError("no ELF files found in pinned CPython installation")
+        raise RuntimeError("no ELF files found in pinned CPython/guest validation runtime")
 
     copied: list[Path] = []
     for source in sorted(dependencies, key=lambda item: str(item)):
@@ -262,7 +408,8 @@ def _copy_runtime_dependencies(python_home: Path, rootfs: Path) -> list[Path]:
     return copied
 
 
-def _build_initramfs(work: Path) -> tuple[Path, int]:
+
+def _build_initramfs(work: Path) -> tuple[Path, int, tuple[str, ...]]:
     rootfs = work / "rootfs"
     for name in ("bin", "dev", "proc", "sys", "tmp", "opt"):
         (rootfs / name).mkdir(parents=True, exist_ok=True)
@@ -276,7 +423,10 @@ def _build_initramfs(work: Path) -> tuple[Path, int]:
 
     copied_python = rootfs / "opt" / "python"
     shutil.copytree(python_home, copied_python, symlinks=True)
-    libraries = _copy_runtime_dependencies(python_home, rootfs)
+    validation_site, validation_versions = _copy_guest_validation_packages(rootfs)
+    libraries = _copy_runtime_dependencies(
+        python_home, rootfs, extra_scan_roots=(validation_site,)
+    )
     library_dirs = sorted({str(path.parent) for path in libraries})
     library_path = os.pathsep.join(["/opt/python/lib", *library_dirs])
 
@@ -284,15 +434,16 @@ def _build_initramfs(work: Path) -> tuple[Path, int]:
     runtime_env.update({
         "PYTHONHOME": str(python_home),
         "LD_LIBRARY_PATH": os.pathsep.join([str(python_home / "lib"), *library_dirs]),
+        "PYTHONPATH": os.pathsep.join([str(ROOT), str(validation_site)]),
     })
-    _run = subprocess.run(
+    smoke = subprocess.run(
         [
             str(python_home / "bin" / "python3.11"),
             "-S",
             "-c",
-            "import json, selectors, subprocess, pathlib, gzip, base64",
+            "import json, selectors, subprocess, pathlib, gzip, base64, jsonschema; from wsm_install.cli import main",
         ],
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -300,6 +451,12 @@ def _build_initramfs(work: Path) -> tuple[Path, int]:
         timeout=20,
         env=runtime_env,
     )
+    if smoke.returncode != 0:
+        detail = (smoke.stderr or smoke.stdout or "no diagnostic output").strip()
+        raise RuntimeError(
+            "guest CPython import smoke failed "
+            f"(exit {smoke.returncode}): {detail[-4000:]}"
+        )
 
     busybox = shutil.which("busybox")
     if not busybox:
@@ -323,7 +480,10 @@ def _build_initramfs(work: Path) -> tuple[Path, int]:
             text=True,
         )
 
-    shutil.copytree(ROOT / "wsm_hwcheck", rootfs / "opt" / "wsm" / "wsm_hwcheck")
+    project_root = rootfs / "opt" / "wsm"
+    shutil.copytree(ROOT / "wsm_hwcheck", project_root / "wsm_hwcheck")
+    shutil.copytree(ROOT / "wsm_install", project_root / "wsm_install")
+    shutil.copytree(ROOT / "schemas", project_root / "schemas")
     init_script = render_guest_init(library_path)
     init_path = rootfs / "init"
     init_path.write_text(init_script, encoding="utf-8")
@@ -355,7 +515,7 @@ def _build_initramfs(work: Path) -> tuple[Path, int]:
         raise RuntimeError("failed to create guest initramfs")
     if initramfs.stat().st_size > MAX_INITRAMFS_BYTES:
         raise RuntimeError("guest initramfs exceeds the 256 MiB ceiling")
-    return initramfs, len(libraries)
+    return initramfs, len(libraries), validation_versions
 
 
 def _find_runner_kernel() -> Path:
@@ -389,6 +549,45 @@ def _decode_guest_report(serial: str) -> dict:
         return json.loads(payload.decode("utf-8"))
     except (ValueError, OSError, EOFError, UnicodeError, json.JSONDecodeError) as exc:
         raise RuntimeError(f"cannot decode guest hardware report: {exc}") from exc
+
+
+def _validate_installer_plan_result(serial: str) -> dict[str, str]:
+    """Require exactly one guest-side non-confirmable wsm-install plan result."""
+    prefix = "WSM_INSTALL_PLAN_RESULT:"
+    matches = re.findall(rf"{re.escape(prefix)}([^\r\n]+)", serial)
+    if serial.count("WSM_INSTALL_STAGE_START") != 1 or serial.count("WSM_INSTALL_STAGE_DONE") != 1:
+        raise RuntimeError("guest installer stage markers were missing or duplicated")
+    if len(matches) != 1:
+        raise RuntimeError(f"expected one guest installer plan result marker, found {len(matches)}")
+    fields: dict[str, str] = {}
+    for item in matches[0].split(";"):
+        if "=" not in item:
+            raise RuntimeError("guest installer plan result contains a malformed field")
+        key, value = item.split("=", 1)
+        if not key or key in fields:
+            raise RuntimeError("guest installer plan result contains an empty or duplicate field")
+        fields[key] = value
+    expected = {
+        "status": "diagnostic-only",
+        "confirmable": "false",
+        "backend": "guix-system",
+        "dry_run": "true",
+        "mutations_authorized": "false",
+        "backend_invoked": "false",
+        "disk_access_performed": "false",
+    }
+    required_fields = set(expected) | {"plan_sha256"}
+    if set(fields) != required_fields:
+        raise RuntimeError(
+            "guest installer plan result has missing or unexpected fields: "
+            f"expected={sorted(required_fields)}, actual={sorted(fields)}"
+        )
+    for key, value in expected.items():
+        if fields[key] != value:
+            raise RuntimeError(f"guest installer plan result violated {key}={value}: {fields}")
+    if not re.fullmatch(r"[0-9a-f]{64}", fields["plan_sha256"]):
+        raise RuntimeError("guest installer plan result lacks a valid canonical plan digest")
+    return fields
 
 
 def _validate_report(report: dict) -> tuple[int, int]:
@@ -462,7 +661,7 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory(prefix="wsm-hwcheck-qemu-guest-") as directory:
         work = Path(directory)
-        initramfs, dependency_count = _build_initramfs(work)
+        initramfs, dependency_count, validation_versions = _build_initramfs(work)
         kernel_copy = work / "guest-kernel"
         # Runner kernels in /boot are root-readable; copy them read-only into
         # the disposable workspace without changing the source or host boot state.
@@ -548,6 +747,7 @@ def main() -> int:
                 + f"\nQEMU stderr tail: {stderr[-1200:]}"
             ) from exc
         device_count, functional_test_count = _validate_report(report)
+        installer_result = _validate_installer_plan_result(serial)
         print(
             "PASS: actual wsm_hwcheck ran inside a QEMU TCG guest and its report "
             "validated against schemas/hardware-report.schema.json"
@@ -565,6 +765,12 @@ def main() -> int:
             f"QEMU isolation: TCG=true; network=false; virtual_disk=false; "
             f"host_passthrough=false; serial_bytes={result.stdout_bytes_seen}"
         )
+        print(
+            "PASS: wsm-install --preflight --dry-run executed inside the guest "
+            "and emitted a non-confirmable diagnostic-only plan"
+        )
+        print("Guest validator packages: " + ", ".join(validation_versions))
+        print("Installer plan result: " + "; ".join(f"{key}={value}" for key, value in installer_result.items()))
     return 0
 
 
