@@ -113,7 +113,7 @@ WSM спершу повторно використовує підтримува�
 - Наявний record з `discovery_status = unknown` або відсутній evidence coverage дає unknown, а не ready.
 - Hard-stop застосовується лише до capability, обов'язкової для явно вибраного сценарію, і має reason code та evidence reference.
 - Якщо CLI ще не приймає сценарій явно, він повинен називати результат **diagnostic draft only** і не позиціонувати його як підтвердження готовності до інсталяції.
-- `guix-system` та `nixos` — окремі backend IDs; вибір backend не змінює hardware evidence.
+- Для plan v0.1 допустимий лише backend ID `guix-system`. `nixos` може розглядатися лише в майбутньому версійному contract після окремого ADR; він не приймається поточним CLI й не емітується hardware preflight.
 - Draft plan не містить дозволу на mutation. Fresh report не замінює target revalidation.
 
 ### 7.1 Рекомендовані reason codes
