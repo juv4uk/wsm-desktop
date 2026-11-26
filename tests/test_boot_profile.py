@@ -39,11 +39,11 @@ class ManagerDetectionTests(unittest.TestCase):
             root = Path(directory)
             (root / "1").mkdir()
             comm = root / "1/comm"
-            comm.write_text("shepherd\\n", encoding="utf-8")
+            comm.write_text("shepherd\n", encoding="utf-8")
             self.assertEqual(boot._detect_manager(root), "shepherd")
-            comm.write_text("systemd\\n", encoding="utf-8")
+            comm.write_text("systemd\n", encoding="utf-8")
             self.assertEqual(boot._detect_manager(root), "systemd")
-            comm.write_text("init\\n", encoding="utf-8")
+            comm.write_text("init\n", encoding="utf-8")
             self.assertEqual(boot._detect_manager(root), "unknown")
 
     def test_missing_pid1_comm_is_unknown(self) -> None:
@@ -110,6 +110,7 @@ class BootCommandTests(unittest.TestCase):
             self.assertEqual(kwargs["stdin"], subprocess.DEVNULL)
             self.assertTrue(kwargs["capture_output"])
             self.assertEqual(kwargs["env"]["LC_ALL"], "C")
+            self.assertNotIn("SHEPHERD_SOCKET", kwargs["env"])
             self.assertNotIn("SHEPHERD_SOCKET", kwargs["env"])
             self.assertLessEqual(kwargs["timeout"], boot.MAX_TIMEOUT_SECONDS)
             self.assertEqual(argv[0], "/usr/bin/systemd-analyze")
@@ -211,16 +212,17 @@ class BootCommandTests(unittest.TestCase):
         def run(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
             calls.append((argv, kwargs))
             output = {
-                "--version": "herd (GNU Shepherd) 1.0.0\\n",
-                "status": "root running\\nwsm-live-ready running\\n",
-                "log": "Service root started\\nService wsm-live-ready started\\n",
-                "graph": "digraph shepherd { root -> wsm-live-ready; }\\n",
+                "--version": "herd (GNU Shepherd) 1.0.0\n",
+                "status": "root running\nwsm-live-ready running\n",
+                "log": "Service root started\nService wsm-live-ready started\n",
+                "graph": "digraph shepherd { root -> wsm-live-ready; }\n",
             }[argv[-1]]
             return subprocess.CompletedProcess(argv, 0, stdout=output, stderr="")
 
         with (
             patch.object(boot, "_detect_manager", return_value="shepherd"),
             patch.object(boot, "_manager_scope", return_value="system"),
+            patch.dict(boot.os.environ, {"SHEPHERD_SOCKET": "/tmp/not-pid1-shepherd.sock"}),
         ):
             artifact = boot.collect_boot_profile(
                 runner=run,
