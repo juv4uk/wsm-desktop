@@ -33,6 +33,8 @@
              (guix gexp)
              ((guix licenses) #:prefix license:)
              (guix packages)
+             (guix utils)
+             (srfi srfi-1)
              (nongnu packages linux)
              (nongnu packages nvidia)
              (nongnu services nvidia))
@@ -135,6 +137,80 @@
                       #t))
            (stop #~(const #t))))))
 
+;; Guix snapshot пакує Mesa 26.2.6 у $out/lib64, але перевірка RUNPATH
+;; очікує $out/lib. У Nonguix-драйвері це ламає mesa-for-nvda, тому явно
+;; будуємо варіант Mesa з -Dlibdir=lib і підміняємо його у всіх пакетах,
+;; які тягнуть за собою Nonguix-драйвер.
+;; libglvnd-for-nvda теж meson-пакет: без фіксації libdir він кладе
+;; libGL.so.1 у $out/lib64, а patch-elf драйвера шукає $out/lib/libGL.so.1.
+(define libglvnd-for-nvda-fixed
+  (hidden-package
+   (package/inherit libglvnd-for-nvda
+     (arguments
+      (substitute-keyword-arguments (package-arguments libglvnd-for-nvda)
+        ((#:configure-flags flags #~'())
+         #~(cons* "-Dlibdir=lib" #$flags)))))))
+
+(define mesa-for-nvda-fixed
+  (hidden-package
+   (package/inherit mesa-for-nvda
+     (arguments
+      (substitute-keyword-arguments (package-arguments mesa-for-nvda)
+        ((#:configure-flags flags #~'())
+         #~(cons* "-Dlibdir=lib" #$flags)))))))
+
+;; Meson у цьому snapshot-і типово встановлює бібліотеки в $out/lib64,
+;; а патч-фази Nonguix шукають $out/lib. Фіксуємо libdir для всіх meson-пакетів
+;; у ланцюгу NVIDIA, а не тільки для самої Mesa.
+(define (with-fixed-mesa p)
+  (package/inherit p
+    (arguments
+     (substitute-keyword-arguments (package-arguments p)
+       ((#:configure-flags flags #~'())
+        #~(cons* "-Dlibdir=lib" #$flags))))
+    (inputs
+     (modify-inputs (package-inputs p)
+       (replace "mesa" mesa-for-nvda-fixed)))))
+
+(define egl-gbm-fixed (with-fixed-mesa egl-gbm))
+(define egl-x11-fixed (with-fixed-mesa egl-x11))
+(define egl-wayland2-fixed (with-fixed-mesa egl-wayland2))
+
+(define nvidia-driver-580-fixed
+  (package/inherit nvidia-driver-580
+    (inputs
+     (modify-inputs (package-inputs nvidia-driver-580)
+       ;; patch-elf шукає lib/libGL.so.1 у всіх входах; виправлений
+       ;; libglvnd дає цей шлях, на відміну від звичайного lib64.
+       (prepend libglvnd-for-nvda-fixed)
+       (replace "mesa" mesa-for-nvda-fixed)
+       (replace "egl-gbm" egl-gbm-fixed)
+       (replace "egl-x11" egl-x11-fixed)))))
+
+(define nv-codec-headers-fixed
+  (package/inherit nv-codec-headers
+    (inputs
+     (modify-inputs (package-inputs nv-codec-headers)
+       (replace "nvidia-driver" nvidia-driver-580-fixed)))))
+
+(define nvidia-vaapi-driver-fixed
+  (package/inherit nvidia-vaapi-driver
+    (inputs
+     (modify-inputs (package-inputs nvidia-vaapi-driver)
+       (replace "nv-codec-headers" nv-codec-headers-fixed)))))
+
+(define nvda-580-fixed
+  (package/inherit nvda-580
+    (inputs
+     (modify-inputs (package-inputs nvda-580)
+       (replace "mesa" mesa-for-nvda-fixed)
+       (replace "nvidia-driver" nvidia-driver-580-fixed)
+       (replace "nvidia-vaapi-driver" nvidia-vaapi-driver-fixed)))
+    (propagated-inputs
+     (modify-inputs (package-propagated-inputs nvda-580)
+       (replace "nvidia-driver" nvidia-driver-580-fixed)))
+    (properties `((driver . ,nvidia-driver-580-fixed)))))
+
 (operating-system
   ;; Proprietary NVIDIA modules require the non-libre Linux kernel.
   (kernel linux)
@@ -158,11 +234,20 @@
                  (password #f)
                  (supplementary-groups '("audio" "video" "netdev")))
                %base-user-accounts))
-  (packages (cons* wsm-live-tools screen linux-firmware %base-packages))
+  ;; man-db викликає profile-hook manual-database, який на 850 записах іде
+  ;; понад годину в ізольованому store. Для live ISO man-база не потрібна.
+  (packages (cons* wsm-live-tools screen linux-firmware
+                   (remove (lambda (p)
+                             (string=? (package-name p) "man-db"))
+                           %base-packages)))
   (services
    (append
     (list wsm-live-ready-marker
-          (service nvidia-service-type)
+          (service nvidia-service-type
+                   (nvidia-configuration
+                    (driver nvda-580-fixed)
+                    (module nvidia-module-580)
+                    (firmware nvidia-firmware)))
           (service network-manager-service-type)
           (service wpa-supplicant-service-type)
           (service elogind-service-type)
