@@ -5,9 +5,9 @@ QEMU_PYTHON ?= python3.11
 GUIX ?= guix
 PRODUCT ?= free
 
-.PHONY: check check-ci-policy qemu-acceptance-manual check-guix-eval release-gate check-docs check-doc-ownership check-regression-register check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle check-profiles check-agent check-calamares check-channels check-cli-install check-env-preflight check-evidence-drafter check-executor check-guided check-hygiene check-install-steps check-isa check-journal check-live-acceptance check-makefile check-observation check-partition check-perf-baseline check-boot-profile check-profile-evidence check-profile-match check-profiles-matrix check-release-verdict check-state check-syntax check-tui check-licences image-live-minimal
+.PHONY: check check-ci-policy qemu-acceptance-manual check-guix-eval release-gate check-docs check-doc-ownership check-regression-register check-release-info check-artifact-versions check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle check-profiles check-agent check-calamares check-channels check-cli-install check-env-preflight check-evidence-drafter check-executor check-guided check-hygiene check-install-steps check-isa check-journal check-live-acceptance check-makefile check-observation check-partition check-perf-baseline check-boot-profile check-profile-evidence check-profile-match check-profiles-matrix check-release-verdict check-state check-syntax check-tui check-licences image-live-minimal check-temp-paths
 
-check: check-ci-policy check-docs check-doc-ownership check-regression-register check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa check-live-acceptance check-profiles-matrix check-perf-baseline check-boot-profile check-profile-evidence check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-hygiene check-channels check-executor check-cli-install check-calamares check-guided check-tui check-agent check-journal check-env-preflight check-observation check-licences
+check: check-ci-policy check-docs check-doc-ownership check-regression-register check-release-info check-artifact-versions check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa check-live-acceptance check-profiles-matrix check-perf-baseline check-boot-profile check-profile-evidence check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-hygiene check-channels check-executor check-cli-install check-calamares check-guided check-tui check-agent check-journal check-env-preflight check-observation check-licences check-temp-paths
 
 check-profiles:
 	$(PYTHON) tests/test_system_profiles.py
@@ -123,6 +123,13 @@ check-doc-ownership:
 check-regression-register:
 	$(PYTHON) tests/test_omarchy_regression_register.py
 
+check-release-info:
+	$(PYTHON) tests/test_release_info_schema.py
+	$(PYTHON) scripts/check_release_info.py
+
+check-artifact-versions:
+	$(PYTHON) tests/test_artifact_version_refusal.py
+
 check-system:
 	$(GUIX) system build systems/minimal.scm
 
@@ -178,10 +185,9 @@ image-live-minimal:
 
 # Повні QEMU runtime checks запускаються лише вручну, не в `make check` і не в CI.
 qemu-acceptance-manual:
-	command -v qemu-system-x86_64 >/dev/null
-	command -v busybox >/dev/null
-	command -v cpio >/dev/null
-	command -v modprobe >/dev/null
+	@for tool in qemu-system-x86_64 busybox cpio modprobe ldd gzip sudo mknod timeout zstd xz; do \
+		command -v "$tool" >/dev/null || { echo "qemu-acceptance-manual: missing host tool: $tool" >&2; exit 1; }; \
+	done
 	command -v "$(QEMU_PYTHON)" >/dev/null
 	"$(QEMU_PYTHON)" -c 'import sys, jsonschema; assert sys.version_info[:2] == (3, 11), sys.version'
 	bash scripts/ci_qemu_guest_smoke.sh
@@ -190,3 +196,6 @@ qemu-acceptance-manual:
 
 release-bundle: check
 	$(PYTHON) scripts/build_release_bundle.py
+
+check-temp-paths:
+	$(PYTHON) tests/test_temp_path_containment.py

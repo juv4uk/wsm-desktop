@@ -6,21 +6,22 @@
 спостереження, неперевірені конфігурації та нотатки про власне обладнання
 зберігаються в `docs/hardware/`, а не серед профілів.
 
-Коли профіль буде реально заявлено, його каталог має містити принаймні:
+Коли профіль буде реально заявлено, його каталог має містити:
 
 ```text
 profiles/hardware/<vendor>/<model>/
   profile.scm
   evidence.json
+  artifacts/
 ```
 
 - `profile.scm` — декларація конфігурації для конкретної машини.
 - `evidence.json` — bundle зі звітом `wsm-hwcheck`, перевіреними функціями
   та обмеженнями.
+- `artifacts/` — незмінні raw reports і функціональні logs, адресовані з bundle.
 - Не створюйте каталог профілю лише на підставі Windows/WSL інвентаризації,
   synthetic classifier test або припущення про драйвер. Відсутність профілю
   є чесним станом, доки немає native Linux evidence.
-
 
 Дослідницькі спостереження про H170 власника з Windows/WSL винесені в
 [окрему довідку](../../docs/hardware/OWNER-HARDWARE-REFERENCE.md). Вона не є
@@ -28,44 +29,57 @@ profiles/hardware/<vendor>/<model>/
 автоматичному зіставленні. Профіль з'явиться лише після native Linux report
 та окремих функціональних тестів.
 
-## Поточний валідатор `wsm-profile-evidence/1`
+## Контракт `wsm-profile-evidence/2`
 
-Запуск:
+Запуск повного scanner-а:
 
 ```sh
-python3 scripts/check_profile_evidence.py
+make check-profile-evidence
+python3 scripts/check_profile_evidence.py --dir profiles/hardware
 ```
 
-Поточний scanner шукає наявні файли
-`profiles/hardware/<vendor>/<model>/evidence.json`, перевіряє їх за JSON
-Schema `wsm-profile-evidence/1`, а також застосовує спільні правила
-`wsm_install/profile.py`:
+Bundle має містити:
 
-- принаймні одна функція має статус `pass`;
-- кожен статус `fail` має бути відображений у `known_limitations`;
-- `verified_by` не містить електронної адреси;
-- `profile.slug` відповідає шляху каталогу.
+- `report_id` та `report_schema_version` — посилання на exact source report;
+- `profile_source.path` і `profile_source.sha256` — digest точних байтів
+  `profile.scm`, на яких виконувалися тести;
+- `isa_level` — підтверджений рівень `wsm-cpu-isa/1` або явне `unknown`;
+- `verified_functions`, `known_limitations` і непорожній `not_assessed`;
+- непорожній `artifacts` із безпечними relative POSIX paths і SHA-256.
 
-**Межі поточної реалізації важливі:**
+Bundle містить **рівно один** артефакт типу `wsm-hwcheck-report`. Це provenance
+інвентаризації, не функціональний тест. Кожен `pass` або `fail` мусить
+посилатися через `verified_functions[].evidence` на окремий
+`functional-test-log`; посилання лише на report відхиляється. Файли мають
+бути звичайними непорожніми файлами в `artifacts/`; symlink, traversal,
+дубльовані шляхи й неправильний digest відхиляються.
 
-- scanner знаходить `evidence.json`; він поки не виявляє окремий
-  `profile.scm`, для якого bundle відсутній;
-- схема v1 зберігає для artifact `kind` і SHA-256, але не шлях до байтів;
-  тому поточний валідатор не може перевірити вміст реального artifact за
-  цим хешем;
-- `report_id` є посилальним значенням, але поточна система не підтверджує,
-  що відповідний raw report існує та має саме ті байти;
-- окремі функціональні логи для кожного `pass`/`fail` і захист від
-  symlink/path traversal ще не є гарантіями схеми v1.
+## Чернетка з реального звіту
 
-Тож наявність валідного v1 bundle — це лише рівень доказу, визначений
-реальною схемою та кодом на поточному `main`. Не описуйте й не використовуйте
-майбутні гарантії v2 як уже реалізовані до їхнього злиття та тестування.
+У цільовій теці до генерації вже мають існувати `profile.scm` і всі потрібні
+права доступу. Генератор не створює декларацію профілю, не робить
+функціональних тестів, не змінює статуси з `not-assessed` і не перезаписує
+наявні файли:
 
-Поточна інсталяційна логіка приймає відсутні докази як попередження і лишає
-план у режимі `diagnostic-only`; переданий, але невалідний bundle створює
-blocker. Це не означає, що scanner вже автоматично індексує кожен файл
-`profile.scm` у дереві репозиторію.
+```sh
+python3 scripts/draft_profile_evidence.py \
+  --report hwcheck-report.json \
+  --vendor GIGABYTE --model "GA-H170-Gaming 3" \
+  --slug gigabyte/ga-h170-gaming3 \
+  --out profiles/hardware/gigabyte/ga-h170-gaming3/evidence.json
+```
 
-Відсутність перевірених профілів — нормальний стан. Дослідницькі документи
-не є профілями й не повинні створювати видимість сумісності.
+Генератор копіює точні байти report до
+`artifacts/wsm-hwcheck-report.json`, зберігає SHA-256 і хешує точні байти
+`profile.scm`. Після цього людина мусить виконати функціональні тести,
+додати їхні logs до `artifacts/` і вказати окремі шляхи в кожній перевіреній
+функції. Draft bundle із самими `not-assessed` не проходить semantic evidence
+gate і не стає профілем сумісності.
+
+## Межа доказів
+
+SHA-256 підтверджує збіг фактичних байтів із digest, але не засвідчує автора,
+code review, походження commit або підпис WSM. `profile.scm` є виконуваним
+Guile Scheme-кодом; перевірка цілісності не є дозволом на його виконання.
+Наразі профілів із реальними функціональними доказами немає. Див.
+[HARDWARE-PROFILE-EVIDENCE.md](../../docs/HARDWARE-PROFILE-EVIDENCE.md).

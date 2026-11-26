@@ -4,7 +4,7 @@
 
 - Статус: **план реалізовано, нічого не виконується**
 - Код: [`wsm_install/install_steps.py`](../wsm_install/install_steps.py)
-- Тести: `tests/test_install_steps.py` (18)
+- Тести: `tests/test_install_steps.py` (19)
 
 ## Що це
 
@@ -36,11 +36,15 @@ guix system init systems/desktop.scm /mnt
 `/dev/nvme0n1` + 1 = `/dev/nvme0n1p1`. Помилка тут форматує **диск** замість
 розділу. Ім'я обчислюється в одному місці й покрите тестами.
 
-## Чому ext4 типово
+## Чому перший Guix target приймає лише ext4
 
-Бо він нудний і кожен інструмент відновлення його знає. btrfs доступний і має
-справжні переваги (знімки, стиснення) і справжню ціну (більше рухомих частин).
-Це вибір користувача, а не те, що я маю протягнути типовим значенням.
+`systems/desktop.scm` фіксує root filesystem як ext4. Тому перший preview
+приймає лише ext4 і відхиляє btrfs/xfs: інакше планувальник міг би
+відформатувати root одним типом, тоді як Guix target монтував би його як інший.
+Це не твердження, що btrfs або xfs технічно непридатні. Вони повернуться до
+вибору після реалізації та перевірки versioned Guix system-config generator,
+який узгоджує formatter argv, root declaration, package closure та QEMU
+acceptance в одному typed contract.
 
 ## Чого ще немає
 

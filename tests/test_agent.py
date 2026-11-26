@@ -52,6 +52,13 @@ class AllowlistTests(unittest.TestCase):
         with self.assertRaises(AgentError):
             validate_command(["/usr/bin/dd", "if=/dev/zero", "of=/dev/nvme0n1"])
 
+    def test_btrfs_and_xfs_formatters_are_not_allowed_for_ext4_guix_target(self) -> None:
+        for formatter in ("/usr/sbin/mkfs.btrfs", "/usr/sbin/mkfs.xfs"):
+            with self.subTest(formatter=formatter):
+                with self.assertRaises(AgentError) as caught:
+                    validate_command([formatter, "-f", "/dev/nvme0n1p2"])
+                self.assertEqual(caught.exception.code, "agent.not-allowed")
+
     def test_bare_name_is_refused(self) -> None:
         """PATH lookup in a root context is the Omarchy #8172 mistake."""
         with self.assertRaises(AgentError):

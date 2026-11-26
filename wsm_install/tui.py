@@ -1,19 +1,16 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""A pseudo-graphical installer for machines that have a screen but no desktop.
+"""Український TUI для minimal-live preview на консолі без desktop.
 
-Three frontends, one backend:
+Поточний шлях minimal-live: `wsm-install-live` відкриває цей TUI після
+hardware preflight. `--guided` є альтернативним текстовим входом у той
+самий typed planning contract. Calamares лишається лише reference-only:
+він не входить до поточного minimal-live шляху й не є обраним frontend-ом.
 
-* console (`--guided`) - a read-only target selector;
-* pseudo-graphics (`--tui`) - a full-screen read-only preview;
-* Calamares - an optional GUI shell with the same disabled-APPLY contract.
+Малювання представлено списком рядків, а введення — ін'єктованим читачем
+клавіш. Це дає змогу тестувати весь сценарій без реального термінала й
+працювати через serial console.
 
-Why not curses: `curses` is in the standard library but drags terminal
-capability handling and a global screen state that is painful to test and
-breaks on serial consoles. The screen here is a list of lines plus a key
-reader, both injectable, so the whole flow is testable without a terminal.
-
-Why not a real GUI at this level: the point of the middle tier is to work on a
-machine with 1-2 GiB of RAM and no GPU. Box drawing characters cost nothing.
+Цей рівень не потребує desktop або GPU; APPLY вимкнено.
 """
 
 from __future__ import annotations
@@ -33,6 +30,16 @@ SHOW_CURSOR = "\x1b[?25h"
 class Screen(Protocol):
     def render(self, lines: list[str]) -> None: ...
     def read_key(self) -> str: ...
+
+
+def normalize_key(char: str) -> str:
+    """Normalize shortcuts shared by US and Ukrainian keyboard layouts."""
+    return {
+        "\r": "enter", "\n": "enter",
+        "q": "quit", "й": "quit",
+        "j": "down", "о": "down",
+        "k": "up", "л": "up",
+    }.get(char, char)
 
 
 @dataclass
@@ -58,12 +65,20 @@ class TerminalScreen:
             tty.setraw(descriptor)
             char = sys.stdin.read(1)
             if char == "\x1b":
-                # Arrow keys arrive as ESC [ A/B/C/D.
-                rest = sys.stdin.read(2)
-                return {"[A": "up", "[B": "down"}.get(rest, "esc")
-            return {"\r": "enter", "\n": "enter", "q": "quit", "j": "down", "k": "up"}.get(
-                char, char
-            )
+                # A standalone Esc cancels path confirmation. Arrow sequences
+                # have a short continuation window so Esc never blocks forever.
+                import select
+
+                if not select.select([sys.stdin], [], [], 0.05)[0]:
+                    return "esc"
+                prefix = sys.stdin.read(1)
+                if prefix != "[":
+                    return "esc"
+                if not select.select([sys.stdin], [], [], 0.05)[0]:
+                    return "esc"
+                direction = sys.stdin.read(1)
+                return {"A": "up", "B": "down"}.get(direction, "esc")
+            return {"\r": "enter", "\n": "enter"}.get(char, char)
         finally:
             termios.tcsetattr(descriptor, termios.TCSADRAIN, previous)
 
@@ -84,7 +99,7 @@ def disk_list(candidates: list[Candidate], selected: int) -> list[str]:
     lines: list[str] = []
     for index, disk in enumerate(candidates):
         marker = ">" if index == selected else " "
-        removable = "  removable" if disk.removable else ""
+        removable = "  знімний" if disk.removable else ""
         lines.append(f"{marker} {index + 1}. {disk.path:<16} {disk.human_size():>9}{removable}")
     return lines
 
@@ -99,25 +114,25 @@ def run_tui(
     disks = list(candidates)
 
     if not disks:
-        screen.render(box("WSM install", [
-            "No whole disks were found.",
-            "If the disk is attached, check that the kernel sees it: lsblk",
+        screen.render(box("WSM • перегляд плану", [
+            "Дисків для перегляду не знайдено.",
+            "Перевірте, чи система бачить диск: lsblk",
             "",
-            "Press q to quit.",
+            "Натисніть q (або й), щоб вийти.",
         ]))
         screen.read_key()
         return 1
 
     selected = 0
     while True:
-        body = ["", "Choose a disk to preview:", ""]
+        body = ["", "Оберіть диск для перегляду плану:", ""]
         body += disk_list(disks, selected)
-        body += ["", "↑/↓ or j/k to move, Enter to choose, q to quit."]
+        body += ["", "↑/↓ або j/k (о/л) — вибір; Enter — далі; q/й — вихід."]
         if evidence_note:
-            body += ["", f"Hardware: {evidence_note}"[: BOX_WIDTH - 4]]
-        screen.render(box("WSM install", body))
+            body += ["", f"Обладнання: {evidence_note}"[: BOX_WIDTH - 4]]
+        screen.render(box("WSM • перегляд плану", body))
 
-        key = screen.read_key()
+        key = normalize_key(screen.read_key())
         if key == "quit":
             return 1
         if key == "up":
@@ -131,16 +146,16 @@ def run_tui(
 
     firmware = "uefi"
     while True:
-        screen.render(box("Firmware", [
+        screen.render(box("Режим завантаження", [
             "",
-            f"Disk: {disk.path}  ({disk.human_size()})",
+            f"Диск: {disk.path}  ({disk.human_size()})",
             "",
             f"  [1] UEFI{'  <-' if firmware == 'uefi' else ''}",
             f"  [2] BIOS{'  <-' if firmware == 'bios' else ''}",
             "",
-            "1/2 or arrows to change, Enter to continue, q to quit.",
+            "1/2 або стрілки — змінити; Enter — далі; q/й — вихід.",
         ]))
-        key = screen.read_key()
+        key = normalize_key(screen.read_key())
         if key == "quit":
             return 1
         if key in {"1"}:
@@ -156,16 +171,18 @@ def run_tui(
 
     typed = ""
     while True:
-        screen.render(box("Confirm", [
+        screen.render(box("Підтвердження", [
             "",
-            f"Preview target: {disk.path} ({disk.human_size()}).",
+            f"Ціль перегляду: {disk.path} ({disk.human_size()}).",
             "",
-            "No disk will be changed. Type the path to confirm this preview, or q to quit.",
+            "Диск не змінюватиметься. Введіть його шлях; Esc — скасувати.",
             "",
             f"  > {typed}_",
         ]))
+        # У полі шляху не нормалізуємо q/j/k/й/о/л: це звичайні
+        # символи назв пристроїв і точного підтвердження. Esc скасовує ввід.
         key = screen.read_key()
-        if key == "quit":
+        if key == "esc":
             return 1
         if key == "enter":
             break
@@ -175,30 +192,30 @@ def run_tui(
             typed = typed[:-1]
 
     if typed != disk.path:
-        screen.render(box("Stopped", [
+        screen.render(box("Зупинено", [
             "",
-            "The path you typed does not match the chosen disk.",
-            "Nothing was changed.",
+            "Введений шлях не збігається з обраним диском.",
+            "Змін не внесено.",
         ]))
         screen.read_key()
         return 1
 
-    screen.render(box("Preview", ["", f"Preparing a read-only preview for {disk.path}..."]))
+    screen.render(box("Перегляд", ["", f"Готуємо попередній перегляд {disk.path} лише для читання..."]))
     result = preview(disk.path, disk.size_bytes, firmware)
     if isinstance(result, int) and result != 0:
-        screen.render(box("Preview failed", [
+        screen.render(box("Помилка перегляду", [
             "",
-            f"Preview could not be generated (exit {result}).",
-            "APPLY is disabled. Nothing was changed.",
+            f"Не вдалося створити перегляд (код {result}).",
+            "APPLY вимкнено. Змін не внесено.",
         ]))
         return result
 
-    screen.render(box("Preview complete", [
+    screen.render(box("Перегляд завершено", [
         "",
-        f"Plan prepared for {disk.path} ({firmware}).",
+        f"План підготовлено для {disk.path} ({firmware}).",
         "",
-        "APPLY is disabled.",
-        "No disk commands were executed.",
-        "WSM was NOT installed.",
+        "APPLY вимкнено.",
+        "Команди роботи з диском не виконувалися.",
+        "WSM НЕ встановлено.",
     ]))
     return 0

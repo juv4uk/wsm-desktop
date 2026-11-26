@@ -4,12 +4,16 @@
 
 - Статус: **перший запис**, зроблено 2026-11-26
 - Перевірка: `scripts/verify_live_release.py`
+- Збірка й публікація: `.github/workflows/release-minimal-live.yml` (єдиний конвеєр образу)
 - Машиночитний вердикт: [`artifacts/iso-verdict-0.1.0-rc2-live-iso.json`](artifacts/iso-verdict-0.1.0-rc2-live-iso.json)
 
 ## Навіщо цей файл
 
 Реліз без перевірки — це заява. Тут записано, що саме перевірено, чим і з яким
 результатом. Якщо артефакт не згаданий — його не перевіряли.
+
+Походження артефакту (хто і з якого коміту його зібрав) — окреме питання, і воно
+розібране в [RELEASE-PROVENANCE.md](RELEASE-PROVENANCE.md).
 
 ## `wsm-desktop-kde-hardened-20261125.iso`
 

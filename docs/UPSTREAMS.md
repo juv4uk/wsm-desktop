@@ -111,6 +111,14 @@ GPL-3.0-or-later, і жодна частина цього репозиторію
   **заплановано на 26.11.2026**; до цього, з 10.11.2026, на `master` уже діяв
   toolchain/transition freeze. Після заморозки на `master` ідуть лише виправлення
   блокерів і security updates, а решта змін живе в team-гілках.
+- За планом релізної команди (лист 15.11.2026): тиждень 49 (30.11–06.12) —
+  створення й тегування release-гілки; тиждень 50 (07.12–13.12) — hard freeze і
+  release candidate; **21.12.2026 — цільова дата фінального релізу**. Це план, а
+  не обіцянка, і саме так його треба читати.
+- Практичний наслідок для піна каналу: між 30.11 і 21.12 зріз `master` може
+  змінюватися під реліз, тому пін, зроблений у цьому вікні, фіксує проміжний
+  стан. Вибір «пін до 30.11» чи «пін на тег 1.6.0 після 21.12» — окреме рішення
+  з власним ADR, а не побічний ефект релізу Guix.
 - Наслідок для [#39](https://github.com/juv4uk/wsm-desktop/issues/39) і
   [#210](https://github.com/juv4uk/wsm-desktop/issues/210): доказом
   відтворюваності лишається **точний commit** у `channels/*.lock.scm`, а не
@@ -153,6 +161,24 @@ GPL-3.0-or-later, і жодна частина цього репозиторію
   необхідно перевірити на reference hardware; відсутність X11 fallback не
   можна компенсувати припущенням про сумісність.
 
+### SBOM із `guix graph`
+
+- З Guix **1.5.0** `guix graph` має бекенди `graphml` і `cyclonedx-json`, тобто
+  вміє видавати Software Bill of Materials для замикання пакетів. Для WSM це
+  єдиний відомий спосіб отримати SBOM, який сягає аж до bootstrap-бінарників,
+  без власного коду.
+- Формат — CycloneDX JSON, який читають сканери вразливостей (наприклад
+  Dependency-Track). Це доповнює наш `release-manifest.json`, а не замінює
+  його: manifest каже «що ми зібрали і з якого коміту», SBOM каже «з чого це
+  складається».
+- Обмеження, назване автором зміни в upstream: у SBOM поки є лише ім'я й версія
+  кожної залежності, чого може не вистачити для точного зіставлення з базою
+  вразливостей; а для графів, де вузли — імена файлів у store, версію
+  доведеться не виводити взагалі.
+- Статус для WSM: **вхідні дані**, не рішення. Додавання SBOM у релізний
+  конвеєр — окреме рішення з власним ADR, бо воно змінює склад артефактів і
+  те, що ми обіцяємо перевіряти.
+
 ### Calamares
 
 - Актуальний stable upstream — **3.4.3** (2026-09-10); деталі provenance,
@@ -162,8 +188,11 @@ GPL-3.0-or-later, і жодна частина цього репозиторію
 Джерела:
 - [Guix 1.6.0 release meeting notes, 15.11.2026](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00088.html)
 - [Guix toolchain/transition freeze, 10.11.2026](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00039.html)
+- [Guix 1.6.0 release schedule, 15.11.2026](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00091.html)
 - [GCD 009 deliberation notice](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00074.html)
 - [Guix repository on Codeberg](https://codeberg.org/guix/guix/)
+- [guix graph: CycloneDX backend, PR #2405](https://codeberg.org/guix/guix/pulls/2405)
+- [GNU Guix 1.5.0 release announcement](https://guix.gnu.org/en/blog/2026/gnu-guix-1.5.0-released/)
 - [KDE Plasma 6.8.3, 10.11.2026](https://kde.org/announcements/plasma/6/6.8.3/)
 - [KDE Plasma 6.8 announcement, 14.10.2026](https://kde.org/announcements/plasma/6/6.8.0/)
 - [KDE Plasma 6.7.6, 03.11.2026](https://kde.org/announcements/plasma/6/6.7.6/)

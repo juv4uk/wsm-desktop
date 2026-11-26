@@ -122,11 +122,27 @@ class PathHijackTests(unittest.TestCase):
 
 
 class FilesystemChoiceTests(unittest.TestCase):
-    def test_btrfs_is_available_and_uses_force(self) -> None:
-        steps = plan_steps(layout(), filesystem="btrfs")
-        mkfs = [step for step in steps if tool(step) == "mkfs.btrfs"]
-        self.assertEqual(len(mkfs), 1)
-        self.assertIn("-f", mkfs[0].command)
+    def test_btrfs_and_xfs_are_refused_until_guix_config_matches(self) -> None:
+        for filesystem in ("btrfs", "xfs"):
+            with self.subTest(filesystem=filesystem):
+                with self.assertRaises(Refused) as caught:
+                    plan_steps(layout(), filesystem=filesystem)
+                self.assertEqual(caught.exception.code, "filesystem.unsupported")
+
+    def test_supported_filesystem_matches_guix_root_declaration(self) -> None:
+        import re
+
+        from wsm_install.install_steps import FILESYSTEMS, ROOT_FILESYSTEM
+
+        scheme = (ROOT / "systems" / "desktop.scm").read_text(encoding="utf-8")
+        root = re.search(
+            r'\(file-system\s+\(mount-point "/".*?\(type "([^"]+)"\)',
+            scheme,
+            flags=re.DOTALL,
+        )
+        self.assertIsNotNone(root, "desktop Guix system must declare a root filesystem")
+        self.assertEqual(ROOT_FILESYSTEM, root.group(1))
+        self.assertEqual(set(FILESYSTEMS), {root.group(1)})
 
     def test_unknown_filesystem_is_refused(self) -> None:
         with self.assertRaises(Refused) as caught:
@@ -159,3 +175,41 @@ class RenderTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ForeignDataTests(unittest.TestCase):
+    """Omarchy #14949: a reset deleted other operating systems' boot entries.
+
+    The register in docs/LESSONS-FROM-OMARCHY.md calls this row `partial`,
+    because "the ESP is mounted inside the target" proves where it is mounted,
+    not whose ESP it is. The stronger property is different and testable
+    without a VM: WSM never reuses somebody else's partition. The plan wipes the
+    whole target disk and formats only partitions it created in that same plan,
+    so there is no shared ESP to damage in the first place.
+    """
+
+    def test_whole_disk_is_wiped_before_any_partition_is_created(self) -> None:
+        commands = layout().commands()
+        self.assertEqual(commands[0], ["sgdisk", "--zap-all", layout().disk])
+
+    def test_only_self_created_partitions_are_formatted_or_mounted(self) -> None:
+        """Any /dev path in the step list must be ours, not a foreign partition."""
+        current = layout()
+        created = {device_for(current.disk, partition["number"]) for partition in current.partitions}
+        allowed = created | {current.disk}
+        for step in plan_steps(current):
+            for argument in step.command:
+                if argument.startswith("/dev/"):
+                    self.assertIn(
+                        argument,
+                        allowed,
+                        f"{argument!r} is not a partition this plan created",
+                    )
+
+    def test_the_plan_never_touches_the_firmware_boot_order(self) -> None:
+        """Boot order is a separate claim; nothing here may quietly rewrite it."""
+        tools = {step.command[0].rsplit("/", 1)[-1] for step in plan_steps(layout())}
+        self.assertFalse(
+            tools & {"efibootmgr", "bootctl", "grub-install", "grub2-install"},
+            f"unexpected boot-order tooling: {sorted(tools)}",
+        )

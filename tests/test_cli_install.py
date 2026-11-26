@@ -40,6 +40,13 @@ class InstallModeTests(unittest.TestCase):
         self.assertTrue(all(step["status"] == "not-run" for step in payload["steps"]))
         self.assertEqual(payload["handoff"][:3], ["guix", "system", "init"])
 
+    def test_btrfs_and_xfs_are_refused_by_first_guix_preview(self) -> None:
+        for filesystem in ("btrfs", "xfs"):
+            with self.subTest(filesystem=filesystem):
+                result = run_cli("--filesystem", filesystem)
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("invalid choice", result.stderr)
+
     def test_install_without_disk_is_refused(self) -> None:
         result = run_cli("--install", "--quiet")
         self.assertEqual(result.returncode, 2)

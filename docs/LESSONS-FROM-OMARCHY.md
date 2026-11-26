@@ -175,6 +175,7 @@ JSON-масивом аргументів, який передається як `
   не повинна отримувати completion marker; merged.
 - [#20178](https://github.com/omacom/omarchy/issues/20178) — open issue про
   Legacy/CSM multi-disk install без перевіреного boot-order handoff.
+- [#15435](https://github.com/omacom/omarchy/issues/15435) — звіт про update, який завершувався без перевірки свіжості initramfs/UKI, підписів EFI та ідентичності ESP, куди записано boot artifacts; upstream закрив issue як `not planned`.
 
 ## Реєстр регресійних класів WSM
 
@@ -194,20 +195,25 @@ JSON-масивом аргументів, який передається як `
 | Дія на застарілому стані (partition table після запису) | таблиця перечитується перед форматуванням | тест перевіряє порядок кроків | `covered` | `tests/test_install_steps.py::test_partition_table_is_reread_before_formatting` |
 | USB device metadata виконується як Hyprland Lua (Omarchy #8129) | WSM не реалізує Hyprland device-toggle або генерацію Lua з USB descriptors | відповідної інтеграції в WSM немає | `out-of-scope` | — |
 | FIDO2 migration передчасно позначається завершеною без виконання precondition (Omarchy #16421) | майбутній WSM migration runner має лишати невирішені preconditions у pending; власного FIDO2 migration runner поки немає | відповідну migration-підсистему WSM не реалізовано | `out-of-scope` | — |
-| Видалення чужих boot entries на shared ESP (Omarchy #14949) | ESP монтується всередину цілі; чужий ESP не форматується | частково: тест перевіряє mountpoint, а не вміст ESP | `partial` | `tests/test_install_steps.py::test_esp_is_mounted_inside_the_target_not_outside` |
+| Видалення чужих boot entries на shared ESP (Omarchy #14949) | WSM працює лише з цільовим диском: `sgdisk --zap-all` стирає його повністю, а форматується тільки те, що створено цим самим планом. Чужий ESP на іншому носії не адресується взагалі | тест: жоден `/dev`-шлях у плані не веде на пристрій, якого план не створив; boot order не змінюється | `covered` | `tests/test_install_steps.py::test_only_self_created_partitions_are_formatted_or_mounted` |
+| Stale або unsigned boot artifacts / запис на не-booted ESP під час update (Omarchy #15435) | Власного system updater, UKI signer і ESP writer у WSM поки немає; майбутній updater мусить прив'язувати target до identity firmware-boot ESP, а не лише mount path | немає update/boot-artifact lifecycle, який можна перевірити | `out-of-scope` | — |
+| Передбачувані host-side шляхи у `/tmp` (Omarchy #19965) | фіксовані `/tmp`-імена лишаються тільки в `GUEST_INIT` одноразової QEMU VM; host-side writers використовують `tempfile` | AST-тест обмежує літерали `GUEST_INIT`; він не доводить відсутність динамічно зібраних шляхів чи всіх filesystem TOCTOU-гонок | `partial` | `tests/test_temp_path_containment.py::test_fixed_tmp_paths_exist_only_inside_the_guest_script` |
+| Нерегулярні lock paths та runtime-directory validation (Omarchy #19998) | перед появою host-side lock API він мусить відхиляти symlink/FIFO/directory lock targets і перевіряти ownership та mode runtime directory; окремого WSM lock-file manager поки не виявлено | відповідного lock lifecycle та тестів наразі немає | `out-of-scope` | — |
 | `root=` втрачено під час kernel/package transaction (Omarchy #6951) | bootloader-конфіг генерує Guix System; WSM не пише `root=` сам | немає — WSM не має власного boot-кроку | `out-of-scope` | — |
 | LUKS recovery slot видалено при зміні ключа (Omarchy #14874) | шифрування не реалізоване | немає коду, який чіпає slots | `out-of-scope` | — |
 | Legacy/CSM multi-disk boot-order hand-off (Omarchy #20178) | BIOS layout створює `bios_grub`, але preview не доводить, що firmware після майбутнього встановлення стартує з цільового диска | немає двохдискового Legacy/CSM QEMU або physical acceptance | `not-covered` | — |
-| Міграція власних артефактів (`wsm-profile-evidence/1` → `/2`) | плану міграції немає | немає | `not-covered` | — |
+| Міграція власних артефактів (`wsm-profile-evidence/2` → `/3`) | читач відмовляє на невідомій версії за іменем; плану міграції поки немає | тест: кожен наявний читач відмовляє на версії +1 і приймає поточну | `partial` | `tests/test_artifact_version_refusal.py::test_next_version_is_refused_by_name` |
 
 `out-of-scope` не означає «вирішено»: це означає, що коду, який міг би зламатися
 саме так, у WSM поки немає. Щойно з'явиться власний boot-крок, шифрування,
-механізм встановлення сторонніх тем/плагінів або друга версія артефакту —
-відповідний рядок переходить у `not-covered` і отримує тест. Це також стосується майбутнього FIDO2 або іншого системного migration workflow.
+механізм встановлення сторонніх тем/плагінів, updater/ESP lifecycle або друга
+версія артефакту — відповідний рядок переходить у `not-covered` і отримує тест.
+Це також стосується майбутнього FIDO2 або іншого системного migration workflow.
 
 Ці upstream reports — не докази дефектів у WSM або на конкретному обладнанні.
 Це джерела для regression fixtures та acceptance вимог; кожен сценарій має
-окремий prevent/detect rule і статус власної перевірки.
+окремий prevent/detect rule і статус власної перевірки. Звіт Omarchy #15435
+не означає, що WSM має такий дефект: він фіксує вимогу до майбутнього updater-а.
 
 Джерела: [Omarchy 4.5 announcement](https://omarchy.org/news/2026/11/omarchy-4-5/),
 [official v4.5.0 release](https://github.com/omacom/omarchy/releases/tag/v4.5.0),
