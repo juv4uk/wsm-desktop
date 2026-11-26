@@ -108,6 +108,11 @@ jobs:
           done
           exit $status
 
+      - name: Evaluate the Compatibility live system
+        run: |
+          /usr/local/bin/guix time-machine -C channels/compatibility.lock.scm -- \
+            system build systems/live-compat.scm --dry-run
+
       - name: Evaluate the home environment
         run: |
           /usr/local/bin/guix time-machine -C channels.lock.scm -- \
