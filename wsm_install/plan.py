@@ -67,6 +67,9 @@ def build_plan(
     diagnostic-only - absence is not a failure, it is the normal state until
     someone actually tests the hardware.
     """
+    if backend != "guix":
+        raise ValueError("unsupported backend; the first WSM preview supports only 'guix'")
+
     blockers: list[str] = []
     warnings: list[str] = []
 
@@ -188,7 +191,7 @@ def build_plan(
         "storage target is not selected by hardware discovery; explicit user selection and immediate identity revalidation are still required"
     )
 
-    backend_id = {"guix": "guix-system", "nix": "nixos"}[backend]
+    backend_id = "guix-system"
     plan: dict[str, Any] = {
         "plan_version": "0.1.0",
         "plan_mode": "dry-run",

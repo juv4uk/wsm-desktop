@@ -93,12 +93,19 @@ class InstallerPlanTests(unittest.TestCase):
         self.assertFalse(first["execution"]["backend_invoked"])
         self.assertFalse(first["execution"]["disk_access_performed"])
 
-    def test_unknown_critical_display_refuses_to_emit_plan(self) -> None:
+    def test_unknown_critical_display_refuses_to_emit_guix_plan(self) -> None:
         report, raw = load_fixture("unknown-incomplete.json")
-        plan, blockers, _ = build_plan(report, raw, "nix")
+        plan, blockers, _ = build_plan(report, raw, "guix")
         self.assertTrue(blockers)
-        self.assertEqual(plan["backend"]["id"], "nixos")
+        self.assertEqual(plan["backend"]["id"], "guix-system")
         self.assertFalse(plan["execution"]["mutations_authorized"])
+
+    def test_plan_builder_rejects_deferred_backends(self) -> None:
+        report, raw = load_fixture("desktop-observed.json")
+        for backend in ("nix", "nixos"):
+            with self.subTest(backend=backend):
+                with self.assertRaisesRegex(ValueError, "only 'guix'"):
+                    build_plan(report, raw, backend)
 
     def test_required_network_firmware_error_is_warning_with_offline_fallback(self) -> None:
         report, raw = load_fixture("missing-firmware.json")
@@ -120,12 +127,12 @@ class InstallerPlanTests(unittest.TestCase):
             stderr = io.StringIO()
             with contextlib.redirect_stderr(stderr):
                 result = main([
-                    "--preflight", "--report", str(report_path), "--backend", "nix",
+                    "--preflight", "--report", str(report_path), "--backend", "guix",
                     "--dry-run", "--plan-output", str(plan_path),
                 ])
             self.assertEqual(result, 0, stderr.getvalue())
             plan = json.loads(plan_path.read_text(encoding="utf-8"))
-            self.assertEqual(plan["backend"]["id"], "nixos")
+            self.assertEqual(plan["backend"]["id"], "guix-system")
             self.assertFalse(plan["execution"]["backend_invoked"])
             self.assertFalse(plan["execution"]["disk_access_performed"])
             self.assertFalse(plan["execution"]["plan_confirmable"])
@@ -251,7 +258,7 @@ class InstallerPlanTests(unittest.TestCase):
     def test_not_detected_critical_device_refuses_to_emit_plan(self) -> None:
         report, raw = load_fixture("unknown-incomplete.json")
         report["devices"][0]["discovery_status"] = "not-detected"
-        _, blockers, _ = build_plan(report, raw, "nix")
+        _, blockers, _ = build_plan(report, raw, "guix")
         self.assertTrue(any("not-detected" in item for item in blockers))
 
     def test_cli_accepts_profile_evidence_and_records_provenance(self) -> None:

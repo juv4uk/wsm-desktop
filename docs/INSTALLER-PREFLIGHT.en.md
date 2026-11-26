@@ -10,7 +10,7 @@
 
 ## Purpose
 
-The `wsm-install` prototype validates a local hardware evidence report, presents observed facts, and emits a deterministic backend-specific draft plan. It does not deploy a system, invoke Guix or Nix, open block devices, partition disks, or change bootloader state.
+The `wsm-install` prototype validates a local hardware evidence report, presents observed facts, and emits a deterministic draft plan for the sole first-preview backend, GNU Guix System. It does not deploy a system, run deployment commands, open block devices, partition disks, or change bootloader state.
 
 The first increment is CLI-only. It deliberately does not select or embed an installer frontend. A graphical/TUI layer can later consume the same report summary and plan functions.
 
@@ -29,7 +29,7 @@ Write the plan to a file instead of stdout:
 ```sh
 python3 -m wsm_install --preflight \
   --report tests/fixtures/hardware/desktop-observed.json \
-  --backend nix --dry-run --plan-output /tmp/wsm-plan.json
+  --backend guix --dry-run --plan-output /tmp/wsm-plan.json
 ```
 
 Both `--preflight` and `--dry-run` are mandatory. There is no apply command in this prototype.
@@ -52,7 +52,7 @@ The v1 prototype treats unknown or not-detected discovery for an explicitly repo
 
 The plan includes the SHA-256 digest of the exact source-report bytes and report-local JSON Pointer references to the evidence and functional-test records used for each device summary. `plan_sha256` is computed over canonical JSON (UTF-8, sorted keys, no insignificant whitespace) of the plan before the digest field is added. The machine-readable `execution.dry_run` marker is true; plan confirmation, mutation authorization, backend invocation, and disk access are all false.
 
-The CLI backend aliases are explicit: `guix` maps to `guix-system`, and `nix` maps to `nixos`.
+The only accepted first-preview CLI alias is `guix`, mapped to the canonical plan ID `guix-system`. The values `nix` and `nixos` are rejected. Nix/NixOS remains a separate research direction, not an available installer backend.
 
 A draft plan is not a deployment authorization. A future apply path must independently revalidate the exact target device, backend revision, plan digest, and explicit user confirmation. Report freshness does not replace target-device revalidation.
 
