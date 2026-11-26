@@ -1,25 +1,27 @@
 {
   "schema": "wsm-release-info/1",
   "release_id": "wsm-desktop-hardware-preview",
-  "version": "0.1.0-rc3",
-  "display_name": "WSM Desktop RC3 — три інсталятори",
+  "version": "0.1.0-rc4",
+  "display_name": "WSM Desktop RC4 — апаратні докази та preview-only інсталятор",
   "status": "pre-release",
   "date": "2026-11-26",
   "scope": [
     "read-only hardware evidence report (wsm-hwcheck 0.2.0, report schema 1.0.0)",
-    "three installer frontends over one backend: console (--guided), pseudo-graphical (--tui) and the Calamares jobmodule",
-    "privileged agent: the unprivileged side writes a plan, root executes only an allowlisted set of commands",
-    "execution journal and recovery report: what ran, what failed, and what to check next",
-    "environment preflight: tools, guix, root, mount point, system file, report and ISA level, before the first disk is touched",
-    "authenticated free-only Guix channel lock and an authenticated Compatibility lock with Nonguix",
-    "reproducible source bundle with checksums and build manifest",
-    "KDE Plasma desktop profile, a minimal console live profile and a live-ISO recipe, shipped as unverified source (not as an image built here)"
+    "four installer entrypoints (CLI --install, Guided, TUI and Calamares) over one preview-only executor",
+    "privileged agent validates plan structure and renders preview; APPLY is disabled in every frontend",
+    "all planned installer steps return not-run (command not executed); recovery reads journal data only",
+    "safe preview-plan output: regular-file destination validation and atomic write; device nodes, symlinks and report overwrite are refused",
+    "environment preflight checks tools, Guix, privilege, mount point, system file, hardware report and ISA before preview; no target disk is modified",
+    "separate Free and Compatibility channel locks; structural product policy is checked independently; Compatibility Guix authentication and system evaluation remain a manual gate and are not claimed as complete for this candidate",
+    "one CI workflow defines fast tests/docs and bounded QEMU guest acceptance; QEMU evidence is distinct from physical hardware and Guix ISO evidence",
+    "reproducible source bundle with checksums and build manifest"
   ],
   "excluded": [
-    "any write to a physical block device, partition table or bootloader: the installer has never run on a disk",
-    "a verified installation: no install has completed anywhere, in QEMU or on hardware",
-    "the Compatibility image: systems/live-compat.scm and channels/compatibility.lock.scm exist and pass policy checks, but were never built here",
-    "the Nix/NixOS backend: ADR 0004 keeps Guix as the only supported backend",
+    "any APPLY, partition, format, mount, bootloader or Guix deployment write to a physical or virtual target disk; the installer remains preview-only",
+    "a verified installation: no installation has completed in QEMU or on physical hardware",
+    "a Guix-generated bootable WSM ISO in this source bundle; the minimal-live release is a separate artifact with its own build, BIOS and UEFI gates",
+    "authenticated Guix evaluation and system build of the Compatibility profiles for this candidate; structural lock policy is not a substitute for Guix authentication",
+    "physical support claims for the Compatibility NVIDIA/Pascal profile, including GTX 1050 Ti; package declarations and QEMU enumeration are not physical bind/render evidence",
     "a claim of performance: the baseline harness exists, no physical-machine measurement has been published"
   ],
   "requirements": {
@@ -27,7 +29,7 @@
     "jsonschema": "4.26.0"
   },
   "artifacts": [
-    "wsm-desktop-0.1.0-rc2-source.tar.gz",
+    "wsm-desktop-0.1.0-rc4-source.tar.gz",
     "SHA256SUMS",
     "release-manifest.json"
   ]

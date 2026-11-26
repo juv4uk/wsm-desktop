@@ -395,6 +395,38 @@ class ReleaseBundleTests(unittest.TestCase):
             sums = (canonical.parent / "SHA256SUMS").read_text(encoding="utf-8")
             self.assertIn(f"  {canonical.name}", sums)
 
+
+class ReleaseMetadataPolicyTests(unittest.TestCase):
+    def test_release_metadata_version_matches_the_source_asset(self) -> None:
+        info = json.loads((ROOT / "RELEASE-INFO.json").read_text(encoding="utf-8"))
+        self.assertEqual(info["version"], "0.1.0-rc4")
+        expected = f"wsm-desktop-{info['version']}-source.tar.gz"
+        self.assertIn(expected, info["artifacts"])
+
+    def test_release_metadata_describes_preview_only_not_root_execution(self) -> None:
+        info = json.loads((ROOT / "RELEASE-INFO.json").read_text(encoding="utf-8"))
+        notes = (ROOT / "RELEASE-NOTES.md").read_text(encoding="utf-8")
+        combined = json.dumps(info, ensure_ascii=False) + "\\n" + notes
+
+        self.assertIn("preview-only", combined)
+        self.assertIn("APPLY", combined)
+        self.assertIn("not-run", combined)
+        self.assertIn("command not executed", combined)
+        self.assertNotIn("root executes", combined.lower())
+        self.assertNotIn("only then executes", combined.lower())
+        self.assertNotIn("лише тоді виконує", combined.lower())
+
+    def test_release_metadata_does_not_claim_compatibility_authentication(self) -> None:
+        info = json.loads((ROOT / "RELEASE-INFO.json").read_text(encoding="utf-8"))
+        notes = (ROOT / "RELEASE-NOTES.md").read_text(encoding="utf-8")
+        combined = json.dumps(info, ensure_ascii=False) + "\\n" + notes
+
+        self.assertIn("channels/compatibility.lock.scm", combined)
+        self.assertIn("manual", combined.lower())
+        self.assertIn("not yet run", combined.lower())
+        self.assertNotIn("authenticated Compatibility lock", combined)
+
+
 def gzip_open(path: Path):  # pragma: no cover - tiny helper for readable test
     import gzip
 
