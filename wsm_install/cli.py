@@ -291,28 +291,44 @@ def _run_install(args: argparse.Namespace) -> int:
         return 2
 
     if args.write_plan:
-        # This file is a reviewable preview artifact only. The privileged agent
-        # also refuses APPLY until target identity and consent are bound to it.
-        Path(args.write_plan).write_text(
-            json.dumps({
-                "schema": "wsm-install-plan/1",
-                "disk": disk.path,
-                "firmware": args.firmware,
-                "filesystem": args.filesystem,
-                "mount_point": args.mount_point,
-                "handoff": command,
-                "steps": [
-                    {
-                        "command": step.command,
-                        "purpose": step.purpose,
-                        "destructive": step.destructive,
-                    }
-                    for step in steps
-                ],
-            }, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
+        # A preview artifact is still a file write. Refuse device nodes, pseudo
+        # filesystems, symlinks, and aliases of the report/schema inputs.
+        destination, error = _safe_plan_output_path(
+            args.write_plan,
+            Path(args.report),
+            Path(args.schema),
         )
-        print(f"wsm-install: preview plan written to {args.write_plan}; APPLY disabled", file=sys.stderr)
+        if error or destination is None:
+            print(
+                f"wsm-install: write-plan.refused: {error or 'invalid destination'}",
+                file=sys.stderr,
+            )
+            return 2
+        rendered = json.dumps({
+            "schema": "wsm-install-plan/1",
+            "disk": disk.path,
+            "firmware": args.firmware,
+            "filesystem": args.filesystem,
+            "mount_point": args.mount_point,
+            "handoff": command,
+            "steps": [
+                {
+                    "command": step.command,
+                    "purpose": step.purpose,
+                    "destructive": step.destructive,
+                }
+                for step in steps
+            ],
+        }, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+        try:
+            _write_plan_atomically(destination, rendered)
+        except OSError as exc:
+            print(f"wsm-install: write-plan.failed: {exc}", file=sys.stderr)
+            return 2
+        print(
+            f"wsm-install: preview plan written to {destination}; APPLY disabled",
+            file=sys.stderr,
+        )
         return 0
 
     if not args.quiet:
