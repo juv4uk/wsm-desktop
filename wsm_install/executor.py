@@ -132,7 +132,7 @@ def execute(
             command=command,
             purpose=step.purpose,
             destructive=step.destructive,
-            status="skipped",
+            status="not-run",
             detail="preview only; APPLY disabled; command not executed",
         )
         results.append(result)
