@@ -49,14 +49,18 @@ def write_tar(path: Path, members: list[tuple[str, bytes]]) -> None:
 
 
 class QemuHwcheckGuestSafetyTests(unittest.TestCase):
-    def test_qemu_job_host_python_minor_matches_guest_runtime(self) -> None:
-        workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-        qemu_job = workflow.split("  qemu-acceptance:", 1)[1].split(
-            "\n  acceptance-gates:", 1
-        )[0]
-        guest_minor = ".".join(guest.PYTHON_ASSET.removeprefix("cpython-").split(".")[:2])
-        self.assertEqual(guest_minor, "3.11")
-        self.assertIn(f'python-version: "{guest_minor}"', qemu_job)
+    def test_manual_qemu_target_requires_guest_compatible_python_abi(self) -> None:
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        self.assertEqual(guest.GUEST_VALIDATION_ABI, "cpython-311")
+        self.assertIn(
+            '$(PYTHON) -c \'import sys; assert sys.implementation.cache_tag == "cpython-311"',
+            makefile,
+        )
+        self.assertIn("$(PYTHON) scripts/ci_qemu_hwcheck_guest.py", makefile)
+        documentation = (
+            ROOT / "docs" / "testing" / "HWCHECK-QEMU-GUEST.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn("PYTHON=python3.11 make qemu-acceptance-manual", documentation)
 
     def test_guest_init_template_renders_all_stages_without_placeholders(self) -> None:
         rendered = guest.render_guest_init("/lib:/lib64:/opt/python/lib")
