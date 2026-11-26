@@ -1,20 +1,60 @@
-# Calamares integration
+# Calamares у WSM
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-This directory is reserved for WSM's Calamares configuration, branding, module configuration, and translations.
+- Статус: **модуль написано, у Calamares не запускався**
+- Роль: **опційний** вхід. Основний шлях — `wsm-install` (CLI): він працює там,
+  де графічний майстер не піднімається (див. [INSTALLER.md](../../docs/INSTALLER.md))
+- Рішення: [ADR 0008](../../docs/decisions/0008-calamares-backend-module.md) (`proposed`)
 
-## Current status
+## Розподіл ролей
 
-No production settings.conf or runnable WSM deployment module is committed yet. The first task is a feasibility check: determine whether the selected Calamares release and its Qt/KPMcore/Python dependencies can be built and run in the intended Guix live environment.
+| Шар | Хто робить | Файл |
+| --- | --- | --- |
+| Мова, локація, клавіатура, користувач | Calamares, з коробки | — |
+| Розбиття диска | Calamares (kpmcore) | — |
+| Перевірка заліза й докази | **WSM** | `modules/wsm_deploy/main.py` |
+| Вибір профілю | **WSM** | те саме |
+| Запис системи | **WSM** | `wsm_install/install_steps.py` + `executor.py` |
 
-## Planned contents
+Модуль навмисно тонкий: він не форматує й не монтує нічого сам, а викликає ті
+самі модулі, що й CLI. Одна реалізація кожної небезпечної операції, Calamares —
+лише обличчя.
 
-- settings.conf — WSM module sequence, version-controlled with the Calamares release.
-- branding/wsm/ — WSM-owned branding, artwork, and slideshow.
-- modules/wsm-guix-deploy/ — WSM-owned Python job module, after API validation.
-- modules/wsm-guix-config/ — future UI module for Guix-specific configuration, if existing Calamares views are insufficient.
+## Контракт jobmodule
 
-Do not copy upstream Calamares module configuration blindly. Keep upstream notices, check the matching version's module documentation, and record local changes.
+- `run()` повертає `None` при успіху;
+- при збої — кортеж `(message, details)`: короткий рядок для людини й довший
+  текст для журналу.
 
-See docs/INSTALLER.md and docs/decisions/0002-calamares-as-installer.md.
+Модуль ніколи не повертає `None`, якщо чогось бракує. Відсутній звіт про залізо,
+невирішений блокер, невалідні докази, відсутній диск або розмір — усе це кортеж
+з поясненням.
+
+## Ключі globalstorage, які читає модуль
+
+| Ключ | Звідки | Навіщо |
+| --- | --- | --- |
+| `wsmReportPath` | крок preflight | звіт `wsm-hwcheck` |
+| `wsmTargetDisk` | Calamares | цільовий диск; WSM ніколи не обирає сам |
+| `wsmTargetSizeBytes` | Calamares | розмір — те, чим ловиться підмінений диск |
+| `wsmProfileEvidence` | крок вибору профілю | bundle доказів заліза |
+| `wsmSystemFile` | крок вибору профілю | який `.scm` віддати Guix |
+| `wsmDryRun` | налаштування | прогін без запису |
+
+## Чому модуль сам шукає `wsm_install`
+
+Calamares завантажує `main.py` за шляхом, тому пакет не імпортується. Модуль
+піднімається вгору по батьківських теках, доки не знайде `wsm_install`, замість
+того щоб вгадувати фіксовану глибину.
+
+## Чого ще немає
+
+- **Запуску в Calamares.** Жодного разу: ні збірки модуля, ні прогону в живому
+  інсталяторі.
+- **`settings.conf`.** Порядок кроків у Calamares ще не описаний: спершу треба
+  вирішити, які його власні модулі ми лишаємо (partition, users, locale), а які
+  вимикаємо.
+- **Кроку preflight як окремого модуля.** Зараз `wsmReportPath` має заповнити
+  хтось інший; цей модуль лише читає його.
+- **QML-інтерфейсу вибору профілю.**

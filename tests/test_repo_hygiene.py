@@ -111,6 +111,28 @@ class CiOnlyScriptTests(unittest.TestCase):
         self.assertIn("MARKER=", text)
 
 
+class InstallerFrontendTests(unittest.TestCase):
+    """The CLI is the primary path: a GUI installer needs hardware we may not have."""
+
+    def test_installer_document_names_the_cli_as_primary(self) -> None:
+        text = (ROOT / "docs" / "INSTALLER.md").read_text(encoding="utf-8")
+        self.assertIn("Два входи, один бекенд", text)
+        self.assertIn("CLI первинний", text)
+
+    def test_calamares_module_is_marked_optional(self) -> None:
+        text = (ROOT / "installer" / "calamares" / "README.md").read_text(encoding="utf-8")
+        self.assertIn("опційний", text.lower())
+
+    def test_both_frontends_call_the_same_backend(self) -> None:
+        """Two frontends must not mean two implementations of mkfs."""
+        module = (ROOT / "installer" / "calamares" / "modules" / "wsm_deploy" / "main.py").read_text(encoding="utf-8")
+        self.assertIn("wsm_install.executor", module)
+        self.assertIn("wsm_install.install_steps", module)
+        self.assertIn("wsm_install.partition", module)
+        # No direct subprocess use: the backend owns every command.
+        self.assertNotIn("subprocess", module)
+
+
 class DecisionStatusTests(unittest.TestCase):
     """Two ADRs must not both claim to be the accepted answer."""
 
