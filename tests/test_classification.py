@@ -247,6 +247,26 @@ class ProfileEvidenceTests(unittest.TestCase):
             with self.assertRaisesRegex(ClassificationEvidenceError, "exact report bytes"):
                 load_validated_profile_evidence(report, changed_raw, evidence_path)
 
+    def test_non_list_artifacts_is_rejected_without_crashing(self) -> None:
+        report, raw = one_gpu_report()
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence_path = make_profile_bundle(Path(temporary), report, raw)
+            document = json.loads(evidence_path.read_text(encoding="utf-8"))
+            document["artifacts"] = None
+            evidence_path.write_text(json.dumps(document), encoding="utf-8")
+            with self.assertRaisesRegex(ClassificationEvidenceError, "artifacts must be a list"):
+                load_validated_profile_evidence(report, raw, evidence_path)
+
+    def test_report_object_must_match_bound_raw_bytes(self) -> None:
+        report, raw = one_gpu_report()
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence_path = make_profile_bundle(Path(temporary), report, raw)
+            evidence = load_validated_profile_evidence(report, raw, evidence_path)
+        altered = copy.deepcopy(report)
+        altered["environment"]["kernel_release"] = "different-kernel"
+        with self.assertRaisesRegex(ClassificationEvidenceError, "report object does not match"):
+            classify_subsystem(altered, "graphics", evidence, report_bytes=raw)
+
     def test_function_name_cannot_appear_twice(self) -> None:
         report, raw = one_gpu_report()
         with tempfile.TemporaryDirectory() as temporary:
