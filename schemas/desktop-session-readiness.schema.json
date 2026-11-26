@@ -40,19 +40,8 @@
     "session": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id_digest", "type", "desktop", "desktop_version"],
+      "required": ["type", "desktop", "desktop_version"],
       "properties": {
-        "id_digest": {
-          "oneOf": [
-            {
-              "type": "string",
-              "pattern": "^[0-9a-f]{16}$"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
         "type": {
           "enum": ["x11", "wayland", "unknown"]
         },

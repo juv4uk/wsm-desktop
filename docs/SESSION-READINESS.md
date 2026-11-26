@@ -29,11 +29,11 @@ Upstream:
 
 Артефакт записується атомарно в приватний runtime-каталог:
 
-    $XDG_RUNTIME_DIR/wsm/plasma-phase2-<boot-digest>-<session-digest>.json
+    $XDG_RUNTIME_DIR/wsm/plasma-phase2-<boot-digest>-<phase2-monotonic-us>.json
 
 Каталог WSM має режим 0700, файл — 0600; власник перевіряється, symlink замість runtime directory відхиляється. Тимчасовий файл fsync-иться перед атомарним rename.
 
-У JSON немає сирого session ID, username, hostname, UID, display name, адрес або повного environment. Для session ID та boot ID зберігається короткий SHA-256 digest. Вивід loginctl не зберігається; читаються лише Id та TimestampMonotonic.
+У JSON немає сирого session ID, username, hostname, UID, display name, адрес або повного environment. Session ID взагалі не записується і не хешується: він використовується лише для запиту та перевірки відповіді logind. Короткий SHA-256 digest зберігається лише для boot ID. Ім'я файлу використовує boot digest і монотонний timestamp phase 2. Вивід loginctl не зберігається; читаються лише Id та TimestampMonotonic.
 
 ## Межі інтерпретації
 

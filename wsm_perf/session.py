@@ -206,7 +206,6 @@ def collect_session_readiness(
         "marker": MARKER,
         "phase": 2,
         "session": {
-            "id_digest": _digest(session_id) if session_id else None,
             "type": session_type,
             "desktop": "KDE",
             "desktop_version": kde_version or None,
@@ -258,15 +257,17 @@ def write_session_readiness(
         raise SessionReadinessError(f"cannot create WSM runtime directory: {exc.strerror}") from exc
     _validate_private_directory(target_dir, uid=owner, label="WSM runtime directory")
 
-    session_digest = artifact.get("session", {}).get("id_digest")
     boot_digest = artifact.get("boot_identity", {}).get("digest")
-    for value in (session_digest, boot_digest):
-        if value is not None and not _HEX_DIGEST.fullmatch(value):
-            raise SessionReadinessError("artifact contains an invalid identity digest")
-    filename = (
-        f"plasma-phase2-{boot_digest or 'unknown'}-"
-        f"{session_digest or 'unknown'}.json"
-    )
+    if boot_digest is not None and not _HEX_DIGEST.fullmatch(boot_digest):
+        raise SessionReadinessError("artifact contains an invalid boot digest")
+    phase2_monotonic_us = artifact.get("timing", {}).get("phase2_monotonic_us")
+    if (
+        isinstance(phase2_monotonic_us, bool)
+        or not isinstance(phase2_monotonic_us, int)
+        or phase2_monotonic_us <= 0
+    ):
+        raise SessionReadinessError("artifact contains an invalid phase-2 monotonic timestamp")
+    filename = f"plasma-phase2-{boot_digest or 'unknown'}-{phase2_monotonic_us}.json"
     destination = target_dir / filename
     fd, temporary_name = tempfile.mkstemp(prefix=".plasma-phase2-", dir=target_dir)
     temporary = Path(temporary_name)

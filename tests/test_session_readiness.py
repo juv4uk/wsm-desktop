@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import subprocess
@@ -58,7 +57,7 @@ class SessionReadinessTests(unittest.TestCase):
         self.assertEqual(artifact["status"], "available")
         self.assertEqual(artifact["timing"]["login_to_phase2_ms"], 10_000.0)
         self.assertEqual(artifact["timing"]["session_start_monotonic_us"], 50_000_000)
-        self.assertEqual(artifact["session"]["id_digest"], hashlib.sha256(b"8").hexdigest()[:16])
+        self.assertNotIn("id_digest", artifact["session"])
         self.assertEqual(artifact["session"]["type"], "x11")
 
     def test_fixed_loginctl_argv_and_no_shell(self) -> None:
@@ -99,7 +98,7 @@ class SessionReadinessTests(unittest.TestCase):
         self.environment["XDG_SESSION_ID"] = "../other-session"
         artifact = self.collect()
         self.assertEqual(artifact["status"], "partial")
-        self.assertIsNone(artifact["session"]["id_digest"])
+        self.assertNotIn("id_digest", artifact["session"])
         self.runner.assert_not_called()
 
     def test_failed_or_malformed_loginctl_is_unknown_not_zero(self) -> None:
