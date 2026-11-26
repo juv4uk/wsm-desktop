@@ -85,6 +85,10 @@ Plasma не змінено. Старі опубліковані ISO не пер�
 `41486ff5c86db95c63a45c7fb1cf753e604eb97fef1f777093c4325a4edebd60`).
 Обидва зібрано 26.11.2026 о 22:45 і 22:58 EET відповідно (`build_exit=0`).
 QEMU TCG підтвердив консольний вхід `wsm`/`wsm` і `sudo -S id -u -> 0` в обох.
+Вільний `-login`-ISO публікується частинами в GitHub Release; Compatibility
+`-login`-ISO лишається локальним кандидатом і копією на Ventoy до завершення
+ліцензійної перевірки NVIDIA binary payload (§1.1(d) + `patchelf`), як і
+попередній compatibility-образ.
 
 Зміна стосується лише облікового запису live-користувача й вилучення
 `man-db`/`manual-database` із вільного профілю (як у compatibility-профілі),

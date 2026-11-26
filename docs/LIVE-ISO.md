@@ -47,6 +47,9 @@ sha256sum "$(readlink result)"
   `41486ff5c86db95c63a45c7fb1cf753e604eb97fef1f777093c4325a4edebd60`).
   У них консольний вхід `wsm`/`wsm`, користувач у `wheel`, `sudo` працює з
   тим самим паролем; QEMU TCG підтвердив shell і `sudo -S id -u -> 0`.
+  Вільний `-login`-ISO опубліковано частинами; compatibility-версію поки
+  не завантажено до GitHub Release через незавершену ліцензійну перевірку
+  NVIDIA binary payload, але вона є локальним кандидатом і копією на Ventoy.
 - Копія на Ventoy: `D:\wsm-desktop-kde-20261125.iso`, поруч із початковим
   `omarchy-4.5.0-x86.iso` (його не змінено). SHA-256 копії, порахований на
   Windows-боці: `C054C6F7AF5119F96739CDAB4FC540449FFB2136A10A92554AC01D887590CBB9`
