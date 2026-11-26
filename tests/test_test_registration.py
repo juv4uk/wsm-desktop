@@ -53,6 +53,35 @@ def declared_tests(source: Path) -> tuple[dict[str, set[str]], list[str]]:
     return declared, duplicates
 
 
+def main_guard_problems(source: Path) -> list[str]:
+    """The `if __name__ == "__main__"` guard must be unique and last.
+
+    A second guard, or one placed before the test classes, runs
+    `unittest.main()` while the later classes are still undefined: the file
+    looks complete and half of it never executes when run as a script.
+    """
+    tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
+    guards = [
+        index
+        for index, node in enumerate(tree.body)
+        if isinstance(node, ast.If)
+        and isinstance(node.test, ast.Compare)
+        and isinstance(node.test.left, ast.Name)
+        and node.test.left.id == "__name__"
+    ]
+    problems: list[str] = []
+    if len(guards) > 1:
+        problems.append(
+            f"{source.relative_to(ROOT)}: {len(guards)} `__main__` guards; only one may exist"
+        )
+    if guards and guards[-1] != len(tree.body) - 1:
+        problems.append(
+            f"{source.relative_to(ROOT)}: the `__main__` guard is not the last statement, "
+            f"so anything defined after it never runs when the file is executed"
+        )
+    return problems
+
+
 def load_module(source: Path):
     name = f"registration_{source.stem}"
     spec = importlib.util.spec_from_file_location(name, source)
@@ -106,6 +135,12 @@ class TestRegistrationTests(unittest.TestCase):
                     )
         self.assertEqual(problems, [], "\n".join(problems))
 
+    def test_main_guard_is_unique_and_last(self) -> None:
+        problems: list[str] = []
+        for source in test_modules():
+            problems.extend(main_guard_problems(source))
+        self.assertEqual(problems, [], "\n".join(problems))
+
     def test_the_rule_catches_a_shadowed_class(self) -> None:
         """The detector must be red on the exact defect it was written for."""
         sample = (
@@ -125,6 +160,23 @@ class TestRegistrationTests(unittest.TestCase):
             finally:
                 path.unlink()
             self.assertEqual(duplicates, ["GateTests"])
+
+    def test_the_rule_catches_a_guard_before_the_tests(self) -> None:
+        sample = (
+            "import unittest\n"
+            "if __name__ == '__main__':\n"
+            "    unittest.main()\n"
+            "class LateTests(unittest.TestCase):\n"
+            "    def test_never_runs(self):\n"
+            "        pass\n"
+        )
+        path = TESTS / "_tmp_guard_sample.py"
+        path.write_text(sample, encoding="utf-8")
+        try:
+            problems = main_guard_problems(path)
+        finally:
+            path.unlink()
+        self.assertTrue(problems, "a guard before the classes must be reported")
 
 
 if __name__ == "__main__":
