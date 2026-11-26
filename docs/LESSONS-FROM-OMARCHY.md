@@ -201,6 +201,7 @@ JSON-масивом аргументів, який передається як `
 | Нерегулярні lock paths та runtime-directory validation (Omarchy #19998) | перед появою host-side lock API він мусить відхиляти symlink/FIFO/directory lock targets і перевіряти ownership та mode runtime directory; окремого WSM lock-file manager поки не виявлено | відповідного lock lifecycle та тестів наразі немає | `out-of-scope` | — |
 | `root=` втрачено під час kernel/package transaction (Omarchy #6951) | bootloader-конфіг генерує Guix System; WSM не пише `root=` сам | немає — WSM не має власного boot-кроку | `out-of-scope` | — |
 | LUKS recovery slot видалено при зміні ключа (Omarchy #14874) | шифрування не реалізоване | немає коду, який чіпає slots | `out-of-scope` | — |
+| Omarchy rollcall (#20107): функціональна перевірка не дорівнює інвентаризації | WSM збирає bus/sysfs inventory, driver binding та runtime-firmware facts; звіт локальний і не містить чутливих host identifiers | `functional_tests` навмисно порожній: немає незалежних Wi-Fi/Bluetooth/audio/mic/panel/backlight/touchpad/GPU-render/battery/service pass/fail/skip перевірок або розрізнення user-disabled skip | `partial` | `tests/test_hwcheck.py::test_inventory_separates_driver_binding_and_functional_tests`; `tests/test_hwcheck.py::test_report_is_local_and_does_not_include_sensitive_identifiers` |
 | Перехід simpledrm → апаратний DRM до запуску SDDM (Omarchy #20059) | У WSM desktop/live використовується GNU Shepherd; не копіювати systemd drop-in. Перед SDDM потрібен лише обґрунтований bounded readiness gate для DRM/udev, без фіксованого sleep і глобального `udevadm settle` | QEMU late-KMS і фізичний acceptance для стабільності seat, SDDM та first-boot autologin ще не виконані | `not-covered` | — |
 | Legacy/CSM multi-disk boot-order hand-off (Omarchy #20178) | BIOS layout створює `bios_grub`, але preview не доводить, що firmware після майбутнього встановлення стартує з цільового диска | немає двохдискового Legacy/CSM QEMU або physical acceptance | `not-covered` | — |
 | Міграція власних артефактів (`wsm-profile-evidence/2` → `/3`) | читач відмовляє на невідомій версії за іменем; плану міграції поки немає | тест: кожен наявний читач відмовляє на версії +1 і приймає поточну | `partial` | `tests/test_artifact_version_refusal.py::test_next_version_is_refused_by_name` |
@@ -290,3 +291,48 @@ Shepherd-native, подієвою та bounded; відсутність апар�
 Для зміни статусу потрібні окремі behavioral/VM тести та перевірка на
 конфігурації з пізнім KMS; це не можна вивести з наявності SDDM чи DRM
 драйвера у package closure.
+
+## Оновлення: Omarchy rollcall і межа між inventory та функціональною перевіркою, 25 листопада 2026
+
+Upstream PR [omacom/omarchy#20107](https://github.com/omacom/omarchy/pull/20107)
+додало команду `omarchy rollcall`: локальний read-only звіт для Wi-Fi, Bluetooth,
+аудіовиходу, вбудованого мікрофона, панелі й підсвічування, touchpad, GPU
+rendering, батареї та невдалих системних служб. Кожна перевірка має окремий
+результат `pass`, `fail` або `skip` із причиною; відсутнє обладнання не є
+помилкою, а вимкнене користувачем радіо або відсутня на цьому типі машини
+функція не перетворюється на негативний verdict.
+
+Ключовий прийом — визначати присутність із bus/device topology, а не з
+інтерфейсу, який з'являється лише після успішного завантаження драйвера.
+Наприклад, Wi-Fi адаптер без мережевого інтерфейсу все одно є присутнім
+пристроєм і може бути позначений як несправний, а не відсутній. Команда не
+потребує root, не змінює стан пристроїв, виводить JSON і редагує host name,
+username та MAC-адреси. У PR окремо відкладені повторні перевірки після
+suspend/resume та централізоване збирання звітів.
+
+**Що WSM уже має:** `wsm-hwcheck` читає sysfs/procfs, перелічує PCI/USB,
+storage та display devices, окремо фіксує driver binding, module/alias
+кандидатів і runtime firmware facts. Звіт локальний; тести забороняють
+мережеве вивантаження та чутливі host identifiers.
+
+**Чого WSM не має:** поточний collector не виконує functional checks
+аудіо, мікрофона, Wi-Fi connectivity, Bluetooth input, touchpad,
+backlight, battery discharge або GPU rendering. Для спостережених
+пристроїв `functional_tests` лишається порожнім. Це правильна межа
+інвентаризаційного preflight, а не доказ того, що функція працює.
+
+**Що запозичуємо:** у майбутньому окремий `wsm-rollcall`/diagnostic mode
+може запускати лише явно запитані read-only функціональні checks і повертати
+для кожної пари «функція × пристрій» `pass/fail/skip` із причиною. Наявність
+треба визначати незалежно від працездатного інтерфейсу; відсутнє обладнання
+та user-disabled стан — це `skip`, а не `fail`. Жодного автоматичного
+вмикання радіо, програвання тестового звуку, зміни яскравості, запуску
+suspend, мережевого upload чи privilege escalation за замовчуванням.
+
+**Статус WSM — `partial`.** Наявний evidence inventory не можна підвищувати
+до `certified` або називати функціональною сумісністю. Functional-test logs
+мають лишатися окремим артефактом і бути прив'язані до конкретної функції
+та пристрою; сам факт driver binding або запис у `wsm-hwcheck` цього не
+замінює.
+
+Джерело: [Omarchy rollcall upstream report, 25.11.2026](https://omarchyupstream.com/2026-11-25/omarchy-rollcall-adds-a-read-only-hardware-report-for-bug-reports-5699273a8ca8/).
