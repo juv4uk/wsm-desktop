@@ -138,3 +138,63 @@ FS resizer також використовує KPMcore; його доступн�
 Продовжити з невеликого packaging spike для Calamares 3.4.2 у власному WSM Guix channel. Спершу довести dependency closure і набір модулів. Не починати розробку великого backend, поки не підтверджено, що live-середовище може надійно запускати сам Calamares.
 
 Цей документ не засвідчує фактичної збірки, запуску або сумісності на фізичному обладнанні.
+
+---
+
+## Оновлення upstream provenance — 2026-11-26
+
+Попередній GitHub upstream URL більше не є canonical source: репозиторій
+[calamares/calamares на GitHub](https://github.com/calamares/calamares)
+архівовано 2025-08-18. Проєкт продовжує розробку на
+[Codeberg](https://codeberg.org/Calamares/calamares); офіційний портал і
+developer documentation перенесені на
+[calamares.codeberg.page](https://calamares.codeberg.page/).
+
+Це **не** означає, що Calamares покинуто. Водночас старий GitHub repository
+не можна далі використовувати як джерело для оновлень, issues або нових tags.
+
+### Версії та provenance
+
+- Офіційний сайт описує **3.4.2** як перший реально tagged release після
+  переїзду на Codeberg. CMake-аналіз у цьому документі зроблено саме для
+  `v3.4.2`; його не слід автоматично приписувати 3.4.3.
+- Debian source package **3.4.3-1** (26.10.2026) позначає це як новий upstream
+  release. Debian повідомляє upstream tarball
+  `calamares_3.4.3.orig.tar.xz`, SHA-256
+  `b62832265be9e1b80ab4a0851f28cae28ef6808ae6c4969c5ac0369f748f0c29`,
+  і Git-Tag-Info `24d7a168167e7023914c0b4f5507c73380bb35df`,
+  fingerprint `c7203c0a920670bf94f00bb1b01d1a72ac8dc9a1`.
+  Це метадані, опубліковані Debian у підписаному source-package notice; перед
+  використанням у Guix треба незалежно отримати Codeberg tag/tarball, перевірити
+  підпис і перерахувати SHA-256 саме з отриманих байтів.
+- Nixpkgs snapshot, перевірений 17–20.11.2026, ще пакував 3.4.2; bump до 3.4.3
+  перебував у черзі. Це корисна ознака package-maintenance lag, але не доказ
+  про Guix і не причина копіювати Nix patches.
+
+Джерела:
+- [Офіційний Calamares portal і Codeberg migration](https://calamares.codeberg.page/)
+- [Debian #1148139: archive/migration notice та 3.4.3-1 source checksums](https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1148139)
+- [Debian sid package 3.4.3-1](https://packages.debian.org/unstable/utils/calamares)
+- [Nixpkgs Calamares package status](https://maintainermode.org/p/calamares)
+- [Legacy GitHub repository — archived](https://github.com/calamares/calamares)
+
+### Що змінюється для WSM
+
+1. **Canonical source — Codeberg.** У новому packaging spike фіксувати Codeberg
+   repository, tag/commit, signed source provenance і SHA-256. Не додавати
+   GitHub archive як updater remote.
+2. **3.4.3 — новий кандидат, не доведений build target.** Поточний CMake/Qt/KF6/
+   KPMcore аналіз залишається перевіреним лише для 3.4.2, доки не виконано diff
+   review та повторну перевірку CMake options/targets для 3.4.3.
+3. **Не переносити NixOS-specific patches.** Debian/Nix package metadata
+   допомагає знайти версію й залежності, але Guix повинен мати власний
+   derivation і reproducible closure.
+4. **ADR 0008 лишається proposed.** До ратифікації потрібні Guix package build,
+   Python Development + pybind11 API, фактично встановлений `partition`
+   module/KPMcore, `loadmodule` tests, privileged job isolation і disposable
+   QEMU acceptance. Наявність upstream release або NixOS integration не є
+   доказом жодного з цих WSM gates.
+
+Це оновлення змінює джерело та версійний baseline дослідження, але не
+ратифікує Calamares і не змінює обраний для поточного minimal-live RC3
+read-only CLI/TUI шлях.
