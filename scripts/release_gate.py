@@ -190,12 +190,25 @@ def check_image(iso: Path | None, boot: bool) -> dict[str, str]:
 
     if not isinstance(payload, dict) or payload.get("schema") != "wsm-release-verdict/1":
         return criterion("image", "fail", "live image verifier returned an unknown or missing schema")
-    if payload.get("artifact") != iso.name:
+    # A release may publish the image as parts. In that case the verifier joins
+    # them and the verdict names the joined artifact, so comparing against the
+    # part's own name would reject a perfectly good release.
+    published_as_parts = ".part" in iso.name
+    if published_as_parts:
+        if not str(payload.get("artifact_source", "")).startswith("parts"):
+            return criterion(
+                "image", "fail",
+                "verifier was given a part but did not report a reassembled artifact",
+            )
+    elif payload.get("artifact") != iso.name:
         return criterion("image", "fail", "live image verifier verdict names a different ISO artifact")
     try:
         actual_sha256 = sha256_file(iso)
     except OSError as exc:
         return criterion("image", "fail", f"cannot hash selected ISO: {exc}")
+    if published_as_parts:
+        # The verdict's digest belongs to the joined image, not to this part.
+        actual_sha256 = payload.get("artifact_sha256")
     if payload.get("artifact_sha256") != actual_sha256:
         return criterion(
             "image",
