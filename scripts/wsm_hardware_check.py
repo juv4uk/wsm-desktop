@@ -3,7 +3,8 @@
 """One-command, read-only hardware preview check for a WSM release tree.
 
 The script collects a local hardware report and asks the diagnostic-only
-installer prototype to draft plans for both backend aliases.  It never opens
+installer prototype to draft the single Guix System plan supported by the first
+WSM preview.  It never opens
 block devices, invokes a backend, changes firmware/bootloader state, or uses
 the network.  The only writes are regular files inside the explicit output
 directory.  Logged commands use argv arrays and path placeholders; no absolute
@@ -30,8 +31,8 @@ if str(ROOT) not in sys.path:
 
 RELEASE_INFO = ROOT / "RELEASE-INFO.json"
 SCHEMA = ROOT / "schemas" / "hardware-report.schema.json"
-BACKENDS = ("guix", "nix")
-EXPECTED_BACKEND_IDS = {"guix": "guix-system", "nix": "nixos"}
+BACKENDS = ("guix",)
+EXPECTED_BACKEND_IDS = {"guix": "guix-system"}
 BLOCKED_MARKER = "wsm-install: no plan emitted because required critical evidence is unresolved"
 MAX_REPORT_BYTES = 8 * 1024 * 1024
 
@@ -252,7 +253,9 @@ def verify_plan(
     if not confirmable_false:
         critical_errors.append("plan_readiness.confirmable must be false")
 
-    expected_backend_id = EXPECTED_BACKEND_IDS[backend]
+    if backend != "guix":
+        raise ValueError("wsm-hardware-check validates GNU Guix System only")
+    expected_backend_id = "guix-system"
     backend_object = plan.get("backend")
     backend_id = backend_object.get("id") if isinstance(backend_object, dict) else None
     if backend_id != expected_backend_id:
