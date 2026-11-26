@@ -1,70 +1,75 @@
-# WSM Hardware Evidence Report v1
+# Звіт про апаратні докази WSM, версія 1
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Status: **initial schema proposal**
-- Critical path: **yes** — preflight and the installer plan both consume this schema
-- Schema: [hardware-report.schema.json](../../schemas/hardware-report.schema.json)
-- Parent: [Issue #3](https://github.com/juv4uk/wsm-desktop/issues/3)
-- Work item: [Issue #5](https://github.com/juv4uk/wsm-desktop/issues/5)
+- Статус: **початкова пропозиція схеми**
+- Критичний шлях: **так** — preflight і план інсталятора обидва споживають цю схему
+- Схема: [hardware-report.schema.json](../../schemas/hardware-report.schema.json)
+- Батьківське завдання: [#3](https://github.com/juv4uk/wsm-desktop/issues/3)
+- Робоче завдання: [#5](https://github.com/juv4uk/wsm-desktop/issues/5)
 
-## Purpose
+## Призначення
 
-The report is a backend-neutral evidence record produced by the live environment before installation. It is not a hardware certification, benchmark result, or global compatibility score.
+Звіт — це backend-нейтральний запис доказів, який створює live-середовище перед встановленням. Він не є сертифікацією обладнання, результатом бенчмарку або загальною оцінкою сумісності.
 
-It preserves the distinction between observations made on the current machine, external database records, and functions actually tested.
+Він зберігає різницю між спостереженнями, зробленими на поточній машині, записами із зовнішніх баз і функціями, які справді перевіряли.
 
-## Versioning
+## Версіювання
 
-The first schema is 1.0.0 and targets JSON Schema Draft 2020-12.
+Перша схема — 1.0.0, цільова версія JSON Schema — Draft 2020-12.
 
-- A breaking change increments the major version.
-- A backward-compatible optional-field addition increments the minor version and requires a published schema for that exact minor version plus explicit consumer support.
-- Clarifications that do not change validation behavior increment the patch version.
-- Producers write the exact schema version. Consumers select the validator for that exact version and reject unsupported versions with an explanation rather than silently misreading them.
+- Несумісна зміна збільшує мажорну версію.
+- Сумісне додавання необов'язкового поля збільшує мінорну версію й вимагає опублікованої схеми саме для цієї мінорної версії та явної підтримки з боку споживача.
+- Уточнення, що не змінюють поведінку валідації, збільшують патч-версію.
+- Виробники записують точну версію схеми. Споживачі обирають валідатор саме для цієї версії й відхиляють непідтримувані версії з поясненням, а не читають їх мовчки неправильно.
 
-The v1.0.0 schema sets `additionalProperties: false` for its closed objects. Therefore, a v1.0.0 consumer does **not** generically tolerate unknown properties. A new optional field is accepted only after the corresponding schema revision and consumer support are released. Do not advertise forward-field tolerance that the selected schema validator does not implement.
+Схема v1.0.0 встановлює `additionalProperties: false` для своїх закритих об'єктів. Тому споживач v1.0.0 **не** толерує невідомі властивості загалом. Нове необов'язкове поле приймається лише після випуску відповідної ревізії схеми й підтримки в споживачі. Не заявляйте сумісність із майбутніми полями, якої вибраний валідатор схеми не реалізує.
 
-## Evidence model
+## Модель доказів
 
-For each device, store separate facts:
+Для кожного пристрою зберігайте окремі факти:
 
 - discovery: discovered / not-detected / unknown;
 - driver: bound / module-loaded-unbound / available-only / none-known / error / not-applicable / unknown;
 - runtime firmware: loaded / available-not-confirmed-loaded / missing / load-error / not-needed / unknown;
-- every function test: passed / failed / partial / not-run / unsupported / unknown.
+- кожен функціональний тест: passed / failed / partial / not-run / unsupported / unknown.
 
-A driver candidate reported by a package index or kernel configuration database does not mean the running kernel loaded or bound it.
+Кандидатний драйвер, який повідомив індекс пакетів або база конфігурації ядра, не означає, що запущене ядро його завантажило чи прив'язало.
 
-Runtime firmware loading is separate from a device firmware update. A successful device firmware update capability says nothing about whether a kernel driver has its required runtime blob.
+Завантаження runtime firmware — це не те саме, що оновлення firmware пристрою. Успішна здатність оновити firmware пристрою нічого не каже про те, чи має драйвер ядра потрібний йому runtime-блоб.
 
-A function test documents its method and result. A read-only inventory check may prove that a connector exists, but not that an end-to-end task works.
+Функціональний тест документує свій метод і результат. Read-only інвентаризаційна перевірка може довести, що роз'єм існує, але не те, що наскрізне завдання працює.
 
-## Evidence provenance
+## Походження доказів
 
-Each evidence item records its kind, source/tool and optional version/URL, observation time, confidence label, concise summary, and optional reference.
+Кожен елемент доказів записує свій вид, джерело/інструмент і необов'язкові версію/URL, час спостереження, мітку впевненості, стислий підсумок і необов'язкове посилання.
 
-Use confirmed only for a directly observed fact or reproducible test. An external database entry normally remains strong or limited depending on the exactness of hardware and kernel matching. Use unknown where source quality or matching is unclear.
+Використовуйте `confirmed` лише для безпосередньо спостереженого факту або відтворюваного тесту. Запис із зовнішньої бази зазвичай лишається `strong` або `limited` залежно від точності збігу обладнання й ядра. Використовуйте `unknown`, коли якість джерела або збіг неясні.
 
-## Privacy
+## Приватність
 
-The strict-local profile is the default. Reports must not include serial numbers, MAC addresses, UUIDs, hostnames, usernames, IP addresses or storage WWNs. The report ID is a random per-report identifier, not a stable host identifier.
+Профіль strict-local є типовим. Звіти не повинні містити серійних номерів, MAC-адрес, UUID, імен хостів, імен користувачів, IP-адрес або WWN носіїв. Ідентифікатор звіту — випадковий ідентифікатор конкретного звіту, а не стабільний ідентифікатор хоста.
 
-Network upload is false in v1. An export workflow must create a separate sanitized copy and show the data categories before asking for consent. Never assume an upstream tool's redaction is sufficient.
+Мережеве вивантаження у v1 — false. Робочий процес експорту мусить створити окрему санітизовану копію і показати категорії даних до того, як просити згоду. Ніколи не вважайте редагування upstream-інструмента достатнім.
 
-## Display data
+## Дані дисплея
 
-A display record distinguishes monitor identity decoded from EDID, connector identity and connection state, advertised modes, active mode observed through DRM/KMS, and active refresh rate where available.
+Запис дисплея розрізняє ідентичність монітора, декодовану з EDID, ідентичність роз'єму й стан з'єднання, заявлені режими, активний режим, спостережений через DRM/KMS, і активну частоту оновлення, де вона доступна.
 
-Advertised modes are not proof that every mode works through the actual GPU, connector, cable and monitor path.
+Заявлені режими не є доказом того, що кожен режим працює через фактичний шлях GPU, роз'єму, кабелю й монітора.
 
-## Synthetic fixtures
+## Синтетичні фікстури
 
-The fixtures in this directory are synthetic and contain no real machine report:
+Фікстури в цьому каталозі синтетичні й не містять звіту з реальної машини:
+
 - [desktop-observed.json](../../tests/fixtures/hardware/desktop-observed.json)
 - [missing-firmware.json](../../tests/fixtures/hardware/missing-firmware.json)
 - [unknown-incomplete.json](../../tests/fixtures/hardware/unknown-incomplete.json)
 
-## Implementation guidance
+## Настанови щодо реалізації
 
-Collectors keep raw observations separate from derived recommendations. Recommendations reference evidence and state confidence. Never change an unknown status into a failure simply because a lookup source or optional utility is unavailable.
+Колектори тримають сирі спостереження окремо від похідних рекомендацій. Рекомендації посилаються на докази й зазначають впевненість. Ніколи не перетворюйте статус `unknown` на відмову лише тому, що джерело пошуку або необов'язкова утиліта недоступні.
+
+---
+
+Англійський переклад цього документа: [REPORT-FORMAT.en.md](REPORT-FORMAT.en.md). Канонічною є українська версія.
