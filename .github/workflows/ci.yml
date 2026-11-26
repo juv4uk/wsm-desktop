@@ -77,7 +77,8 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          # Native validator wheels copied into the pinned guest must share its CPython ABI.
+          python-version: "3.11"
       - name: Install disposable QEMU and guest tools
         run: |
           set -euo pipefail
