@@ -263,7 +263,7 @@ class BootCommandTests(unittest.TestCase):
             )
         self.assertEqual(artifact["manager"]["scope"], "user")
         self.assertEqual(artifact["scope"], "user-service-manager")
-        self.assertTrue(any("not the system manager" in item for item in artifact["warnings"]))
+        self.assertTrue(any("user Shepherd instance" in item for item in artifact["warnings"]))
 
     def test_unknown_pid1_manager_does_not_guess_systemd_or_shepherd(self) -> None:
         runner = unittest.mock.Mock()
