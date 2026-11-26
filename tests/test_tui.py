@@ -107,6 +107,23 @@ class NavigationTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(calls, [])
 
+    def test_device_paths_containing_navigation_letters_are_confirmable(self) -> None:
+        for path in ("/dev/sdq", "/dev/sdj", "/dev/sdk"):
+            with self.subTest(path=path):
+                calls: list = []
+                disk = Candidate(path, 120 * GIB, False)
+                screen = FakeScreen(["enter", "enter"] + type_path(path))
+                code = run_tui(screen, [disk], plan_recorder(calls))
+                self.assertEqual(code, 0, screen.text()[-240:])
+                self.assertEqual([call[1] for call in calls], [path])
+
+    def test_escape_cancels_path_confirmation(self) -> None:
+        calls: list = []
+        screen = FakeScreen(["enter", "enter", "esc"])
+        code = run_tui(screen, DISKS, plan_recorder(calls))
+        self.assertEqual(code, 1)
+        self.assertEqual(calls, [])
+
     def test_wrong_typed_path_stops_before_planning(self) -> None:
         """The first disk is selected, so typing the second disk's path must fail."""
         calls: list = []
