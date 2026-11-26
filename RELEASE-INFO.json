@@ -1,33 +1,35 @@
 {
   "schema": "wsm-release-info/1",
   "release_id": "wsm-desktop-hardware-preview",
-  "version": "0.1.0-rc3",
-  "display_name": "WSM Desktop RC3 — три інсталятори",
+  "version": "0.1.0-rc4",
+  "display_name": "WSM Desktop RC4 — інсталятор у режимі попереднього перегляду",
   "status": "pre-release",
   "date": "2026-11-26",
   "scope": [
-    "read-only hardware evidence report (wsm-hwcheck 0.2.0, report schema 1.0.0)",
-    "three installer frontends over one backend: console (--guided), pseudo-graphical (--tui) and the Calamares jobmodule",
-    "privileged agent: the unprivileged side writes a plan, root executes only an allowlisted set of commands",
-    "execution journal and recovery report: what ran, what failed, and what to check next",
-    "environment preflight: tools, guix, root, mount point, system file, report and ISA level, before the first disk is touched",
-    "authenticated free-only Guix channel lock and an authenticated Compatibility lock with Nonguix",
-    "reproducible source bundle with checksums and build manifest",
-    "KDE Plasma desktop profile, a minimal console live profile and a live-ISO recipe, shipped as unverified source (not as an image built here)"
+    "Апаратний звіт лише для читання: wsm-hwcheck 0.2.0, схема звіту 1.0.0.",
+    "Прототипи CLI Guided, CLI TUI та опційного Calamares jobmodule передають запит до спільного WSM planner; усі інтерфейси працюють лише в режимі preview-only.",
+    "Привілейований агент перевіряє структуру плану та допустимі форми argv, але не запускає процеси й не виконує команди.",
+    "Executor повертає для кожного запланованого кроку status=not-run; APPLY вимкнено.",
+    "Код журналу та звіту відновлення присутній, але цей preview-only реліз не виконує дискових операцій і не заявляє результатів відновлення після інсталяції.",
+    "Read-only preflight перевіряє доступне середовище та формує діагностичний план без звернення до цільового блочного пристрою.",
+    "Окремі зафіксовані Free та Compatibility channel inputs; структурна перевірка lock-файлів не є криптографічною автентифікацією.",
+    "Відтворюваний вихідний архів із контрольними сумами та маніфестом, прив’язаним до точного source commit.",
+    "Конфігурації KDE Plasma, мінімального live-середовища та live ISO включені як вихідні рецепти; збірку релізного WSM ISO цим RC не заявлено."
   ],
   "excluded": [
-    "any write to a physical block device, partition table or bootloader: the installer has never run on a disk",
-    "a verified installation: no install has completed anywhere, in QEMU or on hardware",
-    "the Compatibility image: systems/live-compat.scm and channels/compatibility.lock.scm exist and pass policy checks, but were never built here",
-    "the Nix/NixOS backend: ADR 0004 keeps Guix as the only supported backend",
-    "a claim of performance: the baseline harness exists, no physical-machine measurement has been published"
+    "Будь-яке виконання partition, format, mount, bootloader або Guix deploy команд: APPLY вимкнено, усі заплановані кроки мають status=not-run.",
+    "Підтверджена інсталяція WSM — ані в QEMU, ані на фізичному обладнанні.",
+    "Опублікований або перевірений релізний ISO: вихідні рецепти не є зібраним і завантаженим образом; синтетичний CI harness не є release ISO.",
+    "Фізичні hardware compatibility verdicts або гарантії підтримки конкретних конфігурацій.",
+    "Backend Nix/NixOS: ADR 0004 визначає GNU Guix єдиним backend-ом першого підтримуваного шляху; Nix лишається дослідницьким напрямом.",
+    "Твердження про перевагу продуктивності: фізичних benchmark-вимірювань не опубліковано."
   ],
   "requirements": {
     "python": ">=3.10",
     "jsonschema": "4.26.0"
   },
   "artifacts": [
-    "wsm-desktop-0.1.0-rc2-source.tar.gz",
+    "wsm-desktop-0.1.0-rc4-source.tar.gz",
     "SHA256SUMS",
     "release-manifest.json"
   ]
