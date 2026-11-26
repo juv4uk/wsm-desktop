@@ -83,12 +83,22 @@ Guix, а не про наш образ: доки ми не зробили дво
 цілісність. Твердження «відтворювано» вимагає двох незалежних збірок і
 порівняння байтів; доти це `not-tested`, а не властивість.
 
+## Якщо підписувати самим: що змінилося у cosign
+
+Третє питання зі списку нижче — «чи додаємо власний підпис поверх атестації» — має тепер конкретну форму. Стан на 26.11.2026:
+
+- **Cosign v3** (жовтень 2025) увімкнув за замовчуванням новий формат bundle: підписаний матеріал лежить в одному файлі разом із сертифікатом, записом у transparency log та RFC 3161 timestamp. За такого bundle перевірка **не потребує мережі** — достатньо локальної копії trusted root. У v4 старі прапорці приберуть, тож покладатися на старий формат немає сенсу.
+- **Keyless підпис прив'язує артефакт до identity, а не до ключа**: сертифікат короткоживучий і виданий за OIDC-токеном (для GitHub Actions — `.../release.yml@refs/heads/main`). Перевірка формулюється як «підписано саме цим workflow», а не «цим ключем». Це знімає потребу зберігати приватний ключ, але додає залежність від стороннього identity provider — рівно та сама інфраструктурна залежність, що вже описана вище для атестацій.
+- **Два правила, які легко порушити:** підписувати треба **дайджест**, а не ім'я файлу, і робити це **в тому ж job, де артефакт зібрано** — інакше між збіркою і підписом артефакт можна підмінити.
+
+Що це означає для нас: власний підпис — це не «ще один `.sig`-файл поруч». Якщо ми хочемо, щоб артефакт можна було перевірити офлайн, треба постачати bundle і trusted root, а не сам лише підпис. Це додає до релізу кілька файлів і один крок перевірки — і саме це варто зважити в ADR, а не вирішувати між ділом.
+
 ## Що з цим робити
 
 Нічого не змінюємо в цьому документі: це вхідні дані. Рішення про provenance і підпис оформлюється окремим ADR разом із політикою підпису образів (M6), і в ньому має бути три речі:
 
 1. які саме артефакти атестуються (релізний ISO — так, щоденні тестові збірки — ні);
 2. чи входить `gh attestation verify` в інструкцію перевірки поруч із `SHA256SUMS`;
-3. чи додаємо ми власний підпис поверх атестації, чи поки покладаємося на неї.
+3. чи додаємо ми власний підпис поверх атестації, чи поки покладаємося на неї — і якщо додаємо, то cosign-ом keyless чи власним ключем, і чи постачаємо bundle з trusted root для офлайн-перевірки.
 
-Джерела: [mkosi: SourceDateEpoch, Seed, ToolsTree](https://github.com/systemd/mkosi/blob/main/mkosi/resources/man/mkosi.1.md), [reproducible-mkosi: перелік upstream-виправлень](https://github.com/edgelesssys/reproducible-mkosi), [reproducible-builds.org — system images](https://reproducible-builds.org/docs/system-images/), [xorriso: reproducibility залежить від версії інструментів](https://lists.reproducible-builds.org/pipermail/rb-general/2025-April/003728.html), [GitHub Docs — artifact attestations](https://docs.github.com/en/actions/concepts/security/artifact-attestations), [actions/attest](https://github.com/actions/attest/), [gh attestation verify](https://cli.github.com/manual/gh_attestation_verify).
+Джерела: [mkosi: SourceDateEpoch, Seed, ToolsTree](https://github.com/systemd/mkosi/blob/main/mkosi/resources/man/mkosi.1.md), [reproducible-mkosi: перелік upstream-виправлень](https://github.com/edgelesssys/reproducible-mkosi), [reproducible-builds.org — system images](https://reproducible-builds.org/docs/system-images/), [xorriso: reproducibility залежить від версії інструментів](https://lists.reproducible-builds.org/pipermail/rb-general/2025-April/003728.html), [GitHub Docs — artifact attestations](https://docs.github.com/en/actions/concepts/security/artifact-attestations), [actions/attest](https://github.com/actions/attest/), [gh attestation verify](https://cli.github.com/manual/gh_attestation_verify), [Sigstore: cosign v3 і новий bundle](https://blog.sigstore.dev/cosign-3-0-available/), [cosign: офлайн-перевірка bundle](https://github.com/sigstore/cosign), [GitLab: keyless-підпис артефактів](https://docs.gitlab.com/ci/yaml/signing_examples/).
