@@ -146,6 +146,7 @@ check-profiles-matrix:
 
 check-docs:
 	$(PYTHON) tests/test_docs.py
+	$(PYTHON) tests/test_upstreams_status.py
 
 check-doc-ownership:
 	$(PYTHON) tests/test_doc_ownership.py
