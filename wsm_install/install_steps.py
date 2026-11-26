@@ -18,11 +18,10 @@ The ordering matters and is the whole point:
    that is not part of the target tree lands on the live system;
 4. only then hand the target to the backend.
 
-What this module deliberately does not decide: which filesystem the user wants.
-ext4 is the default because it is boring and every recovery tool knows it. btrfs
-is a legitimate choice with real advantages (snapshots, compression) and real
-costs (more moving parts, more ways to be surprised). That is the user's call,
-not a default I should smuggle in.
+The first supported Guix target, systems/desktop.scm, declares an ext4 root.
+Until WSM has a reviewed generator that changes the Guix declaration together
+with the planned formatter, this module deliberately accepts only ext4.
+btrfs and xfs remain future capabilities, not options in the current preview.
 """
 
 from __future__ import annotations
@@ -43,17 +42,14 @@ TRUSTED_TOOLS = {
     "partprobe": "/usr/sbin/partprobe",
     "udevadm": "/usr/bin/udevadm",
     "mkfs.ext4": "/usr/sbin/mkfs.ext4",
-    "mkfs.btrfs": "/usr/sbin/mkfs.btrfs",
-    "mkfs.xfs": "/usr/sbin/mkfs.xfs",
     "mkfs.fat": "/usr/sbin/mkfs.fat",
     "mount": "/usr/bin/mount",
     "mkdir": "/usr/bin/mkdir",
 }
 
+ROOT_FILESYSTEM = "ext4"
 FILESYSTEMS = {
-    "ext4": {"mkfs": "mkfs.ext4", "args": ["-F"], "root": True},
-    "btrfs": {"mkfs": "mkfs.btrfs", "args": ["-f"], "root": True},
-    "xfs": {"mkfs": "mkfs.xfs", "args": ["-f"], "root": True},
+    ROOT_FILESYSTEM: {"mkfs": "mkfs.ext4", "args": ["-F"], "root": True},
 }
 
 
