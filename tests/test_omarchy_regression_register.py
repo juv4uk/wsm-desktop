@@ -27,7 +27,7 @@ STATUSES = {"covered", "partial", "not-covered", "out-of-scope"}
 EVIDENCE_STATUSES = {"covered", "partial"}
 ROW = re.compile(r"^\|\s*(?P<row>.+?)\s*\|\s*$")
 EVIDENCE = re.compile(r"`(?P<path>tests/[\w./-]+\.py)::(?P<method>test_\w+)`")
-MINIMUM_ROWS = 8
+MINIMUM_ROWS = 12
 
 
 def register_rows(text: str) -> list[list[str]]:
@@ -86,6 +86,27 @@ class OmarchyRegisterTest(unittest.TestCase):
                     source,
                     f"{row[0]}: {match.group('path')} has no {match.group('method')}",
                 )
+
+    def test_untrusted_theme_execution_is_not_claimed_covered_by_channel_policy(self) -> None:
+        rows = [
+            row for row in self.rows
+            if "CVE-2026-108913" in row[0]
+        ]
+        self.assertEqual(len(rows), 1, "Omarchy theme/plugin execution must have one explicit row")
+        self.assertEqual(rows[0][3].strip("`"), "out-of-scope")
+        self.assertEqual(rows[0][4], "—")
+
+    def test_nonfree_channel_policy_has_its_own_evidence_row(self) -> None:
+        rows = [
+            row for row in self.rows
+            if "Free payload" in row[0]
+        ]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0][3].strip("`"), "covered")
+        self.assertIn(
+            "tests/test_check_channels.py::test_nonguix_is_refused_by_free_policy",
+            rows[0][4],
+        )
 
     def test_uncovered_rows_cite_nothing(self) -> None:
         for row in self.rows:
