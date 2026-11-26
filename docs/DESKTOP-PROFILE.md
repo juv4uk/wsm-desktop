@@ -12,7 +12,10 @@
 | --- | --- |
 | `systems/desktop.scm` | цільова система: KDE Plasma, SDDM, NetworkManager, звук, шрифти з кирилицею, українська локаль |
 | `systems/live.scm` | live-профіль для завантажувального ISO: те саме плюс пакет `wsm-tools` |
-| `wsm/packages/wsm.scm` | пакетне визначення наших інструментів для Guix |
+| `wsm/packages/wsm.scm` | пакетне визначення інструментів Guix, зокрема performance collectors |
+| `systems/home.scm` | PipeWire та KDE phase-2 autostart із прямим store-шляхом через Guix Home |
+| `wsm_perf/session.py`, `scripts/collect_session_readiness.py` | вимір часу від logind session creation до Plasma phase 2 |
+| `docs/SESSION-READINESS.md` | межі, формат і тлумачення session-readiness evidence |
 | `scripts/build_iso.sh` | збірка ISO з `systems/live.scm` |
 | `tests/test_system_profiles.py` | структурні перевірки профілів без Guix |
 

@@ -10,8 +10,11 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
+PACKAGED_SITE = ROOT / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages"
+if (ROOT / "wsm_perf").is_dir():
     sys.path.insert(0, str(ROOT))
+elif PACKAGED_SITE.is_dir():
+    sys.path.insert(0, str(PACKAGED_SITE))
 
 from wsm_perf.boot import (  # noqa: E402
     DEFAULT_TIMEOUT_SECONDS,
