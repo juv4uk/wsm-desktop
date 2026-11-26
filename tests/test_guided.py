@@ -51,7 +51,7 @@ class StopTests(unittest.TestCase):
     def run_flow(self, answers: list[str]):
         calls: list = []
         console = FakeConsole(answers)
-        code = run_guided(console, DISKS, plan_recorder(calls), install_recorder(calls))
+        code = run_guided(console, DISKS, plan_recorder(calls))
         return code, console, calls
 
     def test_enter_at_disk_choice_stops(self) -> None:
@@ -72,38 +72,41 @@ class StopTests(unittest.TestCase):
         self.assertEqual(calls, [])
         self.assertIn("does not match", console.text())
 
-    def test_stop_before_install_leaves_the_disk_untouched(self) -> None:
-        code, console, calls = self.run_flow(["1", "uefi", "/dev/nvme0n1", ""])
-        self.assertEqual(code, 1)
+    def test_guided_mode_only_previews_and_never_offers_apply(self) -> None:
+        code, console, calls = self.run_flow(["1", "uefi", "/dev/nvme0n1"])
+        self.assertEqual(code, 0)
         self.assertEqual([c[0] for c in calls], ["plan"])
-        self.assertIn("Stopped after planning", console.text())
+        self.assertIn("APPLY is disabled", console.text())
+        self.assertNotIn("Install now", console.text())
+        self.assertNotIn("This will erase", console.text())
 
     def test_no_disks_found_stops(self) -> None:
         console = FakeConsole([])
-        code = run_guided(console, [], plan_recorder([]), install_recorder([]))
+        code = run_guided(console, [], plan_recorder([]))
         self.assertEqual(code, 1)
         self.assertIn("No whole disks", console.text())
 
 
 class SuccessTests(unittest.TestCase):
-    def test_full_flow_plans_then_installs_the_chosen_disk(self) -> None:
+    def test_full_flow_only_previews_the_chosen_disk(self) -> None:
         calls: list = []
-        console = FakeConsole(["2", "uefi", "/dev/sda", "install"])
-        code = run_guided(console, DISKS, plan_recorder(calls), install_recorder(calls))
+        console = FakeConsole(["2", "uefi", "/dev/sda"])
+        code = run_guided(console, DISKS, plan_recorder(calls))
         self.assertEqual(code, 0)
-        self.assertEqual([c[0] for c in calls], ["plan", "install"])
+        self.assertEqual([c[0] for c in calls], ["plan"])
         self.assertEqual(calls[0][1], "/dev/sda")
+        self.assertIn("nothing was changed", console.text().lower())
 
     def test_firmware_defaults_to_uefi(self) -> None:
         calls: list = []
-        console = FakeConsole(["1", "", "/dev/nvme0n1", "install"])
-        run_guided(console, DISKS, plan_recorder(calls), install_recorder(calls))
+        console = FakeConsole(["1", "", "/dev/nvme0n1"])
+        run_guided(console, DISKS, plan_recorder(calls))
         self.assertEqual(calls[0][3], "uefi")
 
     def test_bios_can_be_chosen(self) -> None:
         calls: list = []
-        console = FakeConsole(["1", "bios", "/dev/nvme0n1", "install"])
-        run_guided(console, DISKS, plan_recorder(calls), install_recorder(calls))
+        console = FakeConsole(["1", "bios", "/dev/nvme0n1"])
+        run_guided(console, DISKS, plan_recorder(calls))
         self.assertEqual(calls[0][3], "bios")
 
 
