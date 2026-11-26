@@ -201,8 +201,10 @@ JSON-масивом аргументів, який передається як `
 | Нерегулярні lock paths та runtime-directory validation (Omarchy #19998) | перед появою host-side lock API він мусить відхиляти symlink/FIFO/directory lock targets і перевіряти ownership та mode runtime directory; окремого WSM lock-file manager поки не виявлено | відповідного lock lifecycle та тестів наразі немає | `out-of-scope` | — |
 | `root=` втрачено під час kernel/package transaction (Omarchy #6951) | bootloader-конфіг генерує Guix System; WSM не пише `root=` сам | немає — WSM не має власного boot-кроку | `out-of-scope` | — |
 | LUKS recovery slot видалено при зміні ключа (Omarchy #14874) | шифрування не реалізоване | немає коду, який чіпає slots | `out-of-scope` | — |
+| Перехід simpledrm → апаратний DRM до запуску SDDM (Omarchy #20059) | У WSM desktop/live використовується GNU Shepherd; не копіювати systemd drop-in. Перед SDDM потрібен лише обґрунтований bounded readiness gate для DRM/udev, без фіксованого sleep і глобального `udevadm settle` | QEMU late-KMS і фізичний acceptance для стабільності seat, SDDM та first-boot autologin ще не виконані | `not-covered` | — |
 | Legacy/CSM multi-disk boot-order hand-off (Omarchy #20178) | BIOS layout створює `bios_grub`, але preview не доводить, що firmware після майбутнього встановлення стартує з цільового диска | немає двохдискового Legacy/CSM QEMU або physical acceptance | `not-covered` | — |
 | Міграція власних артефактів (`wsm-profile-evidence/2` → `/3`) | читач відмовляє на невідомій версії за іменем; плану міграції поки немає | тест: кожен наявний читач відмовляє на версії +1 і приймає поточну | `partial` | `tests/test_artifact_version_refusal.py::test_next_version_is_refused_by_name` |
+| Частково завантажені або змінені release assets (Omarchy #516) | реліз лишається draft до read-back перевірки точного набору файлів і SHA-256 | verifier відхиляє missing/extra/corrupt/path traversal/symlink assets | `covered` | `tests/test_verify_release_assets.py::test_valid_download_matches_local_bundle` |
 
 `out-of-scope` не означає «вирішено»: це означає, що коду, який міг би зламатися
 саме так, у WSM поки немає. Щойно з'явиться власний boot-крок, шифрування,
@@ -220,3 +222,71 @@ JSON-масивом аргументів, який передається як `
 [update process](https://github.com/omacom/omarchy/blob/quattro/docs/update-process.md),
 [migration guide](https://github.com/omacom/omarchy/blob/quattro/agents/skills/migrations.md),
 [Omarchy 4.0.1 security release](https://github.com/omacom/omarchy/releases/tag/v4.0.1).
+
+
+## Оновлення: Omarchy ISO pipeline, 24 листопада 2026
+
+У merge `omacom/omarchy-iso#516` команда зберегла повне стиснення, але
+розділила staging root image і фінальне пакування: root image готується в
+некомпресованому дереві, його копіювання у compressed btrfs volume
+паралелізується, а побудова root image перекривається в часі з live ISO.
+Переіндексація offline mirror повторно використовує вже синхронізовані package
+databases; initramfs та image packing використовують кілька потоків, а
+паралельні завантаження зросли з 5 до 16.
+
+Важливіше за прискорення — два дефекти, знайдені review-ботом і виправлені до
+merge: невдалий запуск потоку міг порушити cleanup, а шляхи з архіву могли
+вийти за межі тимчасового каталогу. Для WSM це окремі regression-вимоги:
+cleanup мусить працювати після часткової ініціалізації, а розпаковані шляхи
+мають залишатися всередині приватного temp root.
+
+**Що переносимо в WSM:** GitHub release спочатку створюється як draft,
+потім усі assets завантажуються назад із release, звіряються точна множина
+файлів і SHA-256, і лише після успішної перевірки draft публікується. Повторний
+запуск може відновити тільки draft, прив'язаний до того самого source commit;
+попередні assets цього draft спершу видаляються, щоб повторне завантаження не
+залишило зайвих файлів. Вже опублікований release або draft з іншим commit
+відхиляється. Так публічний tag не отримує часткових або неперевірених assets.
+
+**Що не переносимо буквально:** Arch/btrfs staging, mkarchiso та їхні
+compression flags. Guix має content-addressed store і derivation graph;
+паралелізація має спиратися на Guix dependency closure і вимірювання. До
+першого успішного image build не додаємо ще один шар конкурентного пакування:
+спершу потрібні baseline, однакові inputs, точний manifest і BIOS/UEFI
+acceptance.
+
+Джерела: [Omarchy upstream report, 24.11.2026](https://omarchyupstream.com/2026-11-24/iso-builds-parallelized-while-keeping-full-compression-6446f3c31fa1/),
+[omarchy-iso#516](https://github.com/omacom/omarchy-iso/pull/516),
+[GNU Guix time-machine manual](https://guix.gnu.org/manual/devel/en/guix.pdf).
+
+## Оновлення: Omarchy DRM hand-off перед SDDM, 25 листопада 2026
+
+Upstream PR [omacom/omarchy#20059](https://github.com/omacom/omarchy/pull/20059)
+було злито 25 листопада. Він описує race на системах без early KMS: SDDM
+може стартувати під час переходу від `simpledrm` до драйвера реальної GPU.
+Коли DRM-пристрій зникає і з'являється повторно, `CanGraphical` у logind
+короткочасно змінюється; SDDM може витратити одноразовий first-boot autologin,
+завершити helper і показати greeter замість автоматичного входу.
+
+Upstream виправлення використовує обмежене очікування з подіями udev:
+спершу чекає від'єднання simple-framebuffer, потім — появи й ініціалізації
+DRM card; коли вузла ще немає, слухає DRM udev events. Таймаути обмежують
+затримку на системах, де лишається simpledrm або немає робочого KMS. Це
+краще за фіксований sleep чи глобальний `udevadm settle`, який може чекати
+на сторонні coldplug-пристрої.
+
+**Що це означає для WSM:** наші desktop/live профілі запускають SDDM, але
+системний менеджер служб — GNU Shepherd, а не systemd. Тому systemd drop-in
+і shell helper з Omarchy переносити буквально не можна. Спочатку потрібен
+окремий acceptance-сценарій для late-KMS: перевірити, чи справді наш порядок
+запуску допускає гонку, чи стабільні DRM node та seat, і чи зберігається
+first-boot autologin. Якщо проблема відтворюється, реалізація має бути
+Shepherd-native, подієвою та bounded; відсутність апаратного драйвера мусить
+залишати працездатний консольний fallback.
+
+**Статус WSM — `not-covered`, не «дефект знайдено».** Поточні тести не
+відтворюють simpledrm → native DRM hand-off, а QEMU boot marker доводить лише
+досягнення системою marker service, не готовність графічного seat або SDDM.
+Для зміни статусу потрібні окремі behavioral/VM тести та перевірка на
+конфігурації з пізнім KMS; це не можна вивести з наявності SDDM чи DRM
+драйвера у package closure.

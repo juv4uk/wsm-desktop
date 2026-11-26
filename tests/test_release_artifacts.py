@@ -45,8 +45,8 @@ class HardwareCheckScriptTests(unittest.TestCase):
 
             manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["overall"], "pass")
-            self.assertEqual(set(manifest["plans"]), {"guix", "nix"})
-            for backend in ("guix", "nix"):
+            self.assertEqual(set(manifest["plans"]), {"guix"})
+            for backend in ("guix",):
                 plan_entry = manifest["plans"][backend]
                 self.assertEqual(plan_entry["status"], "verified-diagnostic")
                 self.assertTrue(plan_entry["safe_execution_flags"])
@@ -69,13 +69,10 @@ class HardwareCheckScriptTests(unittest.TestCase):
             expected = {
                 "report.json",
                 "plan-guix.json",
-                "plan-nix.json",
                 "manifest.json",
                 "SHA256SUMS",
                 "install-guix.stdout.log",
                 "install-guix.stderr.log",
-                "install-nix.stdout.log",
-                "install-nix.stderr.log",
             }
             self.assertTrue(expected.issubset({path.name for path in output.iterdir()}))
 
@@ -192,9 +189,8 @@ class HardwareCheckScriptTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["overall"], "preflight-blocked")
-            for backend in ("guix", "nix"):
-                self.assertEqual(manifest["plans"][backend]["status"], "safely-blocked")
-                self.assertFalse((output / f"plan-{backend}.json").exists())
+            self.assertEqual(manifest["plans"]["guix"]["status"], "safely-blocked")
+            self.assertFalse((output / "plan-guix.json").exists())
 
 
 class ReleaseBundleTests(unittest.TestCase):

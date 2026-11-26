@@ -132,6 +132,14 @@ class OmarchyRegisterTest(unittest.TestCase):
         self.assertEqual(row[3].strip("`"), "not-covered")
         self.assertEqual(row[4], "—")
 
+    def test_late_drm_handoff_is_not_claimed_covered_before_acceptance(self) -> None:
+        row = self._row_for_source("Omarchy #20059")
+        self.assertIn("simpledrm", row[0])
+        self.assertIn("GNU Shepherd", row[1])
+        self.assertIn("bounded", row[1])
+        self.assertEqual(row[3].strip("`"), "not-covered")
+        self.assertEqual(row[4], "—")
+
     def test_boot_update_esp_identity_is_not_claimed_covered_without_updater(self) -> None:
         row = self._row_for_source("Omarchy #15435")
         self.assertIn("не-booted ESP", row[0])
@@ -152,6 +160,14 @@ class OmarchyRegisterTest(unittest.TestCase):
         self.assertIn("lock", row[0].lower())
         self.assertEqual(row[3].strip("`"), "out-of-scope")
         self.assertEqual(row[4], "—")
+
+    def test_release_assets_are_read_back_before_a_draft_is_published(self) -> None:
+        row = self._row_for_source("Omarchy #516")
+        self.assertEqual(row[3].strip("`"), "covered")
+        self.assertIn(
+            "tests/test_verify_release_assets.py::test_valid_download_matches_local_bundle",
+            row[4],
+        )
 
     def test_register_class_names_are_unique(self) -> None:
         names = [row[0] for row in self.rows]

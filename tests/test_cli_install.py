@@ -16,18 +16,26 @@ GIB = 1024 ** 3
 FIXTURE = ROOT / "tests" / "fixtures" / "hardware" / "desktop-observed.json"
 
 
-def run_cli(*extra: str) -> subprocess.CompletedProcess:
+def run_cli(*extra: str, backend: str = "guix") -> subprocess.CompletedProcess:
     with tempfile.TemporaryDirectory() as temporary:
         report = Path(temporary) / "report.json"
         report.write_text(FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
         return subprocess.run(
             [sys.executable, "-m", "wsm_install", "--preflight", "--dry-run",
-             "--report", str(report), "--backend", "guix", *extra],
+             "--report", str(report), "--backend", backend, *extra],
             capture_output=True, text=True, check=False, cwd=ROOT,
         )
 
 
 class InstallModeTests(unittest.TestCase):
+    def test_deferred_backends_are_rejected_by_cli(self) -> None:
+        for backend in ("nix", "nixos"):
+            with self.subTest(backend=backend):
+                result = run_cli(backend=backend)
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("invalid choice", result.stderr)
+                self.assertNotIn("plan_sha256", result.stdout)
+
     def test_dry_run_plans_without_executing(self) -> None:
         result = run_cli(
             "--install", "--target-disk", "/dev/nvme0n1",
