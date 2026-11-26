@@ -137,10 +137,11 @@ Producer tool version `0.3.0` додає до кожного workload резул
 PSI й zram — **system-wide** джерела: вони включають активність інших процесів
 і описують інтервал workload, але не доводять причинний зв'язок із конкретним
 процесом. Їх використовуємо як контекст і для виявлення корельованого pressure,
-не як regression threshold та не як автоматичний діагноз. Читання telemetry
-відбувається поза timed region, не змінює самі workload timings і не пише до
-procfs/sysfs. Це виконується лише під час явного запуску benchmark, ніколи в
-hardware preflight.
+не як regression threshold та не як автоматичний діагноз. Для інтерпретації
+абсолютних дельт кожен workload також записує `sample_window_seconds` —
+тривалість серії виміряних повторів. Читання telemetry відбувається поза timed
+region, не змінює самі workload timings і не пише до procfs/sysfs. Це
+виконується лише під час явного запуску benchmark, ніколи в hardware preflight.
 
 Артефакти tool version `0.2.0` мають virtualization provenance, але ще не
 містять `system_pressure`; відсутність цих полів у старому результаті означає
