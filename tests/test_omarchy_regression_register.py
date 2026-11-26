@@ -212,5 +212,47 @@ class OmarchyRegisterTest(unittest.TestCase):
             )
 
 
+class RegisterCensusTests(unittest.TestCase):
+    """The published counts must come from the table, not from memory.
+
+    The same defect happened in a sibling project: a census number lived in a
+    test and in a document, the document fell two behind, and nobody saw it
+    because the test was about something else. So the document states the
+    counts and this test recomputes them.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.text = REGISTER.read_text(encoding="utf-8")
+        cls.counts = {}
+        for status in ("covered", "partial", "not-covered", "out-of-scope"):
+            cls.counts[status] = 0
+        for line in cls.text.splitlines():
+            match = re.search(r"\|\s*`(covered|partial|not-covered|out-of-scope)`\s*\|", line)
+            if match and line.startswith("| "):
+                cls.counts[match.group(1)] += 1
+
+    def test_census_total_matches_the_table(self) -> None:
+        stated = re.search(r"із (\d+) класів у реєстрі", self.text)
+        self.assertIsNotNone(stated, "the register must publish its census")
+        self.assertEqual(int(stated.group(1)), sum(self.counts.values()))
+
+    def test_census_per_status_matches_the_table(self) -> None:
+        expected = {
+            "закриті тестом": ("covered", r"(\d+) закриті тестом"),
+            "закриті частково": ("partial", r"(\d+) закриті частково"),
+            "не покритий": ("not-covered", r"(\d+) не покритий"),
+            "позначені": ("out-of-scope", r"(\d+) позначені\s+`?out-of-scope`?"),
+        }
+        for phrase, (status, pattern) in expected.items():
+            with self.subTest(status=status):
+                match = re.search(pattern, self.text)
+                self.assertIsNotNone(match, phrase)
+                self.assertEqual(int(match.group(1)), self.counts[status], phrase)
+
+    def test_the_census_is_not_empty(self) -> None:
+        self.assertGreaterEqual(sum(self.counts.values()), 10)
+
+
 if __name__ == "__main__":
     unittest.main()
