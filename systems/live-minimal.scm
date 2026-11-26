@@ -26,6 +26,15 @@
              (gnu system nss)
              (wsm packages wsm))
 
+;; DHCP тут не потрібен окремою службою: NetworkManager має власний DHCP-клієнт
+;; і керує адресами сам. Окремий клієнт лише боровся б із ним за інтерфейс.
+;;
+;; Історична довідка: раніше тут стояв dhcp-client-service-type. ISC DHCP
+;; досяг end-of-life у 2022, службу спершу позначили застарілою (2025), а потім
+;; видалили зовсім. У зафіксованому каналі її вже немає, тому збірка падала з
+;; «dhcp-client-service-type: unbound variable» — саме це й показав build.log
+;; першої невдалої збірки образу.
+;;
 ;; Маркер готовності — той самий контракт, що в повному live-образі.
 ;; Приймання вимагає WSM_LIVE_READY у послідовній консолі, і мінімальний образ
 ;; не має бути винятком: інакше він «завантажується» без доказів.
@@ -87,8 +96,7 @@
     (append (list
              wsm-live-ready-marker
              (service network-manager-service-type)
-             (service wpa-supplicant-service-type)
-             (service dhcp-client-service-type))
+             (service wpa-supplicant-service-type))
             %base-services)
     ;; %base-services уже має один console-font-service для tty1–tty6.
     ;; Змінюємо шрифт tty2 у ньому, не додаючи дубль Shepherd service.
