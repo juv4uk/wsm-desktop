@@ -460,6 +460,26 @@ class HomeEnvironmentTests(unittest.TestCase):
         text = (ROOT / "systems" / "home.scm").read_text(encoding="utf-8")
         self.assertNotIn("home-pulseaudio-rtp", text)
         self.assertNotIn("pulseaudio-service-type", text)
+    def test_home_profile_installs_the_kde_phase_two_marker(self) -> None:
+        text = (ROOT / "systems" / "home.scm").read_text(encoding="utf-8")
+        self.assertIn("(wsm packages wsm)", text)
+        self.assertIn("wsm-tools", text)
+        self.assertIn("home-xdg-configuration-files-service-type", text)
+        self.assertIn("autostart/wsm-session-readiness.desktop", text)
+        self.assertIn("(mixed-text-file", text)
+        self.assertIn('"Exec=" (file-append python "/bin/python3") " " wsm-tools "/bin/wsm-session-marker\\n"', text)
+        self.assertIn('"X-KDE-autostart-phase=2\\n"', text)
+        self.assertIn('"OnlyShowIn=KDE;\\n"', text)
+
+    def test_wsm_tools_package_contains_performance_modules_and_collectors(self) -> None:
+        text = (ROOT / "wsm" / "packages" / "wsm.scm").read_text(encoding="utf-8")
+        self.assertIn('(copy-recursively "wsm_perf"', text)
+        for name in ("measure_baseline.py", "collect_boot_profile.py", "collect_session_readiness.py"):
+            with self.subTest(script=name):
+                self.assertIn(f'(copy-file "scripts/{name}"', text)
+        self.assertIn('"wsm-session-marker"', text)
+        self.assertIn('"wsm-perf-baseline"', text)
+        self.assertIn('"wsm-boot-profile"', text)
 
 
 class CompatibilityProfileTests(unittest.TestCase):
