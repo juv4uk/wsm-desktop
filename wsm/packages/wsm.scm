@@ -19,6 +19,13 @@
   #:use-module (gnu packages python)
   #:use-module (gnu packages python-xyz)
   #:use-module (guix licenses)
+  ;; version-major+minor lives here; without it the module fails to load.
+  #:use-module (guix utils)
+  ;; `any` comes from SRFI-1 and `string-contains` from SRFI-13. Both are used
+  ;; in the source select? predicate below; without these two imports the module
+  ;; does not load at all, and the failure appears only when Guix evaluates it.
+  #:use-module (srfi srfi-1)
+  #:use-module (srfi srfi-13)
   #:export (wsm-tools))
 
 (define-public wsm-tools

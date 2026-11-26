@@ -29,6 +29,11 @@ jobs:
       - name: Check documentation
         run: python scripts/check_docs.py
 
+      - name: Check Scheme imports
+        # Two builds failed at read time on a missing #:use-module; this catches
+        # the known set without waiting twenty minutes for Guix.
+        run: python scripts/check_scheme_imports.py
+
       - name: Check Free channel lock
         run: python scripts/check_channels.py --lock channels.lock.scm --policy free
 
