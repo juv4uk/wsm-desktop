@@ -37,6 +37,10 @@ class InstallModeTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["mode"], "dry-run")
+        self.assertEqual(
+            payload["target_size_source"],
+            "user-supplied planning estimate; not read from the block device",
+        )
         self.assertTrue(all(step["status"] == "skipped" for step in payload["steps"]))
         self.assertEqual(payload["handoff"][:3], ["guix", "system", "init"])
 
