@@ -4,6 +4,7 @@
 
 - Статус: **перший запис**, зроблено 2026-11-26
 - Перевірка: `scripts/verify_live_release.py`
+- Машиночитний вердикт: [`artifacts/iso-verdict-0.1.0-rc2-live-iso.json`](artifacts/iso-verdict-0.1.0-rc2-live-iso.json)
 
 ## Навіщо цей файл
 
