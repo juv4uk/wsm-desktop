@@ -2,25 +2,26 @@
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Статус: **CI experiment**
+- Статус: **ручна QEMU runtime-перевірка; не входить у hosted CI**
 - Пов'язано: #3 (hardware preflight), #16 (driver/runtime firmware evidence), #61 (generic QEMU guest), #64 (bounded serial/stderr capture), #66
-- Runner: scripts/ci_qemu_hwcheck_guest.py
-- Workflow: `.github/workflows/ci.yml`, job `qemu-acceptance` (push у `main` і кожен pull request); локальний запуск — `python scripts/ci_qemu_hwcheck_guest.py`.
+- Скрипт: `scripts/ci_qemu_hwcheck_guest.py`
+- Ручний запуск окремого етапу: `python scripts/ci_qemu_hwcheck_guest.py`
+- Повний набір: `make qemu-acceptance-manual`
 
 ## Що саме перевіряється
 
-GitHub-hosted Ubuntu runner готує тимчасовий initramfs із runner kernel, BusyBox та CPython runtime. Усередині QEMU-гостя виконується реальний код python -m wsm_hwcheck з цього repository commit. Гість читає власні /sys і /proc, формує Hardware Evidence Report v1.0.0 та передає стислий звіт через serial. Host runner розпаковує payload і перевіряє його офіційною JSON Schema з репозиторію.
+Linux host готує тимчасовий initramfs із runner kernel, BusyBox та CPython runtime. Усередині QEMU-гостя виконується реальний код python -m wsm_hwcheck з цього repository commit. Гість читає власні /sys і /proc, формує Hardware Evidence Report v1.0.0 та передає стислий звіт через serial. Host розпаковує payload і перевіряє його офіційною JSON Schema з репозиторію.
 
 Це не підмінює collector shell-імітатором і не підставляє host /sys чи /proc: колектор запускається у власному Linux guest kernel і бачить тільки його псевдофайлові системи.
 
 ## Runtime CPython
 
-Для цього CI experiment використовується незмінний upstream release python-build-standalone tag 20261123:
+Для цієї ручної QEMU-перевірки використовується незмінний upstream release python-build-standalone tag 20261123:
 
 - CPython 3.11.18, target x86_64-unknown-linux-gnu;
 - archive install_only_stripped;
 - SHA-256: 75b92c55bc6a5f58fe4d08fc5261c983b2b17930192d62946fe7c9cf6fd66316;
-- завантаження відбувається лише у host runner, з перевіркою digest перед розпакуванням.
+- завантаження відбувається лише на host,  з перевіркою digest перед розпакуванням.
 
 GNU/Linux build не називається static. Runner перевіряє ELF-об'єкти у pinned runtime через ldd, відмовляється від unresolved libraries та копіює до initramfs лише виявлені зовнішні shared-library dependencies. Host /lib цілком не копіюється. Python runtime не додається до WSM Guix/Nix closure або production image у межах цього experiment.
 
