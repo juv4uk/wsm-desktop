@@ -125,8 +125,8 @@ GPL-3.0-or-later, і жодна частина цього репозиторію
   «останній master». Період заморозки — зручне вікно, щоб зафіксувати зріз, але
   сам факт заморозки не робить рухому гілку піном. Після виходу 1.6.0 рішення
   «пін до релізу чи на реліз» оформлюється окремо.
-- [`GCD 009`](https://codeberg.org/guix/guix-consensus-documents) — пропозиція
-  узагальнити bootloader subsystem і ввести Guix Bootspec; deliberation тривала
+- [`GCD 009`](https://codeberg.org/guix/guix-consensus-documents) — прийнятий консенсусний документ,
+  що вводить Guix Bootspec; upstream implementation ще очікує merge.
   13–19.11.2026, результат на 26.11.2026 невідомий. Якщо її приймуть, контракт
   запису bootloader зміниться на боці upstream. Для WSM це аргумент не будувати
   власний формат bootloader-конфігурації: наш інсталятор має викликати штатний
@@ -345,11 +345,11 @@ Unified Kernel Image — один PE-файл, у який складені stub
 - [Guix 1.6.0 release meeting notes, 15.11.2026](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00088.html)
 - [Guix toolchain/transition freeze, 10.11.2026](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00039.html)
 - [Guix 1.6.0 release schedule, 15.11.2026](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00091.html)
-- [GCD 009 deliberation notice](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00074.html) and [acceptance record](https://codeberg.org/guix/guix-consensus-documents/pulls/15#issuecomment-28116399)
+- [GCD 009 deliberation announcement, 13.11.2026](https://lists.libreplanet.org/archive/html/guix-devel/2026-11/msg00074.html) and [consensus acceptance record, 20.11.2026](https://codeberg.org/guix/guix-consensus-documents/pulls/15#issuecomment-28116399)
 - [Guix repository on Codeberg](https://codeberg.org/guix/guix/)
 - [SDDM #1917 — гонка з DRM-драйвером](https://github.com/sddm/sddm/issues/1917)
 - [dri-devel: simpledrm і запущені дисплей-сервери](https://lists.freedesktop.org/archives/dri-devel/2024-May/453272.html)
-- [GCD 009 — Guix Bootspec (deliberation)](https://codeberg.org/guix/guix-consensus-documents/pulls/15)
+- [GCD 009 — Guix Bootspec (accepted; implementation pending upstream merge)](https://codeberg.org/guix/guix-consensus-documents/pulls/15)
 - [ArchWiki: Unified kernel image](https://wiki.archlinux.org/title/Unified_kernel_image)
 - [LWN: Fedora approves a smaller GRUB (UKI, TPM PCR stability)](https://lwn.net/Articles/1085609/)
 - [The Shepherd 1.0.0 released](https://shepherding.services/news/2024/12/the-shepherd-1.0.0-released/)
