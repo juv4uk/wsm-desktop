@@ -100,7 +100,7 @@ WSM має один спільний контракт типізованого �
 Це read-only релізний кандидат для збору апаратних доказів на Linux-ПК. Він **не встановлює WSM Desktop** і не змінює систему поза явно вибраним output-каталогом. Він виконує чотири речі:
 
 1. `wsm-hwcheck` 0.2.0 читає локальні `/sys` і `/proc`; стандартно додає runtime-діагностику з `/lib/modules/<kernel>/modules.*` і фіксованих команд лише для читання `journalctl -k -b --no-pager --output=cat --lines=4096` / `dmesg --color=never`. Якщо дані недоступні без прав, поле лишається `unknown` і з'являється warning.
-2. `wsm-install --preflight --dry-run` валідує цей звіт і видає **diagnostic-only** план для ратифікованого backend-а `guix-system`; план `nixos` лишається лише дослідницьким.
+2. `wsm-install --preflight --dry-run` валідує цей звіт і видає **лише один diagnostic-only** план для ратифікованого backend-а `guix-system`. CLI та публічний plan API відхиляють Nix/NixOS; окремий експеримент [#55](https://github.com/juv4uk/wsm-desktop/issues/55) не є частиною продуктового contract.
 3. `scripts/wsm_hardware_check.py` перевіряє `plan_status`, `plan_mode`, `plan_readiness.confirmable=false`, збіг `backend.id`, digest-и, а також що `dry_run=true`, `mutations_authorized=false`, `backend_invoked=false`, `disk_access_performed=false`, після чого пише manifest і `SHA256SUMS`. Команди в manifest зберігаються як argv-масиви з `<out>` замість абсолютних шляхів.
 4. `channels.lock.scm` фіксує автентифіковані метадані вільного офіційного Guix-каналу. Для цього lock підтверджено authenticated `guix pull` і `time-machine ... describe`; збірку або запуск VM із цим самим lock у межах RC1 ще не підтверджено.
 
@@ -169,7 +169,7 @@ Tarball побудовано з `git archive HEAD | gzip -n -9` (`mtime=0`), т�
 Додайте до [#10](https://github.com/juv4uk/wsm-desktop/issues/10) або [#8](https://github.com/juv4uk/wsm-desktop/issues/8):
 
 - версію/release ID з `manifest.json`;
-- `overall` і статуси `guix`/`nix`;
+- `overall` і статус єдиного backend-а `guix`;
 - стислий human-readable summary зі stderr;
 - модель пристрою/проблему, але **не** сирі serial/MAC/UUID/WWN.
 
