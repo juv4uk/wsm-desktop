@@ -25,6 +25,7 @@
 ;; дистрибутива.
 
 (use-modules (gnu)
+             (gnu services shepherd)
              (gnu packages python)
              (gnu packages python-xyz)
              (gnu packages screen)
@@ -114,6 +115,26 @@
     (description "Read-only hardware report, diagnostic-only Guix plan and desktop launcher.")
     (license license:gpl3+)))
 
+;; Приймання однакове для всіх образів: маркер у послідовній консолі.
+(define wsm-live-ready-marker
+  (simple-service 'wsm-live-ready shepherd-root-service-type
+    (list (shepherd-service
+           (documentation "Announce on the serial console that the live system is up.")
+           (provision '(wsm-live-ready))
+           (requirement '(user-processes))
+           (respawn? #f)
+           (start #~(lambda ()
+                      (catch #t
+                        (lambda ()
+                          (call-with-output-file "/dev/console"
+                            (lambda (port)
+                              (display "WSM_LIVE_READY" port)
+                              (newline port)
+                              (force-output port))))
+                        (lambda _ #f))
+                      #t))
+           (stop #~(const #t))))))
+
 (operating-system
   ;; Proprietary NVIDIA modules require the non-libre Linux kernel.
   (kernel linux)
@@ -140,7 +161,8 @@
   (packages (cons* wsm-live-tools screen linux-firmware %base-packages))
   (services
    (append
-    (list (service nvidia-service-type)
+    (list wsm-live-ready-marker
+          (service nvidia-service-type)
           (service network-manager-service-type)
           (service wpa-supplicant-service-type)
           (service elogind-service-type)
