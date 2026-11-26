@@ -139,7 +139,7 @@ def check_channels(product: str) -> dict[str, str]:
     return criterion(
         "channels",
         "pass",
-        f"{product} product channel lock policy passed; no other product is implied",
+        f"{product} product structural policy and Guix channel authentication passed; no other product is implied",
     )
 
 
