@@ -206,17 +206,14 @@ def run_tui(
         screen.render(box("Stopped", ["", "Stopped after planning. Nothing was changed."]))
         return 1
 
-    screen.render(box("APPLY відхилено", [
-        "",
-        "Спільний executor наразі працює лише у preview-only режимі.",
-    ]))
     install_status = install(disk.path, disk.size_bytes, firmware)
     if type(install_status) is not int or install_status != 0:
         status = install_status if type(install_status) is int and install_status > 0 else 1
-        screen.render(box("Інсталяцію не завершено", [
+        screen.render(box("APPLY відхилено", [
             "",
+            "Спільний executor наразі працює лише у preview-only режимі.",
             f"Код завершення: {status}.",
-            "Не можна заявляти про успішне встановлення.",
+            "Інсталяцію не завершено; успіх не заявляється.",
         ]))
         return status
 
