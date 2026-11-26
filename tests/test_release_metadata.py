@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 RELEASE_INFO = json.loads((ROOT / "RELEASE-INFO.json").read_text(encoding="utf-8"))
 RELEASE_NOTES = (ROOT / "RELEASE-NOTES.md").read_text(encoding="utf-8")
 EXECUTOR_DOC = (ROOT / "docs" / "EXECUTOR.md").read_text(encoding="utf-8")
+VERIFIED_ARTIFACTS = (ROOT / "docs" / "VERIFIED-ARTIFACTS.md").read_text(encoding="utf-8")
 
 
 class ReleaseMetadataContractTests(unittest.TestCase):
@@ -64,6 +65,12 @@ class ReleaseMetadataContractTests(unittest.TestCase):
         self.assertIn("verified bootable iso", excluded)
         self.assertIn("не доводить, що відповідний образ зібрано", RELEASE_NOTES)
         self.assertIn("не є доказом повного wsm installer boot/install", RELEASE_NOTES.lower())
+
+    def test_published_iso_evidence_does_not_claim_boot_or_install_success(self) -> None:
+        self.assertIn("docs/VERIFIED-ARTIFACTS.md", RELEASE_NOTES)
+        self.assertIn("BIOS/UEFI boot та запуск інсталятора не перевірялися", RELEASE_NOTES)
+        self.assertIn("не перевірено", VERIFIED_ARTIFACTS)
+        self.assertIn("Інсталятор у образі не запускався", VERIFIED_ARTIFACTS)
 
 
 if __name__ == "__main__":
