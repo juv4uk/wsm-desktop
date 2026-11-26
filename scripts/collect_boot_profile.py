@@ -25,8 +25,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="wsm-boot-profile",
         description=(
-            "Collect read-only boot/service-manager evidence for the current boot "
-            "for the current boot."
+            "Collect read-only boot/service-manager evidence for the current boot."
         ),
     )
     parser.add_argument(
