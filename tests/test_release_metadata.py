@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 RELEASE_INFO = json.loads((ROOT / "RELEASE-INFO.json").read_text(encoding="utf-8"))
 RELEASE_NOTES = (ROOT / "RELEASE-NOTES.md").read_text(encoding="utf-8")
 EXECUTOR_DOC = (ROOT / "docs" / "EXECUTOR.md").read_text(encoding="utf-8")
+VERIFIED_ARTIFACTS = (ROOT / "docs" / "VERIFIED-ARTIFACTS.md").read_text(encoding="utf-8")
 
 
 class ReleaseMetadataContractTests(unittest.TestCase):
@@ -81,7 +82,7 @@ class ReleaseMetadataContractTests(unittest.TestCase):
 
     def test_release_notes_do_not_claim_rc4_artifact_is_published(self) -> None:
         self.assertIn("не створює й не публікує rc4", RELEASE_NOTES.lower())
-        self.assertIn("не були побудовані", RELEASE_INFO["excluded"][-1] if False else " ".join(RELEASE_INFO["excluded"]))
+        self.assertIn("have not been built or published", RELEASE_INFO["excluded"][-1])
 
 
 if __name__ == "__main__":
