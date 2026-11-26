@@ -1,71 +1,77 @@
-# Виконання кроків
+# Виконання кроків інсталятора
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Статус: **реалізовано, на реальному диску не запускалось**
-- Код: [`wsm_install/executor.py`](../wsm_install/executor.py)
-- Тести: `tests/test_executor.py` (9)
+- Статус: **preview-only; реальний APPLY вимкнено**
+- Код: [`wsm_install/executor.py`](../wsm_install/executor.py), [`wsm_install/cli.py`](../wsm_install/cli.py)
+- Frontends: CLI, `--guided`, опційний Calamares
+- Тести: `tests/test_executor.py`, `tests/test_cli_install.py`, `tests/test_guided.py`, `tests/test_calamares_module.py`
 
-## Чотири правила
+## Поточна межа
 
-Це єдиний модуль інсталятора, який щось виконує. Тому правила тут
-безкомпромісні.
+Усі три входи використовують один `wsm_install.executor.execute()`. Він приймає лише
+preview-запити: будь-який `dry_run`, відмінний від буквального `True`, повертає
+`execute.apply-disabled` **до будь-якого виводу або зовнішньої дії**. У ньому немає
+runner-а, verifier-а, `subprocess` чи shell-викликів.
 
-**1. Dry-run типово.** Реальний запуск вимагає підтвердження, яке **називає
-диск**: `--wipe /dev/nvme0n1`, а не `--yes`.
+CLI додатково відхиляє `--execute` до читання звіту або вибору frontend-а. Тому
+`--install --execute` і `--guided --execute` не доходять до планувальника.
+Збіг рядків `--target-disk` та `--acknowledge-disk` не є дозволом на запис.
 
-**2. Підтвердження перевіряється перед кожною руйнівною дією**, а не один раз на
-початку. Згода, дана для першого кроку, не має мовчки покривати сьомий.
+## Три входи — одна межа
 
-**3. Кожен крок перевіряється перед наступним.** `mkfs`, який повернув 0 і
-нічого не створив, — це не успіх. Перевірка читає систему, а не код виходу:
+| Вхід | Дозволена дія | Поведінка APPLY |
+| --- | --- | --- |
+| `wsm-install --install` | Побудувати й показати argv-план | `--execute` відхиляється |
+| `wsm-install --guided` | Вибрати ціль і показати read-only preview | Немає кроку «Install now» чи install callback |
+| Calamares `wsm_deploy` | Передати план спільному executor-у | `wsmDryRun=false` відхиляється executor-ом |
 
-| Крок | Що перевіряється |
-| --- | --- |
-| `partprobe` | вузли розділів з'явилися |
-| `mkfs.*` | `blkid` повідомляє очікувану файлову систему |
-| `mount` | пристрій справді є в `/proc/mounts` за цією точкою |
-| `mkdir` | тека існує |
+У guided mode повторне введення шляху диска підтверджує лише те, для якого
+пристрою показати preview. Це не destructive consent. Calamares має той самий
+контракт і не може мати власного шляху до `mkfs`, `mount` або `guix system init`.
 
-**4. Перший збій зупиняє все.** Продовжити після невдалого монтування й
-відформатувати щось інше — це як машина лишається без системи й без пояснення.
+## Що доведено, а що ні
 
-## Чому перевірка, а не код виходу
+- У unit/CLI tests перевіряється, що навіть **правильний** matching
+  `--acknowledge-disk` не дозволяє APPLY.
+- Guided tests перевіряють, що flow викликає лише preview callback, не показує
+  «Install now» і не викликає жодного install callback.
+- Calamares test перевіряє, що `wsmDryRun=false` повертає
+  `execute.apply-disabled`.
+- Це не є доказом безпеки майбутнього APPLY і не є QEMU install acceptance.
+  Жоден тест цього PR не запускає `sgdisk`, `mkfs`, `mount` чи `guix system init`.
 
-`mkfs.ext4` повертає 0 і в разі, коли диск насправді недописався через збій
-носія. `mount` повертає 0, а потім точка зникає через помилку в `fstab`.
-Код виходу говорить «команда не поскаржилась», а не «система в потрібному
-стані». Тому кожен крок підтверджується окремо.
+Параметр `--target-size-bytes` наразі є **введеною користувачем оцінкою для
+побудови плану**. CLI не читає фактичну місткість block device, major/minor,
+serial/WWN, sysfs topology або таблицю розділів. Старе твердження, що звірка
+цієї ж введеної величини захищає від підміни диска, було неправильним і вилучене.
 
-## Тестованість
+## Умови для майбутнього APPLY
 
-`execute()` приймає `runner` і `verifier` як параметри. Тому весь модуль
-перевіряється без диска, root і QEMU: тести підставляють фальшиві виконавці й
-перевіряють порядок, зупинку на збої й відмови.
+Реальний виконавець може повернутися лише окремим reviewed PR після виконання всіх умов:
 
-## Чого ще немає
+1. **Immutable typed plan.** Executor отримує layout, filesystem, target identity
+   та всі параметри з одного snapshot; довільний список команд і окремий рядок
+   disk не є допустимим API.
+2. **Стійка ідентичність цілі.** До початку й перед кожною destructive boundary
+   перечитуються block-device type, major/minor, capacity, logical sector size,
+   stable identity за наявності, partition-table digest, partition number,
+   start/end/type та topology. Зміна значення анулює згоду.
+3. **Згода, прив'язана до digest.** Підтвердження містить target identity і digest
+   повного плану; воно перевіряється перед кожним записом.
+4. **Закрита tool closure.** Кожний executable походить з перевіреної Guix package
+   closure. Абсолютний шлях сам по собі не доводить, що програма є в образі.
+5. **Справжні postconditions.** Після GPT write таблиця перечитується й
+   звіряється з layout; після rescan перевіряються device nodes та major/minor;
+   після mkfs — filesystem UUID/type/label; після mount — точний source/target
+   у mountinfo. Команда без verifier-а не може завершитися як success.
+6. **Переривання та відновлення.** Після помилки фактичний стан перечитується;
+   повтор destructive кроку не виконується лише за журналом. Потрібні recovery
+   semantics і disposable snapshot/rollback.
+7. **Acceptance у disposable QEMU.** Реальні loop-backed/QEMU block devices
+   доводять target identity, точні postconditions, відмову при підміні,
+   interruption і відсутність змін на сусідньому диску. Mock-тести — лише
+   доповнення, не доказ безпеки APPLY.
 
-- **Запуску на реальному диску.** Жодного разу.
-- **Відкату.** Якщо крок упав посередині, план відновлення не описаний.
-- **Роботи з UUID.** `/dev/nvme0n1p2` може стати іншим після перезавантаження.
-- **Перевірки, що диск не змінився** між плануванням і виконанням — зараз є лише
-  звірка розміру в планувальнику.
-
-## Як це запускається
-
-```sh
-# подивитись план, нічого не роблячи
-wsm-install --preflight --dry-run --report hw.json --backend guix \
-    --install --target-disk /dev/nvme0n1 --target-size-bytes 274877906944 \
-    --acknowledge-disk /dev/nvme0n1
-
-# виконати (лише з явним підтвердженням)
-wsm-install ... --install --execute --acknowledge-disk /dev/nvme0n1
-```
-
-Без `--execute` — dry-run: кроки перелічуються зі статусом `skipped`, нічого не
-виконується. `--execute` без `--acknowledge-disk` відхиляється до того, як
-прозвучить перша команда.
-
-`--target-size-bytes` обов'язковий навмисно: розмір — це те, чим ловиться
-підмінений диск, і вгадувати його не можна.
+До завершення цих критеріїв підтримуваний шлях закінчується на read-only
+preflight, typed plan і preview. Не запускайте цей код на фізичному диску.
