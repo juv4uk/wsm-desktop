@@ -343,6 +343,22 @@ class SplitChecksumTests(unittest.TestCase):
         self.assertIn("covered = [root / name for name in parts]", self.text)
         self.assertIn("if not split:", self.text)
 
+class ReassemblyDocTests(unittest.TestCase):
+    """A published artifact nobody can assemble is not published."""
+
+    def setUp(self) -> None:
+        self.notes = (ROOT / "docs" / "RELEASE-MINIMAL-LIVE.md").read_text(encoding="utf-8")
+
+    def test_notes_explain_how_to_join_the_parts(self) -> None:
+        self.assertIn("cat WSM-Desktop-*.iso.part*", self.notes)
+
+    def test_notes_point_at_the_whole_image_digest(self) -> None:
+        self.assertIn("artifact.sha256", self.notes)
+        self.assertIn("published_as", self.notes)
+
+    def test_notes_warn_about_the_device_not_the_partition(self) -> None:
+        self.assertIn("/dev/sdX1", self.notes)
+
 
 
 if __name__ == "__main__":

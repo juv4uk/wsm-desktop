@@ -116,7 +116,35 @@ release workflow WSM окремо виконує BIOS/UEFI marker smoke.
   proprietary firmware не додаються.
 - Це QEMU boot acceptance у BIOS і UEFI, а не підтвердження сумісності
   кожної фізичної конфігурації.
-- Release workflow не публікує ISO розміром 2 GiB або більше.
+- Один asset GitHub обмежений 2 GiB. Якщо образ більший, реліз містить
+  **частини** (`*.iso.partNNN`) замість цілого файлу — див. нижче.
+
+## Якщо образ опубліковано частинами
+
+Склеювання виконується у **лексичному** порядку імен; інший порядок дасть
+файл із правильним розміром і неправильним вмістом.
+
+```sh
+mkdir -p ~/wsm && cd ~/wsm
+cat WSM-Desktop-*.iso.part* > WSM-Desktop.iso
+sha256sum WSM-Desktop.iso
+```
+
+Далі звірте `sha256` із полем `artifact.sha256` у `release-manifest.json`.
+Це sha256 **цілого** образу, а не частин: маніфест описує файл, який має
+вийти після склеювання, з `artifact.published_as: "parts"`.
+
+```sh
+python3 -c "import json,hashlib,pathlib; m=json.loads(pathlib.Path('release-manifest.json').read_text()); print('збіг' if hashlib.sha256(pathlib.Path('WSM-Desktop.iso').read_bytes()).hexdigest() == m['artifact']['sha256'] else 'НЕ ЗБІГАЄТЬСЯ')"
+```
+
+Запис на USB — після збігу, не до:
+
+```sh
+sudo dd if=WSM-Desktop.iso of=/dev/sdX bs=4M status=progress oflag=sync
+```
+
+`/dev/sdX` — це носій, а не розділ (`/dev/sdX1`). Помилка тут знищує чужі дані.
 
 ## Відтворюваність
 
