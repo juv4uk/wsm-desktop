@@ -40,6 +40,14 @@ WSM встановлюється на обладнання, яке напере�
 доказом прив'язки. `available-only` разом з явним `candidate` означає
 `candidate-only`; `not-applicable` не є помилкою драйвера.
 
+Firmware не є окремою категорією пристрою: у hardware report це вкладений
+per-device факт. Класифікатор не підставляє стан драйвера материнської плати
+замість firmware verdict. У `device_evidence` зберігаються
+`requirement`, `runtime_status`, спостережені файли, package candidates,
+kernel-log evidence та redistribution status; планувальник окремо обробляє
+обов'язковий runtime firmware. Самі `missing` або `load-error` не
+перетворюються тут на глобальний install stop.
+
 Результат функціонального тесту зберігається окремо за парою
 `device_id + capability`. `passed` для `display-mode` не доводить GPU
 rendering, suspend/resume чи працездатність другого GPU. Провал одного тесту
@@ -86,8 +94,9 @@ gate. Він повторно використовує `build_plan()` для п�
 Класифікатор не читає sysfs, не запускає драйвери, не змінює firmware, не
 виконує мережеві запити, не вибирає диск і не дозволяє backend mutation.
 
-## Непокрита capability: suspend/resume Серед підсистем
-немає `suspend`, хоча «працює, але не засинає» — один із найчастіших дефектів
+## Непокрита capability: suspend/resume
+
+Серед підсистем немає `suspend`, хоча «працює, але не засинає» — один із найчастіших дефектів
 на сучасних ноутбуках. Причина не в байдужості: у звіті `wsm-hwcheck` немає
 категорії, з якої це можна взяти, а додавання категорії — зміна схеми
 [HARDWARE-REPORT](../schemas/hardware-report.schema.json) і належить власникам

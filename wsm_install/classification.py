@@ -47,7 +47,6 @@ FUNCTIONAL_TEST_TO_EVIDENCE = {
 SUBSYSTEMS: dict[str, tuple[str, ...]] = {
     "cpu": ("cpu",),
     "memory": ("memory",),
-    "firmware": ("motherboard",),
     "storage": ("storage-controller", "storage-device"),
     "graphics": ("gpu", "display"),
     "network": ("network",),
@@ -71,7 +70,8 @@ class SubsystemVerdict:
     coverage: str = "unknown"
     observation: str = "no-device-record"
     evidence_states: list[str] = field(default_factory=list)
-    functional_tests: list[dict[str, str]] = field(default_factory=list)
+    functional_tests: list[dict[str, Any]] = field(default_factory=list)
+    device_evidence: list[dict[str, Any]] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -83,6 +83,7 @@ class SubsystemVerdict:
             "observation": self.observation,
             "evidence_states": list(self.evidence_states),
             "functional_tests": [dict(item) for item in self.functional_tests],
+            "device_evidence": [dict(item) for item in self.device_evidence],
         }
 
 
@@ -131,10 +132,10 @@ def evidence_state_for(device: dict[str, Any]) -> str:
     return "not-tested"
 
 
-def functional_test_evidence(device: dict[str, Any]) -> list[dict[str, str]]:
+def functional_test_evidence(device: dict[str, Any]) -> list[dict[str, Any]]:
     """Return each test at its own capability scope; never roll it up to device PASS."""
     device_id = str(device.get("device_id", "?"))
-    results: list[dict[str, str]] = []
+    results: list[dict[str, Any]] = []
     tests = device.get("functional_tests") or []
     if not isinstance(tests, list):
         return results
@@ -143,13 +144,64 @@ def functional_test_evidence(device: dict[str, Any]) -> list[dict[str, str]]:
         if not isinstance(test, dict):
             continue
         status = str(test.get("status", "unknown"))
-        results.append({
+        item: dict[str, Any] = {
             "device_id": device_id,
             "capability": str(test.get("capability", "unknown")),
             "reported_status": status,
             "evidence_state": FUNCTIONAL_TEST_TO_EVIDENCE.get(status, "unknown"),
-        })
+        }
+        # Keep the report's provenance intact. These fields explain how, when,
+        # and with what supporting material the capability result was obtained.
+        for field_name in ("tested_at", "method", "result", "evidence_refs"):
+            if field_name in test:
+                value = test[field_name]
+                item[field_name] = list(value) if field_name == "evidence_refs" else value
+        results.append(item)
     return results
+
+
+def device_evidence_for(device: dict[str, Any]) -> dict[str, Any]:
+    """Preserve per-device provenance without turning observations into verdicts."""
+    result: dict[str, Any] = {"device_id": str(device.get("device_id", "?"))}
+
+    driver = device.get("driver")
+    if isinstance(driver, dict):
+        driver_fields = (
+            "status",
+            "candidate",
+            "module",
+            "module_loaded",
+            "bound_driver",
+            "kernel_config_symbol",
+            "notes",
+        )
+        result["driver"] = {
+            key: driver[key] for key in driver_fields if key in driver
+        }
+
+    firmware = device.get("firmware")
+    if isinstance(firmware, dict):
+        firmware_fields = (
+            "requirement",
+            "runtime_status",
+            "files_observed",
+            "package_candidates",
+            "kernel_log_evidence",
+            "redistribution_status",
+        )
+        result["firmware"] = {
+            key: list(firmware[key]) if isinstance(firmware[key], list) else firmware[key]
+            for key in firmware_fields
+            if key in firmware
+        }
+
+    evidence = device.get("evidence")
+    if isinstance(evidence, list):
+        result["evidence"] = [
+            dict(item) for item in evidence if isinstance(item, dict)
+        ]
+
+    return result
 
 
 def classify_subsystem(report: dict[str, Any], subsystem: str) -> SubsystemVerdict:
@@ -174,15 +226,18 @@ def classify_subsystem(report: dict[str, Any], subsystem: str) -> SubsystemVerdi
         return verdict
 
     states: list[str] = []
-    tests: list[dict[str, str]] = []
+    tests: list[dict[str, Any]] = []
+    device_evidence: list[dict[str, Any]] = []
     for device in devices:
         state = evidence_state_for(device)
         states.append(state)
         tests.extend(functional_test_evidence(device))
+        device_evidence.append(device_evidence_for(device))
         verdict.reasons.append(f"{device.get('device_id', '?')}: {state}")
 
     verdict.evidence_states = states
     verdict.functional_tests = tests
+    verdict.device_evidence = device_evidence
 
     # A summary can be KNOWN only if every observed device has a concrete
     # driver candidate or binding. Any untested/non-applicable/unknown device
