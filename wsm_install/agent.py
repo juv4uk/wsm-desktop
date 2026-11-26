@@ -172,6 +172,12 @@ def build_parser():
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.recover:
+        if args.plan is None:
+            print(
+                "wsm-install-agent: --plan is required with --recover",
+                file=sys.stderr,
+            )
+            return 2
         from wsm_install.journal import recovery_report
 
         sys.stdout.write(recovery_report(Path(args.plan)))
