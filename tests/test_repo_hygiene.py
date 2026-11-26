@@ -213,7 +213,7 @@ class InstallerFrontendTests(unittest.TestCase):
 
     def test_installer_document_names_the_cli_as_primary(self) -> None:
         text = (ROOT / "docs" / "INSTALLER.md").read_text(encoding="utf-8")
-        self.assertIn("Два входи, один бекенд", text)
+        self.assertIn("Один typed contract, поточний CLI/TUI шлях", text)
         self.assertIn("CLI первинний", text)
 
     def test_calamares_module_is_marked_optional(self) -> None:
