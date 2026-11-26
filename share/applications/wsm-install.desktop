@@ -1,8 +1,0 @@
-[Desktop Entry]
-Type=Application
-Version=1.0
-Name=WSM Installer (preflight)
-Comment=WSM hardware preflight and read-only Guix install plan
-Exec=/run/current-system/profile/bin/wsm-install-live
-Terminal=true
-Categories=System;

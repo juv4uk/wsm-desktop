@@ -1,9 +1,0 @@
----
-type: "job"
-name: "wsm_deploy"
-interface: "python"
-script: "main.py"
-pretty_name: "WSM system deployment"
-description: "Validate hardware evidence and deploy the WSM system with guix system init."
-required: true
-emergency: false
