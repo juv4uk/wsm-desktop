@@ -176,6 +176,32 @@ JSON-масивом аргументів, який передається як `
 - [#20178](https://github.com/omacom/omarchy/issues/20178) — open issue про
   Legacy/CSM multi-disk install без перевіреного boot-order handoff.
 
+## Реєстр регресійних класів WSM
+
+Кожен клас вище перетворений на правило й на перевірку — або чесно позначений як
+непокритий. Статуси закриті: `covered`, `partial`, `not-covered`, `out-of-scope`.
+Формат доказу — `tests/<file>::<test_method>`; `scripts/check_omarchy_register.py`
+перевіряє, що кожен заявлений тест справді існує, тому рядок не може тихо
+застаріти.
+
+| Клас | Prevent rule у WSM | Detect rule | Статус | Доказ |
+| --- | --- | --- | --- | --- |
+| PATH-підміна у привілейованому кроці (Omarchy #8172) | усі команди — абсолютні шляхи з фіксованої таблиці | тест перевіряє кожну команду плану | `covered` | `tests/test_install_steps.py::test_every_command_starts_with_an_absolute_path` |
+| Рядок замість argv (Omarchy #7926) | команди — списки аргументів; shell-API заборонені в модулях | AST-policy замість пошуку рядків | `covered` | `tests/test_repo_hygiene.py::test_project_modules_do_not_use_shell_interpreting_apis` |
+| Третій бік як виконання коду (CVE-2026-108913) | Nonguix лише в окремому Compatibility-профілі | політика каналів відхиляє nonguix у вільному lock | `covered` | `tests/test_check_channels.py::test_nonguix_is_refused_by_free_policy` |
+| Дія на застарілому стані (partition table після запису) | таблиця перечитується перед форматуванням | тест перевіряє порядок кроків | `covered` | `tests/test_install_steps.py::test_partition_table_is_reread_before_formatting` |
+| Неправильний диск (Omarchy #8129, підміна імені пристрою) | відмова на running system disk, partition path і disk image | тест відмови до будь-якого запису | `covered` | `tests/test_partition.py::test_running_system_disk_is_refused` |
+| Перервана операція отримує completion marker (Omarchy #16421) | журнал пише «до» і «після» з fsync | тест викликає перерваний крок і перевіряє звіт | `covered` | `tests/test_journal.py::test_interrupted_step_is_called_out` |
+| Видалення чужих boot entries на shared ESP (Omarchy #14949) | ESP монтується всередину цілі; чужий ESP не форматується | частково: тест перевіряє mountpoint, а не вміст ESP | `partial` | `tests/test_install_steps.py::test_esp_is_mounted_inside_the_target_not_outside` |
+| `root=` втрачено під час kernel/package transaction (Omarchy #6951) | bootloader-конфіг генерує Guix System; WSM не пише `root=` сам | немає — WSM не має власного boot-кроку | `out-of-scope` | — |
+| LUKS recovery slot видалено при зміні ключа (Omarchy #14874) | шифрування не реалізоване | немає коду, який чіпає slots | `out-of-scope` | — |
+| Legacy/CSM multi-disk boot order (Omarchy #20178) | підтримується лише UEFI | немає перевірки порядку завантаження між дисками | `not-covered` | — |
+| Міграція власних артефактів (`wsm-profile-evidence/1` → `/2`) | плану міграції немає | немає | `not-covered` | — |
+
+`out-of-scope` не означає «вирішено»: це означає, що коду, який міг би зламатися
+саме так, у WSM поки немає. Щойно з'явиться власний boot-крок, шифрування або
+друга версія артефакту — рядок переходить у `not-covered` і отримує тест.
+
 Ці upstream reports — не докази дефектів у WSM або на конкретному обладнанні.
 Це джерела для regression fixtures та acceptance вимог; кожен сценарій має
 окремий prevent/detect rule і статус власної перевірки.
