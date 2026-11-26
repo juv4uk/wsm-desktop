@@ -99,6 +99,9 @@ def plan_steps(
     hostname: str | None = None,
 ) -> list[Step]:
     """Build the ordered step list for a layout, or refuse."""
+    # A Layout can be passed between modules or reconstructed by another caller.
+    # Re-check that exact-disk consent and observed size survived that handoff.
+    layout.validate_confirmation()
     if filesystem not in FILESYSTEMS:
         raise Refused(
             "filesystem.unsupported",
@@ -167,6 +170,7 @@ def plan_steps(
 
 def backend_command(layout: Layout, system_file: str, target: str = "/mnt") -> list[str]:
     """The handoff command. This module does not run it, and neither should a UI."""
+    layout.validate_confirmation()
     if not system_file.endswith(".scm"):
         raise Refused(
             "backend.system-file",

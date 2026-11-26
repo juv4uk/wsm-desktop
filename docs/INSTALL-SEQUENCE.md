@@ -4,7 +4,7 @@
 
 - Статус: **план реалізовано, нічого не виконується**
 - Код: [`wsm_install/install_steps.py`](../wsm_install/install_steps.py)
-- Тести: `tests/test_install_steps.py` (16)
+- Тести: `tests/test_install_steps.py` (18)
 
 ## Що це
 
