@@ -143,6 +143,19 @@ class SuccessTests(unittest.TestCase):
         })
         self.assertIsNone(load_module().run())
 
+    def test_apply_mode_is_refused_by_shared_preview_only_executor(self) -> None:
+        """Calamares cannot bypass the same APPLY gate used by the CLI."""
+        install_fake_libcalamares({
+            "wsmReportPath": str(self.report),
+            "wsmTargetDisk": "/dev/nvme0n1",
+            "wsmTargetSizeBytes": 256 * GIB,
+            # wsmDryRun intentionally omitted: the module default is APPLY.
+        })
+        result = load_module().run()
+        self.assertIsNotNone(result)
+        self.assertIn("deployment failed", result[0].lower())
+        self.assertIn("execute.apply-disabled", result[1])
+
     def test_pretty_name_is_defined(self) -> None:
         install_fake_libcalamares({})
         self.assertTrue(load_module().pretty_name())
