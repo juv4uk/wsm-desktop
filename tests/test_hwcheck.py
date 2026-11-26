@@ -687,5 +687,77 @@ class RuntimeFirmwareEvidenceTests(unittest.TestCase):
         self.assertFalse(result.available)
         self.assertEqual(result.reason, "not-installed")
 
+class VirtualizationCollectorTests(unittest.TestCase):
+    """The canonical collector must distinguish positive VM evidence from absence."""
+
+    def collect_virtualization(
+        self,
+        *,
+        system_vendor: str = "Example Systems",
+        product_name: str = "Example Desktop",
+        hypervisor_type: str | None = None,
+    ) -> str:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            sysfs = root / "sys"
+            proc = root / "proc"
+            sysfs.mkdir()
+            proc.mkdir()
+            if system_vendor:
+                write(sysfs, "class/dmi/id/sys_vendor", system_vendor + "\n")
+            if product_name:
+                write(sysfs, "class/dmi/id/product_name", product_name + "\n")
+            if hypervisor_type:
+                write(sysfs, "hypervisor/type", hypervisor_type + "\n")
+            report = collect_report(sysfs, proc)
+            return report["environment"]["virtualization"]
+
+    def test_no_hypervisor_marker_is_unknown_not_physical(self) -> None:
+        self.assertEqual(self.collect_virtualization(), "unknown")
+
+    def test_qemu_is_detected_from_dmi_identity(self) -> None:
+        self.assertEqual(
+            self.collect_virtualization(
+                system_vendor="QEMU", product_name="Standard PC"
+            ),
+            "qemu",
+        )
+
+    def test_kvm_sysfs_evidence_takes_precedence_over_qemu_dmi(self) -> None:
+        self.assertEqual(
+            self.collect_virtualization(
+                system_vendor="QEMU",
+                product_name="Standard PC",
+                hypervisor_type="KVM",
+            ),
+            "kvm",
+        )
+
+    def test_vmware_is_not_misclassified_as_qemu(self) -> None:
+        self.assertEqual(
+            self.collect_virtualization(
+                system_vendor="VMware, Inc.", product_name="VMware Virtual Platform"
+            ),
+            "vmware",
+        )
+
+    def test_hyper_v_is_not_misclassified_as_qemu(self) -> None:
+        self.assertEqual(
+            self.collect_virtualization(
+                system_vendor="Microsoft Corporation",
+                product_name="Virtual Machine",
+            ),
+            "hyper-v",
+        )
+
+    def test_virtualbox_is_reported_as_other_virtualization(self) -> None:
+        self.assertEqual(
+            self.collect_virtualization(
+                system_vendor="innotek GmbH", product_name="VirtualBox"
+            ),
+            "other",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
