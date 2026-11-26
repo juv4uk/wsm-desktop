@@ -5,7 +5,12 @@
 Реліз `0.1.0-rc2-live-iso` наразі містить завантажувальні assets Free hardened ISO.
 Compatibility/NVIDIA ISO зібрано локально та перевірено за SHA-256, але його
 шість бінарних частин ще не завантажено до GitHub Release. Тому checksum manifest
-не означає, що Compatibility ISO вже можна завантажити.
+не означає, що Compatibility ISO вже можна завантажити. Публікацію також
+відкладено до ліцензійної перевірки NVIDIA binary payload: чинна NVIDIA EULA
+§1.1(d) вимагає незмінених binary files для Linux distribution exception і
+передачі угоди одержувачам, тоді як pinned Nonguix recipe виконує `patchelf`
+над ELF у driver package. Це не юридичний висновок про конкретний archive
+580.178.04; потрібна перевірка bundled EULA/письмове підтвердження.
 
 GitHub обмежує один release asset до 2 GiB, тому ISO розбивається на частини.
 Загальний розмір релізу не обмежений; бінарні частини не додаються до Git-історії.
@@ -85,6 +90,10 @@ TCG не емулює GTX 1050 Ti, тому цей запуск **не є** до
 23.11.2026. Це лише кандидати для наступного build: поточний ISO не містить цих
 версій, а їх сумісність треба окремо підтвердити Guix/Nonguix evaluation,
 module build, rebuild ISO та повторним BIOS/UEFI й physical acceptance.
+
+NVIDIA License: [Driver License Agreement](https://www.nvidia.com/en-us/drivers/nvidia-license/),
+§1.1(d) та §2.3. До окремого licensing review Compatibility ISO залишається
+локальним build candidate і не призначений для публічного binary distribution.
 
 Джерела: [NVIDIA 580.196.11](https://www.nvidia.com/en-us/drivers/details/285683/),
 [NVIDIA legacy GPU support timeframe](https://nvidia.custhelp.com/app/answers/detail/a_id/3142/),

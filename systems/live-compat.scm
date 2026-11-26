@@ -22,6 +22,9 @@
 ;;   лишається зафіксованим діагностичним сигналом. TCG не емулює GTX 1050 Ti.
 ;; - QEMU UEFI acceptance: окремого доказу наразі немає.
 ;; - Compatibility .part001–.part006: ще не завантажено до GitHub Release.
+;; - NVIDIA binary redistribution: NOT CLEARED. Pinned Nonguix package inherits
+;;   patch-elf/patchelf over installed ELF files; compare the exact driver EULA
+;;   and obtain licensing review/permission before publishing binary assets.
 ;; - Physical H170 / GTX 1050 Ti binding, DRM, Vulkan/OpenGL та rendering:
 ;;   NOT RUN; потрібен окремий boot на цільовій машині.
 ;; Тести нижче перевіряють лише source-level graph overrides; вони не
