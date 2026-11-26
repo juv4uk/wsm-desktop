@@ -50,11 +50,11 @@
 (operating-system
   (host-name "wsm-live-minimal")
   (timezone "Europe/Kyiv")
-  (locale "en_US.utf8")
-  (keyboard-layout (keyboard-layout "us"))
-
-  ;; Локаль en_US навмисно: повідомлення про помилки в такому вигляді легше
-  ;; шукати. Українська лишається в документації, не в консолі інсталятора.
+  ;; Українська — основна локаль live-системи; Guix додає її до locale data.
+  (locale "uk_UA.utf8")
+  ;; US лишається для шляхів і паролів; Alt+Shift перемикає US/UA.
+  (keyboard-layout
+   (keyboard-layout "us,ua" #:options '("grp:alt_shift_toggle")))
 
   (bootloader
    (bootloader-configuration
@@ -89,6 +89,14 @@
              (service wpa-supplicant-service-type)
              (service dhcp-client-service-type))
             %base-services)
+    ;; %base-services уже має один console-font-service для tty1–tty6.
+    ;; Змінюємо шрифт tty2 у ньому, не додаючи дубль Shepherd service.
+    (console-font-service-type config =>
+      (map (lambda (tty+font)
+             (if (string=? (car tty+font) "tty2")
+                 (cons "tty2" "LatGrkCyr-8x16")
+                 tty+font))
+           config))
     ;; tty1 і serial лишаються для boot logs; live-сесія доступна на tty2.
     (mingetty-service-type config =>
       (if (string=? (mingetty-configuration-tty config) "tty2")
