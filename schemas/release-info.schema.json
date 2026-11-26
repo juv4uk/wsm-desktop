@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/juv4uk/wsm-desktop/schemas/release-info.schema.json",
+  "title": "WSM release info",
+  "description": "Machine-readable description of what a release is and, just as important, what it is not. Every other versioned artifact in this repository has a schema; release metadata is what people read first, so it gets one too.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "release_id",
+    "version",
+    "display_name",
+    "status",
+    "date",
+    "scope",
+    "excluded",
+    "artifacts"
+  ],
+  "properties": {
+    "schema": {
+      "const": "wsm-release-info/1"
+    },
+    "release_id": {
+      "type": "string",
+      "minLength": 3,
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[a-z0-9.]+)?$"
+    },
+    "display_name": {
+      "type": "string",
+      "minLength": 3
+    },
+    "status": {
+      "enum": [
+        "pre-release",
+        "release",
+        "withdrawn"
+      ]
+    },
+    "date": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "scope": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 10
+      }
+    },
+    "excluded": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 10
+      }
+    },
+    "requirements": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$"
+      }
+    }
+  }
+}
