@@ -72,6 +72,9 @@ SHEPHERD_WARNINGS = (
     "When run as a non-root user, herd observes that user's Shepherd instance, "
     "not the PID 1 system manager. The manager scope is recorded explicitly; "
     "the collector never invokes sudo or escalates privileges.",
+    "Current-boot status/log/graph do not observe shutdown ordering, prove that "
+    "service stop handlers completed, or confirm that filesystems were unmounted. "
+    "The collector also does not evaluate the Shepherd version in the pinned Guix channel.",
     "This artifact is one observation of the current boot, not a five-run sample "
     "or a complete desktop-readiness measurement.",
 )
