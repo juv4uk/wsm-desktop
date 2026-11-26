@@ -9,10 +9,10 @@ on:
   pull_request:
   workflow_dispatch:
 
-# A new commit supersedes only an older run for the same pull request.
-# Pushes and manual runs are keyed by commit SHA and are never cancelled.
+# Only earlier runs for the same pull request can be superseded.
+# Each main commit and each manual run gets its own concurrency group.
 concurrency:
-  group: checks-${{ github.event.pull_request.number || github.sha }}
+  group: checks-${{ github.event.pull_request.number || (github.event_name == 'workflow_dispatch' && github.run_id) || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
