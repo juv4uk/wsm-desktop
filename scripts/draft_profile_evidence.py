@@ -201,6 +201,35 @@ def write_bundle(
     return artifact_path
 
 
+def formats_used(schema: Any) -> set[str]:
+    """Every ``format`` the schema asks for, at any depth."""
+    found: set[str] = set()
+    if isinstance(schema, dict):
+        value = schema.get("format")
+        if isinstance(value, str):
+            found.add(value)
+        for item in schema.values():
+            found |= formats_used(item)
+    elif isinstance(schema, list):
+        for item in schema:
+            found |= formats_used(item)
+    return found
+
+
+def missing_format_checkers(schema: Any, checker: Any) -> list[str]:
+    """Formats the schema declares but this installation cannot check.
+
+    ``jsonschema`` only ships the format checkers that its optional extras
+    install. Without ``jsonschema[format]`` the checker object is non-empty but
+    knows nothing, and every ``"format": "date-time"`` in the schema becomes a
+    comment: an invalid timestamp passes validation silently. That is worse
+    than no validation, because the report looks checked.
+    """
+    return sorted(
+        name for name in formats_used(schema) if checker.checkers.get(name) is None
+    )
+
+
 def validate_hardware_report(report: Any) -> list[str]:
     """Validate source report schema and privacy assertions before copying raw bytes."""
     try:
@@ -211,9 +240,19 @@ def validate_hardware_report(report: Any) -> list[str]:
     except (OSError, UnicodeError, json.JSONDecodeError, jsonschema.SchemaError) as exc:
         return [f"cannot load hardware report schema: {exc}"]
 
+    checker = jsonschema.FormatChecker()
+    unchecked = missing_format_checkers(schema, checker)
+    if unchecked:
+        # Refuse to validate instead of validating less than we claim.
+        return [
+            "format validation is unavailable for "
+            + ", ".join(unchecked)
+            + ": install jsonschema[format] (see requirements-install.txt)"
+        ]
+
     validator = jsonschema.Draft202012Validator(
         schema,
-        format_checker=jsonschema.FormatChecker(),
+        format_checker=checker,
     )
     errors = sorted(
         validator.iter_errors(report),
