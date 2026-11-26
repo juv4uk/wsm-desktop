@@ -37,8 +37,9 @@ CLI додатково відхиляє `--execute` до читання звіт
   `--acknowledge-disk` не дозволяє APPLY.
 - Guided і TUI tests перевіряють, що flow викликає лише preview callback, не показує
   install confirmation screen і не викликає жодного install callback.
-- Calamares test перевіряє, що `wsmDryRun=false` повертає
-  `execute.apply-disabled`.
+- Calamares tests перевіряють, що `wsmDryRun=false` та відсутній ключ
+  відмовляються fail-closed, а `wsmDryRun=true` повертає non-success статус
+  preview і прямо повідомляє, що систему не встановлено.
 - Це не є доказом безпеки майбутнього APPLY і не є QEMU install acceptance.
   Жоден тест цього PR не запускає `sgdisk`, `mkfs`, `mount` чи `guix system init`.
 
