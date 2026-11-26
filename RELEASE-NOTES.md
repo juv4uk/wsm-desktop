@@ -57,6 +57,21 @@ WSM має один спільний контракт типізованого �
 вихідних live-профілів, але новий ISO з цим виправленням ще потрібно зібрати й
 окремо перевірити в BIOS та UEFI.
 
+## Окремий Compatibility ISO (`0.1.0-rc2-live-iso`)
+
+Це не RC4 і не частина поточного source-only candidates: реліз
+`0.1.0-rc2-live-iso` лишається окремим треком для завантажувальних образів.
+26.11.2026 о 17:57 EET зібрано `wsm-desktop-kde-compat-nvidia-20261126.iso`
+(10382727168 байт, SHA-256
+`19a1ca6fc1377fbfb878e1cf670fc521faf7ea0389579f3a6501d956b6df6da0`) із
+власним ядром `linux-wsm-gp107-7.3.5`: `customize-linux` + `localmodconfig`
+з whitelist під i5-6400 / H170-Gaming 3 / GTX 1050 Ti, 69 модулів замість 6519.
+NVIDIA 580.178.04, `nouveau` у чорному списку, `nvidia-drm.modeset=1`,
+firmware `nvidia/gp107` присутні в ISO. QEMU з `accel=tcg` без KVM показав
+маркери `WSM_LIVE_READY`, `This is the GNU system.` і `wsm-kde login:`;
+наявність підтримки реальної GPU цим не доводиться — потрібен boot із
+Ventoy на цільовій машині. Докладніше — [ISO-RELEASE.md](ISO-RELEASE.md).
+
 ## Що цей RC не доводить
 
 - Немає реального APPLY: не виконується жодна операція з розділами, файловими системами, точками монтування, EFI чи завантажувачем.
