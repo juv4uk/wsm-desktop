@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """One-command, read-only hardware preview check for a WSM release tree.
 
 The script collects a local hardware report and asks the diagnostic-only
@@ -152,8 +152,15 @@ def prepare_output(raw: str) -> Path:
 
     try:
         os.chmod(output, 0o700)
-    except OSError:
-        pass
+        actual_mode = stat.S_IMODE(output.stat().st_mode)
+    except OSError as exc:
+        raise SystemExit(
+            f"wsm-hardware-check: cannot enforce output directory mode 0700: {exc}"
+        ) from exc
+    if actual_mode != 0o700:
+        raise SystemExit(
+            f"wsm-hardware-check: output directory mode is {actual_mode:o}, expected 700"
+        )
     return output
 
 

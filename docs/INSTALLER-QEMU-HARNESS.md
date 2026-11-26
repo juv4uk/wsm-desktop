@@ -1,11 +1,11 @@
 # Disposable QEMU installer harness
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Status: **QEMU harness and synthetic-ISO CI integration available; Guix/WSM guest acceptance pending**
+- Status: **QEMU harness and synthetic-ISO acceptance run in the unified `.github/workflows/ci.yml` job `qemu-acceptance`; Guix/WSM guest acceptance pending**
 - Related: #1 (Guix VM milestone), #13 (read-only CLI), #14 (QEMU integration), #23 (session freshness), #27 (harness)
 - Harness: `scripts/qemu_boot_smoke.py`
-- Synthetic-ISO integration: `.github/workflows/qemu-harness-iso-integration.yml`
+- Synthetic-ISO integration: `.github/workflows/ci.yml` → `qemu-acceptance`.
 - Generic Linux guest smoke: `scripts/ci_qemu_guest_smoke.sh`
 
 ## What is implemented
@@ -16,7 +16,7 @@ The project harness accepts a user-supplied regular ISO, validates bounded disk/
 
 The result fields `serial_output_tail` and `qemu_error` are bounded diagnostic tails, not complete logs. Their corresponding byte counters are `serial_bytes_seen` and `stderr_bytes_seen`; `serial_truncated` and `stderr_truncated` indicate that output exceeded the retained caps. The boot marker is evaluated while streaming and is independent of whether its bytes remain in the returned tail.
 
-The dedicated synthetic-ISO CI workflow builds a tiny disposable GRUB/BusyBox guest, passes it through the actual project harness, and requires the guest-only marker `WSM_QEMU_HARNESS_ISO_BOOT_OK`. A separate `qemu-guest-smoke` job in `.github/workflows/checks.yml` directly boots the GitHub runner kernel with a minimal BusyBox initramfs and checks `WSM_QEMU_GUEST_INIT_OK`. These tests cover different layers: direct guest-kernel execution and the project's ISO/QEMU harness.
+The unified `qemu-acceptance` job in `.github/workflows/ci.yml` builds a tiny disposable GRUB/BusyBox guest, passes it through the actual project harness, and requires the guest-only marker `WSM_QEMU_HARNESS_ISO_BOOT_OK`. The same unified job also directly boots the GitHub runner kernel with a minimal BusyBox initramfs and checks `WSM_QEMU_GUEST_INIT_OK`. These tests cover different layers: direct guest-kernel execution and the project's ISO/QEMU harness.
 
 ## What a pass means — and does not mean
 

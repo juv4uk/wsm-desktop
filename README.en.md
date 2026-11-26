@@ -9,7 +9,7 @@
 
 ## Try it now
 
-The working component available today is the hardware collector. It reads sysfs and procfs only. It does not modify block devices, partition tables, filesystems, or system state. By default, the report goes to stdout; `--output PATH` writes only the JSON report to the explicitly selected file.
+The working component available today is the hardware collector. Inventory uses sysfs and procfs; the collector also reads local kernel-module indexes from `/lib/modules/<kernel>/` and, when available, bounded kernel-log diagnostics through fixed read-only `journalctl -k -b` or `dmesg` commands. It does not modify block devices, partition tables, filesystems, or system state. By default, the report goes to stdout; `--output PATH` writes only the JSON report to the explicitly selected file.
 
 ```console
 $ git clone https://github.com/juv4uk/wsm-desktop.git
@@ -30,6 +30,19 @@ $ python -m wsm_install --preflight --report hw.json --backend guix --dry-run
 The `wsm_install` command prints a diagnostic plan for this machine. It remains a draft by design: it is not an installation plan until a target disk is selected and required device roles are confirmed.
 
 The project is in **pre-alpha**. There is no supported installation image yet. The repository currently defines the project architecture and development foundations; it must not be used to install or modify a real system.
+
+## Release 0.1.0-rc1
+
+The first public pre-release is [WSM Desktop 0.1.0-rc1 — Hardware Preview](https://github.com/juv4uk/wsm-desktop/releases/tag/0.1.0-rc1). It ships the read-only tools and a reproducible source bundle, not an installation image: there is no supported installation in it.
+
+Verify what you downloaded:
+
+```sh
+sha256sum -c SHA256SUMS
+python3 -c 'import json; d=json.load(open("release-manifest.json")); n="wsm-desktop-0.1.0-rc1-source.tar.gz"; print(d["source_commit"], d["artifacts"][n]["sha256"])'
+```
+
+The tarball is built with `git archive HEAD | gzip -n -9` at `mtime=0`, so the same commit yields the same bytes. Full scope, known limitations and how to report back are in [RELEASE-NOTES.md](RELEASE-NOTES.md).
 
 ## Project status
 
@@ -141,9 +154,9 @@ The backend decision is closed. [ADR 0004](docs/decisions/0004-nix-guix-backend-
 
 ## Licensing and project identity
 
-Original source code in this repository is licensed under **GPL-3.0-or-later**. Project documentation is licensed under **CC-BY-SA-4.0**. See [LICENSE](LICENSE), [LICENSES/CC-BY-SA-4.0.txt](LICENSES/CC-BY-SA-4.0.txt), and [docs/LICENSING.md](docs/LICENSING.md).
+All work created for WSM Desktop in this repository — code, configuration, tests and documentation — is released under the **VOLNIST** licence. See [LICENSE](LICENSE) and [docs/LICENSING.md](docs/LICENSING.md).
 
-GNU, GNU Guix, Nonguix, and Calamares are independent projects. Their names and marks identify their respective projects and are not claims of affiliation or endorsement. WSM Desktop is not an official GNU, Guix, Nonguix, or Calamares distribution.
+Third-party components — GNU Guix, Calamares, Nonguix, Linux, drivers, firmware — keep their own licences. This licence does not change them and does not relicense them.
 
 ---
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Prepare a confirmed Guix handoff without executing deployment commands."""
 
 from __future__ import annotations
@@ -113,6 +113,88 @@ def _load_selection(value: dict[str, Any]) -> TargetSelection:
     selection = TargetSelection(**value)
     validate_selection(selection)
     return selection
+
+
+def _ensure_output_outside_target(destination: Path) -> None:
+    """Never write a review copy into the installer-owned target mount root."""
+    target = Path(GUIX_TARGET_MOUNTPOINT).resolve(strict=False)
+    if destination == target or target in destination.parents:
+        raise DeployCliError(
+            "configuration output must be outside the target mountpoint "
+            "to avoid writing to the target filesystem"
+        )
+
+
+def _decode_mountinfo_field(value: str) -> str:
+    """Decode octal escapes in Linux /proc/self/mountinfo path fields."""
+    decoded: list[str] = []
+    index = 0
+    while index < len(value):
+        character = value[index]
+        if character != "\\":
+            decoded.append(character)
+            index += 1
+            continue
+        escaped = value[index + 1:index + 4]
+        if len(escaped) != 3 or any(digit not in "01234567" for digit in escaped):
+            raise DeployCliError("mountinfo contains an invalid octal path escape")
+        decoded.append(chr(int(escaped, 8)))
+        index += 4
+    return "".join(decoded)
+
+
+def _target_mount_is_present(target: Path) -> bool:
+    """Find the exact target mountpoint, including same-filesystem bind mounts."""
+    mountinfo = Path("/proc/self/mountinfo")
+    try:
+        content = mountinfo.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise DeployCliError(f"cannot read target mount table: {exc}") from exc
+    lines = content.splitlines()
+    if not lines:
+        raise DeployCliError("target mount table is empty; refusing filesystem identity check")
+
+    target_mountpoint = str(target.absolute())
+    target_found = False
+    for line_number, line in enumerate(lines, start=1):
+        fields = line.split()
+        if len(fields) < 10 or "-" not in fields[6:]:
+            raise DeployCliError(
+                f"mountinfo line {line_number} is malformed; refusing filesystem identity check"
+            )
+        if not re.fullmatch(r"[0-9]+:[0-9]+", fields[2]):
+            raise DeployCliError(
+                f"mountinfo line {line_number} has invalid device identity"
+            )
+        mountpoint = _decode_mountinfo_field(fields[4])
+        if mountpoint == target_mountpoint:
+            target_found = True
+    return target_found
+
+
+def _ensure_output_not_on_target_filesystem(destination: Path) -> None:
+    """Reject same-filesystem output aliases when the installer target is mounted.
+
+    os.path.ismount() may not recognize a same-filesystem bind mount. The
+    exact target mountpoint is therefore read from /proc/self/mountinfo.
+    Comparing st_dev is intentionally conservative and also rejects
+    subvolumes on the same filesystem.
+    """
+    target = Path(GUIX_TARGET_MOUNTPOINT)
+    if not _target_mount_is_present(target):
+        return
+
+    try:
+        target_device = target.stat().st_dev
+        output_device = destination.parent.stat().st_dev
+    except OSError as exc:
+        raise DeployCliError(f"cannot verify output filesystem identity: {exc}") from exc
+
+    if output_device == target_device:
+        raise DeployCliError(
+            "configuration output must not share the mounted target filesystem "
+            "(including bind-mount aliases)"
+        )
 
 
 def _resolve_output(
@@ -275,6 +357,8 @@ def main(argv: list[str] | None = None) -> int:
             args.output,
             (plan_path, selection_path),
         )
+        _ensure_output_outside_target(destination)
+        _ensure_output_not_on_target_filesystem(destination)
         handoff = prepare(
             plan,
             selection,

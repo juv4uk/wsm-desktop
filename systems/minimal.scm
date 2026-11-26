@@ -1,4 +1,4 @@
-;; SPDX-License-Identifier: GPL-3.0-or-later
+;; SPDX-License-Identifier: LicenseRef-Volnist
 ;;
 ;; Мінімальний приклад Guix System для первинної перевірки у disposable QEMU VM.
 ;; Це не завершена конфігурація WSM Desktop і не конфігурація інсталятора.

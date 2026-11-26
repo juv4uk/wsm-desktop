@@ -1,8 +1,7 @@
 # WSM Desktop
 
 [![Перевірки репозиторію](https://github.com/juv4uk/wsm-desktop/actions/workflows/checks.yml/badge.svg)](https://github.com/juv4uk/wsm-desktop/actions/workflows/checks.yml)
-[![Ліцензія коду: GPL-3.0-or-later](https://img.shields.io/badge/%D0%BA%D0%BE%D0%B4-GPL--3.0--or--later-blue.svg)](LICENSE)
-[![Ліцензія документації: CC-BY-SA-4.0](https://img.shields.io/badge/%D0%B4%D0%BE%D0%BA%D1%83%D0%BC%D0%B5%D0%BD%D1%82%D0%B0%D1%86%D1%96%D1%8F-CC--BY--SA--4.0-lightgrey.svg)](LICENSES/CC-BY-SA-4.0.txt)
+[![Ліцензія: ВОЛЬНІСТЬ](https://img.shields.io/badge/%D0%BB%D1%96%D1%86%D0%B5%D0%BD%D0%B7%D1%96%D1%8F-%D0%92%D0%9E%D0%9B%D0%AC%D0%9D%D0%86%D0%A1%D0%A2%D0%AC-blue.svg)](LICENSE)
 
 > Апаратно-орієнтований десктопний Linux на основі GNU Guix System; Nix/NixOS збережено як відкладений дослідницький напрям.
 
@@ -10,8 +9,7 @@
 
 ## Спробувати зараз
 
-Єдина частина цього репозиторію, яка працює вже сьогодні, — апаратний колектор. Він читає
-лише sysfs і procfs. Він не змінює block devices, таблиці розділів, файлові системи чи системний стан. За замовчуванням звіт іде в stdout; `--output PATH` записує лише JSON-звіт у явно вказаний файл.
+Єдина частина цього репозиторію, яка працює вже сьогодні, — апаратний колектор. Інвентаризація використовує sysfs і procfs; додатково колектор читає локальні індекси модулів ядра з `/lib/modules/<kernel>/` і, коли доступно, обмежену діагностику журналу ядра через фіксовані read-only команди `journalctl -k -b` або `dmesg`. Він не змінює block devices, таблиці розділів, файлові системи чи системний стан. За замовчуванням звіт іде в stdout; `--output PATH` записує лише JSON-звіт у явно вказаний файл.
 
 ```console
 $ git clone https://github.com/juv4uk/wsm-desktop.git
@@ -36,10 +34,31 @@ $ python -m wsm_install --preflight --report hw.json --backend guix --dry-run
 вона не стає планом встановлення, доки не обрано цільовий диск і не підтверджено
 обов'язкові ролі пристроїв.
 
-> **Статус: pre-alpha.** Підтримуваного інсталяційного образу ще немає. Репозиторій
-> визначає архітектуру проєкту та основи розробки; його не можна використовувати для
-> встановлення або зміни реальної системи. Колектор вище працює лише на читання і
-> безпечний для запуску.
+> **Статус: pre-alpha.** Повний disk-APPLY та підтримуваний шлях встановлення ще не готові.
+> Репозиторій визначає архітектуру проєкту та основи розробки; колектор вище працює
+> лише на читання і безпечний для запуску.
+
+## Мінімальний live-носій WSM
+
+Компактний [Minimal Live Installer Preview RC3](https://github.com/juv4uk/wsm-desktop/releases/tag/0.1.0-rc3-minimal-live)
+збирається на GitHub runner із `systems/live-minimal.scm` та обмеженням менше
+2 GiB. Він містить власні `wsm-hwcheck`, `wsm-install` і `wsm-install-live`.
+Цей RC дає hardware preflight і перегляд плану; APPLY вимкнено, тому він не
+змінює розділи й не встановлює систему. Деталі — у
+[документації live-релізу](docs/RELEASE-MINIMAL-LIVE.md).
+
+## Реліз 0.1.0-rc1
+
+Перший публічний pre-release — [WSM Desktop 0.1.0-rc1 — Hardware Preview](https://github.com/juv4uk/wsm-desktop/releases/tag/0.1.0-rc1). Це read-only інструменти та відтворюваний вихідний бандл, а не інсталяційний образ: підтримуваного встановлення в ньому немає.
+
+Перевірка цілісності завантаженого:
+
+```sh
+sha256sum -c SHA256SUMS
+python3 -c 'import json; d=json.load(open("release-manifest.json")); n="wsm-desktop-0.1.0-rc1-source.tar.gz"; print(d["source_commit"], d["artifacts"][n]["sha256"])'
+```
+
+Tarball будується з `git archive HEAD | gzip -n -9` з `mtime=0`, тож той самий коміт дає ті самі байти. Повні межі, відомі обмеження й порядок зворотного зв'язку — у [RELEASE-NOTES.md](RELEASE-NOTES.md).
 
 ## Стан проєкту
 
@@ -154,9 +173,9 @@ wsm/               майбутні модулі Guix-каналу проєкт�
 
 ## Ліцензування та ідентичність проєкту
 
-Оригінальний код у цьому репозиторії ліцензовано за **GPL-3.0-or-later**. Документація проєкту — за **CC-BY-SA-4.0**. Див. [LICENSE](LICENSE), [LICENSES/CC-BY-SA-4.0.txt](LICENSES/CC-BY-SA-4.0.txt) і [docs/LICENSING.md](docs/LICENSING.md).
+Уся робота, створена для WSM Desktop у цьому репозиторії (код, конфігурації, тести й документація), поширюється під ліцензією **ВОЛЬНІСТЬ**. Див. [LICENSE](LICENSE) і [docs/LICENSING.md](docs/LICENSING.md).
 
-GNU, GNU Guix, Nonguix і Calamares є незалежними проєктами. Їхні назви та позначки ідентифікують відповідні проєкти й не є заявою про афіліацію чи схвалення. WSM Desktop не є офіційним дистрибутивом GNU, Guix, Nonguix чи Calamares.
+Сторонні компоненти — GNU Guix, Calamares, Nonguix, Linux, драйвери, firmware — зберігають власні ліцензії. Ця ліцензія їх не змінює і не переліцензовує.
 
 ---
 

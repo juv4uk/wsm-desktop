@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Acceptance tests for the Guix deployment adapter.
 
 These follow the assertions in docs/INSTALLER-HANDOFF.md section 8: a plan that
@@ -55,6 +55,13 @@ def confirmed_plan(backend: str = "guix") -> dict:
     plan["plan_readiness"]["confirmable"] = True
     plan["plan_readiness"]["missing_required_roles"] = []
     plan["plan_readiness"]["required_user_actions"] = []
+    # A future user-confirmable snapshot must be coherent across the duplicated
+    # readiness/status/execution markers. CLI v0.1 deliberately never emits it.
+    plan["plan_status"] = "confirmation-ready"
+    plan["execution"]["plan_confirmable"] = True
+    plan["execution"]["mutations_authorized"] = False
+    plan["execution"]["backend_invoked"] = False
+    plan["execution"]["disk_access_performed"] = False
     plan.pop("plan_sha256")
     plan["plan_sha256"] = hashlib.sha256(
         canonical_json(plan).encode("utf-8")
@@ -170,6 +177,48 @@ class HandoffRefusalTests(unittest.TestCase):
         report_bytes = FIXTURE.read_bytes()
         plan, _, _ = build_plan(json.loads(report_bytes), report_bytes, "guix")
         self.assert_refused("plan.not_confirmable", plan, selection())
+
+    def test_diagnostic_status_cannot_be_promoted_by_readiness_flag(self) -> None:
+        plan = confirmed_plan()
+        plan["plan_status"] = "diagnostic-only"
+        refresh_plan_hash(plan)
+        self.assert_refused("plan.not_confirmation_ready", plan, selection())
+
+    def test_execution_confirmable_must_match_readiness(self) -> None:
+        plan = confirmed_plan()
+        plan["execution"]["plan_confirmable"] = False
+        refresh_plan_hash(plan)
+        self.assert_refused("plan.execution_not_confirmable", plan, selection())
+
+    def test_pending_user_actions_refuse_confirmation_ready_plan(self) -> None:
+        plan = confirmed_plan()
+        plan["plan_readiness"]["required_user_actions"] = ["storage-install-target"]
+        refresh_plan_hash(plan)
+        self.assert_refused("plan.user_actions", plan, selection())
+
+    def test_confirmation_ready_plan_must_remain_dry_run(self) -> None:
+        plan = confirmed_plan()
+        plan["execution"]["dry_run"] = False
+        refresh_plan_hash(plan)
+        self.assert_refused("plan.dry_run", plan, selection())
+
+    def test_mutation_authorization_is_never_carried_by_prepare_plan(self) -> None:
+        plan = confirmed_plan()
+        plan["execution"]["mutations_authorized"] = True
+        refresh_plan_hash(plan)
+        self.assert_refused("plan.mutations_authorized", plan, selection())
+
+    def test_backend_must_not_have_been_invoked_before_handoff(self) -> None:
+        plan = confirmed_plan()
+        plan["execution"]["backend_invoked"] = True
+        refresh_plan_hash(plan)
+        self.assert_refused("plan.backend_invoked", plan, selection())
+
+    def test_plan_mode_must_be_dry_run(self) -> None:
+        plan = confirmed_plan()
+        plan["plan_mode"] = "confirmed"
+        refresh_plan_hash(plan)
+        self.assert_refused("plan.mode", plan, selection())
 
     def test_source_report_id_rejects_scheme_comment_injection(self) -> None:
         plan = confirmed_plan()

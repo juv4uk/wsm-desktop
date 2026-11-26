@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Tests for the plan-only Guix deployment handoff CLI."""
 
 from __future__ import annotations
@@ -13,12 +13,18 @@ import sys
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from wsm_install.backend_guix import TargetSelection  # noqa: E402
-from wsm_install.guix_deploy import main  # noqa: E402
+from wsm_install.guix_deploy import (
+    DeployCliError,
+    _ensure_output_not_on_target_filesystem,
+    _ensure_output_outside_target,
+    main,
+)  # noqa: E402
 from wsm_install.plan import build_plan, canonical_json  # noqa: E402
 
 FIXTURE = ROOT / "tests" / "fixtures" / "hardware" / "desktop-observed.json"
@@ -33,6 +39,11 @@ def confirmed_plan() -> dict:
     plan["plan_readiness"]["confirmable"] = True
     plan["plan_readiness"]["missing_required_roles"] = []
     plan["plan_readiness"]["required_user_actions"] = []
+    plan["plan_status"] = "confirmation-ready"
+    plan["execution"]["plan_confirmable"] = True
+    plan["execution"]["mutations_authorized"] = False
+    plan["execution"]["backend_invoked"] = False
+    plan["execution"]["disk_access_performed"] = False
     plan.pop("plan_sha256", None)
     plan["plan_sha256"] = hashlib.sha256(canonical_json(plan).encode("utf-8")).hexdigest()
     return plan
@@ -146,6 +157,32 @@ class GuixDeployCliTests(unittest.TestCase):
         self.assertIn("plan field 'backend' must be a JSON object", stderr)
         self.assertFalse(self.output_path.exists())
 
+    def test_diagnostic_status_is_refused_even_with_confirmable_flag(self) -> None:
+        diagnostic = copy.deepcopy(self.plan)
+        diagnostic["plan_status"] = "diagnostic-only"
+        diagnostic.pop("plan_sha256", None)
+        diagnostic["plan_sha256"] = hashlib.sha256(
+            canonical_json(diagnostic).encode("utf-8")
+        ).hexdigest()
+        write_json(self.plan_path, diagnostic)
+        code, _stdout, stderr = self.run_cli("--show-confirmation")
+        self.assertEqual(code, 3)
+        self.assertIn("plan.not_confirmation_ready", stderr)
+        self.assertFalse(self.output_path.exists())
+
+    def test_execution_confirmation_mismatch_is_refused(self) -> None:
+        invalid = copy.deepcopy(self.plan)
+        invalid["execution"]["plan_confirmable"] = False
+        invalid.pop("plan_sha256", None)
+        invalid["plan_sha256"] = hashlib.sha256(
+            canonical_json(invalid).encode("utf-8")
+        ).hexdigest()
+        write_json(self.plan_path, invalid)
+        code, _stdout, stderr = self.run_cli("--show-confirmation")
+        self.assertEqual(code, 3)
+        self.assertIn("plan.execution_not_confirmable", stderr)
+        self.assertFalse(self.output_path.exists())
+
     def test_diagnostic_only_plan_is_refused_before_creating_output(self) -> None:
         diagnostic = copy.deepcopy(self.plan)
         diagnostic["plan_readiness"]["confirmable"] = False
@@ -236,6 +273,73 @@ class GuixDeployCliTests(unittest.TestCase):
             code = main(arguments)
         self.assertEqual(code, 2)
         self.assertIn("cannot open plan", stderr.getvalue())
+
+    def test_review_output_may_not_live_inside_the_target_mountpoint(self) -> None:
+        for candidate in (Path("/mnt"), Path("/mnt/system.scm"), Path("/mnt/wsm/review.scm")):
+            with self.subTest(candidate=str(candidate)):
+                with self.assertRaises(DeployCliError) as raised:
+                    _ensure_output_outside_target(candidate)
+                self.assertIn("outside the target mountpoint", str(raised.exception))
+
+    def test_review_output_is_refused_on_same_filesystem_bind_mount_even_if_ismount_is_false(self) -> None:
+        # Python's ismount may return False for a same-filesystem bind mount.
+        # mountinfo still contains the exact /mnt mountpoint, so st_dev must be compared.
+        mountinfo = "36 25 8:1 / /mnt rw,relatime - ext4 /dev/vda1 rw\n"
+        fake_stat = type("StatResult", (), {"st_dev": 123})()
+        with (
+            patch.object(Path, "read_text", return_value=mountinfo),
+            patch.object(Path, "stat", return_value=fake_stat),
+            patch("wsm_install.guix_deploy.os.path.ismount", return_value=False),
+        ):
+            with self.assertRaises(DeployCliError) as raised:
+                _ensure_output_not_on_target_filesystem(self.root / "review.scm")
+        self.assertIn("share the mounted target filesystem", str(raised.exception))
+
+    def test_review_output_on_separate_filesystem_is_allowed(self) -> None:
+        mountinfo = "36 25 8:1 / /mnt rw,relatime - ext4 /dev/vda1 rw\n"
+        target_stat = type("StatResult", (), {"st_dev": 123})()
+        output_stat = type("StatResult", (), {"st_dev": 456})()
+
+        def fake_stat(path: Path):
+            return target_stat if path == Path("/mnt") else output_stat
+
+        with (
+            patch.object(Path, "read_text", return_value=mountinfo),
+            patch.object(Path, "stat", autospec=True, side_effect=fake_stat),
+        ):
+            _ensure_output_not_on_target_filesystem(self.root / "review.scm")
+
+    def test_review_output_skips_device_comparison_when_mountinfo_has_no_target_mount(self) -> None:
+        root_mount = "1 0 8:1 / / rw,relatime - ext4 /dev/root rw\n"
+        with (
+            patch.object(Path, "read_text", return_value=root_mount),
+            patch.object(Path, "stat", side_effect=AssertionError("stat must not be called")),
+        ):
+            _ensure_output_not_on_target_filesystem(self.root / "review.scm")
+
+    def test_review_output_fails_closed_when_mountinfo_is_unavailable(self) -> None:
+        with patch.object(Path, "read_text", side_effect=OSError("proc unavailable")):
+            with self.assertRaisesRegex(DeployCliError, "cannot read target mount table"):
+                _ensure_output_not_on_target_filesystem(self.root / "review.scm")
+
+    def test_review_output_fails_closed_on_malformed_mountinfo_after_target_entry(self) -> None:
+        malformed = "36 25 8:1 / /mnt rw,relatime - ext4 /dev/vda1 rw\nmalformed\n"
+        with patch.object(Path, "read_text", return_value=malformed):
+            with self.assertRaisesRegex(DeployCliError, "mountinfo line 2 is malformed"):
+                _ensure_output_not_on_target_filesystem(self.root / "review.scm")
+
+    def test_review_output_fails_closed_on_malformed_mountinfo(self) -> None:
+        malformed = "36 25 8:1 / /mnt rw,relatime\n"
+        with patch.object(Path, "read_text", return_value=malformed):
+            with self.assertRaisesRegex(DeployCliError, "mountinfo line 1 is malformed"):
+                _ensure_output_not_on_target_filesystem(self.root / "review.scm")
+
+    def test_mountinfo_path_escape_is_decoded(self) -> None:
+        from wsm_install.guix_deploy import _decode_mountinfo_field
+
+        self.assertEqual(_decode_mountinfo_field(r"/target\040drive\134name"), "/target drive\\name")
+        with self.assertRaisesRegex(DeployCliError, "invalid octal path escape"):
+            _decode_mountinfo_field(r"/target\04x")
 
     def test_custom_mountpoint_is_not_a_cli_option(self) -> None:
         # The backend allow-list fixes the installer-owned mount root; a CLI

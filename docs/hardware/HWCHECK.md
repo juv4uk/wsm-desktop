@@ -1,6 +1,6 @@
 # WSM hardware preflight collector
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 - Status: **prototype v0.2.0** — read-only evidence collector, not a hardware certification, compatibility score, or end-to-end function test.
 - Critical path: **yes** — the installer consumes this report before it writes to a disk.

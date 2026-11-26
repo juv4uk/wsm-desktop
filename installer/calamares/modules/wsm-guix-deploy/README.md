@@ -1,6 +1,6 @@
 # Модуль wsm-guix-deploy
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 Це місце для майбутнього Python job module Calamares. Файлу \`module.desc\` та Calamares entry point тут навмисно немає, тому frontend не може випадково завантажити незавершений installer backend.
 
@@ -30,7 +30,7 @@ python3 -m wsm_install.guix_deploy \\
 
 CLI:
 - відмовляє diagnostic-only або зміненим планам, blockers, неузгодженим digest-ам і невалідному вибору;
-- створює новий файл із правами \`0600\`, не перезаписує наявний і не приймає symlink або duplicate JSON keys;
+- створює новий файл із правами \`0600\`, не перезаписує наявний, не приймає symlink або duplicate JSON keys і не пише оглядову копію всередині \`/mnt\`;
 - повертає argv як типізований список із фіксованими \`/run/wsm/system.scm\` і \`/mnt\`, але **ніколи не запускає цю команду**; \`--output\` задає лише оглядову копію й не змінює allowlist argv;
 - не монтує, не форматує та не змінює цільовий диск.
 
@@ -62,3 +62,5 @@ CLI:
 \`tests/test_backend_guix.py\` перевіряє adapter refusal paths, \`tests/test_guix_deploy_cli.py\` — standalone CLI, підтвердження digest-ів і безпечне створення файлу. Тести не потребують Guix і не змінюють диски.
 
 Фактичне виконання \`guix system init\`, mount/partition/filesystem operations, повторна перевірка identity цілі та QEMU installed-system boot залишаються наступними окремими кроками. Для них потрібні окремий execution contract, автентифікований Guix channel snapshot і disposable disk image.
+
+Коли target `/mnt` вже змонтований, CLI додатково порівнює `st_dev` його filesystem із filesystem директорії оглядової копії. Однаковий device ID означає відмову, навіть якщо output шлях лексично поза `/mnt` (bind mount або той самий filesystem/subvolume). Помилка перевірки завершується fail-closed.

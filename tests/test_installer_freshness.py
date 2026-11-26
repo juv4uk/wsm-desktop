@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Fail-closed consumer-side freshness policy tests; no producer schema changes."""
 
 from __future__ import annotations

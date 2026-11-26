@@ -1,6 +1,6 @@
 # Контракт передавання: апаратний preflight → план → системний backend
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 - Статус: **proposed / design-only** — backend-адаптер Guix v0.1 реалізовано read-only
 - Дата: 2026-11-25
@@ -152,6 +152,8 @@ CLI contract v0.1:
 - `execution` booleans: `dry_run`, `plan_confirmable`, `mutations_authorized`, `backend_invoked`, `disk_access_performed`.
 
 Усі v0.1 плани залишаються diagnostic-only, навіть коли blocker list порожній: це не означає, що вже реалізовано user confirmation, storage/partition plan або backend apply. Поточний CLI не реалізує повний target model з §4: зокрема storage partition plan, selected/pinned backend revision, повний user intent, confirmation token і apply phases ще не існують у його JSON output.
+
+**Окремий acceptance gate Guix adapter-а (майбутній контракт, не CLI v0.1):** щоб CLI handoff міг перейти до фази підтвердження, майбутній frontend має сформувати узгоджений snapshot з `plan_mode=dry-run`, `plan_status=confirmation-ready`, `plan_readiness.confirmable=true`, порожніми `missing_required_roles` і `required_user_actions` та `execution.plan_confirmable=true`. Одночасно `execution.dry_run=true`, `mutations_authorized=false`, `backend_invoked=false` і `disk_access_performed=false`; blockers мають бути порожніми. Backend відхиляє будь-яку суперечність між цими маркерами. `confirmation-ready` означає лише «можна показати користувачеві точні digest-и для окремого підтвердження»; це **не** означає, що користувач уже підтвердив план або дозволив мутації. Наявний CLI v0.1 такого snapshot не створює, тому його diagnostic-only JSON завжди відхиляється Guix handoff-ом.
 
 **Coverage marker і verdict — різні поняття.** Якщо report не містить запису потрібної capability, CLI може відобразити це в `plan_readiness.role_coverage` як `not-collected` і додати warning. Похідний compatibility verdict цієї capability має залишатися `unknown` із збереженням причини, coverage boundary та provenance; `not-collected` не є verdict, не означає `not-detected` або `not-tested` і не задовольняє critical evidence gate. Такий missing-role план залишається diagnostic-only.
 
@@ -355,7 +357,7 @@ Frontend реалізація може змінюватися (Calamares, інш
 - `python3 -m wsm_install.guix_deploy --plan PLAN.json --selection TARGET.json --show-confirmation` перевіряє обидва входи й показує точні SHA-256 плану та вибору цілі; файл конфігурації не створюється;
 - другий виклик вимагає обидва digest-и через `--confirm-plan-sha256` і `--confirm-target-digest`, після чого створює новий абсолютний `.scm` файл з режимом `0600` як **оглядову копію**;
 - CLI друкує JSON із allow-listed `argv`, але ніколи не виконує його. `argv` завжди містить фіксовані `/run/wsm/system.scm` і `/mnt`, навіть коли оглядова копія лежить в іншому абсолютному шляху: це відображення майбутньої команди інсталятора, а не дозвіл на довільні шляхи. Окремі `--mountpoint` немає;
-- CLI відхиляє symlink/не regular input, duplicate JSON keys, змінені чи diagnostic-only plans, неузгоджені підтвердження та перезапис наявного output;
+- CLI відхиляє symlink/не regular input, duplicate JSON keys, змінені чи diagnostic-only plans, неузгоджені підтвердження, перезапис наявного output і будь-яку оглядову копію всередині цільового `/mnt`;
 - `make check-installer` запускає окремі backend і CLI safety tests.
 
 **Обмеження поточного стану:** `wsm_install/cli.py` поки формує лише diagnostic-only plan із `confirmable=false`; отже, поточний frontend ще не видає plan, який може пройти Guix handoff. Реалізований CLI приймає вже підтверджений plan і окремий target selection; тести використовують синтетичний confirmed fixture. Це не підміняє UI-підтвердження і не доводить readiness фізичного диска.

@@ -1,0 +1,53 @@
+{
+  "schema": "wsm-profile-evidence/1",
+  "profile": {
+    "vendor": "Gigabyte",
+    "model": "GA-H170-Gaming3",
+    "slug": "gigabyte/ga-h170-gaming3"
+  },
+  "report_id": "замінити на report_id зі звіту wsm-hwcheck",
+  "report_schema_version": "1.0.0",
+  "isa_level": "x86-64-v2",
+  "verified_on": "2026-11-26",
+  "verified_by": "автори проєкту",
+  "verified_functions": [
+    {
+      "name": "graphics",
+      "status": "not-assessed",
+      "note": "що саме перевіряли"
+    },
+    {
+      "name": "storage",
+      "status": "not-assessed"
+    },
+    {
+      "name": "network",
+      "status": "not-assessed"
+    },
+    {
+      "name": "audio",
+      "status": "not-assessed"
+    }
+  ],
+  "known_limitations": [
+    "кожне обмеження окремим рядком"
+  ],
+  "not_assessed": [
+    "suspend/resume",
+    "що ще не перевірено"
+  ],
+  "artifacts": [
+    {
+      "kind": "dmesg",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "note": "замінити на справжній хеш"
+    }
+  ],
+  "hardware_signature": {
+    "pci_ids": [
+      "0000:0000"
+    ],
+    "match": "all",
+    "notes": "vendor:device у нижньому регістрі, як у lspci -nn; замінити на справжні"
+  }
+}

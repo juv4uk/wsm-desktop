@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Guix deployment adapter: turn a confirmed install plan into a typed handoff.
 
 This module implements the backend side of docs/INSTALLER-HANDOFF.md for the
@@ -125,19 +125,35 @@ def validate_plan(plan: dict[str, Any]) -> None:
         "plan.version",
         "unsupported plan version; expected 0.1.0",
     )
-    backend = plan.get("backend") or {}
+    backend = plan.get("backend")
+    _require(
+        isinstance(backend, dict),
+        "plan.backend_shape",
+        "backend must be an object",
+    )
     _require(
         backend.get("id") == BACKEND_ID,
         "plan.backend",
         f"this adapter only deploys {BACKEND_ID}, got {backend.get('id')!r}; "
         "one installation has exactly one backend",
     )
+    blockers = plan.get("blockers")
     _require(
-        not plan.get("blockers"),
-        "plan.blockers",
-        f"plan has unresolved blockers: {plan.get('blockers')}",
+        isinstance(blockers, list),
+        "plan.blockers_shape",
+        "blockers must be an array",
     )
-    readiness = plan.get("plan_readiness") or {}
+    _require(
+        not blockers,
+        "plan.blockers",
+        f"plan has unresolved blockers: {blockers}",
+    )
+    readiness = plan.get("plan_readiness")
+    _require(
+        isinstance(readiness, dict),
+        "plan.readiness_shape",
+        "plan_readiness must be an object",
+    )
     _require(
         readiness.get("confirmable") is True,
         "plan.not_confirmable",
@@ -145,15 +161,62 @@ def validate_plan(plan: dict[str, Any]) -> None:
         f"{readiness.get('required_user_actions')}",
     )
     _require(
-        not readiness.get("missing_required_roles"),
-        "plan.missing_roles",
-        f"required device roles were never observed: {readiness.get('missing_required_roles')}",
+        plan.get("plan_mode") == "dry-run",
+        "plan.mode",
+        "Guix handoff accepts only a dry-run plan snapshot",
     )
-    execution = plan.get("execution") or {}
+    _require(
+        plan.get("plan_status") == "confirmation-ready",
+        "plan.not_confirmation_ready",
+        "only a confirmation-ready plan can enter the Guix handoff; diagnostic-only plans are never accepted",
+    )
+    missing_roles = readiness.get("missing_required_roles")
+    _require(
+        isinstance(missing_roles, list),
+        "plan.missing_roles_shape",
+        "plan_readiness.missing_required_roles must be an array",
+    )
+    _require(
+        not missing_roles,
+        "plan.missing_roles",
+        f"required device roles were never observed: {missing_roles}",
+    )
+    required_actions = readiness.get("required_user_actions")
+    _require(
+        isinstance(required_actions, list),
+        "plan.user_actions_shape",
+        "plan_readiness.required_user_actions must be an array",
+    )
+    _require(
+        not required_actions,
+        "plan.user_actions",
+        f"required user actions remain unresolved: {required_actions}",
+    )
+    execution = plan.get("execution")
+    _require(
+        isinstance(execution, dict),
+        "plan.execution_shape",
+        "execution must be an object",
+    )
     _require(
         execution.get("dry_run") is True,
         "plan.dry_run",
         "plan was not produced in dry-run mode",
+    )
+    _require(
+        execution.get("plan_confirmable") is True,
+        "plan.execution_not_confirmable",
+        "execution.plan_confirmable must agree with plan_readiness.confirmable",
+    )
+    _require(
+        execution.get("mutations_authorized") is False,
+        "plan.mutations_authorized",
+        "prepare-only handoff must not carry mutation authorization",
+    )
+    _require(
+        execution.get("backend_invoked") is False,
+        "plan.backend_invoked",
+        "plan already claims backend execution; refusing to continue",
     )
     _require(
         execution.get("disk_access_performed") is False,

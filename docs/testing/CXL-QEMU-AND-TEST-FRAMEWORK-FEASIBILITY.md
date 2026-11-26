@@ -1,6 +1,6 @@
 # QEMU CXL та cxl_test: результати feasibility
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 - Статус: підтверджений інженерний експеримент; не hardware compatibility certification
 - Дата: 2026-11-25

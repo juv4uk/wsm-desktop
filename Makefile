@@ -1,11 +1,110 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 
 PYTHON ?= python3
 GUIX ?= guix
+PRODUCT ?= free
 
-.PHONY: check check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle
+.PHONY: check check-guix-eval release-gate check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle check-profiles check-agent check-calamares check-channels check-cli-install check-env-preflight check-evidence-drafter check-executor check-guided check-hygiene check-install-steps check-isa check-journal check-live-acceptance check-makefile check-observation check-partition check-perf-baseline check-profile-evidence check-profile-match check-profiles-matrix check-release-verdict check-state check-syntax check-tui check-licences image-live-minimal
 
-check: check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy
+check: check-docs check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa check-live-acceptance check-profiles-matrix check-perf-baseline check-profile-evidence check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-hygiene check-channels check-executor check-cli-install check-calamares check-guided check-tui check-agent check-journal check-env-preflight check-observation check-licences
+
+check-profiles:
+	$(PYTHON) tests/test_system_profiles.py
+
+check-syntax:
+	$(PYTHON) tests/test_python_syntax.py
+
+check-state:
+	$(PYTHON) tests/test_state_ownership.py
+
+check-isa:
+	$(PYTHON) tests/test_cpu_isa.py
+
+check-live-acceptance:
+	$(PYTHON) tests/test_live_iso_acceptance.py
+
+check-perf-baseline:
+	$(PYTHON) tests/test_perf_baseline.py
+
+check-profile-evidence:
+	$(PYTHON) tests/test_profile_evidence.py
+	$(PYTHON) scripts/check_profile_evidence.py
+
+check-profile-match:
+	$(PYTHON) tests/test_profile_match.py
+
+check-release-verdict:
+	$(PYTHON) tests/test_verify_live_release.py
+
+check-makefile:
+	$(PYTHON) tests/test_makefile_coverage.py
+
+check-evidence-drafter:
+	$(PYTHON) tests/test_draft_profile_evidence.py
+
+check-partition:
+	$(PYTHON) tests/test_partition.py
+
+check-install-steps:
+	$(PYTHON) tests/test_install_steps.py
+
+check-executor:
+	$(PYTHON) tests/test_executor.py
+
+check-cli-install:
+	$(PYTHON) tests/test_cli_install.py
+
+check-calamares:
+	$(PYTHON) tests/test_calamares_module.py
+
+check-guided:
+	$(PYTHON) tests/test_guided.py
+
+check-tui:
+	$(PYTHON) tests/test_tui.py
+
+check-agent:
+	$(PYTHON) tests/test_agent.py
+
+check-journal:
+	$(PYTHON) tests/test_journal.py
+
+check-env-preflight:
+	$(PYTHON) tests/test_preflight_env.py
+
+check-observation:
+	$(PYTHON) tests/test_observation_principles.py
+
+check-licences:
+	$(PYTHON) tests/test_licence_headers.py
+
+# Manual, needs Guix: evaluates the Scheme without building anything.
+# Not part of `check` on purpose - a contributor without Guix must still pass.
+check-guix-eval:
+	$(GUIX) time-machine -C channels.lock.scm -- system build systems/minimal.scm --dry-run
+	$(GUIX) time-machine -C channels.lock.scm -- system build systems/desktop.scm --dry-run
+	$(GUIX) time-machine -C channels.lock.scm -- system build systems/live.scm --dry-run
+	$(GUIX) time-machine -C channels.lock.scm -- system build systems/live-minimal.scm --dry-run
+	$(GUIX) time-machine -C channels/compatibility.lock.scm -- system build systems/live-compat.scm --dry-run
+	$(GUIX) time-machine -C channels.lock.scm -- home build systems/home.scm --dry-run
+
+check-hygiene:
+	$(PYTHON) tests/test_repo_hygiene.py
+
+release-gate:
+	$(PYTHON) scripts/release_gate.py --product "$(PRODUCT)" $(if $(ISO),--iso "$(ISO)") $(if $(BOOT),--boot)
+
+check-channels:
+	$(PYTHON) tests/test_check_channels.py
+	$(PYTHON) scripts/check_channels.py --policy free --lock channels.lock.scm
+	@if test -f channels/compatibility.lock.scm; then \
+		$(PYTHON) scripts/check_channels.py --policy compatibility --lock channels/compatibility.lock.scm; \
+	else \
+		printf '%s\\n' 'check-channels: Compatibility lock NOT_CONFIGURED; no Compatibility PASS'; \
+	fi
+
+check-profiles-matrix:
+	$(PYTHON) tests/test_profiles.py
 
 check-docs:
 	$(PYTHON) scripts/check_docs.py
@@ -51,12 +150,17 @@ check-uefi-preboot-policy:
 
 check-release:
 	$(PYTHON) tests/test_release_artifacts.py
+	$(PYTHON) tests/test_release_gate.py
 
 describe-lock:
 	$(GUIX) time-machine -C channels.lock.scm -- describe -f channels
 
 check-locked-system:
 	$(GUIX) time-machine -C channels.lock.scm -- system build systems/minimal.scm
+
+# Компактний консольний live-носій із WSM CLI/TUI.
+image-live-minimal:
+	WSM_LIVE_PROFILE=systems/live-minimal.scm ./scripts/build_iso.sh
 
 release-bundle: check
 	$(PYTHON) scripts/build_release_bundle.py

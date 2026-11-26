@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Pure, fail-closed report freshness policy (proposal; not wired into CLI yet).
 
 The schema/collector contract is owned by the hardware producer workstream.

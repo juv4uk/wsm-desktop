@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Run a disposable, offline QEMU boot smoke test for a supplied live ISO.
 
 This is a boot smoke test only. It does not claim that wsm-install ran inside
@@ -260,14 +260,52 @@ def validate_iso(path: Path) -> Path:
     return resolved
 
 
+def validate_ovmf_image(path: Path, label: str) -> Path:
+    """Accept a non-empty regular OVMF image; never follow a supplied symlink."""
+    if path.is_symlink():
+        raise ValueError(f"{label} must not be a symlink")
+    try:
+        resolved = path.resolve(strict=True)
+    except OSError as exc:
+        raise ValueError(f"cannot resolve {label}: {exc}") from exc
+    if not resolved.is_file() or resolved.stat().st_size == 0:
+        raise ValueError(f"{label} must be a non-empty regular file")
+    return resolved
+
+
+def copy_ovmf_vars_template(template: Path, destination: Path) -> Path:
+    """Copy a distinct OVMF VARS template into a private per-run writable file."""
+    source = validate_ovmf_image(template, "OVMF variables template")
+    if destination.exists() or destination.is_symlink():
+        raise ValueError(f"refusing to overwrite OVMF variables destination: {destination}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source, destination)
+    if not destination.is_file() or destination.stat().st_size != source.stat().st_size:
+        try:
+            destination.unlink()
+        except OSError:
+            pass
+        raise ValueError("private OVMF variables copy is incomplete")
+    return destination
+
+
 def build_qemu_command(
     qemu: str,
     iso: Path,
     qcow2: Path,
     memory_mib: int,
     cpus: int,
+    firmware: str = "bios",
+    ovmf_code: Path | None = None,
+    ovmf_vars: Path | None = None,
 ) -> list[str]:
-    """Build isolated QEMU arguments using JSON blockdev nodes and stdio serial."""
+    """Build isolated QEMU arguments using JSON blockdev nodes and stdio serial.
+
+    ``firmware="uefi"`` adds a read-only OVMF code pflash plus a writable copy of
+    the variable store, so the guest can set its own boot entries without
+    touching the host's. The acceptance for the live image requires both modes:
+    a BIOS-only boot proves nothing about UEFI machines.
+    """
     file_node = json.dumps({
         "driver": "file",
         "filename": str(qcow2),
@@ -278,9 +316,19 @@ def build_qemu_command(
         "file": "wsm-disk-file",
         "node-name": "wsm-disk",
     }, separators=(",", ":"))
+    firmware_args: list[str] = []
+    if firmware == "uefi":
+        if ovmf_code is None or ovmf_vars is None:
+            raise ValueError("uefi boot needs both an OVMF code image and a variables file")
+        firmware_args = [
+            "-drive", f"if=pflash,format=raw,readonly=on,file={ovmf_code}",
+            "-drive", f"if=pflash,format=raw,file={ovmf_vars}",
+        ]
+
     return [
         qemu,
         "-machine", "q35,accel=tcg",
+        *firmware_args,
         "-m", str(memory_mib),
         "-smp", str(cpus),
         "-cdrom", str(iso),
@@ -310,6 +358,22 @@ def build_parser() -> argparse.ArgumentParser:
         "--boot-marker",
         help="literal text that must appear on the serial console to confirm boot",
     )
+    parser.add_argument(
+        "--firmware",
+        choices=("bios", "uefi"),
+        default="bios",
+        help="boot firmware; uefi needs --ovmf-code (acceptance requires both modes)",
+    )
+    parser.add_argument(
+        "--ovmf-code",
+        type=Path,
+        help="read-only OVMF code image for --firmware uefi",
+    )
+    parser.add_argument(
+        "--ovmf-vars",
+        type=Path,
+        help="separate OVMF variables template; a private writable copy is used for the guest",
+    )
     parser.add_argument("--dry-run", action="store_true", help="print the isolated QEMU command only")
     return parser
 
@@ -334,15 +398,48 @@ def main(argv: Sequence[str] | None = None) -> int:
     qemu = shutil.which("qemu-system-x86_64") or "qemu-system-x86_64"
     qemu_img = shutil.which("qemu-img") or "qemu-img"
 
+    ovmf_code: Path | None = None
+    ovmf_vars_template: Path | None = None
+    ovmf_vars: Path | None = None
+    if args.firmware == "uefi":
+        if args.ovmf_code is None or args.ovmf_vars is None:
+            print(
+                "qemu-boot-smoke: --firmware uefi requires both --ovmf-code and "
+                "--ovmf-vars; CODE and VARS must be separate files",
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            ovmf_code = validate_ovmf_image(args.ovmf_code, "OVMF code image")
+            ovmf_vars_template = validate_ovmf_image(args.ovmf_vars, "OVMF variables template")
+            if os.path.samefile(ovmf_code, ovmf_vars_template):
+                raise ValueError("OVMF CODE and VARS must be separate files")
+        except (OSError, ValueError) as exc:
+            print(f"qemu-boot-smoke: {exc}", file=sys.stderr)
+            return 2
+
     with tempfile.TemporaryDirectory(prefix="wsm-qemu-smoke-") as temporary:
         work = Path(temporary).resolve()
         qcow2 = work / "disposable.qcow2"
-        command = build_qemu_command(qemu, iso, qcow2, args.memory_mib, args.cpus)
+        if args.firmware == "uefi":
+            # CODE stays read-only; only a private copy of the distinct VARS
+            # template is writable by the guest. Host NVRAM is never passed in.
+            assert ovmf_vars_template is not None
+            ovmf_vars = copy_ovmf_vars_template(
+                ovmf_vars_template, work / "OVMF_VARS.fd"
+            )
+        command = build_qemu_command(
+            qemu, iso, qcow2, args.memory_mib, args.cpus,
+            firmware=args.firmware,
+            ovmf_code=args.ovmf_code,
+            ovmf_vars=ovmf_vars,
+        )
 
         if args.dry_run:
             print(json.dumps({
                 "mode": "dry-run",
                 "iso": str(iso),
+                "firmware": args.firmware,
                 "temporary_directory": str(work),
                 "qcow2_path": str(qcow2),
                 "qemu_command": command,
@@ -355,6 +452,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "host_device_passthrough": False,
                 "network_enabled": False,
                 "efi_variable_store": False,
+                "host_efi_variables_modified": False,
+                "guest_uefi_vars_writable": args.firmware == "uefi",
+                "guest_uefi_vars_source": (
+                    "private-copy-of-vars-template" if args.firmware == "uefi" else None
+                ),
                 "guest_installer_execution": False,
             }, sort_keys=True, indent=2))
             return 0
@@ -405,6 +507,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             "host_device_passthrough": False,
             "network_enabled": False,
             "efi_variable_store": False,
+            "host_efi_variables_modified": False,
+            "guest_uefi_vars_writable": args.firmware == "uefi",
+            "guest_uefi_vars_source": (
+                "private-copy-of-vars-template" if args.firmware == "uefi" else None
+            ),
             "guest_installer_execution": False,
         }
         print(json.dumps(result, sort_keys=True, indent=2))

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Privacy/evidence guardrails for the display and network validation protocols."""
 
 from __future__ import annotations

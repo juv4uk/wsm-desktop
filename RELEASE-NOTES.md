@@ -1,20 +1,96 @@
-# WSM Desktop Hardware Preview RC1
+# WSM Desktop RC3 — три інсталятори
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Версія: `0.1.0-rc1` (`RELEASE-INFO.json`)
-- Дата: 2026-11-25
-- Статус: **pre-release / hardware evidence only**
+- Версія: `0.1.0-rc3` (`RELEASE-INFO.json`)
+- Дата: 2026-11-26
+- Статус: **pre-release / installer source, never executed**
 - Вихідний коміт: див. `release-manifest.json` у релізних артефактах
+
+## Що змінилося від RC2
+
+**Три інсталятори над одним бекендом.** Це головне в цьому релізі.
+
+| Вхід | Коли | Вартість |
+| --- | --- | --- |
+| `wsm-install --guided` | послідовна консоль, скрипт, сліпий термінал | нуль |
+| `wsm-install --tui` | екран і клавіатура без робочого столу | символи рамок |
+| модуль Calamares `wsm_deploy` | машина, яка тягне Qt | Qt і KDE-стек |
+
+Усі три викликають ті самі `partition.py`, `install_steps.py` і `executor.py`.
+Це не три інсталятори, а три обличчя одного.
+
+**Розділення привілеїв.** Непривілейована частина пише план у файл; root-агент
+перевіряє кожну команду за allowlist (лише `partprobe`, `udevadm`, `mkfs.*`,
+`mount`, `mkdir`, з абсолютними шляхами) і лише тоді виконує. `sh`, `dd` і
+`guix` у allowlist немає навмисно.
+
+**Журнал і відновлення.** Кожен крок пишеться до і після, з `fsync`. Після збою
+`wsm-install-agent --recover` показує, що завершилось, що впало й на чому, і що
+робити далі. Відкату немає — відкат напівзаписаного диска неможливий, і
+вдавати інше гірше, ніж дати точний стан.
+
+**Перевірка середовища.** `--check-env` перевіряє інструменти, `guix`, root,
+точку монтування, системний файл, звіт про залізо й рівень ISA — до першого
+дотику до диска.
+
+**Другий live-образ.** `systems/live-minimal.scm` — консоль, мережа й
+інструменти WSM, без Plasma, Qt і Calamares. Для машин, де графічний інсталятор
+не піднімається.
+
+**Compatibility lock.** `channels/compatibility.lock.scm` — Guix і Nonguix,
+обидва з `introduction` і на повному коміті. Перевіряється політикою
+`compatibility` у `make check-channels`.
+
+**Ліцензія.** Сім файлів у main мали заголовки GPL-3.0-or-later і CC-BY-SA-4.0.
+Виправлено на `LicenseRef-Volnist`; тест не дає цьому повторитись.
+
+## Чого в цьому релізі немає
+
+**Жодного встановлення.** Інсталятор жодного разу не запускався — ні в QEMU, ні
+на залізі. Код шляху повний і покритий тестами, але доказу роботи немає.
+
+**Жодного образу, зібраного тут.** Профілі входять як вихідний текст.
+
+**Жодного вимірювання швидкості.** Harness існує, фізичних прогонів немає.
+
+## Що змінилося від RC1 (архів)
+**Ліцензія.** Робота проєкту перейшла з GPL-3.0-or-later (код) і CC-BY-SA-4.0
+(документація) на власну ліцензію **ВОЛЬНІСТЬ**. Це стосується RC2 і далі.
+Той, хто вже взяв RC1, отримав його під GPL-3.0-or-later і CC-BY-SA-4.0 — та
+ліцензія не відкликається і лишається чинною для тих артефактів.
+
+**Десктоп.** Додано `systems/desktop.scm` (KDE Plasma, SDDM як єдиний
+дисплейний менеджер, NetworkManager, звук, шрифти з кирилицею, українська
+локаль) і `systems/live.scm` з `scripts/build_iso.sh`. **Це рецепти, а не
+образ:** жоден із них не зібрано, бо в середовищі написання немає Guix.
+У реліз вони входять як вихідний текст із явною позначкою «не перевірено».
+
+**Захист релізної збірки.** `build_release_bundle.py` відмовляється збирати
+артефакт під іменем, відмінним від канонічного: інакше `SHA256SUMS` посилався б
+на файл, якого ніхто не завантажує, і перевірка контрольної суми падала б тихо.
+
+**Запобіжник проти обрізаних файлів.** `tests/test_python_syntax.py` парсить
+кожен `.py` у репозиторії. За одну добу чотири pull request прийшли з файлом,
+записаним наполовину; тепер це червона перевірка, а не зламаний релізний
+інструмент.
+
+**Безпека.** Обмежено initramfs і serial-вивід у CXL QEMU guest; додано
+перевірку стану Guix-плану (`mountinfo`, digest); DisplayID parser вимкнено за
+замовчуванням до підтвердженого upstream-виправлення.
+
+**Документація.** ADR 0006 (hardware-first frontend) і реєстр рішень;
+дослідницькі документи позначено як такі, що не блокують реліз; мовна політика
+зафіксована — українська канонічна, англійська як `.en.md`.
 
 ## Що це є
 
-Це перший релізний кандидат, який можна безпечно запустити на реальному обладнанні. Він **не встановлює WSM Desktop** і не змінює систему поза явним output-каталогом. Він виконує чотири речі:
+Це read-only релізний кандидат для збору апаратних доказів на Linux-ПК. Він **не встановлює WSM Desktop** і не змінює систему поза явно вибраним output-каталогом. Він виконує чотири речі:
 
 1. `wsm-hwcheck` 0.2.0 читає локальні `/sys` і `/proc`; стандартно додає runtime-діагностику з `/lib/modules/<kernel>/modules.*` і фіксованих команд лише для читання `journalctl -k -b --no-pager --output=cat --lines=4096` / `dmesg --color=never`. Якщо дані недоступні без прав, поле лишається `unknown` і з'являється warning.
 2. `wsm-install --preflight --dry-run` валідує цей звіт і видає **diagnostic-only** план для ратифікованого backend-а `guix-system`; план `nixos` лишається лише дослідницьким.
 3. `scripts/wsm_hardware_check.py` перевіряє `plan_status`, `plan_mode`, `plan_readiness.confirmable=false`, збіг `backend.id`, digest-и, а також що `dry_run=true`, `mutations_authorized=false`, `backend_invoked=false`, `disk_access_performed=false`, після чого пише manifest і `SHA256SUMS`. Команди в manifest зберігаються як argv-масиви з `<out>` замість абсолютних шляхів.
-4. `channels.lock.scm` фіксує автентифікований вільний канал Guix, з якого відтворюється мінімальний VM-приклад.
+4. `channels.lock.scm` фіксує автентифіковані метадані вільного офіційного Guix-каналу. Для цього lock підтверджено authenticated `guix pull` і `time-machine ... describe`; збірку або запуск VM із цим самим lock у межах RC1 ще не підтверджено.
 
 Покрокова інструкція для реального заліза — у [docs/RELEASE-TESTING.md](docs/RELEASE-TESTING.md).
 
@@ -34,7 +110,7 @@
 - немає викликів Guix/Nix backend-у з метою розгортання;
 - немає мережевих запитів чи завантаження драйверів/firmware;
 - немає Nonguix або nonfree firmware у `channels.lock.scm`;
-- немає другого підтримуваного backend-а: [ADR 0004](docs/decisions/0004-nix-guix-backend-strategy.md) ратифіковано 26.11.2026 для GNU Guix, а Nix/NixOS лишається дослідженням у [#55](https://github.com/juv4uk/wsm-desktop/issues/55).
+- немає другого підтримуваного backend-а: [ADR 0004](docs/decisions/0004-nix-guix-backend-strategy.md) ратифіковано 25.11.2026 для GNU Guix, а Nix/NixOS лишається дослідженням у [#55](https://github.com/juv4uk/wsm-desktop/issues/55).
 
 ## Channel lock
 
@@ -50,11 +126,11 @@ guix time-machine -C channels.lock.scm -- system vm --no-graphic systems/minimal
 
 Раніший знімок у [systems/README.md](systems/README.md) справді було отримано з вимкненою автентифікацією як дослідницький checkout. Цей lock — окремий автентифікований pull того самого коміту в ізольованому профілі. `guix time-machine` може попереджати «channel is not trusted», бо локальний channels-файл не внесено до `trusted-channels.scm`; це не повідомлення про failing signature. `--disable-authentication` не використовувався, `time_machine_exit=0`.
 
-Lock є pinned fact, але сам по собі не є гарантією релізу: вона з'являється лише разом із build/boot-доказом, наведеним нижче.
+Цей lock є зафіксованим автентифікованим channel input, але не доказом збірки чи завантаження системи саме з нього. Команди вище наведено як спосіб провести таку окрему перевірку; їхні успішні результати не заявляються в цьому RC.
 
 ## Підтверджені межі
 
-Реальний boot доведено лише для мінімального Guix System у disposable QEMU/TCG: `guix system build` → `exit=0`, `guix system vm` → `exit=0`, guest дійшов до `wsm-desktop login:`, QEMU завершився `vm_exit=0`. Деталі — у [systems/README.md](systems/README.md). Повний GRUB `--full-boot` до ядра не доведено, тому це **не** доказ завантаження з реального USB.
+Попередній QEMU/TCG boot мінімального Guix System із маркером `wsm-desktop login:` описано в [systems/README.md](systems/README.md), але він походить з окремого shallow checkout, отриманого з вимкненою автентифікацією. Тому цей результат **не** зараховується як build/boot proof для `channels.lock.scm`. Щоб отримати такий доказ, потрібно окремо успішно виконати `guix time-machine -C channels.lock.scm -- system build systems/minimal.scm` і `guix time-machine -C channels.lock.scm -- system vm --no-graphic systems/minimal.scm`, зберегти точні exit codes та логи. Повний GRUB `--full-boot` до ядра також не доведено, тому це **не** доказ завантаження з реального USB.
 
 NixOS-експеримент для #55 має `nix_build_exit=0`. Окремий boot у QEMU/TCG дійшов до systemd-маркерів `Reached target Login Prompts` і `Reached target Multi-User System`, але завершився `vm_exit=124` за timeout 420 і не видав маркера `login:`. Логи й точні exit codes публікуються окремо в [#55](https://github.com/juv4uk/wsm-desktop/issues/55); це не є частиною обіцянки цього RC.
 

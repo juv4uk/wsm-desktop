@@ -1,4 +1,4 @@
-;; SPDX-License-Identifier: GPL-3.0-or-later
+;; SPDX-License-Identifier: LicenseRef-Volnist
 ;;
 ;; Authenticated Guix channel lock for WSM Hardware Preview RC1.
 ;; Generated from the isolated authenticated profile used for issue #39:

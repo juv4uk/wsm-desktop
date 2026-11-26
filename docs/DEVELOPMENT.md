@@ -1,6 +1,6 @@
 # Середовище розробки
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 ## Загальні вимоги
 
@@ -62,3 +62,24 @@ Install the pinned development validation dependency and run the full checks:
     make check
 
 The hardware report contract uses JSON Schema Draft 2020-12. The test suite validates the schema, all synthetic fixtures, the local-only privacy invariants, and the rule that unknown observations are not treated as failures.
+
+## Перевірка Scheme на раннері
+
+`systems/*.scm` ніколи не виконувались: у середовищі розробки немає Guix. Саме
+тому пропущений `(srfi srfi-1)` доїхав до main — файл читається очима, а падає
+на завантаженні.
+
+``make check-guix-eval` (manual, needs Guix)` закриває це: раннер ставить Guix, авторизує
+ключ підстановок і виконує
+
+```sh
+guix time-machine -C channels.lock.scm -- system build systems/desktop.scm --dry-run
+```
+
+`--dry-run` розв'язує весь граф і **вимагає прочитати й обчислити файл**, але не
+завантажує жодного пакета. Це ловить відсутні імпорти, невідомі поля записів і
+зламане спадкування за кілька хвилин.
+
+`systems/compatibility.scm` навмисно **не** перевіряється: він потребує Nonguix,
+якого в `channels.lock.scm` немає, і додавати невільний канал у CI означало б
+змінити політику проєкту заради зручності перевірки.

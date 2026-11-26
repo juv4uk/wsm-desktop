@@ -1,6 +1,8 @@
 # Конфігурації Guix System
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
+
+Файл [`live-iso.scm`](live-iso.scm) — перший реально зібраний і завантажений у QEMU live ISO з KDE Plasma та нашими preflight-інструментами. Деталі збірки, checksum і межі — у [`docs/LIVE-ISO.md`](../docs/LIVE-ISO.md). Він не є повним інсталятором і не змінює RC1.
 
 Файл \`minimal.scm\` — мінімальний приклад для перевірки синтаксису, побудови системи та запуску у відокремленій QEMU-віртуальній машині. Це не профіль випуску WSM Desktop, не live-образ і не виробничий інсталятор.
 

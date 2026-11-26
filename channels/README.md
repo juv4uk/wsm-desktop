@@ -1,27 +1,41 @@
 # Канали WSM
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-## Вільний релізний lock
+## Free
 
-`../channels.lock.scm` — автентифікований snapshot **тільки офіційного каналу Guix** для WSM Hardware Preview RC1. Він містить точний commit `4e5195be20d9b124df8a8bb69213412236e4668e` і channel introduction з OpenPGP fingerprint. Немає Nonguix, nonfree firmware, додаткових substitute serverів чи ключів.
-
-Lock створено з ізольованого профілю, де `guix pull` виконувався **без** `--disable-authentication`; результат `guix describe -f channels` містить `make-channel-introduction`. Докази й командний лог — у [#39](https://github.com/juv4uk/wsm-desktop/issues/39).
-
-Використання з кореня репозиторію:
+`../channels.lock.scm` — окремий release lock тільки з офіційним каналом GNU
+Guix. Він фіксує точний commit та introduction. Структурна перевірка виконується
+так:
 
 ```sh
+python3 scripts/check_channels.py --policy free --lock channels.lock.scm
 guix time-machine -C channels.lock.scm -- describe -f channels
-guix time-machine -C channels.lock.scm -- system build systems/minimal.scm
-guix time-machine -C channels.lock.scm -- system vm --no-graphic systems/minimal.scm
 ```
 
-`guix time-machine -C channels.lock.scm -- describe -f channels` друкує розв'язані revisions; саме цей вивід варто додавати до звіту про відтворення. Команда може попередити «channel is not trusted», якщо цей local channels-файл не внесено до `~/.config/guix/trusted-channels.scm`; це не failing signature. У перевірці RC1 `time_machine_exit=0` без `--disable-authentication`. Не оновлюйте lock автоматично разом із звичайними pull-ами: це pinned fact, а не рухома гілка.
+Перша команда перевіряє Scheme-структуру й allowlist. Друга — незалежно
+виконує channel authentication у Guix. PASS лише структурної перевірки не
+доводить криптографічну автентифікацію.
 
-## Поточні файли
+## Compatibility
 
-- `free.scm` — `%default-channels`, рухома база для розробки; не є release lock.
-- `compatibility.scm` — додає Nonguix як **явну опцію**; не використовується у free-профілі RC1.
-- `../channels.lock.scm` — автентифікований release lock RC1.
+`compatibility.lock.scm` — pin Guix + Nonguix для окремого Compatibility
+образу. Не змішуйте його з Free lock:
 
-Жоден із цих файлів не змінює глобальну конфігурацію Guix хоста. Для ізольованих експериментів у цьому проєкті використовується окремий Guix daemon з приватними `/gnu/store` і `/var/guix`.
+```sh
+python3 scripts/check_channels.py --policy compatibility --lock channels/compatibility.lock.scm
+guix time-machine -C channels/compatibility.lock.scm -- describe -f channels
+guix time-machine -C channels/compatibility.lock.scm -- system build systems/live-compat.scm --dry-run
+```
+
+Структурний checker підтверджує лише точні назви каналів, repository URLs,
+commit pins та canonical introduction metadata. Він не перевіряє підпис
+конкретного commit. Це робить Guix channel authentication; live-compat
+evaluation окремо доводить, що закріплена композиція може бути обчислена.
+
+## Рухомі визначення
+
+- `free.scm` — рухома база Free для розробки, не release lock.
+- `compatibility.scm` — явне додавання Nonguix, не release lock.
+- `../channels.lock.scm` і `compatibility.lock.scm` — окремі pinned inputs
+  для двох продуктів. Жоден із них не змінює глобальну конфігурацію Guix хоста.

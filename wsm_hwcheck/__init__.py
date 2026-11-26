@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-License-Identifier: LicenseRef-Volnist
 """WSM hardware preflight collector."""
 
 from .collector import VERSION, collect_report

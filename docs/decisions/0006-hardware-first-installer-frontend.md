@@ -1,6 +1,6 @@
 # ADR 0006: Hardware-first frontend WSM — адаптувати патерн archinstall
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 - Статус: **proposed — на розгляді [#10](https://github.com/juv4uk/wsm-desktop/issues/10); не ратифіковано**
 - Дата: 2026-11-25

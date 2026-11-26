@@ -1,8 +1,10 @@
 # Hardware Preview RC1 — перевірка на реальному обладнанні
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 Ця інструкція описує **read-only** перевірку RC1 на вашому Linux-ПК. Вона не встановлює WSM Desktop, не змінює розділи, bootloader, UEFI або firmware і не вимагає root. Деяка runtime-діагностика може бути недоступна без прав — тоді відповідні поля лишаються `unknown` і з'являється warning. Єдині записи — файли у вказаному вами output-каталозі.
+
+**Межа фізичних доказів:** у WSL, контейнері або віртуальній машині звіт описує лише пристрої та інтерфейси, видимі цьому гостьовому Linux-середовищу. Він не є повною інвентаризацією фізичного хоста й не підтверджує сумісність його PCI, firmware або storage path. Для bare-metal hardware evidence запускайте RC1 з native Linux або Linux live USB на самому ПК.
 
 ## 0. Що ви отримуєте
 
@@ -21,13 +23,7 @@
 - `jsonschema[format]==4.26.0` — з `requirements-install.txt` або з системного пакета;
 - опційно `/lib/modules/<kernel>/` та `journalctl` або `dmesg` для багатшої діагностики.
 
-Підготовка залежності може потребувати мережі. Після встановлення сам RC1 працює offline. Встановлення залежності ізольовано в користувача (без sudo):
-
-```sh
-python3 -m pip install --user -r requirements-install.txt
-```
-
-Якщо ваш дистрибутив забороняє `pip install --user`, використайте віртуальне оточення:
+Підготовка залежності може потребувати мережі. Після встановлення сам RC1 працює offline. Щоб не змінювати системний Python і уникнути обмежень PEP 668, рекомендовано віртуальне оточення:
 
 ```sh
 python3 -m venv ~/.venvs/wsm-preview
@@ -45,7 +41,7 @@ python3 scripts/wsm_hardware_check.py \
   --out "$HOME/wsm-check-$(date -u +%Y%m%dT%H%M%SZ)"
 ```
 
-Скрипт сам створить каталог із режимом `0700` і відмовиться писати, якщо каталог уже існує й не порожній. Він відхиляє симлінк як кінцевий шлях або будь-який існуючий батьківський компонент, а також ніколи не приймає шлях під `/dev`, `/proc` або `/sys`.
+Скрипт сам створить каталог із режимом `0700` і відмовиться продовжувати, якщо не може встановити та перевірити цей приватний режим. Він відмовиться писати, якщо каталог уже існує й не порожній. Скрипт відхиляє симлінк як кінцевий шлях або будь-який існуючий батьківський компонент, а також ніколи не приймає шлях під `/dev`, `/proc` або `/sys`.
 
 Усі вихідні файли:
 
@@ -120,7 +116,7 @@ PY
 
 Надсилайте публічно лише:
 
-- версію з `manifest.json`; якщо `source_commit` має значення `null` (розпакування tarball всередині іншого git-репо), беріть commit із `release-manifest.json`;
+- версію з `manifest.json`; якщо `source_commit` має значення `null` (звичайний розпакований tarball поза його власним Git work tree, зокрема всередині іншого git-репо), беріть commit із `release-manifest.json`;
 - `overall` і статуси `guix`/`nix`;
 - стислий human-readable summary зі stderr;
 - модель/категорію пристрою й опис проблеми.
@@ -129,16 +125,15 @@ PY
 
 ## 6. Додаткова перевірка збірки (опційно)
 
-На машині з Guix і QEMU можна повторити VM-доказ із #1:
+На машині з Guix і QEMU можна провести окрему перевірку зафіксованого lock:
 
 ```sh
-make check
 make describe-lock
 make check-locked-system
-make vm-system-serial
+guix time-machine -C channels.lock.scm -- system vm --no-graphic systems/minimal.scm
 ```
 
-`describe-lock` і `check-locked-system` явно споживають автентифікований `channels.lock.scm`. `vm-system-serial` відповідає proofs-у з #1: disposable QEMU/TCG, серійний вивід і маркер `wsm-desktop login:`. Звичайний `make vm-system` такого маркера не перевіряє. `guix system vm --full-boot` показував `Welcome to GRUB!`, але до ядра не дійшов за 600 секунд, тому bootloader-шлях не вважається підтвердженим. Не запускайте `guix system init` на реальному диску. Зафіксовані результати — у [systems/README.md](../systems/README.md).
+Перші дві команди підтверджують опис каналу та збірку через `channels.lock.scm`; третя запускає VM через той самий lock. Станом на RC1 authenticated pull і `time-machine ... describe` завершилися успішно, але locked `system build` та locked VM ще не мають опублікованих результатів. `make vm-system-serial` запускає поточний Guix профіль без `channels.lock.scm` і тому не може використовуватися як locked proof. `guix system vm --full-boot` раніше показував `Welcome to GRUB!`, але до ядра не дійшов за 600 секунд; bootloader-шлях не вважається підтвердженим. Не запускайте `guix system init` на реальному диску. Попередній VM-експеримент, який не використовував lock, описаний у [systems/README.md](../systems/README.md).
 
 ## 7. Куди писати результати
 
@@ -147,3 +142,67 @@ make vm-system-serial
 - [#1 — Guix VM proof](https://github.com/juv4uk/wsm-desktop/issues/1) — лише питання щодо VM-доказу.
 
 Не відкривайте новий ADR і не змінюйте канонічний handoff-контракт у межах цього RC.
+
+## Один вердикт: `release-gate`
+
+```sh
+python3 scripts/release_gate.py --iso build/wsm-desktop.iso --boot
+```
+
+Запускає всі перевірки й пише `wsm-release-gate/1`:
+
+| Критерій | Що перевіряє |
+| --- | --- |
+| `docs` | посилання, наявність заголовків, заборонені шаблони |
+| `channels` | lock-файл за політиками `free` і `compatibility` |
+| `tests` | усі набори тестів |
+| `profile-evidence` | валідність bundle-ів заліза |
+| `image` | хеш, маніфест, ISO9660, завантаження в BIOS і UEFI |
+
+`overall` буває `pass`, `fail` або **`incomplete`**. Одне `not-run` робить
+вердикт неповним: перевірка, яку не вдалося виконати, не доводить нічого.
+
+Код виходу 1 буває лише при справжньому провалі. `incomplete` — це не привід
+зупиняти роботу, це привід знати, чого саме бракує.
+
+Приклад сьогоднішнього стану:
+
+```
+overall: incomplete
+  docs               pass
+  channels           pass
+  tests              pass
+  profile-evidence   not-run   no hardware profile bundles exist yet
+  image              not-run   no --iso supplied; nothing to verify
+```
+
+Тобто: документація й канали в порядку, тести зелені, але **образу немає**, і
+доказів заліза теж. Це чесна картина, а не «майже готово».
+
+
+## Єдиний release gate та вибір продукту
+
+Один вердикт для конкретного продукту:
+
+```sh
+make release-gate PRODUCT=free
+make release-gate PRODUCT=compatibility
+make release-gate PRODUCT=all
+```
+
+- `free` перевіряє лише `channels.lock.scm` і не робить заяви про Compatibility.
+- `compatibility` вимагає окремий `channels.compatibility.lock.scm`; його відсутність дає `incomplete / NOT_CONFIGURED`, а не PASS.
+- `all` вимагає обидва lock-файли й обидва результати.
+- Вкладена перевірка ISO звіряє точну назву артефакту, SHA-256, повний набір критеріїв і узгодженість aggregate verdict.
+
+Коди завершення однакові для release gate та вкладеної перевірки ISO:
+
+| Код | Вердикт | Значення |
+| --- | --- | --- |
+| `0` | `pass` | усі необхідні критерії пройшли |
+| `1` | `fail` | реальна перевірка виявила помилку |
+| `2` | `incomplete` | критерій не запускався або доказ не налаштований |
+
+Не перетворюйте `2` на загальний успіх у shell/CI. Workflow може прийняти його
+лише там, де відсутній ISO/profile bundle є очікуваною умовою, і має явно
+перевірити, що це саме `incomplete`, а не `fail`.

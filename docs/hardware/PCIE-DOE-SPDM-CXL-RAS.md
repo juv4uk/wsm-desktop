@@ -1,6 +1,6 @@
 # PCIe DOE/SPDM та CXL RAS: межі безпечного preflight
 
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 - Статус: дослідницький addendum; не є реалізаційним контрактом
 - Критичний шлях: **ні** — дослідження не блокує перший preview-образ
