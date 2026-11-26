@@ -84,7 +84,7 @@ class TestRunnerTests(unittest.TestCase):
 class ChannelTests(unittest.TestCase):
     def _locks(self, root: Path):
         free_lock = root / "channels.lock.scm"
-        compatibility_lock = root / "channels.compatibility.lock.scm"
+        compatibility_lock = root / "channels" / "compatibility.lock.scm"
         return {"free": free_lock, "compatibility": compatibility_lock}
 
     def test_free_product_passes_without_claiming_compatibility(self) -> None:
@@ -98,10 +98,32 @@ class ChannelTests(unittest.TestCase):
                 result = check_channels("free")
         self.assertEqual(result["status"], "pass")
         self.assertIn("free product", result["detail"])
-        run_check.assert_called_once()
+        self.assertEqual(run_check.call_count, 2)
         command = run_check.call_args.args[0]
         self.assertIn("free", command)
         self.assertEqual(Path(command[command.index("--lock") + 1]), locks["free"])
+
+    def test_channel_authentication_missing_guix_is_incomplete(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            locks = self._locks(Path(temporary))
+            locks["free"].write_text("(list)", encoding="utf-8")
+            with patch("release_gate.CHANNEL_LOCKS", new=locks), patch(
+                "release_gate.run", side_effect=[(0, "structural pass"), (127, "guix missing")]
+            ):
+                result = check_channels("free")
+        self.assertEqual(result["status"], "not-run")
+        self.assertIn("free-authentication", result["detail"])
+
+    def test_channel_authentication_failure_is_not_a_structural_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            locks = self._locks(Path(temporary))
+            locks["free"].write_text("(list)", encoding="utf-8")
+            with patch("release_gate.CHANNEL_LOCKS", new=locks), patch(
+                "release_gate.run", side_effect=[(0, "structural pass"), (1, "signature verification failed")]
+            ):
+                result = check_channels("free")
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("signature verification failed", result["detail"])
 
     def test_compatibility_product_missing_lock_is_not_run(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -117,6 +139,7 @@ class ChannelTests(unittest.TestCase):
     def test_compatibility_product_uses_only_its_own_lock(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             locks = self._locks(Path(temporary))
+            locks["compatibility"].parent.mkdir(parents=True, exist_ok=True)
             locks["compatibility"].write_text("(list)", encoding="utf-8")
             with patch("release_gate.CHANNEL_LOCKS", new=locks), patch(
                 "release_gate.run", return_value=(0, "Compatibility structural policy passed")
