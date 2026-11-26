@@ -21,6 +21,7 @@
 ;; user-account або входьте через root у консолі.
 
 (use-modules (gnu)
+             (gnu system locale)
              (gnu services)
              (gnu services shepherd)
              (gnu services desktop)
