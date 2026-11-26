@@ -4,12 +4,12 @@
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -104,17 +104,13 @@ class PlanTests(unittest.TestCase):
 
 
 class ExecutionTests(unittest.TestCase):
-    def test_dry_run_never_calls_the_runner(self) -> None:
-        calls: list = []
+    def test_dry_run_calls_only_the_preview_executor(self) -> None:
         document = plan(GOOD)
         steps = validate_plan(document)
-        code = run_plan(
-            document, steps, dry_run=True,
-            runner=lambda command: calls.append(command),
-            verifier=lambda step: (True, "ok"),
-        )
+        with patch("wsm_install.agent.execute") as execute_mock:
+            code = run_plan(document, steps, dry_run=True)
         self.assertEqual(code, 0)
-        self.assertEqual(calls, [])
+        execute_mock.assert_called_once_with(steps, disk="/dev/nvme0n1", dry_run=True)
 
     def test_plan_without_a_disk_is_refused(self) -> None:
         document = plan(GOOD)
@@ -123,14 +119,14 @@ class ExecutionTests(unittest.TestCase):
             run_plan(document, validate_plan(document), dry_run=True)
         self.assertEqual(caught.exception.code, "agent.bad-disk")
 
-    def test_real_run_as_non_root_is_refused(self) -> None:
-        """Fail now with a clear reason, not later on the first mount."""
-        if os.geteuid() == 0:
-            self.skipTest("running as root")
+    def test_real_apply_is_refused_before_the_executor(self) -> None:
         document = plan(GOOD)
-        with self.assertRaises(AgentError) as caught:
-            run_plan(document, validate_plan(document), dry_run=False)
-        self.assertEqual(caught.exception.code, "agent.not-root")
+        steps = validate_plan(document)
+        with patch("wsm_install.agent.execute") as execute_mock:
+            with self.assertRaises(AgentError) as caught:
+                run_plan(document, steps, dry_run=False)
+        self.assertEqual(caught.exception.code, "agent.apply-disabled")
+        execute_mock.assert_not_called()
 
 
 class CliTests(unittest.TestCase):
@@ -146,7 +142,8 @@ class CliTests(unittest.TestCase):
             path.write_text(json.dumps(plan(GOOD)), encoding="utf-8")
             result = self.run_cli("--plan", str(path), "--dry-run")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("plan accepted", result.stdout)
+        self.assertIn("preview generated", result.stdout)
+        self.assertIn("no disk commands were executed", result.stdout)
 
     def test_plan_with_shell_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -155,6 +152,20 @@ class CliTests(unittest.TestCase):
             result = self.run_cli("--plan", str(path), "--dry-run")
         self.assertEqual(result.returncode, 1)
         self.assertIn("agent.not-allowed", result.stderr)
+
+    def test_recover_requires_a_journal_path(self) -> None:
+        result = self.run_cli("--recover")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--plan is required with --recover", result.stderr)
+
+    def test_apply_without_dry_run_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "plan.json"
+            path.write_text(json.dumps(plan(GOOD)), encoding="utf-8")
+            result = self.run_cli("--plan", str(path))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("agent.apply-disabled", result.stderr)
+        self.assertNotIn("executed", result.stdout)
 
     def test_allowlist_is_not_empty_and_all_absolute(self) -> None:
         self.assertTrue(ALLOWED_PROGRAMS)
