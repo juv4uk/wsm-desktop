@@ -44,7 +44,7 @@ class SessionReadinessTests(unittest.TestCase):
             environment=self.environment,
             proc_root=kwargs.pop("proc_root", Path("/missing-proc")),
             runner=kwargs.pop("runner", self.runner),
-            which=kwargs.pop("which", lambda name: "/usr/bin/loginctl"),
+            which=kwargs.pop("which", lambda name, **_kwargs: "/usr/bin/loginctl"),
             monotonic_ns=kwargs.pop("monotonic_ns", lambda: 60_000_000_000),
             **kwargs,
         )
@@ -81,8 +81,37 @@ class SessionReadinessTests(unittest.TestCase):
         self.assertEqual(options["timeout"], session.LOGINCTL_TIMEOUT_SECONDS)
         self.assertNotIn("USER", json.dumps(artifact))
 
+    def test_loginctl_lookup_ignores_user_writable_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            fake_directory = Path(temporary)
+            fake_loginctl = fake_directory / "loginctl"
+            fake_loginctl.write_text("#!/bin/sh\\nexit 99\\n", encoding="utf-8")
+            fake_loginctl.chmod(0o755)
+            self.environment["PATH"] = str(fake_directory)
+
+            lookups: list[tuple[str, str | None]] = []
+
+            def trusted_lookup(name: str, *, path: str | None = None) -> str:
+                lookups.append((name, path))
+                # Simulate a resolver which would select the attacker's binary
+                # whenever the caller forgets to supply the trusted search path.
+                return (
+                    "/usr/bin/loginctl"
+                    if path == session.SYSTEM_EXECUTABLE_PATH
+                    else str(fake_loginctl)
+                )
+
+            artifact = self.collect(which=trusted_lookup)
+            self.assertEqual(artifact["status"], "available")
+            self.assertEqual(lookups, [("loginctl", session.SYSTEM_EXECUTABLE_PATH)])
+            self.assertEqual(
+                self.runner.call_args.args[0][0],
+                "/usr/bin/loginctl",
+            )
+            self.assertNotEqual(self.runner.call_args.args[0][0], str(fake_loginctl))
+
     def test_missing_loginctl_keeps_marker_but_latency_unknown(self) -> None:
-        artifact = self.collect(which=lambda name: None)
+        artifact = self.collect(which=lambda name, **_kwargs: None)
         self.assertEqual(artifact["status"], "partial")
         self.assertIsNone(artifact["timing"]["session_start_monotonic_us"])
         self.assertIsNone(artifact["timing"]["login_to_phase2_ms"])
