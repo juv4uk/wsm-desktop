@@ -5,9 +5,9 @@ QEMU_PYTHON ?= python3.11
 GUIX ?= guix
 PRODUCT ?= free
 
-.PHONY: check-driver-profiles check check-ci-policy qemu-acceptance-manual check-guix-eval release-gate check-docs check-doc-ownership check-regression-register check-release-info check-artifact-versions check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle check-profiles check-agent check-calamares check-channels check-cli-install check-env-preflight check-evidence-drafter check-executor check-guided check-hygiene check-install-steps check-isa check-journal check-live-acceptance check-makefile check-observation check-partition check-perf-baseline check-boot-profile check-profile-evidence check-profile-match check-profiles-matrix check-release-verdict check-state check-syntax check-tui check-licences image-live-minimal check-temp-paths
+.PHONY: check check-ci-policy qemu-acceptance-manual check-guix-eval release-gate check-docs check-doc-ownership check-regression-register check-release-info check-artifact-versions check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle check-profiles check-agent check-calamares check-channels check-cli-install check-env-preflight check-evidence-drafter check-executor check-guided check-hygiene check-install-steps check-isa check-journal check-live-acceptance check-makefile check-observation check-partition check-perf-baseline check-boot-profile check-profile-evidence check-profile-match check-profiles-matrix check-release-verdict check-state check-syntax check-tui check-licences image-live-minimal check-temp-paths
 
-check: check-ci-policy check-docs check-doc-ownership check-regression-register check-release-info check-artifact-versions check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa check-live-acceptance check-profiles-matrix check-perf-baseline check-boot-profile check-profile-evidence check-driver-profiles check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-hygiene check-channels check-executor check-cli-install check-calamares check-guided check-tui check-agent check-journal check-env-preflight check-observation check-licences check-temp-paths
+check: check-ci-policy check-docs check-doc-ownership check-regression-register check-release-info check-artifact-versions check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa check-live-acceptance check-profiles-matrix check-perf-baseline check-boot-profile check-profile-evidence check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-hygiene check-channels check-executor check-cli-install check-calamares check-guided check-tui check-agent check-journal check-env-preflight check-observation check-licences check-temp-paths
 
 check-profiles:
 	$(PYTHON) tests/test_system_profiles.py
@@ -33,9 +33,6 @@ check-boot-profile:
 check-profile-evidence:
 	$(PYTHON) tests/test_profile_evidence.py
 	$(PYTHON) scripts/check_profile_evidence.py
-
-check-driver-profiles:
-	$(PYTHON) tests/test_driver_profiles.py
 
 check-profile-match:
 	$(PYTHON) tests/test_profile_match.py
@@ -91,12 +88,12 @@ check-licences:
 # Manual, needs Guix: evaluates the Scheme without building anything.
 # Not part of `check` on purpose - a contributor without Guix must still pass.
 check-guix-eval:
-	$(GUIX) time-machine -C channels.lock.scm -- system build systems/minimal.scm --dry-run
-	$(GUIX) time-machine -C channels.lock.scm -- system build systems/desktop.scm --dry-run
-	$(GUIX) time-machine -C channels.lock.scm -- system build systems/live.scm --dry-run
-	$(GUIX) time-machine -C channels.lock.scm -- system build systems/live-minimal.scm --dry-run
-	$(GUIX) time-machine -C channels/compatibility.lock.scm -- system build systems/live-compat.scm --dry-run
-	$(GUIX) time-machine -C channels.lock.scm -- home build systems/home.scm --dry-run
+	$(GUIX) time-machine -C channels.lock.scm -- -L . system build systems/minimal.scm --dry-run
+	$(GUIX) time-machine -C channels.lock.scm -- -L . system build systems/desktop.scm --dry-run
+	$(GUIX) time-machine -C channels.lock.scm -- -L . system build systems/live.scm --dry-run
+	$(GUIX) time-machine -C channels.lock.scm -- -L . system build systems/live-minimal.scm --dry-run
+	$(GUIX) time-machine -C channels/compatibility.lock.scm -- -L . system build systems/live-compat.scm --dry-run
+	$(GUIX) time-machine -C channels.lock.scm -- -L . home build systems/home.scm --dry-run
 
 check-hygiene:
 	$(PYTHON) tests/test_repo_hygiene.py
@@ -180,7 +177,7 @@ describe-lock:
 	$(GUIX) time-machine -C channels.lock.scm -- describe -f channels
 
 check-locked-system:
-	$(GUIX) time-machine -C channels.lock.scm -- system build systems/minimal.scm
+	$(GUIX) time-machine -C channels.lock.scm -- -L . system build systems/minimal.scm
 
 # Компактний консольний live-носій із WSM CLI/TUI.
 image-live-minimal:

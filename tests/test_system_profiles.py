@@ -425,14 +425,14 @@ for argument in "$@"; do printf '|%s' "$argument" >> "$WSM_TEST_GUIX_ARGS"; done
 printf '\\nPWD=%s\\n' "$PWD" >> "$WSM_TEST_GUIX_ARGS"
 root=
 case " $* " in
-    *" -- --version "*) echo 'guix (GNU Guix) 1.5.0-pinned'; exit 0 ;;
-    *" describe -f channels "*)
+    *" -- -L $WSM_TEST_LOAD_PATH --version "*) echo 'guix (GNU Guix) 1.5.0-pinned'; exit 0 ;;
+    *" -- -L $WSM_TEST_LOAD_PATH describe -f channels "*)
         if [ "$WSM_TEST_AUTH_DISABLED" = '1' ]; then
             echo 'channel authentication disabled' >&2
         fi
         printf '%s\\n' '(list (channel (name guix) (commit test)))'
         exit 0 ;;
-    *" system image "*)
+    *" -- -L $WSM_TEST_LOAD_PATH system image "*)
         for argument in "$@"; do
             case "$argument" in --root=*) root=${argument#--root=} ;; esac
         done
@@ -464,6 +464,7 @@ exit 8
             environment["WSM_ISO_DIR"] = str(output_dir)
             environment["WSM_TEST_GUIX_ARGS"] = str(args_log)
             environment["WSM_TEST_IMAGE"] = str(fake_image)
+            environment["WSM_TEST_LOAD_PATH"] = str(ROOT)
             environment.pop("GUIX_PACKAGE_PATH", None)
 
             result = subprocess.run(
@@ -481,8 +482,9 @@ exit 8
 
             calls = args_log.read_text(encoding="utf-8")
             lock = ROOT / "channels.lock.scm"
-            self.assertIn(f"CALL|time-machine|-C|{lock}|-L|{ROOT}|--|describe|-f|channels", calls)
-            self.assertIn(f"CALL|time-machine|-C|{lock}|-L|{ROOT}|--|system|image", calls)
+            self.assertIn(f"CALL|time-machine|-C|{lock}|--|-L|{ROOT}|--version", calls)
+            self.assertIn(f"CALL|time-machine|-C|{lock}|--|-L|{ROOT}|describe|-f|channels", calls)
+            self.assertIn(f"CALL|time-machine|-C|{lock}|--|-L|{ROOT}|system|image", calls)
             self.assertIn(f"--root={expected}", calls)
             self.assertIn("--no-grafts", calls)
             self.assertIn("--image-type=iso9660", calls)
@@ -508,6 +510,15 @@ exit 8
             )
             self.assertIn("default", manifest["guix"]["authentication_policy"])
             self.assertEqual(manifest["guix"]["locked_version"], "guix (GNU Guix) 1.5.0-pinned")
+            self.assertEqual(
+                manifest["build"]["command"],
+                [
+                    "guix", "time-machine", "-C", str(lock), "--",
+                    "-L", str(ROOT), "system", "image",
+                    "--no-grafts", f"--root={expected}", "--image-type=iso9660",
+                    "--system=x86_64-linux", str(ROOT / "systems" / "live.scm"),
+                ],
+            )
 
             checksum_entries = {}
             for line in checksums_path.read_text(encoding="utf-8").splitlines():
@@ -551,6 +562,7 @@ exit 8
             environment["WSM_ISO_DIR"] = str(output_dir)
             environment["WSM_TEST_GUIX_ARGS"] = str(args_log)
             environment["WSM_TEST_IMAGE"] = str(fake_image)
+            environment["WSM_TEST_LOAD_PATH"] = str(ROOT)
             environment["WSM_TEST_AUTH_DISABLED"] = "1"
             environment.pop("GUIX_PACKAGE_PATH", None)
 
