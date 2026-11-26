@@ -259,6 +259,24 @@ class PublishedIsoTests(unittest.TestCase):
         self.assertIn("wsm-live-tools", profile("live-iso.scm"))
 
 
+class AudioConflictTests(unittest.TestCase):
+    """The published image shipped both PipeWire and PulseAudio. That was a bug.
+
+    Byte-level inspection of wsm-desktop-kde-hardened-20261125.iso found
+    pipewire-1.6.8 and pulseaudio-17.0 in the same store. #262 removed the
+    system-wide PulseAudio service for exactly this reason; this test keeps it
+    from coming back through the desktop profile.
+    """
+
+    def test_desktop_profile_does_not_start_system_pulseaudio(self) -> None:
+        self.assertNotIn("pulseaudio-service-type", profile("desktop.scm"))
+
+    def test_live_profiles_do_not_start_system_pulseaudio(self) -> None:
+        for name in ("live.scm", "live-minimal.scm", "live-iso.scm"):
+            with self.subTest(profile=name):
+                self.assertNotIn("(service pulseaudio-service-type)", profile(name))
+
+
 class MinimalLiveTests(unittest.TestCase):
     """A second live image, for hardware that cannot run a graphical installer."""
 
