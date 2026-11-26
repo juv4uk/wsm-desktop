@@ -25,10 +25,27 @@ from typing import Any, Iterable
 PCI_KEYS = ("pci_id", "pci_ids", "address", "identity")
 
 
+def _normalize_pci_component(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.lower().removeprefix("0x")
+    if len(normalized) != 4 or any(character not in "0123456789abcdef" for character in normalized):
+        return None
+    return normalized
+
+
 def _pci_ids_from_device(device: dict[str, Any]) -> set[str]:
     """Collect every vendor:device pair the report exposes for one device."""
     found: set[str] = set()
     identity = device.get("identity") or {}
+
+    # Hardware report v1.0.0 represents PCI identity as separate fields.
+    # Accept both 0x-prefixed and bare four-digit values; reject malformed IDs.
+    vendor = _normalize_pci_component(identity.get("vendor_id"))
+    product = _normalize_pci_component(identity.get("device_id"))
+    if vendor and product:
+        found.add(f"{vendor}:{product}")
+
     for key in ("pci_id", "vendor_device", "vendor:device"):
         value = identity.get(key)
         if isinstance(value, str) and ":" in value:
