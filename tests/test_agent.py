@@ -4,11 +4,11 @@
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -104,17 +104,13 @@ class PlanTests(unittest.TestCase):
 
 
 class ExecutionTests(unittest.TestCase):
-    def test_dry_run_never_calls_the_runner(self) -> None:
-        calls: list = []
+    def test_dry_run_uses_the_shared_preview_only_executor(self) -> None:
         document = plan(GOOD)
         steps = validate_plan(document)
-        code = run_plan(
-            document, steps, dry_run=True,
-            runner=lambda command: calls.append(command),
-            verifier=lambda step: (True, "ok"),
-        )
+        with patch("wsm_install.agent.execute", return_value=[]) as execute:
+            code = run_plan(document, steps, dry_run=True)
         self.assertEqual(code, 0)
-        self.assertEqual(calls, [])
+        execute.assert_called_once_with(steps, disk=document["disk"], dry_run=True)
 
     def test_plan_without_a_disk_is_refused(self) -> None:
         document = plan(GOOD)
@@ -123,14 +119,14 @@ class ExecutionTests(unittest.TestCase):
             run_plan(document, validate_plan(document), dry_run=True)
         self.assertEqual(caught.exception.code, "agent.bad-disk")
 
-    def test_real_run_as_non_root_is_refused(self) -> None:
-        """Fail now with a clear reason, not later on the first mount."""
-        if os.geteuid() == 0:
-            self.skipTest("running as root")
+    def test_real_run_is_refused_before_executor_for_every_uid(self) -> None:
+        """Root privilege alone is never authority to write a target disk."""
         document = plan(GOOD)
-        with self.assertRaises(AgentError) as caught:
-            run_plan(document, validate_plan(document), dry_run=False)
-        self.assertEqual(caught.exception.code, "agent.not-root")
+        with patch("wsm_install.agent.execute") as execute:
+            with self.assertRaises(AgentError) as caught:
+                run_plan(document, validate_plan(document), dry_run=False)
+        self.assertEqual(caught.exception.code, "agent.apply-disabled")
+        execute.assert_not_called()
 
 
 class CliTests(unittest.TestCase):
@@ -147,6 +143,15 @@ class CliTests(unittest.TestCase):
             result = self.run_cli("--plan", str(path), "--dry-run")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("plan accepted", result.stdout)
+
+    def test_real_run_cli_is_refused_without_dry_run_flag(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "plan.json"
+            path.write_text(json.dumps(plan(GOOD)), encoding="utf-8")
+            result = self.run_cli("--plan", str(path))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("agent.apply-disabled", result.stderr)
+        self.assertNotIn("executed", result.stdout)
 
     def test_plan_with_shell_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
