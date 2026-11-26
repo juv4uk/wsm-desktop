@@ -483,6 +483,9 @@ class HomeEnvironmentTests(unittest.TestCase):
         self.assertIn("(wsm packages wsm)", text)
         self.assertIn("wsm-tools", text)
         self.assertIn("home-xdg-configuration-files-service-type", text)
+        self.assertIn("(list \"autostart/wsm-session-readiness.desktop\"
+                       "wsm-session-readiness-desktop)", text)
+        self.assertNotIn("(cons \"autostart/wsm-session-readiness.desktop\"", text)
         self.assertIn("autostart/wsm-session-readiness.desktop", text)
         self.assertIn("(mixed-text-file", text)
         self.assertIn('"Exec=" (file-append python "/bin/python3") " " wsm-tools "/bin/wsm-session-marker\\n"', text)
