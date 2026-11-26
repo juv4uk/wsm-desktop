@@ -25,6 +25,11 @@ CLI може показати план через `wsm-install --install ...`, �
 диска. Так само preview argv та абсолютний шлях інструмента не доводять, що
 цей executable входить до locked Guix live closure.
 
+Preview також звіряє кожен явно переданий `/dev/...` operand із зазначеним
+цілим диском та його partition-node naming. Це лише захист від внутрішньо
+суперечливого відображуваного плану: він не читає фактичний block-device
+identity, major/minor, capacity чи partition table і не є дозволом на APPLY.
+
 ## Чому APPLY вимкнено
 
 Перший executor prototype (#279) міг виконати довільний переданий `Step`.
