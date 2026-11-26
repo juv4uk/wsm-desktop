@@ -27,6 +27,9 @@ guix system image -t uncompressed-iso9660 systems/live-iso.scm
 sha256sum "$(readlink result)"
 ```
 
+Публікація готових ISO в GitHub Releases (частини <2 GiB + checksums) описана в
+[`ISO-RELEASE.md`](../ISO-RELEASE.md).
+
 ## Перевірка, яка вже виконана
 
 - `guix system image -n -t uncompressed-iso9660 systems/live-iso.scm` → `exit=0`.
@@ -68,22 +71,18 @@ guix time-machine -C channels/compatibility.lock.scm -- \
   інсталяція лишається за #112 та контрактом
   [`INSTALLER-HANDOFF.md`](INSTALLER-HANDOFF.md).
 - Free-only Guix snapshot не містить монолітного `linux-firmware`; blobs для
-  частини GPU/Wi-Fi відсутні. Compatibility-профіль драйверів — окрема робота
-  за #171.
+  частини GPU/Wi-Fi відсутні. Для NVIDIA є окремий Compatibility-профіль;
+  вільний ISO лишається вільним.
 - У serial-лозі гостьового ядра є попередження `init[1]: segfault ... in guile`
   на ранньому етапі; система дійшла до логіну, але це потребує окремого
   розслідування перед фінальним релізом.
-- **Цей SHA відповідає попередній тестовій конфігурації, не оновленому security fix.**
-  Під час тієї перевірки в образі був статичний пароль `wsm`, користувач входив
-  до `wheel`, а root увійшов через serial із порожнім паролем. Такий образ не
-  можна розповсюджувати. Поточний source задає `(password #f)`, прибирає
-  `wheel` і явно забороняє порожні паролі в Guix `login-service-type`.
-  Ці зміни ще потребують нового exact-lock build та QEMU перевірки; старий SHA
-  не слід приписувати новому source.
-- SDDM autologin для locked account `wsm` у поточному QEMU ще не
-  повторно перевірений після security patch. Перед merge/release окремо
-  підтвердити: Plasma session стартує як `wsm`, root на `ttyS0` з порожнім
-  паролем отримує відмову, а `sudo -n true` від `wsm` не має привілеїв.
-- Channel authentication для попередньої локальної збірки була вимкнена, попри
-  наявність `channels.lock.scm`; точна збірка з authenticated lock лишається
-  окремим gate за #39.
+- Старий SHA `c054c6f7...` належить попередній тестовій конфігурації зі
+  статичним паролем `wsm`, `wheel` і порожнім root-входом через serial — його
+  не можна розповсюджувати. Hardened ISO з SHA `d1a000f8...` зібрано з точного lock-файлу
+  і перевірено в QEMU: маркери завантаження й `wsm-kde login:` присутні,
+  `Login incorrect` не з’являвся, 1280×800 framebuffer збережено.
+- QEMU-перевірка не друкує саму Plasma-сесію в serial; власник сеансу SDDM і
+  відсутність привілеїв `sudo` для `wsm` остаються окремим gate для bare-metal.
+- Channel authentication для обох профілів виконано: free — `channels.lock.scm`
+  (Guix `4e5195b`), Compatibility — `channels/compatibility.lock.scm`
+  (Guix `4e5195b` + Nonguix `6b8897c`).
