@@ -97,6 +97,65 @@ class EnvironmentProvenanceTests(unittest.TestCase):
             )
         self.assertEqual(artifact["cpu_model"], "unknown")
 
+    @staticmethod
+    def virtualization_report(value: str) -> dict[str, object]:
+        return {
+            "environment": {"virtualization": value},
+            "collectors": [
+                {"name": "wsm-hwcheck-sysfs", "version": "0.2.0"}
+            ],
+        }
+
+    def test_physical_request_with_unknown_virtualization_is_not_confirmed(self) -> None:
+        with patch.object(
+            perf,
+            "collect_report",
+            return_value=self.virtualization_report("unknown"),
+        ) as collector:
+            artifact = environment("physical")
+        collector.assert_called_once_with()
+        self.assertEqual(artifact["mode"], "physical")
+        self.assertEqual(artifact["detected_virtualization"], "unknown")
+        self.assertEqual(artifact["mode_evidence"], "unknown")
+        self.assertEqual(
+            artifact["virtualization_source"], "wsm-hwcheck-sysfs/0.2.0"
+        )
+
+    def test_physical_request_with_qemu_evidence_is_a_mismatch(self) -> None:
+        with patch.object(
+            perf,
+            "collect_report",
+            return_value=self.virtualization_report("qemu"),
+        ):
+            artifact = environment("physical")
+        self.assertEqual(artifact["detected_virtualization"], "qemu")
+        self.assertEqual(artifact["mode_evidence"], "mismatch")
+
+    def test_qemu_request_accepts_kvm_but_preserves_exact_detection(self) -> None:
+        with patch.object(
+            perf,
+            "collect_report",
+            return_value=self.virtualization_report("kvm"),
+        ):
+            artifact = environment("qemu")
+        self.assertEqual(artifact["detected_virtualization"], "kvm")
+        self.assertEqual(artifact["mode_evidence"], "consistent")
+
+    def test_qemu_request_rejects_a_different_hypervisor(self) -> None:
+        with patch.object(
+            perf,
+            "collect_report",
+            return_value=self.virtualization_report("vmware"),
+        ):
+            artifact = environment("qemu")
+        self.assertEqual(artifact["mode_evidence"], "mismatch")
+
+    def test_missing_virtualization_field_remains_unknown(self) -> None:
+        with patch.object(perf, "collect_report", return_value={}):
+            artifact = environment("physical")
+        self.assertEqual(artifact["detected_virtualization"], "unknown")
+        self.assertEqual(artifact["mode_evidence"], "unknown")
+
 
 class SyncWriteCleanupTests(unittest.TestCase):
     def test_sync_write_removes_temporary_file_after_success(self) -> None:
@@ -160,6 +219,53 @@ class MeasurementTests(unittest.TestCase):
 
     def test_environment_does_not_guess_the_storage_class(self) -> None:
         self.assertEqual(environment("physical")["storage_class"], "unknown")
+
+    def test_comparison_requires_consistent_virtualization_evidence(self) -> None:
+        synthetic = {
+            name: (lambda value=float(index + 1): value)
+            for index, name in enumerate(WORKLOADS)
+        }
+        for detected, expected in (
+            ("qemu", True),
+            ("kvm", True),
+            ("vmware", False),
+            ("unknown", False),
+        ):
+            report = {
+                "environment": {"virtualization": detected},
+                "collectors": [
+                    {"name": "wsm-hwcheck-sysfs", "version": "0.2.0"}
+                ],
+            }
+            with self.subTest(detected=detected):
+                with (
+                    patch.object(perf, "collect_report", return_value=report),
+                    patch.dict(perf.WORKLOADS, synthetic),
+                ):
+                    artifact = measure("qemu", 5)
+                self.assertEqual(artifact["comparison_eligible"], expected)
+                self.assertEqual(
+                    artifact["environment"]["detected_virtualization"], detected
+                )
+
+    def test_physical_comparison_is_not_eligible_without_bare_metal_evidence(self) -> None:
+        synthetic = {
+            name: (lambda value=float(index + 1): value)
+            for index, name in enumerate(WORKLOADS)
+        }
+        report = {
+            "environment": {"virtualization": "unknown"},
+            "collectors": [
+                {"name": "wsm-hwcheck-sysfs", "version": "0.2.0"}
+            ],
+        }
+        with (
+            patch.object(perf, "collect_report", return_value=report),
+            patch.dict(perf.WORKLOADS, synthetic),
+        ):
+            artifact = measure("physical", 5)
+        self.assertFalse(artifact["comparison_eligible"])
+        self.assertEqual(artifact["environment"]["mode_evidence"], "unknown")
 
     def test_measure_runs_one_warmup_plus_each_requested_sample(self) -> None:
         calls = {name: 0 for name in WORKLOADS}
