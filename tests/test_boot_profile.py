@@ -19,18 +19,46 @@ import collect_boot_profile as cli  # noqa: E402
 import wsm_perf.boot as boot  # noqa: E402
 
 
-def make_proc_root(root: Path, *, boot_id: str = "00000000-1111-2222-3333-444444444444") -> Path:
+def make_proc_root(
+    root: Path,
+    *,
+    boot_id: str = "00000000-1111-2222-3333-444444444444",
+    manager: str = "systemd",
+) -> Path:
     (root / "sys/kernel/random").mkdir(parents=True)
     (root / "sys/kernel/random/boot_id").write_text(boot_id + "\n", encoding="utf-8")
+    (root / "1").mkdir()
+    (root / "1/comm").write_text(manager + "\n", encoding="utf-8")
     (root / "uptime").write_text("123.45 67.89\n", encoding="utf-8")
     return root
 
 
+class ManagerDetectionTests(unittest.TestCase):
+    def test_pid1_comm_selects_only_known_service_managers(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "1").mkdir()
+            comm = root / "1/comm"
+            comm.write_text("shepherd\n", encoding="utf-8")
+            self.assertEqual(boot._detect_manager(root), "shepherd")
+            comm.write_text("systemd\n", encoding="utf-8")
+            self.assertEqual(boot._detect_manager(root), "systemd")
+            comm.write_text("init\n", encoding="utf-8")
+            self.assertEqual(boot._detect_manager(root), "unknown")
+
+    def test_missing_pid1_comm_is_unknown(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertEqual(boot._detect_manager(Path(directory)), "unknown")
+
+
 class BootCommandTests(unittest.TestCase):
     def setUp(self) -> None:
-        patcher = patch.object(boot, "collect_report", return_value={})
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        report_patcher = patch.object(boot, "collect_report", return_value={})
+        manager_patcher = patch.object(boot, "_detect_manager", return_value="systemd")
+        scope_patcher = patch.object(boot, "_manager_scope", return_value="system")
+        for patcher in (report_patcher, manager_patcher, scope_patcher):
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     def successful_runner(self, calls: list[tuple[list[str], dict[str, object]]]):
         def run(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -67,11 +95,11 @@ class BootCommandTests(unittest.TestCase):
                 artifact = boot.collect_boot_profile(
                     proc_root=proc_root,
                     runner=self.successful_runner(calls),
-                    which=lambda name: "/usr/bin/systemd-analyze",
+                    which=lambda name, **_kwargs: "/usr/bin/systemd-analyze",
                 )
 
         self.assertEqual(len(calls), len(boot.COMMANDS))
-        self.assertEqual(artifact["schema"], "wsm-boot-profile/1")
+        self.assertEqual(artifact["schema"], "wsm-boot-profile/2")
         self.assertEqual(artifact["collection_status"], "available")
         self.assertIn("multi-user.target reached", artifact["commands"]["time"]["stdout"])
         self.assertIn("example.service", artifact["commands"]["blame"]["stdout"])
@@ -82,6 +110,7 @@ class BootCommandTests(unittest.TestCase):
             self.assertEqual(kwargs["stdin"], subprocess.DEVNULL)
             self.assertTrue(kwargs["capture_output"])
             self.assertEqual(kwargs["env"]["LC_ALL"], "C")
+            self.assertNotIn("SHEPHERD_SOCKET", kwargs["env"])
             self.assertLessEqual(kwargs["timeout"], boot.MAX_TIMEOUT_SECONDS)
             self.assertEqual(argv[0], "/usr/bin/systemd-analyze")
 
@@ -104,7 +133,7 @@ class BootCommandTests(unittest.TestCase):
         runner = unittest.mock.Mock()
         artifact = boot.collect_boot_profile(
             runner=runner,
-            which=lambda name: None,
+            which=lambda name, **_kwargs: None,
         )
         self.assertEqual(artifact["collection_status"], "unavailable")
         self.assertTrue(
@@ -127,7 +156,7 @@ class BootCommandTests(unittest.TestCase):
 
         artifact = boot.collect_boot_profile(
             runner=run,
-            which=lambda name: "/usr/bin/systemd-analyze",
+            which=lambda name, **_kwargs: "/usr/bin/systemd-analyze",
         )
         command = artifact["commands"]["time"]
         self.assertEqual(command["status"], "timeout")
@@ -144,7 +173,7 @@ class BootCommandTests(unittest.TestCase):
 
         artifact = boot.collect_boot_profile(
             runner=run,
-            which=lambda name: "/usr/bin/systemd-analyze",
+            which=lambda name, **_kwargs: "/usr/bin/systemd-analyze",
         )
         self.assertEqual(artifact["commands"]["blame"]["status"], "failed")
         self.assertEqual(artifact["commands"]["blame"]["exit_code"], 7)
@@ -160,7 +189,7 @@ class BootCommandTests(unittest.TestCase):
 
         artifact = boot.collect_boot_profile(
             runner=run,
-            which=lambda name: "/usr/bin/systemd-analyze",
+            which=lambda name, **_kwargs: "/usr/bin/systemd-analyze",
         )
         command = artifact["commands"]["blame"]
         self.assertLessEqual(len(command["stdout"].encode("utf-8")), boot.MAX_OUTPUT_BYTES)
@@ -176,12 +205,133 @@ class BootCommandTests(unittest.TestCase):
                     boot.collect_boot_profile(timeout_seconds=timeout, which=lookup)
                 lookup.assert_not_called()
 
+    def test_shepherd_manager_uses_only_fixed_read_only_herd_commands(self) -> None:
+        calls: list[tuple[list[str], dict[str, object]]] = []
+
+        def run(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            calls.append((argv, kwargs))
+            output = {
+                "--version": "herd (GNU Shepherd) 1.0.0\n",
+                "status": "root running\nwsm-live-ready running\n",
+                "log": "Service root started\nService wsm-live-ready started\n",
+                "graph": "digraph shepherd { root -> wsm-live-ready; }\n",
+            }[argv[-1]]
+            return subprocess.CompletedProcess(argv, 0, stdout=output, stderr="")
+
+        lookup = unittest.mock.Mock(return_value="/gnu/store/herd/bin/herd")
+        with (
+            patch.object(boot, "_detect_manager", return_value="shepherd"),
+            patch.object(boot, "_manager_scope", return_value="system"),
+            patch.dict(
+                boot.os.environ,
+                {
+                    "SHEPHERD_SOCKET": "/tmp/not-pid1-shepherd.sock",
+                    "PATH": "/tmp/untrusted:/usr/bin",
+                },
+            ),
+        ):
+            artifact = boot.collect_boot_profile(runner=run, which=lookup)
+        lookup.assert_called_once_with(
+            "herd", path=boot.SYSTEM_EXECUTABLE_PATH
+        )
+
+        self.assertEqual(artifact["manager"]["name"], "shepherd")
+        self.assertEqual(artifact["manager"]["scope"], "system")
+        self.assertEqual(artifact["scope"], "system-boot")
+        self.assertEqual(artifact["collection_status"], "available")
+        self.assertTrue(any("unmounted" in warning for warning in artifact["warnings"]))
+        self.assertTrue(any("Shepherd 1.0.9" in warning and "running manager" in warning for warning in artifact["warnings"]))
+        self.assertEqual(
+            set(artifact["commands"]),
+            {"version", "status", "log", "graph"},
+        )
+        self.assertEqual(
+            artifact["commands"]["log"]["argv"],
+            ["herd", "log"],
+        )
+        self.assertIn("wsm-live-ready", artifact["commands"]["graph"]["stdout"])
+        self.assertEqual(len(calls), 4)
+        self.assertEqual(artifact["commands"]["status"]["argv"], ["herd", "status"])
+        self.assertEqual(artifact["commands"]["graph"]["argv"], ["herd", "graph"])
+        for argv, kwargs in calls:
+            self.assertEqual(argv[0], "/gnu/store/herd/bin/herd")
+            self.assertNotIn("shell", kwargs)
+            self.assertEqual(kwargs["stdin"], subprocess.DEVNULL)
+            self.assertEqual(kwargs["env"]["LC_ALL"], "C")
+            self.assertNotIn("SHEPHERD_SOCKET", kwargs["env"])
+            self.assertLessEqual(kwargs["timeout"], boot.MAX_TIMEOUT_SECONDS)
+
+    def test_unprivileged_shepherd_observation_is_not_claimed_as_system_boot(self) -> None:
+        lookup = unittest.mock.Mock(return_value="/home/user/.guix-home/profile/bin/herd")
+        with (
+            patch.object(boot, "_detect_manager", return_value="shepherd"),
+            patch.object(boot, "_manager_scope", return_value="user"),
+        ):
+            artifact = boot.collect_boot_profile(
+                runner=lambda argv, **kwargs: subprocess.CompletedProcess(argv, 0, "ok", ""),
+                which=lookup,
+            )
+        lookup.assert_called_once_with("herd")
+        self.assertEqual(artifact["manager"]["scope"], "user")
+        self.assertEqual(artifact["scope"], "user-service-manager")
+        self.assertTrue(any("user Shepherd instance" in item for item in artifact["warnings"]))
+
+    def test_unknown_pid1_manager_does_not_guess_systemd_or_shepherd(self) -> None:
+        runner = unittest.mock.Mock()
+        lookup = unittest.mock.Mock(return_value="/usr/bin/systemd-analyze")
+        with (
+            patch.object(boot, "_detect_manager", return_value="unknown"),
+            patch.object(boot, "_manager_scope", return_value="unknown"),
+        ):
+            artifact = boot.collect_boot_profile(runner=runner, which=lookup)
+        self.assertEqual(artifact["manager"]["name"], "unknown")
+        self.assertEqual(artifact["scope"], "unknown")
+        self.assertEqual(artifact["collection_status"], "unavailable")
+        self.assertEqual(artifact["commands"], {})
+        lookup.assert_not_called()
+        runner.assert_not_called()
+
+    def test_systemd_manager_uses_the_fixed_system_executable_path(self) -> None:
+        lookup = unittest.mock.Mock(return_value="/usr/bin/systemd-analyze")
+        with (
+            patch.object(boot, "_detect_manager", return_value="systemd"),
+            patch.object(boot, "_manager_scope", return_value="system"),
+        ):
+            boot.collect_boot_profile(
+                runner=lambda argv, **kwargs: subprocess.CompletedProcess(argv, 0, "ok", ""),
+                which=lookup,
+            )
+        lookup.assert_called_once_with(
+            "systemd-analyze", path=boot.SYSTEM_EXECUTABLE_PATH
+        )
+
+    def test_missing_herd_is_unavailable_not_zero(self) -> None:
+        runner = unittest.mock.Mock()
+        with (
+            patch.object(boot, "_detect_manager", return_value="shepherd"),
+            patch.object(boot, "_manager_scope", return_value="system"),
+        ):
+            artifact = boot.collect_boot_profile(runner=runner, which=lambda name, **_kwargs: None)
+        self.assertEqual(artifact["manager"]["name"], "shepherd")
+        self.assertEqual(artifact["collection_status"], "unavailable")
+        self.assertTrue(
+            all(
+                command["status"] == "unavailable"
+                and command["reason"] == "command-not-found"
+                for command in artifact["commands"].values()
+            )
+        )
+        runner.assert_not_called()
+
 
 class BootIdentityTests(unittest.TestCase):
     def setUp(self) -> None:
-        patcher = patch.object(boot, "collect_report", return_value={})
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        report_patcher = patch.object(boot, "collect_report", return_value={})
+        manager_patcher = patch.object(boot, "_detect_manager", return_value="systemd")
+        scope_patcher = patch.object(boot, "_manager_scope", return_value="system")
+        for patcher in (report_patcher, manager_patcher, scope_patcher):
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     def test_boot_identity_uses_digest_not_raw_boot_uuid(self) -> None:
         raw_id = "00000000-1111-2222-3333-444444444444"
@@ -195,7 +345,7 @@ class BootIdentityTests(unittest.TestCase):
                         argv, 0, stdout="ok", stderr=""
                     )
                 ),
-                which=lambda name: "/usr/bin/systemd-analyze",
+                which=lambda name, **_kwargs: "/usr/bin/systemd-analyze",
             )
         self.assertEqual(identity["status"], "available")
         self.assertEqual(
@@ -229,7 +379,7 @@ class BootIdentityTests(unittest.TestCase):
         with patch.object(boot, "collect_report", return_value={}):
             artifact = boot.collect_boot_profile(
                 runner=unittest.mock.Mock(return_value=subprocess.CompletedProcess([], 0, "ok", "")),
-                which=lambda name: "/usr/bin/systemd-analyze",
+                which=lambda name, **_kwargs: "/usr/bin/systemd-analyze",
             )
         warnings = "\n".join(artifact["warnings"])
         self.assertIn("spawned", warnings)
@@ -239,10 +389,29 @@ class BootIdentityTests(unittest.TestCase):
 
 
 class BootCliTests(unittest.TestCase):
+    def test_cli_import_path_supports_checkout_and_packaged_site_packages(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "wsm_perf").mkdir()
+            self.assertEqual(cli.package_search_path(root), root)
+
+            (root / "wsm_perf").rmdir()
+            site = root / "lib/python3.11/site-packages"
+            (site / "wsm_perf").mkdir(parents=True)
+            self.assertEqual(
+                cli.package_search_path(root, (3, 11)),
+                site,
+            )
+
+            # A store path without either layout must not be replaced by cwd.
+            missing = root / "missing"
+            missing.mkdir()
+            self.assertIsNone(cli.package_search_path(missing, (3, 11)))
+
     def test_cli_writes_json_artifact_to_explicit_path(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "boot-profile.json"
-            artifact = {"schema": "wsm-boot-profile/1", "collection_status": "unavailable"}
+            artifact = {"schema": "wsm-boot-profile/2", "collection_status": "unavailable"}
             with patch.object(cli, "collect_boot_profile", return_value=artifact):
                 result = cli.main(["--output", str(output), "--compact"])
             self.assertEqual(result, 0)
