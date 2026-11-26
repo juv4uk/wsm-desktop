@@ -32,6 +32,7 @@ class ReleaseMetadataContractTests(unittest.TestCase):
         self.assertIn("not-run", scope)
         self.assertIn("no installation command is launched", scope)
         self.assertIn("APPLY вимкнено", RELEASE_NOTES)
+        self.assertIn("Calamares лишається deprioritized/reference-only", RELEASE_NOTES)
         self.assertIn("`not-run`", RELEASE_NOTES)
         self.assertIn("preview-only", EXECUTOR_DOC)
         self.assertIn("not-run", EXECUTOR_DOC)
