@@ -12,14 +12,13 @@
 | Шар | Хто робить | Файл |
 | --- | --- | --- |
 | Мова, локація, клавіатура, користувач | Calamares, з коробки | — |
-| Розбиття диска | Calamares (kpmcore) | — |
+| Розбиття диска | план WSM як дані; Calamares partition module ще не налаштований | — |
 | Перевірка заліза й докази | **WSM** | `modules/wsm_deploy/main.py` |
 | Вибір профілю | **WSM** | те саме |
-| Запис системи | **WSM** | `wsm_install/install_steps.py` + `executor.py` |
+| План і preview | **WSM** | `wsm_install/install_steps.py` + preview-only `executor.py` |
 
 Модуль навмисно тонкий: він не форматує й не монтує нічого сам, а викликає ті
-самі модулі, що й CLI. Одна реалізація кожної небезпечної операції, Calamares —
-лише обличчя.
+самі модулі, що й CLI. Одна реалізація планування; наразі всі небезпечні операції вимкнено, Calamares — лише optional frontend.
 
 ## Контракт jobmodule
 
@@ -37,10 +36,10 @@
 | --- | --- | --- |
 | `wsmReportPath` | крок preflight | звіт `wsm-hwcheck` |
 | `wsmTargetDisk` | Calamares | цільовий диск; WSM ніколи не обирає сам |
-| `wsmTargetSizeBytes` | Calamares | розмір — те, чим ловиться підмінений диск |
+| `wsmTargetSizeBytes` | Calamares | user-supplied оцінка для плану; не вимірюється з block device |
 | `wsmProfileEvidence` | крок вибору профілю | bundle доказів заліза |
 | `wsmSystemFile` | крок вибору профілю | який `.scm` віддати Guix |
-| `wsmDryRun` | налаштування | прогін без запису |
+| `wsmDryRun` | налаштування | boolean; preview завершується явною non-success відповіддю, false — APPLY refused |
 
 ## Чому модуль сам шукає `wsm_install`
 
@@ -58,3 +57,7 @@ Calamares завантажує `main.py` за шляхом, тому пакет 
 - **Кроку preflight як окремого модуля.** Зараз `wsmReportPath` має заповнити
   хтось інший; цей модуль лише читає його.
 - **QML-інтерфейсу вибору профілю.**
+
+## Поточна межа APPLY
+
+Preview не повертає Calamares `None` як успіх: job повертає явну помилку зі статусом, що система **не встановлена**. Будь-який реальний APPLY залишається вимкненим до target-bound executor, digest-bound consent, перевіреної Guix tool closure та disposable-QEMU acceptance.
