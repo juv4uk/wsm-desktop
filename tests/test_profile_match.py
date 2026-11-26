@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -38,6 +39,13 @@ class ReportParsingTests(unittest.TestCase):
 
     def test_device_without_identity_contributes_nothing(self) -> None:
         self.assertEqual(report_pci_ids({"devices": [{"device_id": "x"}]}), set())
+
+
+class SchemaV1IdentityTests(unittest.TestCase):
+    def test_real_schema_fixture_separate_vendor_and_device_ids_are_combined(self) -> None:
+        fixture = ROOT / "tests" / "fixtures" / "hardware" / "desktop-observed.json"
+        report_data = json.loads(fixture.read_text(encoding="utf-8"))
+        self.assertIn("10de:1c82", report_pci_ids(report_data))
 
 
 class MatchingTests(unittest.TestCase):
