@@ -159,8 +159,8 @@ WSM відрізняється від голого Guix тим, що має да
 Кожен образ має **свій** lock-файл, і кожен перевіряється за своєю політикою:
 
 ```sh
-python3 scripts/check_channels.py --policy free
-python3 scripts/check_channels.py --policy compatibility
+python3 scripts/check_channels.py --policy free --lock channels.lock.scm
+python3 scripts/check_channels.py --policy compatibility --lock channels.compatibility.lock.scm
 ```
 
 Політика `free` дозволяє лише офіційний Guix. Політика `compatibility`
@@ -168,16 +168,23 @@ python3 scripts/check_channels.py --policy compatibility
 `http://`, невідомий хост або канал без introduction.
 
 Різниця принципова: продукт може містити пропрієтарний драйвер, але не може
-містити **невідомо що**. Драйвер названий, зафіксований і підписаний; випадковий
-канал — ні.
+містити **невідомо що**. Структурний checker доводить лише, що lock має точну
+назву каналу, allow-listed repository URL, pinned commit та canonical
+introduction. Він **не перевіряє криптографічний підпис конкретного commit**.
+Це окремо робить GNU Guix channel authentication із увімкненою автентифікацією.
+Lock уже присутній у `channels/compatibility.lock.scm`, але сам факт його
+наявності або structural PASS не доводить GPG/channel authentication. До
+release PASS потрібен результат `guix time-machine` для точного lock і
+evaluation `systems/live-compat.scm` у Guix gate.
 
 ### Що це означає для lock-файлів
 
 - `channels.lock.scm` — вільний образ, уже є.
-- `channels.compatibility.lock.scm` — **ще немає**. Його створення вимагає
-  робочого Guix і реального зафіксованого коміта Nonguix
-  ([#210](https://github.com/juv4uk/wsm-desktop/issues/210)). Вигадати хеш
-  означало б зламати саму властивість, яку перевіряє скрипт.
+- `channels/compatibility.lock.scm` — окремий pin Guix + Nonguix для
+  Compatibility. Структурний checker звіряє URL, commit та introduction, але
+  не виконує GPG/channel authentication. До release PASS потрібна окрема
+  перевірка через `guix time-machine -C channels/compatibility.lock.scm -- describe -f channels`
+  та evaluation `systems/live-compat.scm` у Guix gate.
 
 ## Що лишається невідомим
 

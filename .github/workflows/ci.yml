@@ -57,15 +57,29 @@ jobs:
       - name: Check documentation
         run: python scripts/check_docs.py
 
-      - name: Check the channel lock
+      - name: Check configured channel locks (structural only)
         run: |
-          python scripts/check_channels.py --policy free
-          python scripts/check_channels.py --policy compatibility
+          set -euo pipefail
+          python scripts/check_channels.py --policy free --lock channels.lock.scm
+          if [ -f channels/compatibility.lock.scm ]; then
+            python scripts/check_channels.py --policy compatibility --lock channels/compatibility.lock.scm
+          else
+            printf '%s\\n' 'Compatibility lock NOT_CONFIGURED; no Compatibility claim is made'
+          fi
 
       - name: Release gate (structural)
-        # No ISO in CI, so the image criterion is `not-run` and the verdict is
-        # `incomplete` - which is the honest answer, not a failure.
-        run: python scripts/release_gate.py --skip-tests --compact
+        # No Guix or ISO in the quick job: incomplete is expected, but failure
+        # and a false PASS must remain distinguishable.
+        shell: bash
+        run: |
+          set +e
+          python scripts/release_gate.py --product free --skip-tests --compact
+          status=$?
+          set -e
+          if [ "$status" -ne 2 ]; then
+            echo "Expected an incomplete (exit 2) structural verdict; got $status" >&2
+            exit 1
+          fi
 
   guix:
     name: evaluate the Guix system files
@@ -94,6 +108,11 @@ jobs:
             echo "::endgroup::"
           done
           exit $status
+
+      - name: Evaluate the Compatibility live system
+        run: |
+          /usr/local/bin/guix time-machine -C channels/compatibility.lock.scm -- \
+            system build systems/live-compat.scm --dry-run
 
       - name: Evaluate the home environment
         run: |

@@ -36,6 +36,14 @@ def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def verdict_for(criteria: list[dict[str, str]]) -> dict:
+    """Create a real temporary artifact because verdicts bind the exact ISO bytes."""
+    with tempfile.TemporaryDirectory() as temporary:
+        iso = Path(temporary) / "x.iso"
+        iso.write_bytes(b"release-verdict fixture")
+        return verdict(criteria, iso)
+
+
 class ChecksumTests(unittest.TestCase):
     def test_matching_checksum_passes(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -111,18 +119,18 @@ class VerdictTests(unittest.TestCase):
             {"id": "checksum", "status": "pass", "detail": ""},
             {"id": "boot-bios", "status": "not-run", "detail": "no qemu"},
         ]
-        self.assertEqual(verdict(criteria, Path("x.iso"))["overall"], "incomplete")
+        self.assertEqual(verdict_for(criteria)["overall"], "incomplete")
 
     def test_any_failure_fails_the_whole_verdict(self) -> None:
         criteria = [
             {"id": "checksum", "status": "pass", "detail": ""},
             {"id": "boot-uefi", "status": "fail", "detail": "no marker"},
         ]
-        self.assertEqual(verdict(criteria, Path("x.iso"))["overall"], "fail")
+        self.assertEqual(verdict_for(criteria)["overall"], "fail")
 
     def test_all_pass_is_a_pass(self) -> None:
         criteria = [{"id": "checksum", "status": "pass", "detail": ""}]
-        self.assertEqual(verdict(criteria, Path("x.iso"))["overall"], "pass")
+        self.assertEqual(verdict_for(criteria)["overall"], "pass")
 
 
 class CliTests(unittest.TestCase):
@@ -152,7 +160,7 @@ class CliTests(unittest.TestCase):
             )
             result = self.run_cli("--iso", str(iso), "--compact")
         payload = json.loads(result.stdout)
-        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.returncode, 2)
         self.assertEqual(payload["overall"], "incomplete")
         statuses = {item["id"]: item["status"] for item in payload["criteria"]}
         self.assertEqual(statuses["boot-bios"], "not-run")
