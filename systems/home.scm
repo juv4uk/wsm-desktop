@@ -27,6 +27,7 @@
              (gnu home services sound)
              (gnu services)
              (gnu packages)
+             (gnu packages python)
              (guix gexp)
              (wsm packages wsm))
 
@@ -50,7 +51,7 @@
    "Version=1.0\n"
    "Name=WSM session readiness marker\n"
    "Comment=Record the KDE Plasma session phase-2 milestone\n"
-   "Exec=" wsm-tools "/bin/wsm-session-marker\n"
+   "Exec=" (file-append python "/bin/python3") " " wsm-tools "/bin/wsm-session-marker\n"
    "OnlyShowIn=KDE;\n"
    "Terminal=false\n"
    "NoDisplay=true\n"
