@@ -1,23 +1,26 @@
 {
   "schema": "wsm-release-info/1",
   "release_id": "wsm-desktop-hardware-preview",
-  "version": "0.1.0-rc2",
-  "display_name": "WSM Desktop Hardware Preview RC2",
+  "version": "0.1.0-rc3",
+  "display_name": "WSM Desktop RC3 — три інсталятори",
   "status": "pre-release",
   "date": "2026-11-26",
   "scope": [
     "read-only hardware evidence report (wsm-hwcheck 0.2.0, report schema 1.0.0)",
-    "diagnostic-only draft plan for the ratified Guix backend; the Nix plan is research-only (wsm-install 0.1.0)",
-    "authenticated free-only Guix channel lock",
+    "three installer frontends over one backend: console (--guided), pseudo-graphical (--tui) and the Calamares jobmodule",
+    "privileged agent: the unprivileged side writes a plan, root executes only an allowlisted set of commands",
+    "execution journal and recovery report: what ran, what failed, and what to check next",
+    "environment preflight: tools, guix, root, mount point, system file, report and ISA level, before the first disk is touched",
+    "authenticated free-only Guix channel lock and an authenticated Compatibility lock with Nonguix",
     "reproducible source bundle with checksums and build manifest",
-    "KDE Plasma desktop profile and a live-ISO recipe, shipped as unverified source (not as an image)"
+    "KDE Plasma desktop profile, a minimal console live profile and a live-ISO recipe, shipped as unverified source (not as an image built here)"
   ],
   "excluded": [
-    "supported installation image or USB installer: systems/live.scm is a recipe, never built",
-    "any write to a block device, partition table or bootloader",
-    "Nonguix or nonfree firmware in the release channel lock",
-    "a second supported backend: ADR 0004 is ratified for GNU Guix; Nix/NixOS remains research",
-    "the Calamares module: ADR 0006 deprioritised that frontend"
+    "any write to a physical block device, partition table or bootloader: the installer has never run on a disk",
+    "a verified installation: no install has completed anywhere, in QEMU or on hardware",
+    "the Compatibility image: systems/live-compat.scm and channels/compatibility.lock.scm exist and pass policy checks, but were never built here",
+    "the Nix/NixOS backend: ADR 0004 keeps Guix as the only supported backend",
+    "a claim of performance: the baseline harness exists, no physical-machine measurement has been published"
   ],
   "requirements": {
     "python": ">=3.10",
