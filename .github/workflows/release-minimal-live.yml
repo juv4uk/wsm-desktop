@@ -7,6 +7,9 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
+  artifact-metadata: write
 
 concurrency:
   group: minimal-live-release-${{ github.ref }}
@@ -203,6 +206,43 @@ jobs:
             echo "Чернетку завантажено назад із GitHub; точний набір файлів і SHA-256 збігаються."
             echo "Tag: `$RELEASE_TAG`"
             echo "Source: `$GITHUB_SHA`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Підписати provenance релізних артефактів
+        id: attest-release-artifacts
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            ${{ runner.temp }}/wsm-live-dist/WSM-Desktop-0.1.0-rc3-Minimal-Live.iso
+            ${{ runner.temp }}/wsm-live-dist/SHA256SUMS
+            ${{ runner.temp }}/wsm-live-dist/build-manifest.json
+            ${{ runner.temp }}/wsm-live-dist/release-manifest.json
+            ${{ runner.temp }}/wsm-live-dist/boot-bios.json
+            ${{ runner.temp }}/wsm-live-dist/boot-uefi.json
+          create-storage-record: false
+      - name: Перевірити provenance артефактів перед публікацією
+        run: |
+          set -euo pipefail
+          BUNDLE="${{ steps.attest-release-artifacts.outputs.bundle-path }}"
+          test -s "$BUNDLE"
+          for ASSET in \
+            "WSM-Desktop-0.1.0-rc3-Minimal-Live.iso" \
+            "SHA256SUMS" \
+            "build-manifest.json" \
+            "release-manifest.json" \
+            "boot-bios.json" \
+            "boot-uefi.json"
+          do
+            gh attestation verify "$release_dist/$ASSET" \
+              --bundle "$BUNDLE" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release-minimal-live.yml" \
+              --predicate-type "https://slsa.dev/provenance/v1"
+          done
+          {
+            echo "### Криптографічна перевірка походження"
+            echo ""
+            echo "SLSA provenance перевірено для кожного release asset."
+            echo "Signer workflow: $GITHUB_REPOSITORY/.github/workflows/release-minimal-live.yml"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Опублікувати перевірений GitHub pre-release
         env:

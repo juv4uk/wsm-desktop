@@ -123,3 +123,25 @@ release workflow WSM окремо виконує BIOS/UEFI marker smoke.
 Збірка виконується на GitHub-hosted Ubuntu runner з
 `systems/live-minimal.scm` і `channels.lock.scm`. У релізі є ISO,
 build/release manifests, SHA-256 і результати BIOS/UEFI boot smoke.
+
+## Криптографічне походження артефактів
+
+Після успішної збірки ISO, BIOS/UEFI marker smoke та повторної перевірки
+завантажених із GitHub release assets workflow створює підписане SLSA v1
+build-provenance через GitHub Artifact Attestations і Sigstore. Атестація
+охоплює ISO, `SHA256SUMS`, build/release manifests і BIOS/UEFI evidence;
+їхні digest пов'язуються з репозиторієм, commit і workflow signer.
+
+Локальна перевірка завантаженого ISO:
+
+```sh
+gh attestation verify WSM-Desktop-0.1.0-rc3-Minimal-Live.iso \
+  --repo juv4uk/wsm-desktop \
+  --signer-workflow juv4uk/wsm-desktop/.github/workflows/release-minimal-live.yml
+```
+
+Атестація доводить походження digest від конкретного GitHub Actions workflow,
+але сама по собі не доводить відтворюваність збірки, відсутність уразливостей
+або сумісність із фізичним обладнанням. GitHub Artifact Attestations дає
+SLSA Build Level 2 provenance; для Level 3 потрібен окремий ізольований
+reusable workflow.

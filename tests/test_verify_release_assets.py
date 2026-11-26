@@ -43,6 +43,49 @@ def make_bundle(root: Path) -> tuple[Path, Path]:
 
 
 class ReleaseAssetVerificationTests(unittest.TestCase):
+    def test_release_workflow_attests_every_asset_after_readback(self) -> None:
+        import yaml
+
+        workflow_path = ROOT / ".github" / "workflows" / "release-minimal-live.yml"
+        workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+        permissions = workflow["permissions"]
+        for permission in ("contents", "id-token", "attestations", "artifact-metadata"):
+            with self.subTest(permission=permission):
+                self.assertEqual(permissions[permission], "write")
+
+        steps = workflow["jobs"]["build-and-publish"]["steps"]
+        names = [step.get("name", "") for step in steps]
+        readback = names.index("Перевірити завантажені assets до публікації")
+        attest_index = names.index("Підписати provenance релізних артефактів")
+        verify_index = names.index("Перевірити provenance артефактів перед публікацією")
+        publish = names.index("Опублікувати перевірений GitHub pre-release")
+        self.assertLess(readback, attest_index)
+        self.assertLess(attest_index, verify_index)
+        self.assertLess(verify_index, publish)
+
+        attest = steps[attest_index]
+        self.assertEqual(attest["uses"], "actions/attest@v4")
+        self.assertIs(attest["with"]["create-storage-record"], False)
+        subjects = attest["with"]["subject-path"]
+        for filename in (
+            "WSM-Desktop-0.1.0-rc3-Minimal-Live.iso",
+            "SHA256SUMS",
+            "build-manifest.json",
+            "release-manifest.json",
+            "boot-bios.json",
+            "boot-uefi.json",
+        ):
+            with self.subTest(subject=filename):
+                self.assertIn(filename, subjects)
+
+        verification = steps[verify_index]["run"]
+        self.assertIn("gh attestation verify", verification)
+        self.assertIn('--repo "$GITHUB_REPOSITORY"', verification)
+        self.assertIn("--bundle", verification)
+        self.assertIn("--signer-workflow", verification)
+        self.assertIn("release-minimal-live.yml", verification)
+        self.assertIn("https://slsa.dev/provenance/v1", verification)
+
     def test_valid_download_matches_local_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             expected, downloaded = make_bundle(Path(temporary))
