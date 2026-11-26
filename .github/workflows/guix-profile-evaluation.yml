@@ -29,6 +29,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Кожен прогін `guix time-machine` інакше заново витягує checkout каналу.
+      # Ключ — сам lock, тому зміна каналу природно інвалідовує кеш, а решта
+      # прогонів його перевикористовує. Так робить Guix CI у Bitcoin Core.
+      - name: Restore Guix checkout cache
+        id: guix-checkouts
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/guix/checkouts
+          key: guix-checkouts-${{ hashFiles('channels.lock.scm', 'channels/*.scm') }}
+          restore-keys: guix-checkouts-
+
       - name: Install Guix
         run: |
           set -euo pipefail
@@ -41,6 +52,13 @@ jobs:
         run: |
           set -euo pipefail
           make check-guix-eval
+
+      - name: Save Guix checkout cache
+        if: success() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/guix/checkouts
+          key: ${{ steps.guix-checkouts.outputs.cache-primary-key }}
 
       - name: Повідомити причину збою
         if: failure()
