@@ -6,6 +6,7 @@
 - Задача: [#151](https://github.com/juv4uk/wsm-desktop/issues/151), батьківська [#147](https://github.com/juv4uk/wsm-desktop/issues/147)
 - План поточного виправлення provenance: [virtualization evidence](superpowers/plans/2026-11-26-perf-virtualization-evidence.md)
 - План пасивних вимірів: [PSI та zram observations](superpowers/plans/2026-11-26-perf-pressure-observations.md)
+- План Guix-native повторного використання артефактів: [підписані derivations і substitutes](superpowers/plans/2026-11-26-guix-native-artifact-reuse.md)
 - Рішення: [ADR 0007](decisions/0007-clear-linux-principles.md)
 
 ## Головна різниця, яку варто зрозуміти
