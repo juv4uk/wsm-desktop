@@ -57,11 +57,21 @@ class ClassificationPolicyAgreementTests(unittest.TestCase):
                 verdict = classification.classify_subsystem(empty_report, subsystem)
                 self.assertIn(verdict.level, levels)
 
-    def test_missing_subsystem_is_reported_as_unassessed(self) -> None:
-        """`unknown` because nobody looked is a different sentence than `unknown`."""
+    def test_missing_subsystem_keeps_coverage_unknown(self) -> None:
+        """No record is not evidence of complete collection or device absence."""
         verdict = classification.classify_subsystem({"devices": []}, "storage")
         self.assertEqual(verdict.level, classification.UNKNOWN)
-        self.assertFalse(verdict.assessed)
+        self.assertEqual(verdict.coverage, "unknown")
+        self.assertEqual(verdict.observation, "no-device-record")
+
+    def test_candidate_only_is_known_under_the_canonical_policy(self) -> None:
+        self.assertEqual(
+            classification.EVIDENCE_TO_LEVEL["candidate-only"],
+            classification.KNOWN,
+        )
+
+    def test_supported_test_needs_profile_bundle_before_certified_level(self) -> None:
+        self.assertNotIn("supported-tested", classification.EVIDENCE_TO_LEVEL)
 
 
 if __name__ == "__main__":

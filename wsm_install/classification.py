@@ -1,28 +1,11 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""Classify a machine as certified, known or unknown - per subsystem.
+"""Conservative, read-only summary of the evidence in a WSM hardware report.
 
-The installer never meets the same hardware twice, so "supported hardware" is
-not a list. It is a judgement about *this* machine, made from evidence, and it
-has three levels rather than two:
-
-* **certified** - we have a valid evidence bundle for this machine and it says
-  this function passed. Someone ran it and wrote down the result.
-* **known** - the component was discovered and something drives it, but this
-  exact combination has not been verified. It will probably work; nobody
-  promised it.
-* **unknown** - nothing was discovered, or nothing drives it. Not "broken":
-  *not known*, which is a different statement and needs a different response.
-
-The response is what matters:
-
-* **stop** - a critical subsystem is unknown; continuing would produce a system
-  that cannot boot, or one that destroys data on the way.
-* **warn** - the system will install and boot, but something will not work, and
-  the user has to agree to that.
-* **proceed** - unknown peripherals are recorded and nothing else.
-
-`unknown` never silently becomes `known`. That is the whole point of the third
-level: without it, "we did not check" degrades into "we checked and it is fine".
+This module does not decide whether an installation plan is safe. That decision
+belongs to the scenario/capability policy and must account for impact and a
+verified fallback. Report v1 has no complete coverage manifest, and profile
+evidence v2 does not bind a passed function to a device ID, so this module does
+not promote a subsystem to certified.
 """
 
 from __future__ import annotations
@@ -30,52 +13,37 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
-# The canonical vocabulary lives in docs/HARDWARE-COMPATIBILITY-VERDICTS.md and
-# is owned by issue #22. This module does not invent a second one: it derives the
-# three-level summary from those evidence states, so a reader who knows the
-# policy recognises every value here.
-EVIDENCE_TO_LEVEL = {
-    "supported-tested": "certified",
-    "driver-bound-not-tested": "known",
-    "candidate-only": "unknown",
-    "known-problem": "unknown",
-    "not-detected": "unknown",
-    "not-tested": "unknown",
-    "unknown": "unknown",
-    "not-collected": "unknown",
-}
 
 CERTIFIED = "certified"
 KNOWN = "known"
 UNKNOWN = "unknown"
 
+# Canonical vocabulary: docs/HARDWARE-COMPATIBILITY-VERDICTS.md (§4.2).
+# A report-level device summary can use KNOWN/UNKNOWN only. CERTIFIED is
+# deliberately reserved until evidence has exact device/capability scope.
+# A passing function test is not enough for subsystem-level certification.
+# The canonical policy also requires a validated profile bundle covering all
+# critical functions; until that device-scoped contract exists, this state is
+# deliberately absent from the summary mapping.
+EVIDENCE_TO_LEVEL = {
+    "driver-bound-not-tested": KNOWN,
+    "candidate-only": KNOWN,
+    "known-problem": UNKNOWN,
+    "not-detected": UNKNOWN,
+    "not-tested": UNKNOWN,
+    "unknown": UNKNOWN,
+    "not-collected": UNKNOWN,
+}
 
-def evidence_state_for(device: dict[str, Any]) -> str:
-    """Derive the canonical evidence state for one device from the report."""
-    tests = [test for test in device.get("functional_tests") or [] if isinstance(test, dict)]
-    if any(str(test.get("status")) == "failed" for test in tests):
-        return "known-problem"
-    if any(str(test.get("status")) == "passed" for test in tests):
-        return "supported-tested"
+FUNCTIONAL_TEST_TO_EVIDENCE = {
+    "passed": "supported-tested",
+    "failed": "known-problem",
+    "partial": "unknown",
+    "not-run": "not-tested",
+    "unsupported": "unknown",
+    "unknown": "unknown",
+}
 
-    status = str(device.get("discovery_status", "unknown"))
-    driver = device.get("driver") or {}
-    bound = bool(str(driver.get("name") or driver.get("module") or "").strip())
-
-    if status == "not-detected":
-        return "not-detected"
-    if status == "unknown":
-        return "unknown"
-    if bound:
-        return "driver-bound-not-tested"
-    return "not-tested"
-
-STOP = "stop"
-WARN = "warn"
-PROCEED = "proceed"
-
-# Which report categories form which subsystem. A subsystem is a unit of
-# judgement: users care whether storage works, not which PCI address it sits on.
 SUBSYSTEMS: dict[str, tuple[str, ...]] = {
     "cpu": ("cpu",),
     "memory": ("memory",),
@@ -91,17 +59,6 @@ SUBSYSTEMS: dict[str, tuple[str, ...]] = {
     "other": ("other",),
 }
 
-# Unknown here means the machine may not boot or may lose data, so the installer
-# stops rather than guesses.
-CRITICAL = frozenset({"firmware", "storage", "cpu", "memory"})
-
-# Unknown here is survivable: the system installs, boots, and something inside it
-# does not work. The user must agree, because they may not find out until later.
-DEGRADING = frozenset({"graphics", "network", "audio", "bluetooth", "input"})
-
-# Everything else is recorded and nothing more.
-PERIPHERAL = frozenset({"usb", "camera", "other"})
-
 
 @dataclass
 class SubsystemVerdict:
@@ -109,8 +66,12 @@ class SubsystemVerdict:
     level: str
     devices: list[str] = field(default_factory=list)
     reasons: list[str] = field(default_factory=list)
-    assessed: bool = True
+    # Schema v1 has no complete per-subsystem coverage manifest. Keep this
+    # unknown even when some records exist; "observed" is reported separately.
+    coverage: str = "unknown"
+    observation: str = "no-device-record"
     evidence_states: list[str] = field(default_factory=list)
+    functional_tests: list[dict[str, str]] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -118,142 +79,176 @@ class SubsystemVerdict:
             "level": self.level,
             "devices": list(self.devices),
             "reasons": list(self.reasons),
-            "assessed": self.assessed,
+            "coverage": self.coverage,
+            "observation": self.observation,
             "evidence_states": list(self.evidence_states),
+            "functional_tests": [dict(item) for item in self.functional_tests],
         }
 
 
 def _devices_for(report: dict[str, Any], categories: Iterable[str]) -> list[dict[str, Any]]:
     wanted = set(categories)
-    return [device for device in report.get("devices", []) if device.get("category") in wanted]
+    return [
+        device
+        for device in report.get("devices", [])
+        if isinstance(device, dict) and device.get("category") in wanted
+    ]
 
 
-def _evidence_cover(evidence: dict[str, Any] | None) -> dict[str, str]:
-    """Map a verified function name to its status, from a profile evidence bundle."""
-    if not evidence:
-        return {}
-    cover: dict[str, str] = {}
-    for item in evidence.get("verified_functions", []) or []:
-        name = str(item.get("name", "")).lower()
-        status = str(item.get("status", "not-assessed"))
-        if name:
-            cover[name] = status
-    return cover
+def evidence_state_for(device: dict[str, Any]) -> str:
+    """Summarize discovery and driver facts without confusing module load with binding.
+
+    Functional tests are intentionally handled separately by
+    :func:`functional_test_evidence`: one passed capability does not prove every
+    function of the device or subsystem.
+    """
+    discovery = str(device.get("discovery_status", "unknown"))
+    if discovery == "not-detected":
+        return "not-detected"
+    if discovery != "discovered":
+        return "unknown"
+
+    driver = device.get("driver")
+    if not isinstance(driver, dict):
+        return "unknown"
+
+    status = str(driver.get("status", "unknown"))
+    bound_driver = str(driver.get("bound_driver") or "").strip()
+    candidate = str(driver.get("candidate") or "").strip()
+
+    if status == "bound":
+        # The collector represents built-in drivers by bound_driver even when
+        # there is no module symlink. Requiring module would create false unknowns.
+        return "driver-bound-not-tested" if bound_driver else "unknown"
+
+    if status == "available-only" and candidate:
+        return "candidate-only"
+
+    # module-loaded-unbound, a module name, or module_loaded=True alone is not
+    # a candidate/binding proof. not-applicable is not a driver failure either.
+    if status in {"unknown", "error"}:
+        return "unknown"
+    return "not-tested"
 
 
-def classify_subsystem(
-    report: dict[str, Any],
-    subsystem: str,
-    evidence: dict[str, Any] | None = None,
-) -> SubsystemVerdict:
-    devices = _devices_for(report, SUBSYSTEMS.get(subsystem, ()))
+def functional_test_evidence(device: dict[str, Any]) -> list[dict[str, str]]:
+    """Return each test at its own capability scope; never roll it up to device PASS."""
+    device_id = str(device.get("device_id", "?"))
+    results: list[dict[str, str]] = []
+    tests = device.get("functional_tests") or []
+    if not isinstance(tests, list):
+        return results
+
+    for test in tests:
+        if not isinstance(test, dict):
+            continue
+        status = str(test.get("status", "unknown"))
+        results.append({
+            "device_id": device_id,
+            "capability": str(test.get("capability", "unknown")),
+            "reported_status": status,
+            "evidence_state": FUNCTIONAL_TEST_TO_EVIDENCE.get(status, "unknown"),
+        })
+    return results
+
+
+def classify_subsystem(report: dict[str, Any], subsystem: str) -> SubsystemVerdict:
+    """Summarize observed device records; this is not an install-readiness decision."""
+    if subsystem not in SUBSYSTEMS:
+        raise ValueError(f"unknown subsystem: {subsystem!r}")
+
+    devices = _devices_for(report, SUBSYSTEMS[subsystem])
     identifiers = [str(device.get("device_id", "?")) for device in devices]
-    verdict = SubsystemVerdict(subsystem=subsystem, level=UNKNOWN, devices=identifiers)
+    verdict = SubsystemVerdict(
+        subsystem=subsystem,
+        level=UNKNOWN,
+        devices=identifiers,
+        observation="device-records-present" if devices else "no-device-record",
+    )
 
     if not devices:
-        # Absence in the report is not proof of absence on the machine: the
-        # report may simply not cover this subsystem. The level stays unknown,
-        # but the reason says which kind of unknown it is, because the two need
-        # different sentences in front of a user.
-        verdict.reasons.append("this report does not assess this subsystem")
-        verdict.assessed = False
+        verdict.reasons.append(
+            "no device record is present; report v1 has no coverage manifest, "
+            "so absence cannot be interpreted as not-detected or not-collected"
+        )
         return verdict
-
-    # Certified requires evidence about *this* machine, not a driver that happens
-    # to be loaded: someone has to have run the function and recorded the result.
-    cover = _evidence_cover(evidence)
-    if cover.get(subsystem) == "pass":
-        verdict.level = CERTIFIED
-        verdict.reasons.append("a verified evidence bundle records this function as passing")
-        return verdict
-    if cover.get(subsystem) in {"fail", "not-assessed"}:
-        verdict.reasons.append(f"evidence exists but records this function as {cover[subsystem]}")
 
     states: list[str] = []
+    tests: list[dict[str, str]] = []
     for device in devices:
         state = evidence_state_for(device)
         states.append(state)
+        tests.extend(functional_test_evidence(device))
         verdict.reasons.append(f"{device.get('device_id', '?')}: {state}")
 
-    levels = {EVIDENCE_TO_LEVEL.get(state, UNKNOWN) for state in states}
-    if CERTIFIED in levels and levels == {CERTIFIED}:
-        verdict.level = CERTIFIED
-    elif levels <= {CERTIFIED, KNOWN}:
+    verdict.evidence_states = states
+    verdict.functional_tests = tests
+
+    # A summary can be KNOWN only if every observed device has a concrete
+    # driver candidate or binding. Any untested/non-applicable/unknown device
+    # keeps the subsystem unknown. Functional tests remain capability-scoped.
+    has_failed_function = any(
+        item["evidence_state"] == "known-problem" for item in tests
+    )
+    if (
+        states
+        and not has_failed_function
+        and all(state in {"driver-bound-not-tested", "candidate-only"} for state in states)
+    ):
         verdict.level = KNOWN
     else:
         verdict.level = UNKNOWN
-    verdict.evidence_states = states
+
     return verdict
 
 
 def classify(
     report: dict[str, Any],
-    evidence: dict[str, Any] | None = None,
     subsystems: Iterable[str] | None = None,
 ) -> dict[str, Any]:
-    chosen = list(subsystems) if subsystems else list(SUBSYSTEMS)
-    verdicts = [classify_subsystem(report, name, evidence) for name in chosen]
+    """Produce a diagnostic summary, not a stop/warn/proceed installation verdict."""
+    chosen = list(subsystems) if subsystems is not None else list(SUBSYSTEMS)
+    if len(chosen) != len(set(chosen)):
+        raise ValueError("subsystems must not contain duplicates")
 
-    decision = PROCEED
-    for verdict in verdicts:
-        if verdict.level != UNKNOWN:
-            continue
-        if verdict.subsystem in CRITICAL:
-            decision = STOP
-        elif verdict.subsystem in DEGRADING and decision != STOP:
-            decision = WARN
-
-    unknown_critical = [
-        v.subsystem for v in verdicts if v.level == UNKNOWN and v.subsystem in CRITICAL
-    ]
-    unknown_degrading = [
-        v.subsystem for v in verdicts if v.level == UNKNOWN and v.subsystem in DEGRADING
-    ]
-    not_assessed = [v.subsystem for v in verdicts if not v.assessed]
-
+    verdicts = [classify_subsystem(report, name) for name in chosen]
     return {
-        "schema": "wsm-hardware-classification/1",
-        "decision": decision,
+        "schema": "wsm-hardware-classification/2",
+        "subsystems": [verdict.as_dict() for verdict in verdicts],
         "counts": {
-            CERTIFIED: sum(1 for v in verdicts if v.level == CERTIFIED),
-            KNOWN: sum(1 for v in verdicts if v.level == KNOWN),
-            UNKNOWN: sum(1 for v in verdicts if v.level == UNKNOWN),
+            CERTIFIED: 0,
+            KNOWN: sum(1 for verdict in verdicts if verdict.level == KNOWN),
+            UNKNOWN: sum(1 for verdict in verdicts if verdict.level == UNKNOWN),
         },
-        "subsystems": [v.as_dict() for v in verdicts],
-        "stop_because": unknown_critical,
-        "warn_because": unknown_degrading,
-        "not_assessed": not_assessed,
-        "vocabulary": "docs/HARDWARE-COMPATIBILITY-VERDICTS.md (owned by issue #22)",
+        "decision_policy": "docs/INSTALL-CAPABILITY-MATRIX.md",
         "note": (
-            "unknown is not a failure: it means this machine's behaviour was not "
-            "verified here. A decision to stop is about consequences, not about "
-            "how much we like the hardware. The three levels are a summary of the "
-            "canonical evidence states, not a replacement for them."
+            "Diagnostic summary only. Report v1 has no complete coverage manifest; "
+            "functional-test results apply only to their named capability. This "
+            "summary does not choose an installation scenario or authorize a plan."
         ),
     }
 
 
 def explain(result: dict[str, Any]) -> str:
-    """One short paragraph a person can act on."""
-    decision = result["decision"]
-    if decision == STOP:
-        names = ", ".join(result["stop_because"])
-        missing = [name for name in result["stop_because"] if name in result.get("not_assessed", [])]
-        if missing and len(missing) == len(result["stop_because"]):
-            return (
-                f"Installation stopped: {names} was not assessed by this report. "
-                "That is a gap in the report, not a verdict on the machine - "
-                "run wsm-hwcheck on the target and use that report instead."
-            )
-        return (
-            f"Installation stopped: {names} could not be identified or driven. "
-            "Continuing could produce a system that does not boot. "
-            "Send the hardware report so this machine can be classified properly."
-        )
-    if decision == WARN:
-        names = ", ".join(result["warn_because"])
-        return (
-            f"Installation can continue, but {names} is unverified and may not work. "
-            "The system will install and boot; agree explicitly before continuing."
-        )
-    return "Nothing critical is unknown. Unverified peripherals are recorded in the report."
+    """Explain evidence coverage without making an installation decision."""
+    unknown = [
+        item["subsystem"]
+        for item in result.get("subsystems", [])
+        if item.get("level") == UNKNOWN
+    ]
+    known = [
+        item["subsystem"]
+        for item in result.get("subsystems", [])
+        if item.get("level") == KNOWN
+    ]
+    parts = []
+    if known:
+        parts.append("Підсистеми з відомим driver binding або candidate: " + ", ".join(known))
+    if unknown:
+        parts.append("Підсистеми з неповними доказами: " + ", ".join(unknown))
+    if not parts:
+        parts.append("Звіт не містить підсистем для зведення")
+    parts.append(
+        "Це діагностичне зведення, а не рішення про готовність до інсталяції."
+    )
+    return ". ".join(parts) + "."

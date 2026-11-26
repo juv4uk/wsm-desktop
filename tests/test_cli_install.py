@@ -173,8 +173,8 @@ class InstallModeTests(unittest.TestCase):
         self.assertIn("execute.apply-disabled", result.stderr)
 
 
-class ClassificationGateTests(unittest.TestCase):
-    """The installer must not reach a disk when the machine is not understood."""
+class ClassificationSummaryTests(unittest.TestCase):
+    """The three-level view is diagnostic; install gates use report-plan evidence."""
 
     def build(self, *extra: str, report: Path | None = None) -> subprocess.CompletedProcess:
         return run_cli(
@@ -186,24 +186,42 @@ class ClassificationGateTests(unittest.TestCase):
             *extra,
         )
 
-    def test_stop_refuses_before_the_plan(self) -> None:
-        """The shipped fixture is a two-device report: storage was never assessed."""
-        result = self.build()
-        self.assertEqual(result.returncode, 3, result.stderr)
-        self.assertIn("classification.stop", result.stderr)
-
-    def test_stop_is_not_overridable(self) -> None:
-        """--accept-degraded is for warnings, not for a missing boot path."""
-        result = self.build("--accept-degraded")
-        self.assertEqual(result.returncode, 3)
-        self.assertIn("classification.stop", result.stderr)
-
-    def test_classify_flag_prints_the_verdict(self) -> None:
+    def test_classify_flag_prints_a_diagnostic_summary(self) -> None:
         result = run_cli("--classify")
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = json.loads(result.stdout)
-        self.assertEqual(payload["schema"], "wsm-hardware-classification/1")
-        self.assertIn(payload["decision"], {"stop", "warn", "proceed"})
+        self.assertEqual(payload["schema"], "wsm-hardware-classification/2")
+        self.assertNotIn("decision", payload)
+        self.assertEqual(payload["counts"]["certified"], 0)
+        self.assertTrue(all(item["coverage"] == "unknown" for item in payload["subsystems"]))
+
+    def test_absent_storage_record_is_not_a_global_install_stop(self) -> None:
+        """The partial report has no storage record; that is not not-detected."""
+        result = self.build()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("classification.stop", result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["mode"], "dry-run")
+        self.assertTrue(all(step["status"] == "not-run" for step in payload["steps"]))
+
+    def test_report_declared_unknown_critical_role_blocks_preview_plan(self) -> None:
+        """The plan gate consumes a report-declared critical role, not a subsystem label."""
+        value = json.loads(FIXTURE.read_text(encoding="utf-8"))
+        value["devices"][0]["criticality"] = ["boot-path"]
+        value["devices"][0]["discovery_status"] = "unknown"
+        with tempfile.TemporaryDirectory() as temporary:
+            report = Path(temporary) / "report.json"
+            report.write_text(json.dumps(value), encoding="utf-8")
+            result = self.build(report=report)
+        self.assertEqual(result.returncode, 3, result.stderr)
+        self.assertIn("plan.blocked", result.stderr)
+        self.assertIn("required critical device discovery is unknown", result.stderr)
+
+    def test_read_only_classification_does_not_accept_profile_evidence(self) -> None:
+        result = run_cli("--classify", "--profile-evidence", str(ROOT / "missing-evidence.json"))
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--profile-evidence is accepted only", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
