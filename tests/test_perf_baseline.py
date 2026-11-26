@@ -131,9 +131,30 @@ class PressureTelemetryTests(unittest.TestCase):
             snapshot["devices"]["zram0"]["config"]["active_compressor"], "zstd"
         )
         self.assertEqual(
+            snapshot["devices"]["zram0"]["config"]["backing_device"], "none"
+        )
+        self.assertEqual(
             snapshot["devices"]["zram0"]["stats"]["mm_stat"]["fields"]["orig_data_size"],
             100,
         )
+
+    def test_zram_snapshot_redacts_backing_device_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            device = root / "zram0"
+            device.mkdir()
+            (device / "mm_stat").write_text(
+                "100 50 60 1000 70 1 2 3 4\n", encoding="utf-8"
+            )
+            (device / "io_stat").write_text("1 2 3 4\n", encoding="utf-8")
+            (device / "bd_stat").write_text("5 6 7\n", encoding="utf-8")
+            (device / "comp_algorithm").write_text("lzo [zstd] lz4\n", encoding="utf-8")
+            (device / "backing_dev").write_text("/dev/nvme0n1p3\n", encoding="utf-8")
+            snapshot = pressure.read_zram_snapshot(root)
+        self.assertEqual(
+            snapshot["devices"]["zram0"]["config"]["backing_device"], "configured"
+        )
+        self.assertNotIn("/dev/nvme0n1p3", str(snapshot))
 
     def test_mm_stat_stays_snapshot_while_io_and_bd_are_deltas(self) -> None:
         def stat(fields: dict[str, int]) -> dict[str, object]:
