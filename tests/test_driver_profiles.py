@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = ROOT / "drivers" / "schema" / "profile.schema.json"
 PROFILE_DIR = ROOT / "drivers" / "profiles"
 LOCKED_GUIX_COMMIT = "4e5195be20d9b124df8a8bb69213412236e4668e"
+LOCKED_NONGUIX_COMMIT = "6b8897cd6f3223b158c070cdc9cc638279f8c337"
 OWNER_PROFILE = "https://github.com/juv4uk/wsm-os/blob/main/docs/OWNER-HARDWARE-PROFILE.md"
 
 
@@ -51,17 +52,33 @@ class DriverProfileManifestTests(unittest.TestCase):
         self.assertEqual(notes["type"], "array")
         self.assertEqual(notes["items"]["type"], "string")
 
-    def test_channel_commit_matches_the_current_authenticated_free_lock(self) -> None:
+    def test_free_profile_uses_only_the_authenticated_free_lock(self) -> None:
         lock = (ROOT / "channels.lock.scm").read_text(encoding="utf-8")
         self.assertIn(f'(commit "{LOCKED_GUIX_COMMIT}")', lock)
         self.assertIn("Authenticated Guix channel lock", lock)
-        # The lock establishes input identity, not package resolution/build.
-        for profile in (self.free, self.compat):
-            self.assertEqual(profile["source"]["channel_commit"], LOCKED_GUIX_COMMIT)
-            self.assertEqual(
-                profile["source"]["channel_authentication_evidence"],
-                "authenticated-pull-recorded-build-not-evaluated",
-            )
+        source = self.free["source"]
+        self.assertEqual(source["channel_lock_file"], "channels.lock.scm")
+        self.assertEqual(source["channel_commit"], LOCKED_GUIX_COMMIT)
+        self.assertEqual(
+            source["channel_authentication_evidence"],
+            "authenticated-pull-recorded-build-not-evaluated",
+        )
+        self.assertNotIn("additional_channel_commits", source)
+
+    def test_compatibility_profile_uses_the_separate_nonguix_lock(self) -> None:
+        lock = (ROOT / "channels" / "compatibility.lock.scm").read_text(encoding="utf-8")
+        self.assertIn(f'(commit "{LOCKED_GUIX_COMMIT}")', lock)
+        self.assertIn(f'(commit "{LOCKED_NONGUIX_COMMIT}")', lock)
+        source = self.compat["source"]
+        self.assertEqual(source["channel_lock_file"], "channels/compatibility.lock.scm")
+        self.assertEqual(source["channel_commit"], LOCKED_GUIX_COMMIT)
+        self.assertEqual(
+            source["additional_channel_commits"],
+            {"nonguix": LOCKED_NONGUIX_COMMIT},
+        )
+        self.assertEqual(source["channel_authentication_evidence"], "not-evaluated")
+        self.assertIn("authentication", source["notes"].lower())
+        self.assertIn("not been verified", source["notes"].lower())
 
     def test_profiles_are_explicitly_draft_and_not_build_evidence(self) -> None:
         for profile in (self.free, self.compat):
@@ -69,9 +86,14 @@ class DriverProfileManifestTests(unittest.TestCase):
                 self.assertEqual(profile["profile_status"], "draft")
                 self.assertIsNone(profile["source"]["source_commit"])
                 self.assertEqual(profile["source"]["channel_commit"], LOCKED_GUIX_COMMIT)
+                expected_auth = (
+                    "authenticated-pull-recorded-build-not-evaluated"
+                    if profile["profile_class"] == "free"
+                    else "not-evaluated"
+                )
                 self.assertEqual(
                     profile["source"]["channel_authentication_evidence"],
-                    "authenticated-pull-recorded-build-not-evaluated",
+                    expected_auth,
                 )
 
     def test_free_profile_never_claims_nonfree_or_functional_support(self) -> None:
@@ -102,6 +124,14 @@ class DriverProfileManifestTests(unittest.TestCase):
         self.assertFalse(self.compat["enabled_by_default"])
         self.assertEqual(self.compat["base_profile"], "h170-free")
         self.assertFalse(self.compat["policy"]["nonfree_components_included"])
+        self.assertEqual(
+            self.compat["source"]["channel_lock_file"],
+            "channels/compatibility.lock.scm",
+        )
+        self.assertEqual(
+            self.compat["source"]["additional_channel_commits"]["nonguix"],
+            LOCKED_NONGUIX_COMMIT,
+        )
         candidate = self.compat["devices"][0]["driver_candidates"][0]
         self.assertEqual(candidate["candidate_id"], "nvidia-linux-580")
         self.assertEqual(candidate["package_resolution"], "not-assessed")
