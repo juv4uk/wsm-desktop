@@ -63,14 +63,14 @@ read_live_microcode_revision() записує нуль у MSR IA32_BIOS_SIGN_ID 
 ## Рекомендований allowlist
 
 Мінімальний незалежний UEFI application може збирати:
-1. Execution provenance: qemu-ovmf або physical-uefi, встановлений тільки за фактичним способом запуску.
+1. Execution provenance не визначається самим EFI application. Контрольований QEMU harness може виставити `qemu-ovmf`, бо сам запускає зафіксовану OVMF image у відомій конфігурації. `physical-uefi` дозволяти лише за окремим перевіреним записом про фізичне завантаження та канал отримання виводу; не виводити його з CPUID, SMBIOS або відсутності hypervisor bit.
 2. CPUID: vendor, normalized family/model/stepping; без APIC ID та унікальних CPU identifiers.
 3. UEFI protocol presence: факт запуску UEFI application, GOP, ACPI RSDP entry та SMBIOS entry; EFI variables не читати.
 4. GOP current mode: horizontal/vertical resolution, PixelFormat, PixelsPerScanLine; без FrameBufferBase, PixelInformation masks і framebuffer contents; не викликати SetMode().
-5. Memory-map summary: counts сторінок/дескрипторів за типами; без PhysicalStart, VirtualStart, діапазонів чи повної карти.
+5. Memory-map summary: counts сторінок/дескрипторів за типами; без `PhysicalStart`, `VirtualStart`, діапазонів чи повної карти. **Не входить у перший M0:** `GetMemoryMap()` потребує буфера, allocation якого саме змінює memory map; спочатку потрібні окремий повторюваний тест і підтвердження, що агрегат має практичну цінність.
 6. Firmware table presence: тільки acpi_rsdp_present і smbios_present; без адрес, raw bytes, OEM strings, serials, UUID чи asset tags.
 
-Усі значення — pre-boot evidence з явним provenance. Відсутність протоколу/поля лишається unknown або not-exposed, а не «несумісний».
+Усі значення — pre-boot evidence з явним provenance. Provenance додає зовнішній capture harness, а не самозвіт EFI application. Відсутність протоколу/поля лишається `unknown` або `not-exposed`, а не «несумісний».
 
 ## Заборонені операції та дані
 
@@ -116,10 +116,10 @@ ACPI RSDP призначений для надання фізичної адре
 
 ## Наступний QEMU/OVMF fixture
 
-Після окремого вирішення ліцензійної межі:
+Ліцензійну межу для власних файлів WSM з `wsm-os` знято: обидва репозиторії використовують `LicenseRef-Volnist`, а право на роботу з власним кодом зафіксоване у [LICENSING.md](../../docs/LICENSING.md). Це не створює потреби копіювати probe: нову програму все одно пишемо незалежно, за UEFI Specification, без перенесення небезпечних операцій.
 - написати незалежний мінімальний EFI application за allowlist вище;
 - використати q35/OVMF, 128 MiB, COM1 115200 8N1, display off, reboot disabled, timeout 30s;
-- запускати QEMU TCG без host disks, NIC, folder/device passthrough і writable firmware variables;
+- запускати QEMU TCG без host disks, NIC і довільного folder/device passthrough; EFI payload експонувати через virtual FAT у read-only режимі; firmware CODE та VARS подавати read-only, якщо обраний OVMF build може виконати fallback boot без запису NVRAM;
 - передавати тільки обмежений sanitized report через serial;
 - маркувати результат qemu-ovmf, не видавати його за physical measurement;
 - додати negative tests на address/serial/UUID/raw table/MSR write/SetMode/disk-write leakage та GOP→DRM conflation.
@@ -128,14 +128,13 @@ ACPI RSDP призначений для надання фізичної адре
 
 ## План та висновок
 
-1. Закріпити source/licensing/security audit.
-2. Вирішити ліцензійну межу wsm-os окремо від реалізації.
-3. Погодити з #5 окремий versioned pre-boot envelope.
-4. Реалізувати незалежний мінімальний UEFI application.
-5. Додати sanitized QEMU/OVMF fixture, provenance qemu-ovmf та negative tests.
-6. Лише після fixture вирішити, чи інтегрувати provider в installer plan, чи лишити support artifact.
+1. Source/licensing/security audit і policy guardrails — **готово** в [PR #102](https://github.com/juv4uk/wsm-desktop/pull/102).
+2. Погодити з власником #5 окремий versioned pre-boot envelope; до цього не змінювати hardware-report schema v1.0.0.
+3. Реалізувати незалежний мінімальний UEFI application лише як ізольований support/test artifact.
+4. Додати sanitized QEMU/OVMF fixture, provenance `qemu-ovmf` та negative tests.
+5. Лише після fixture вирішити, чи має provider достатню цінність для installer plan, чи лишається support artifact.
 
-Поточний висновок: повторно використати можна досвід, перелік facts, toolchain discovery та QEMU profile. Наявний probe як є не переносити; clean-room provider ще не реалізовано; фізичний запуск не виконувався.
+Поточний висновок: ліцензійне питання між власними репозиторіями знято; повторно використати можна досвід, перелік facts, toolchain discovery та QEMU profile. Наявний probe як є не переносити; незалежний provider і sanitized QEMU fixture ще не реалізовані; фізичний запуск не виконувався. `physical-uefi` не можна проставляти лише на підставі тексту, виведеного EFI application.
 
 ## Оновлення 2026-11-26: дві нові проби в wsm-os/probe
 
