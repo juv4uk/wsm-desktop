@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""Pseudo-graphics must be navigable and must never proceed on a wrong answer."""
+"""Pseudo-graphics must navigate safely and never claim an unperformed install."""
 
 from __future__ import annotations
 
@@ -14,7 +14,10 @@ from wsm_install.guided import Candidate  # noqa: E402
 from wsm_install.tui import box, disk_list, run_tui  # noqa: E402
 
 GIB = 1024 ** 3
-DISKS = [Candidate("/dev/nvme0n1", 256 * GIB, False), Candidate("/dev/sda", 120 * GIB, True)]
+DISKS = [
+    Candidate("/dev/nvme0n1", 256 * GIB, False),
+    Candidate("/dev/sda", 120 * GIB, True),
+]
 
 
 class FakeScreen:
@@ -32,18 +35,11 @@ class FakeScreen:
         return "\n".join("\n".join(frame) for frame in self.frames)
 
 
-def plan_recorder(calls: list):
-    def plan(path, size, firmware):
-        calls.append(("plan", path, firmware))
-
-    return plan
-
-
-def install_recorder(calls: list):
-    def install(path, size, firmware):
-        calls.append(("install", path, firmware))
-
-    return install
+def preview_recorder(calls: list):
+    def preview(path, size, firmware):
+        calls.append((path, size, firmware))
+        return 0
+    return preview
 
 
 def type_path(path: str) -> list[str]:
@@ -76,58 +72,68 @@ class BoxTests(unittest.TestCase):
 class NavigationTests(unittest.TestCase):
     def test_down_moves_the_selection(self) -> None:
         calls: list = []
-        screen = FakeScreen(["down", "enter"] + ["enter"] + type_path("/dev/sda") + ["enter"])
-        code = run_tui(screen, DISKS, plan_recorder(calls), install_recorder(calls))
+        screen = FakeScreen(["down", "enter", "enter"] + type_path("/dev/sda"))
+        code = run_tui(screen, DISKS, preview_recorder(calls))
         self.assertEqual(code, 0)
-        self.assertEqual(calls[0][1], "/dev/sda")
+        self.assertEqual(calls[0][0], "/dev/sda")
 
     def test_selection_wraps_around(self) -> None:
         calls: list = []
-        screen = FakeScreen(["up", "enter"] + ["enter"] + type_path("/dev/sda") + ["enter"])
-        run_tui(screen, DISKS, plan_recorder(calls), install_recorder(calls))
-        self.assertEqual(calls[0][1], "/dev/sda")
+        screen = FakeScreen(["up", "enter", "enter"] + type_path("/dev/sda"))
+        run_tui(screen, DISKS, preview_recorder(calls))
+        self.assertEqual(calls[0][0], "/dev/sda")
 
     def test_quit_at_disk_choice_changes_nothing(self) -> None:
         calls: list = []
         screen = FakeScreen(["quit"])
-        code = run_tui(screen, DISKS, plan_recorder(calls), install_recorder(calls))
+        code = run_tui(screen, DISKS, preview_recorder(calls))
         self.assertEqual(code, 1)
         self.assertEqual(calls, [])
 
-    def test_wrong_typed_path_stops_before_planning(self) -> None:
-        """The first disk is selected, so typing the second disk's path must fail."""
+    def test_wrong_typed_path_stops_before_preview(self) -> None:
         calls: list = []
-        screen = FakeScreen(["enter"] + ["enter"] + type_path("/dev/sda") + ["enter"])
-        code = run_tui(screen, DISKS, plan_recorder(calls), install_recorder(calls))
+        screen = FakeScreen(["enter", "enter"] + type_path("/dev/sda"))
+        code = run_tui(screen, DISKS, preview_recorder(calls))
         self.assertEqual(code, 1)
         self.assertEqual(calls, [])
         self.assertIn("does not match", screen.text())
 
     def test_backspace_corrects_the_typed_path(self) -> None:
         calls: list = []
-        # "/dev/sdX" then backspace then "a"
-        keys = ["down", "enter", "enter"] + list("/dev/sdX") + ["backspace", "a", "enter", "enter"]
+        keys = ["down", "enter", "enter"] + list("/dev/sdX") + ["backspace", "a", "enter"]
         screen = FakeScreen(keys)
-        code = run_tui(screen, DISKS, plan_recorder(calls), install_recorder(calls))
+        code = run_tui(screen, DISKS, preview_recorder(calls))
         self.assertEqual(code, 0, screen.text()[-200:])
-        self.assertEqual(calls[0][1], "/dev/sda")
+        self.assertEqual(calls[0][0], "/dev/sda")
 
-    def test_stop_before_install_leaves_the_disk_untouched(self) -> None:
+    def test_preview_never_offers_install_or_claims_success(self) -> None:
         calls: list = []
-        screen = FakeScreen(["enter", "enter"] + type_path("/dev/nvme0n1") + ["quit"])
-        code = run_tui(screen, DISKS, plan_recorder(calls), install_recorder(calls))
-        self.assertEqual(code, 1)
-        self.assertEqual([c[0] for c in calls], ["plan"])
+        screen = FakeScreen(["enter", "enter"] + type_path("/dev/nvme0n1"))
+        code = run_tui(screen, DISKS, preview_recorder(calls))
+        self.assertEqual(code, 0)
+        self.assertEqual(len(calls), 1)
+        self.assertIn("APPLY is disabled", screen.text())
+        self.assertIn("Preview complete", screen.text())
+        self.assertNotIn("Installing", screen.text())
+        self.assertNotIn("Done", screen.text())
+        self.assertNotIn("Installation finished", screen.text())
+
+    def test_preview_failure_is_reported_not_as_success(self) -> None:
+        screen = FakeScreen(["enter", "enter"] + type_path("/dev/nvme0n1"))
+        code = run_tui(screen, DISKS, lambda *_: 2)
+        self.assertEqual(code, 2)
+        self.assertIn("Preview failed", screen.text())
+        self.assertNotIn("Preview complete", screen.text())
 
     def test_bios_can_be_selected(self) -> None:
         calls: list = []
-        screen = FakeScreen(["enter", "2", "enter"] + type_path("/dev/nvme0n1") + ["enter"])
-        run_tui(screen, DISKS, plan_recorder(calls), install_recorder(calls))
+        screen = FakeScreen(["enter", "2", "enter"] + type_path("/dev/nvme0n1"))
+        run_tui(screen, DISKS, preview_recorder(calls))
         self.assertEqual(calls[0][2], "bios")
 
     def test_no_disks_shows_a_message_and_quits(self) -> None:
         screen = FakeScreen(["q"])
-        code = run_tui(screen, [], plan_recorder([]), install_recorder([]))
+        code = run_tui(screen, [], preview_recorder([]))
         self.assertEqual(code, 1)
         self.assertIn("No whole disks", screen.text())
 
