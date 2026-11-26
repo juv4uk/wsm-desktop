@@ -43,6 +43,15 @@ class CiAcceptancePolicyTests(unittest.TestCase):
         self.assertGreater(timeout, 0)
         self.assertLessEqual(timeout, 30)
 
+    def test_release_gate_scopes_free_product_and_accepts_only_incomplete(self) -> None:
+        steps = self.jobs["checks"]["steps"]
+        gate = next(step for step in steps if step.get("name") == "Release gate (structural)")
+        command = gate.get("run", "")
+        self.assertIn("--product free", command)
+        self.assertIn("--skip-tests --compact", command)
+        self.assertIn('status -ne 2', command)
+        self.assertNotIn("exit 0", command)
+
     def test_qemu_job_runs_all_guest_acceptance_layers(self) -> None:
         steps = self.jobs["qemu-acceptance"]["steps"]
         commands = "\n".join(step.get("run", "") for step in steps)
