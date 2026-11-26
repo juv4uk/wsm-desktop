@@ -39,25 +39,25 @@ def build_parser() -> argparse.ArgumentParser:
 
     install = parser.add_argument_group(
         "install path",
-        "Plan a disk layout and the steps that would install onto it. Dry run "
-        "unless --execute is given together with --acknowledge-disk.",
+        "Plan a disk layout and show install steps. This command is preview-only; "
+        "--execute is refused until target-bound authorization is implemented.",
     )
     install.add_argument("--install", action="store_true",
                          help="plan disk layout and install steps for --target-disk")
     install.add_argument("--target-disk", metavar="PATH", help="whole block device, e.g. /dev/nvme0n1")
     install.add_argument("--target-size-bytes", type=int,
-                         help="size reported for the disk; drift above 2 percent is refused")
+                         help="user-supplied planning estimate; the block device is not probed")
     install.add_argument("--firmware", choices=("uefi", "bios"), default="uefi")
     install.add_argument("--filesystem", choices=("ext4", "btrfs", "xfs"), default="ext4")
     install.add_argument("--mount-point", default="/mnt")
     install.add_argument("--system-file", default="systems/desktop.scm",
                          help="Guix system file handed to guix system init")
     install.add_argument("--execute", action="store_true",
-                         help="actually run the steps; requires --acknowledge-disk")
+                         help="request APPLY (currently refused until target-bound authorization is implemented)")
     install.add_argument("--guided", action="store_true",
                          help="walk through the install in a console, no flags required")
     install.add_argument("--write-plan", metavar="PATH",
-                         help="write the plan as JSON for the privileged agent instead of running it")
+                         help="write JSON for agent validation/preview; real APPLY is disabled")
     install.add_argument("--tui", action="store_true",
                          help="pseudo-graphical installer: full screen, arrow keys, Enter")
     install.add_argument("--acknowledge-disk", metavar="PATH",
@@ -181,9 +181,10 @@ def _hardware_note(args: argparse.Namespace) -> str:
 
 
 def _installer_callbacks(args: argparse.Namespace):
+    """Return shared, status-preserving callbacks for guided and TUI frontends."""
     def make(execute: bool):
-        def call(disk_path: str, size: int, firmware: str) -> None:
-            _run_install(argparse.Namespace(
+        def call(disk_path: str, size: int, firmware: str) -> int:
+            return _run_install(argparse.Namespace(
                 target_disk=disk_path,
                 target_size_bytes=size,
                 firmware=firmware,
@@ -225,44 +226,16 @@ def _run_tui(args: argparse.Namespace) -> int:
 
 
 def _run_guided(args: argparse.Namespace) -> int:
-    """Console flow: choose a disk, confirm by name, then plan and install."""
+    """Console flow: choose a disk, confirm by name, then plan and request APPLY."""
     from wsm_install.guided import list_disks, run_guided
 
     candidates = list_disks(Path("/sys/block"))
-
-    evidence_note = _hardware_note(args)
-
-    def plan(disk_path: str, size: int, firmware: str) -> None:
-        _run_install(argparse.Namespace(
-            target_disk=disk_path,
-            target_size_bytes=size,
-            firmware=firmware,
-            filesystem=args.filesystem,
-            mount_point=args.mount_point,
-            system_file=args.system_file,
-            acknowledge_disk=disk_path,
-            execute=False,
-            quiet=True,
-        ))
-
-    def install(disk_path: str, size: int, firmware: str) -> None:
-        _run_install(argparse.Namespace(
-            target_disk=disk_path,
-            target_size_bytes=size,
-            firmware=firmware,
-            filesystem=args.filesystem,
-            mount_point=args.mount_point,
-            system_file=args.system_file,
-            acknowledge_disk=disk_path,
-            execute=True,
-            quiet=True,
-        ))
-
-    return run_guided(_Console(), candidates, plan, install, evidence_note)
+    plan, install = _installer_callbacks(args)
+    return run_guided(_Console(), candidates, plan, install, _hardware_note(args))
 
 
 def _run_install(args: argparse.Namespace) -> int:
-    """Plan, then optionally run, the disk path. Dry run is the default."""
+    """Plan the disk path; real APPLY is refused until target-bound authorization exists."""
     from wsm_install.executor import ExecutorError, execute
     from wsm_install.install_steps import backend_command, plan_steps, render
     from wsm_install.partition import Disk, Refused, plan as plan_layout
@@ -272,8 +245,8 @@ def _run_install(args: argparse.Namespace) -> int:
         return 2
     if args.target_size_bytes is None:
         print(
-            "wsm-install: --install requires --target-size-bytes; the size is how a "
-            "replaced disk is detected, so it cannot be guessed",
+            "wsm-install: --install requires --target-size-bytes as a planning estimate; "
+            "the live block device is not independently probed",
             file=sys.stderr,
         )
         return 2
@@ -297,12 +270,13 @@ def _run_install(args: argparse.Namespace) -> int:
         return 2
 
     if args.write_plan:
-        # The unprivileged side only writes the plan; wsm-install-agent is what
-        # touches a disk, and it re-validates every command itself.
+        # The unprivileged side writes a plan for validation/preview only;
+        # wsm-install-agent currently refuses real APPLY for every UID.
         Path(args.write_plan).write_text(
             json.dumps({
                 "schema": "wsm-install-plan/1",
                 "disk": disk.path,
+                "target_size_source": "user-supplied planning estimate; not read from the block device",
                 "firmware": args.firmware,
                 "filesystem": args.filesystem,
                 "mount_point": args.mount_point,
@@ -328,7 +302,6 @@ def _run_install(args: argparse.Namespace) -> int:
         results = execute(
             steps,
             disk=disk.path,
-            acknowledgement=args.acknowledge_disk,
             dry_run=not args.execute,
         )
     except ExecutorError as exc:
@@ -339,6 +312,7 @@ def _run_install(args: argparse.Namespace) -> int:
         {
             "mode": "execute" if args.execute else "dry-run",
             "disk": disk.path,
+            "target_size_source": "user-supplied planning estimate; not read from the block device",
             "firmware": args.firmware,
             "filesystem": args.filesystem,
             "steps": [result.as_dict() for result in results],
