@@ -204,7 +204,7 @@ class ClassificationSummaryTests(unittest.TestCase):
         self.assertEqual(payload["mode"], "dry-run")
         self.assertTrue(all(step["status"] == "not-run" for step in payload["steps"]))
 
-    def test_explicit_unknown_critical_role_blocks_preview_plan(self) -> None:
+    def test_report_declared_unknown_critical_role_blocks_preview_plan(self) -> None:
         """The plan gate consumes a report-declared critical role, not a subsystem label."""
         value = json.loads(FIXTURE.read_text(encoding="utf-8"))
         value["devices"][0]["criticality"] = ["boot-path"]
