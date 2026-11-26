@@ -159,3 +159,41 @@ class RenderTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ForeignDataTests(unittest.TestCase):
+    """Omarchy #14949: a reset deleted other operating systems' boot entries.
+
+    The register in docs/LESSONS-FROM-OMARCHY.md calls this row `partial`,
+    because "the ESP is mounted inside the target" proves where it is mounted,
+    not whose ESP it is. The stronger property is different and testable
+    without a VM: WSM never reuses somebody else's partition. The plan wipes the
+    whole target disk and formats only partitions it created in that same plan,
+    so there is no shared ESP to damage in the first place.
+    """
+
+    def test_whole_disk_is_wiped_before_any_partition_is_created(self) -> None:
+        commands = layout().commands()
+        self.assertEqual(commands[0], ["sgdisk", "--zap-all", layout().disk])
+
+    def test_only_self_created_partitions_are_formatted_or_mounted(self) -> None:
+        """Any /dev path in the step list must be ours, not a foreign partition."""
+        current = layout()
+        created = {device_for(current.disk, partition["number"]) for partition in current.partitions}
+        allowed = created | {current.disk}
+        for step in plan_steps(current):
+            for argument in step.command:
+                if argument.startswith("/dev/"):
+                    self.assertIn(
+                        argument,
+                        allowed,
+                        f"{argument!r} is not a partition this plan created",
+                    )
+
+    def test_the_plan_never_touches_the_firmware_boot_order(self) -> None:
+        """Boot order is a separate claim; nothing here may quietly rewrite it."""
+        tools = {step.command[0].rsplit("/", 1)[-1] for step in plan_steps(layout())}
+        self.assertFalse(
+            tools & {"efibootmgr", "bootctl", "grub-install", "grub2-install"},
+            f"unexpected boot-order tooling: {sorted(tools)}",
+        )
