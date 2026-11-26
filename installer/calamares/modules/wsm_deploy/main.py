@@ -151,13 +151,30 @@ def _deploy(dry_run: bool) -> tuple[str, str] | None:
 
 
 def run() -> tuple[str, str] | None:
-    """Calamares entry point."""
-    dry_run = bool(_global("wsmDryRun", False))
+    """Calamares entry point; a preview must never mean installation success."""
+    dry_run = _global("wsmDryRun", False)
+    if not isinstance(dry_run, bool):
+        return (
+            "Invalid WSM dry-run setting",
+            "wsmDryRun must be a boolean; no deployment was attempted.",
+        )
+
     _log(f"wsm_deploy: starting (dry_run={dry_run})")
     result = _deploy(dry_run)
     if result is not None:
         _log(f"wsm_deploy: failed: {result[0]}")
-    return result
+        return result
+
+    if dry_run:
+        return (
+            "WSM preview only",
+            "The plan was inspected, but no installation was performed; APPLY is disabled.",
+        )
+
+    return (
+        "WSM APPLY disabled",
+        "The shared executor refused real deployment; no system was installed.",
+    )
 
 
 def pretty_name() -> str:
