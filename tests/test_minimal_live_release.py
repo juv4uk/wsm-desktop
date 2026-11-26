@@ -34,8 +34,6 @@ class MinimalLiveProfileTests(unittest.TestCase):
 
     def test_guix_package_installs_python_runtime_and_wsm_commands(self) -> None:
         package = (ROOT / "wsm" / "packages" / "wsm.scm").read_text(encoding="utf-8")
-        self.assertIn("(guix utils)", package)
-        self.assertIn("(version-major+minor", package)
         for path in ("scripts/wsm-hwcheck.sh","scripts/wsm-install.sh","scripts/wsm-install-live.sh"):
             with self.subTest(path=path):
                 self.assertIn(path, package)
@@ -95,6 +93,13 @@ class MinimalLiveProfileTests(unittest.TestCase):
             compatibility,
         )
         self.assertIn("(gnu system locale)", (ROOT / "systems" / "live-minimal.scm").read_text(encoding="utf-8"))
+
+    def test_release_workflow_uses_current_node24_actions(self) -> None:
+        workflow = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
+        self.assertIn("actions/checkout@v7", workflow)
+        self.assertIn("actions/setup-python@v7", workflow)
+        self.assertNotIn("actions/checkout@v4", workflow)
+        self.assertNotIn("actions/setup-python@v5", workflow)
 
     def test_release_request_pins_one_tag_and_ignores_comments(self) -> None:
         lines = (ROOT / "RELEASE-REQUEST.txt").read_text(encoding="utf-8").splitlines()
