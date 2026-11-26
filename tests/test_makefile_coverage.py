@@ -65,5 +65,39 @@ class MakefileCoverageTests(unittest.TestCase):
                 self.assertIn("\t$(PYTHON)", block_for(self.text, name))
 
 
+
+import unittest as _unittest
+
+
+class ReleaseGateMakefileCoverageTests(_unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.makefile = (Path(__file__).resolve().parents[1] / "Makefile").read_text(encoding="utf-8")
+
+    def test_product_aware_release_gate_is_in_default_check(self) -> None:
+        check = re.search(r"^check:\s*(.*)$", self.makefile, re.MULTILINE)
+        self.assertIsNotNone(check)
+        self.assertIn("check-release-gate", check.group(1))
+        self.assertRegex(self.makefile, r"(?m)^check-release-gate:\s*\n\s*\$\(PYTHON\) tests/test_release_gate\.py")
+
+    def test_release_gate_passes_explicit_product_and_defaults_to_free(self) -> None:
+        self.assertRegex(self.makefile, r"(?m)^PRODUCT \?= free$")
+        self.assertRegex(self.makefile, r"(?m)^release-gate:\s*\n\s*\$\(PYTHON\) scripts/release_gate\.py --product \"\$\(PRODUCT\)\"")
+
+    def test_channel_make_target_does_not_reuse_free_lock_for_compatibility(self) -> None:
+        start = self.makefile.index("check-channels:")
+        end = self.makefile.find("\n[A-Za-z0-9_.-]+:", start)
+        channel_rule = self.makefile[start:] if end < 0 else self.makefile[start:end]
+        self.assertIn("--policy free --lock channels.lock.scm", channel_rule)
+        self.assertIn("channels.compatibility.lock.scm", channel_rule)
+        self.assertIn("NOT_CONFIGURED", channel_rule)
+
+    def test_every_check_target_is_phony(self) -> None:
+        phony_line = next(line for line in self.makefile.splitlines() if line.startswith(".PHONY:"))
+        phony = set(phony_line.split()[1:])
+        targets = re.findall(r"(?m)^([A-Za-z0-9_.-]+):", self.makefile)
+        missing = {name for name in targets if name.startswith("check") and name not in phony}
+        self.assertEqual(missing, set())
+
 if __name__ == "__main__":
     unittest.main()
