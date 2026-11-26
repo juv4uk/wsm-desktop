@@ -18,6 +18,14 @@ class Screen(Protocol):
     def read_key(self) -> str: ...
 
 
+@dataclass(frozen=True)
+class PreviewOutcome:
+    """Structured result from the read-only CLI planner."""
+
+    exit_code: int
+    details: tuple[str, ...] = ()
+
+
 @dataclass
 class TerminalScreen:
     """Minimal POSIX terminal adapter; all drawing/input stays injectable."""
@@ -162,20 +170,32 @@ def run_tui(
 
     screen.render(box("Planning", ["", f"Preparing a preview for {disk.path}..."]))
     result = preview(disk.path, disk.size_bytes, firmware)
-    if type(result) is not int or result != 0:
-        detail = f"Preview failed (exit {result})." if type(result) is int else "Preview callback returned no exit code."
+    if isinstance(result, PreviewOutcome):
+        exit_code = result.exit_code
+        details = list(result.details)
+    elif type(result) is int:
+        exit_code = result
+        details = []
+    else:
+        exit_code = 1
+        details = ["Preview callback returned no exit code."]
+
+    if exit_code != 0:
+        detail = f"Preview failed (exit {exit_code})."
         screen.render(box("Preview failed", [
             "",
             detail,
+            *details[:3],
             "APPLY is disabled. No disk commands were executed.",
         ]))
         screen.read_key()
-        return result if type(result) is int and result != 0 else 1
+        return exit_code
 
     screen.render(box("Preview only", [
         "",
         f"Preview completed for {disk.path} ({firmware}).",
         "",
+        *details[:3],
         "APPLY is disabled.",
         "No disk commands were executed.",
         "The system is NOT installed.",
