@@ -2,29 +2,29 @@
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Status: **CI experiment**
+- Status: **manual local acceptance; not part of hosted CI**
 - Related: #14 (QEMU integration), #27 (QEMU harness), #35/#38 (resource and path hardening), #34 (generic guest boot)
 - Workflow: ``scripts/qemu_boot_smoke.py` (запускається вручну)`
 
 ## Purpose
 
-The generic guest-boot experiment in #34 proves that QEMU TCG can execute a Linux kernel and a minimal `/init`. This experiment goes one step further: it builds a tiny bootable ISO inside the GitHub-hosted runner and sends that ISO through the actual `scripts/qemu_boot_smoke.py` program.
+The generic guest-boot experiment in #34 proves that QEMU TCG can execute a Linux kernel and a minimal `/init`. This experiment goes one step further: it builds a tiny bootable ISO on a Linux host and sends that ISO through the actual `scripts/qemu_boot_smoke.py` program.
 
 It therefore exercises the project harness's input validation, disposable qcow2 creation, QEMU command construction, serial capture, marker detection, and JSON result contract.
 
 ## Test construction
 
-The workflow uses the runner's existing kernel image, static BusyBox, a minimal initramfs, GRUB and xorriso. The guest `/init` prints the unique marker `WSM_QEMU_HARNESS_ISO_BOOT_OK` to its serial console and powers off. The harness is invoked with a 256 MiB disposable qcow2, 512 MiB guest memory, one vCPU, and a 45-second process timeout.
+The manual test uses the host's existing kernel image, static BusyBox, a minimal initramfs, GRUB and xorriso. The guest `/init` prints the unique marker `WSM_QEMU_HARNESS_ISO_BOOT_OK` to its serial console and powers off. The harness is invoked with a 256 MiB disposable qcow2, 512 MiB guest memory, one vCPU, and a 45-second process timeout.
 
-The ISO and initramfs are generated locally in the temporary GitHub runner workspace; no external ISO or kernel download is required.
+The ISO and initramfs are generated locally in a temporary workspace; no external ISO or kernel download is required.
 
 ## Isolation boundary
 
-- GitHub-hosted Ubuntu runner and QEMU TCG software emulation only.
+- Linux host and QEMU TCG software emulation only.
 - No network device, KVM, host CPU passthrough, host block device, USB/GPU passthrough, shared folder, or EFI variable store is attached.
 - The only writable guest disk is the newly-created qcow2 file in the harness's temporary directory.
 - The runner kernel image is copied read-only as an input to the synthetic ISO; the host kernel is not installed, replaced, or modified.
-- Workflow token permission is `contents: read`; no repository secrets are used.
+- No repository token or secrets are required.
 - The test does not run Guix, Nix, `wsm-install`, or any installation backend.
 
 ## What a pass means
@@ -35,4 +35,4 @@ It does **not** prove that a WSM ISO boots, that a Guix/Nix system builds, that 
 
 ## Failure behavior
 
-The workflow fails if it cannot find the runner kernel, build the initramfs/ISO, create the disposable qcow2, launch QEMU, observe the guest marker, or validate the harness result. The harness itself enforces the configured disk, memory, CPU, and timeout limits.
+The manual test fails if it cannot find a suitable host kernel, build the initramfs/ISO, create the disposable qcow2, launch QEMU, observe the guest marker, or validate the harness result. The harness itself enforces the configured disk, memory, CPU, and timeout limits.
