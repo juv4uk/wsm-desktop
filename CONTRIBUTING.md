@@ -56,7 +56,7 @@
 5. **Тестуйте поведінку, а не згадки.** Новий тест має ловити конкретну регресію: бути червоним без виправлення і зеленим із ним. Filename/regex coverage, який лише шукає ім'я скрипту в тексті, не доводить його виконання чи безпеку. Використовуйте реальні функції/CLI, негативні сценарії та bounded fixtures.
 6. **Розділяйте рівні доказу.** Static test, Guix evaluation, package closure, build, QEMU guest boot, live desktop session і physical hardware function — різні результати. У PR описуйте тільки те, що справді пройшло, із SHA, командою, exit code та обмеженнями.
 
-Не робіть force-push/переписування спільної гілки іншого owner-а без узгодження. Не запускайте physical disk, firmware, EFI/NVRAM або інші side-effect дії для тесту без окремої явної авторизації; звичайні CI/QEMU jobs мають використовувати disposable resources.
+Не робіть force-push/переписування спільної гілки іншого owner-а без узгодження. Не запускайте physical disk, firmware, EFI/NVRAM або інші side-effect дії для тесту без окремої явної авторизації; ручні QEMU acceptance jobs мають використовувати disposable resources.
 
 ## Мовна політика документації
 
