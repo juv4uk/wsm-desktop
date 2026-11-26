@@ -324,9 +324,10 @@ class InstallerPlanTests(unittest.TestCase):
                     "--dry-run", "--profile-evidence", str(evidence_path),
                     "--plan-output", str(artifact_path),
                 ])
+            after = artifact_path.read_bytes()
         self.assertEqual(result, 2)
         self.assertIn("must not overwrite a protected input", stderr.getvalue())
-        self.assertEqual(artifact_path.read_bytes(), original)
+        self.assertEqual(after, original)
 
     def test_cli_refuses_profile_evidence_for_a_different_report(self) -> None:
         report, _ = load_fixture("desktop-observed.json")
