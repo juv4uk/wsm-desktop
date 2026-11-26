@@ -4,7 +4,7 @@
 
 - Дата: 2026-11-26
 - Канонічна задача: [#151 — вимірюваний baseline boot, services і desktop workloads](https://github.com/juv4uk/wsm-desktop/issues/151)
-- Базовий `main` на момент повторного review: `05e6a900d28545fb24456966e5167939329ba271`
+- Базовий `main` на момент повторного review: `b00e2e91c11ae004ed544a1dd45e57630f29fed0`
 
 ## Мета
 
@@ -19,6 +19,7 @@
 5. Невідомий PID 1 не отримує fallback. Недоступний executable/socket, timeout, nonzero exit або неповний chain/log — `unknown/partial`, не нуль і не pass. User Shepherd не видавати за system boot; не виконувати `sudo` автоматично.
 6. Документувати обмеження: `time` завершується на spawn services, а не на повній готовності desktop; `blame` не враховує parallelism; critical-chain показує один шлях і має caveats щодо socket activation, device units та jobs/timeouts.
 7. Один профіль описує один boot; статистику між boots агрегувати окремо, не називати п'ять повторів усередині одного boot незалежними samples.
+8. Чітко відокремити boot observation від shutdown/unmount acceptance: `herd status/log/graph` не доводять завершення stop handlers або unmount цільових файлових систем. Не трактувати upstream Shepherd 1.0.9 fix як доказ версії в pinned Guix channel; exact package version потребує окремої Guix evaluation.
 
 ## Перевірки
 
