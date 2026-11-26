@@ -131,7 +131,7 @@ class NavigationTests(unittest.TestCase):
         code = run_tui(screen, DISKS, plan_recorder(calls))
         self.assertEqual(code, 0)
         self.assertEqual([c[0] for c in calls], ["plan"])
-        self.assertIn("APPLY is disabled", screen.text())
+        self.assertIn("APPLY вимкнено", screen.text())
         self.assertIn("WSM НЕ встановлено", screen.text())
 
     def test_bios_can_be_selected(self) -> None:
