@@ -135,6 +135,7 @@ class DesktopProfileTests(unittest.TestCase):
 
     def test_has_ukrainian_locale(self) -> None:
         self.assertIn("uk_UA.utf8", self.text)
+        self.assertIn("(gnu system locale)", self.text)
 
     def test_free_profile_does_not_reference_nonguix(self) -> None:
         for name in ("desktop.scm", "live.scm"):
@@ -184,6 +185,7 @@ class SourceResolutionTests(unittest.TestCase):
 class LiveProfileTests(unittest.TestCase):
     def test_live_profile_inherits_the_desktop_profile(self) -> None:
         text = profile("live.scm")
+        self.assertIn("(gnu system locale)", text)
         self.assertIn('"/desktop.scm"', text)
         self.assertIn("(inherit base-os)", text)
 
@@ -320,6 +322,7 @@ class MinimalLiveTests(unittest.TestCase):
 
     def test_minimal_live_defaults_to_ukrainian_with_us_fallback(self) -> None:
         text = profile("live-minimal.scm")
+        self.assertIn("(gnu system locale)", text)
         self.assertIn('(locale "uk_UA.utf8")', text)
         self.assertIn('(keyboard-layout "us,ua" #:options \'("grp:alt_shift_toggle"))', text)
         self.assertNotIn("locale-definitions", text)
@@ -432,7 +435,7 @@ case " $* " in
         fi
         printf '%s\\n' '(list (channel (name guix) (commit test)))'
         exit 0 ;;
-    *" -L $WSM_TEST_LOAD_PATH -- system image "*)
+    *" -L $WSM_TEST_LOAD_PATH -- system -L $WSM_TEST_LOAD_PATH image "*)
         for argument in "$@"; do
             case "$argument" in --root=*) root=${argument#--root=} ;; esac
         done
@@ -484,7 +487,10 @@ exit 8
             lock = ROOT / "channels.lock.scm"
             self.assertIn(f"CALL|time-machine|-C|{lock}|-L|{ROOT}|--|--version", calls)
             self.assertIn(f"CALL|time-machine|-C|{lock}|-L|{ROOT}|--|describe|-f|channels", calls)
-            self.assertIn(f"CALL|time-machine|-C|{lock}|-L|{ROOT}|--|system|image", calls)
+            self.assertIn(
+                f"CALL|time-machine|-C|{lock}|-L|{ROOT}|--|system|-L|{ROOT}|image",
+                calls,
+            )
             self.assertIn(f"--root={expected}", calls)
             self.assertIn("--no-grafts", calls)
             self.assertIn("--image-type=iso9660", calls)
@@ -514,7 +520,7 @@ exit 8
                 manifest["build"]["command"],
                 [
                     "guix", "time-machine", "-C", str(lock), "-L", str(ROOT), "--",
-                    "system", "image",
+                    "system", "-L", str(ROOT), "image",
                     "--no-grafts", f"--root={expected}", "--image-type=iso9660",
                     "--system=x86_64-linux", str(ROOT / "systems" / "live.scm"),
                 ],
