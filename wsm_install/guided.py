@@ -120,7 +120,13 @@ def run_guided(
         return 1
 
     console.write("\nPreparing a read-only preview...\n")
-    preview(disk.path, disk.size_bytes, firmware)
+    result = preview(disk.path, disk.size_bytes, firmware)
+    if isinstance(result, int) and result != 0:
+        console.write(
+            f"Preview could not be generated (exit {result}). "
+            "APPLY is disabled; nothing was changed.\n"
+        )
+        return result
     console.write(
         "Preview complete. APPLY is disabled; no disk commands were executed "
         "and nothing was changed.\n"
