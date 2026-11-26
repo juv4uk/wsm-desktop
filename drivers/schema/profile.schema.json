@@ -20,7 +20,7 @@
   ],
   "properties": {
     "schema_version": {
-      "const": "1.0.0"
+      "const": "1.1.0"
     },
     "profile_id": {
       "type": "string",
@@ -359,6 +359,14 @@
           "items": {
             "$ref": "#/$defs/evidence"
           }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Human-readable limits and caveats for this candidate; not functional evidence."
         }
       }
     },
