@@ -96,10 +96,30 @@ class MinimalLiveProfileTests(unittest.TestCase):
         )
         self.assertIn("(gnu system locale)", (ROOT / "systems" / "live-minimal.scm").read_text(encoding="utf-8"))
 
+    def test_boot_smoke_diagnostics_are_visible_and_saved_on_failure(self) -> None:
+        workflow = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
+        bios = workflow.index("name: BIOS boot acceptance")
+        uefi = workflow.index("name: UEFI boot acceptance")
+        diagnostics = workflow.index("name: Зберегти діагностику boot smoke")
+        manifest = workflow.index("name: Маніфест і контрольні суми")
+        self.assertLess(bios, uefi)
+        self.assertLess(uefi, diagnostics)
+        self.assertLess(diagnostics, manifest)
+        self.assertIn('| tee "$release_dist/boot-bios.json"', workflow)
+        self.assertIn('| tee "$release_dist/boot-uefi.json"', workflow)
+        section = workflow[diagnostics:manifest]
+        self.assertIn("if: always()", section)
+        self.assertIn("actions/upload-artifact@v7", section)
+        self.assertIn("boot-bios.json", section)
+        self.assertIn("boot-uefi.json", section)
+        self.assertIn("if-no-files-found: ignore", section)
+        self.assertIn("retention-days: 7", section)
+
     def test_release_workflow_uses_current_node24_actions(self) -> None:
         workflow = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
         self.assertIn("actions/checkout@v7", workflow)
         self.assertIn("actions/setup-python@v7", workflow)
+        self.assertIn("actions/upload-artifact@v7", workflow)
         self.assertNotIn("actions/checkout@v4", workflow)
         self.assertNotIn("actions/setup-python@v5", workflow)
 
