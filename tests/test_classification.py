@@ -169,6 +169,65 @@ class CapabilityScopeTests(unittest.TestCase):
             ["supported-tested", "known-problem"],
         )
 
+    def test_functional_test_provenance_is_preserved(self) -> None:
+        value = device(
+            "gpu-provenance",
+            "gpu",
+            functional_tests=[{
+                "capability": "display-mode",
+                "status": "passed",
+                "tested_at": "2026-11-26T09:30:00Z",
+                "method": "DRM atomic modeset smoke test",
+                "result": "1920x1080@60 accepted",
+                "evidence_refs": ["artifacts/display-test.log"],
+            }],
+        )
+        verdict = classify_subsystem(report(value), "graphics")
+        self.assertEqual(verdict.functional_tests[0]["tested_at"], "2026-11-26T09:30:00Z")
+        self.assertEqual(verdict.functional_tests[0]["method"], "DRM atomic modeset smoke test")
+        self.assertEqual(verdict.functional_tests[0]["result"], "1920x1080@60 accepted")
+        self.assertEqual(
+            verdict.functional_tests[0]["evidence_refs"],
+            ["artifacts/display-test.log"],
+        )
+
+    def test_driver_notes_firmware_and_source_evidence_stay_per_device(self) -> None:
+        value = device("gpu-firmware", "gpu", driver_status="error", bound_driver=None)
+        value["driver"]["notes"] = "probe failed after firmware request"
+        value["firmware"] = {
+            "requirement": "required",
+            "runtime_status": "load-error",
+            "files_observed": [],
+            "package_candidates": ["vendor-firmware"],
+            "kernel_log_evidence": ["kernel-log:firmware-request-failed"],
+            "redistribution_status": "nonfree",
+        }
+        value["evidence"] = [{
+            "kind": "kernel-log",
+            "source": "journal:dmesg",
+            "observed_at": "2026-11-26T09:30:00Z",
+            "confidence": "confirmed",
+            "summary": "firmware request failed for this device",
+            "reference": "artifacts/dmesg.txt",
+        }]
+        verdict = classify_subsystem(report(value), "graphics")
+        self.assertEqual(verdict.level, UNKNOWN)
+        facts = verdict.as_dict()["device_evidence"][0]
+        self.assertEqual(facts["driver"]["notes"], "probe failed after firmware request")
+        self.assertEqual(facts["firmware"]["runtime_status"], "load-error")
+        self.assertEqual(facts["firmware"]["kernel_log_evidence"], ["kernel-log:firmware-request-failed"])
+        self.assertEqual(facts["evidence"][0]["source"], "journal:dmesg")
+        self.assertEqual(facts["evidence"][0]["reference"], "artifacts/dmesg.txt")
+
+    def test_firmware_is_not_a_motherboard_driver_subsystem(self) -> None:
+        motherboard = device("mb-0", "motherboard", driver_status="not-applicable", bound_driver=None)
+        motherboard["firmware"] = {
+            "requirement": "required",
+            "runtime_status": "unknown",
+        }
+        with self.assertRaises(ValueError):
+            classify_subsystem(report(motherboard), "firmware")
+
     def test_raw_profile_dict_is_not_an_input_to_the_classifier(self) -> None:
         value = device("storage-0", "storage-device")
         with self.assertRaises(TypeError):
