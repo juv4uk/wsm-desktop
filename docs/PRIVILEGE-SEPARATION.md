@@ -2,69 +2,46 @@
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Статус: **preview-only; root-агент не виконує жодної команди**
-- Код: [`wsm_install/agent.py`](../wsm_install/agent.py)
-- Тести: `tests/test_agent.py` (19)
+- Статус: **preview-only; жоден installer frontend не виконує дискові команди**
+- Код: `wsm_install/executor.py`, `wsm_install/cli.py`, `wsm_install/guided.py`, `wsm_install/tui.py`, `wsm_install/agent.py` та Calamares module
+- Тести: `tests/test_executor.py`, `tests/test_cli_install.py`, `tests/test_guided.py`, `tests/test_tui.py`, `tests/test_agent.py`, `tests/test_calamares_module.py`
 
-## Проблема
+## Політика
 
-До цього весь інсталятор працював від root: інтерфейс, планувальник і
-виконавець. Отже будь-яка помилка в обробці аргументів — це помилка з правами
-root.
+CLI, Guided, TUI, Calamares і privileged agent працюють у режимі preview-only.
+Будь-який запит APPLY відхиляється до виклику зовнішнього виконавця:
 
-Так само це вирішує elementary installer: UI працює від користувача, а демон
-`io.elementary.installer-daemon` від root виконує руйнівні операції.
+- `wsm-install --execute` відхиляється ще до обробки звіту та вибору frontend;
+- Guided і TUI показують план, але не викликають install callback;
+- Calamares вимагає буквальне `wsmDryRun=True`, а preview повертає non-success результат, щоб його не можна було сплутати з встановленням;
+- privileged agent вимагає `--dry-run`; без цього повертає `agent.apply-disabled`;
+- executor має preview-only API: `dry_run` повинен бути саме `True`, інакше повертається `execute.apply-disabled`.
 
-## Як зроблено тут
+## Перевірки плану
 
-Менше за демон, але з тим самим ефектом:
+Executor перевіряє:
 
-1. Непривілейована частина будує план і **пише його у файл**
-   (`--write-plan plan.json`).
-2. Привілейована частина (`wsm-install-agent --plan plan.json --dry-run`) читає
-   план, перевіряє кожну команду й показує preview. Реальний запуск
-   `--dry-run=false` відхиляється з `agent.apply-disabled` до executor-а.
+1. whole-device target за allow-listed формою `/dev/...`;
+2. що кожне явне посилання `/dev/...` в argv, включно з аргументами на кшталт `--device=/dev/sda1`, належить саме target-диску або його partition;
+3. типи кроків, непорожній argv, контрольні символи, purpose та destructive flag.
 
-## Що агент відхиляє
+Partition naming розрізняється для SATA/SCSI (`/dev/sda1`) та NVMe/MMC (`/dev/nvme0n1p1`). Невідповідність завершується `execute.device-mismatch`; preview іншого диска не формується.
 
-| Відмова | Код | Чому це важливо |
-| --- | --- | --- |
-| програма поза allowlist | `agent.not-allowed` | скомпрометований UI не може запустити `sh -c` через інсталятор |
-| голе ім'я програми | `agent.not-allowed` | пошук у `PATH` від root — помилка Omarchy #8172 |
-| метасимвол оболонки в аргументі | `agent.shell-metacharacter` | виконавець не використовує shell, але майбутній рефакторинг не має відкрити ці двері |
-| план не за схемою | `agent.bad-schema` | зламаний план падає до першого диска, а не посередині |
-| більше 32 кроків | `agent.too-many-steps` | план — це сім кроків; тридцять два означає, що щось не так |
-| реальний запуск не від root | `agent.not-root` | чітко зараз, а не на першому `mount` |
+Allowlist у privileged agent є лише обмеженням для плану, який показують. Вона **не дозволяє виконувати** `partprobe`, `mkfs`, `mount` чи інші команди.
 
-## Allowlist
+## Recovery
 
-Рівно те, що потрібно інсталятору, з абсолютними шляхами:
+`wsm-install-agent --recover --plan PATH` читає журнал і формує звіт; не змінює диски. `--recover` без `--plan` завершується контрольованим exit code 2. Це важливо: відсутнє джерело recovery даних не повинно породжувати traceback або фальшивий звіт.
 
-```
-/usr/sbin/partprobe   /usr/bin/udevadm    /usr/sbin/mkfs.ext4
-/usr/sbin/mkfs.btrfs  /usr/sbin/mkfs.xfs  /usr/sbin/mkfs.fat
-/usr/bin/mount        /usr/bin/mkdir
-```
+## Умови повернення APPLY
 
-Нічого більше. Не `dd`, не `sh`, не `guix` — передача системи в Guix
-відбувається окремим кроком, який агент не виконує.
+Реальний APPLY може повернутися лише окремим reviewed change, який доводить:
 
-## Чого агент не робить
+- стабільну identity block device і повторну перевірку перед кожною destructive boundary;
+- незмінний typed plan із digest-bound consent;
+- звірку кожного target path з immutable plan;
+- обмежений та перевірений набір виконуваних інструментів;
+- перевірювані postconditions і контрольоване відновлення після переривання;
+- destructive acceptance у disposable QEMU-дисках, включно з перериванням на кожній destructive boundary.
 
-**Не є пісочницею та не є executor-ом.** Зараз це вузький валідатор плану й preview; він не має runner-а і не пише на диски.
-
-**Не перевіряє, хто його викликав.** Якщо процес уже має root, він може
-викликати агента, але цей API все одно не виконує план. Перед майбутнім APPLY
-потрібна окрема target-bound authorization.
-
-**Не виконує `guix system init`.** Це окремий крок, і він свідомо поза
-allowlist: агент пише на диск, а не будує систему.
-
-## Чого ще немає
-
-- **Запуску на реальному диску.**
-- **Сокета й постійного демона.** Зараз це одноразовий виклик із файлом плану.
-- **Підпису плану.** План не підписаний; захист у перевірці вмісту, а не в
-  автентичності автора.
-- **Реального APPLY.** Він навмисно заблокований до target binding, consent і postconditions.
-- **Журналу дій агента** окремо від stderr.
+Цей PR не виконує жодних операцій форматування, монтування, bootloader install або запису на реальні диски.
