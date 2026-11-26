@@ -92,8 +92,8 @@ def disk_list(candidates: list[Candidate], selected: int) -> list[str]:
 def run_tui(
     screen: Screen,
     candidates: Iterable[Candidate],
-    plan: Callable[[str, int, str], object],
-    install: Callable[[str, int, bool], object],
+    plan: Callable[[str, int, str], int],
+    install: Callable[[str, int, str], int],
     evidence_note: str = "",
 ) -> int:
     """Choose a disk with arrow keys, confirm by typing its path. Returns an exit code."""
@@ -185,19 +185,40 @@ def run_tui(
         return 1
 
     screen.render(box("Planning", ["", f"Planning {disk.path}..."]))
-    plan(disk.path, disk.size_bytes, firmware)
+    plan_status = plan(disk.path, disk.size_bytes, firmware)
+    if type(plan_status) is not int or plan_status != 0:
+        status = plan_status if type(plan_status) is int and plan_status > 0 else 1
+        screen.render(box("План не сформовано", [
+            "",
+            f"Код завершення: {status}.",
+            "Нічого не змінено. Запис на диск не починався.",
+        ]))
+        return status
 
     screen.render(box("Install", [
         "",
         f"Plan ready for {disk.path} ({firmware}).",
         "",
-        "Enter to install, q to stop. Nothing has been written yet.",
+        "Enter to request APPLY (currently disabled), q to stop.",
+        "Nothing has been written yet.",
     ]))
     if screen.read_key() != "enter":
         screen.render(box("Stopped", ["", "Stopped after planning. Nothing was changed."]))
         return 1
 
-    screen.render(box("Installing", ["", f"Writing the system to {disk.path}..."]))
-    install(disk.path, disk.size_bytes, firmware)
+    screen.render(box("APPLY відхилено", [
+        "",
+        "Спільний executor наразі працює лише у preview-only режимі.",
+    ]))
+    install_status = install(disk.path, disk.size_bytes, firmware)
+    if type(install_status) is not int or install_status != 0:
+        status = install_status if type(install_status) is int and install_status > 0 else 1
+        screen.render(box("Інсталяцію не завершено", [
+            "",
+            f"Код завершення: {status}.",
+            "Не можна заявляти про успішне встановлення.",
+        ]))
+        return status
+
     screen.render(box("Done", ["", "Installation finished.", "Remove the medium and reboot."]))
     return 0
