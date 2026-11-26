@@ -158,6 +158,23 @@ class PressureTelemetryTests(unittest.TestCase):
             100,
         )
 
+    def test_empty_backing_device_value_is_unknown(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            device = root / "zram0"
+            device.mkdir()
+            (device / "mm_stat").write_text(
+                "100 50 60 1000 70 1 2 3 4\n", encoding="utf-8"
+            )
+            (device / "io_stat").write_text("1 2 3 4\n", encoding="utf-8")
+            (device / "bd_stat").write_text("5 6 7\n", encoding="utf-8")
+            (device / "comp_algorithm").write_text("lzo [zstd] lz4\n", encoding="utf-8")
+            (device / "backing_dev").write_text("\n", encoding="utf-8")
+            snapshot = pressure.read_zram_snapshot(root)
+        config = snapshot["devices"]["zram0"]["config"]
+        self.assertEqual(config["backing_device"], "unknown")
+        self.assertEqual(config["status"], "partial")
+
     def test_zram_snapshot_redacts_backing_device_path(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
