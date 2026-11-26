@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""Calamares jobmodule: validate hardware evidence, then deploy WSM.
+"""Calamares jobmodule: validate hardware evidence, then preview WSM deployment.
 
 This module is deliberately thin. It does not partition, format or install by
 itself: it calls the same modules the CLI calls, so there is one implementation
@@ -142,7 +142,6 @@ def _deploy(dry_run: bool) -> tuple[str, str] | None:
         execute(
             steps,
             disk=str(disk_path),
-            acknowledgement=str(disk_path),
             dry_run=dry_run,
         )
     except ExecutorError as exc:
