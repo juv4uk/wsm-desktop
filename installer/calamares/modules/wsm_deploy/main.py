@@ -103,7 +103,7 @@ def _deploy(dry_run: bool) -> tuple[str, str] | None:
     if not size:
         return (
             "Target disk size is unknown",
-            "The size is how a swapped disk is detected, so it cannot be guessed.",
+            "This is a user-supplied planning estimate, not measured block-device capacity.",
         )
 
     evidence_path = _global("wsmProfileEvidence")
@@ -128,8 +128,7 @@ def _deploy(dry_run: bool) -> tuple[str, str] | None:
         layout = plan_layout(
             Disk(path=str(disk_path), size_bytes=int(size), has_existing_data=True),
             firmware,
-            acknowledgement=str(disk_path) if not dry_run else str(disk_path),
-            expected_size_bytes=int(size),
+            acknowledgement=str(disk_path),
         )
         steps = plan_steps(layout)
         handoff = backend_command(layout, str(_global("wsmSystemFile", "systems/desktop.scm")))
@@ -142,7 +141,6 @@ def _deploy(dry_run: bool) -> tuple[str, str] | None:
         execute(
             steps,
             disk=str(disk_path),
-            acknowledgement=str(disk_path),
             dry_run=dry_run,
         )
     except ExecutorError as exc:
@@ -152,13 +150,30 @@ def _deploy(dry_run: bool) -> tuple[str, str] | None:
 
 
 def run() -> tuple[str, str] | None:
-    """Calamares entry point."""
-    dry_run = bool(_global("wsmDryRun", False))
+    """Calamares entry point; a preview must never mean installation success."""
+    dry_run = _global("wsmDryRun", False)
+    if not isinstance(dry_run, bool):
+        return (
+            "Invalid WSM dry-run setting",
+            "wsmDryRun must be a boolean; no deployment was attempted.",
+        )
+
     _log(f"wsm_deploy: starting (dry_run={dry_run})")
     result = _deploy(dry_run)
     if result is not None:
         _log(f"wsm_deploy: failed: {result[0]}")
-    return result
+        return result
+
+    if dry_run:
+        return (
+            "WSM preview only",
+            "The plan was inspected, but no installation was performed; APPLY is disabled.",
+        )
+
+    return (
+        "WSM APPLY disabled",
+        "The shared executor refused real deployment; no system was installed.",
+    )
 
 
 def pretty_name() -> str:
