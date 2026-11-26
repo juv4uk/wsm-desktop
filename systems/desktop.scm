@@ -27,6 +27,7 @@
              (gnu services networking)
              (gnu services sddm)
              (gnu services sound)
+             (gnu services cups)
              (gnu packages fonts))
 ;; (gnu packages kde-plasma) не потрібен: пакет plasma приходить через
 ;; plasma-desktop-service-type, а не через поле packages.
