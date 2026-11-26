@@ -114,7 +114,7 @@ check-profiles-matrix:
 	$(PYTHON) tests/test_profiles.py
 
 check-docs:
-	$(PYTHON) scripts/check_docs.py
+	$(PYTHON) tests/test_docs.py
 
 check-doc-ownership:
 	$(PYTHON) tests/test_doc_ownership.py

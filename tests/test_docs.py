@@ -25,7 +25,7 @@ class DocumentationTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
-class DocumentationLanguageTests(unittest.TestCase):
+class CanonicalDocumentationLanguageGateTests(unittest.TestCase):
     """A document under docs/ is Ukrainian, or it is a *.en.md translation."""
 
     def test_ukrainian_document_is_dominant(self) -> None:
@@ -61,7 +61,7 @@ class InstallerDocumentationPolicyTests(unittest.TestCase):
         self.assertIn("Умовний workflow Calamares (не реалізовано)", document)
 
 
-class DocumentationLanguageTests(unittest.TestCase):
+class DocumentationEntryPointLanguageTests(unittest.TestCase):
     def test_ukrainian_detection(self) -> None:
         self.assertTrue(
             check_docs.is_ukrainian(
