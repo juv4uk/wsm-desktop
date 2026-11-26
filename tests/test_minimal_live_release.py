@@ -103,6 +103,17 @@ class MinimalLiveProfileTests(unittest.TestCase):
         self.assertIn("--json assets --jq '.assets[].name'", workflow)
         self.assertIn("Повідомити причину збою", workflow)
 
+    def test_release_manifest_heredoc_closes_before_asset_upload_steps(self) -> None:
+        workflow = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
+        manifest_start = workflow.index("name: Маніфест і контрольні суми")
+        draft_start = workflow.index("name: Створити чернетку релізу та завантажити assets")
+        manifest_step = workflow[manifest_start:draft_start]
+        self.assertIn('build_manifest_sha256":sha(bp)', manifest_step)
+        self.assertIn('(root/"release-manifest.json").write_text', manifest_step)
+        self.assertIn('(root/"SHA256SUMS").write_text', manifest_step)
+        self.assertIn("\n          PY\n", manifest_step)
+        self.assertIn('sha256sum -c SHA256SUMS', manifest_step)
+
 class LiveInstallerLauncherTests(unittest.TestCase):
     def test_launcher_runs_preflight_and_tui_then_cleans_private_report(self) -> None:
         launcher = ROOT / "scripts/wsm-install-live.sh"
