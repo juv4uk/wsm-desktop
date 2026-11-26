@@ -82,8 +82,18 @@ def _read_report() -> tuple[dict | None, bytes | None, str | None]:
         return None, None, f"hardware report {path} is not valid JSON: {exc}"
 
 
-def _deploy(dry_run: bool) -> tuple[str, str] | None:
-    """Run the plan. Returns a Calamares failure tuple, or None on success."""
+def _deploy(dry_run: bool) -> tuple[str, str]:
+    """Render a preview, then report that no system was installed.
+
+    Calamares interprets None as successful completion. Since APPLY is disabled,
+    preview must be a failure/status tuple, never a successful job result.
+    """
+    if dry_run is not True:
+        return (
+            "APPLY is disabled",
+            "WSM refuses disk writes until target identity and digest-bound consent are implemented.",
+        )
+
     from wsm_install.executor import ExecutorError, execute
     from wsm_install.install_steps import backend_command, plan_steps, render
     from wsm_install.partition import Disk, Refused, plan as plan_layout
@@ -128,8 +138,7 @@ def _deploy(dry_run: bool) -> tuple[str, str] | None:
         layout = plan_layout(
             Disk(path=str(disk_path), size_bytes=int(size), has_existing_data=True),
             firmware,
-            acknowledgement=str(disk_path) if not dry_run else str(disk_path),
-            expected_size_bytes=int(size),
+            acknowledgement=str(disk_path),
         )
         steps = plan_steps(layout)
         handoff = backend_command(layout, str(_global("wsmSystemFile", "systems/desktop.scm")))
@@ -142,22 +151,29 @@ def _deploy(dry_run: bool) -> tuple[str, str] | None:
         execute(
             steps,
             disk=str(disk_path),
-            acknowledgement=str(disk_path),
-            dry_run=dry_run,
+            dry_run=True,
         )
     except ExecutorError as exc:
         return ("WSM deployment failed", f"{exc.code}: {exc.message}")
 
-    return None
+    return (
+        "APPLY is disabled; preview generated, system not installed",
+        "WSM created a read-only preview. No disk command was executed; the operating system was NOT installed.",
+    )
 
 
-def run() -> tuple[str, str] | None:
-    """Calamares entry point."""
-    dry_run = bool(_global("wsmDryRun", False))
-    _log(f"wsm_deploy: starting (dry_run={dry_run})")
-    result = _deploy(dry_run)
-    if result is not None:
-        _log(f"wsm_deploy: failed: {result[0]}")
+def run() -> tuple[str, str]:
+    """Calamares entry point; preview is never reported as job success."""
+    dry_run = _global("wsmDryRun", None)
+    _log(f"wsm_deploy: starting (wsmDryRun={dry_run!r})")
+    if dry_run is not True:
+        result = (
+            "APPLY is disabled",
+            "The WSM deployment job cannot write to disks in this version. No system was installed.",
+        )
+    else:
+        result = _deploy(True)
+    _log(f"wsm_deploy: not installed: {result[0]}")
     return result
 
 
