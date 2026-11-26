@@ -32,8 +32,6 @@ ALLOWED_PROGRAMS = frozenset({
     "/usr/sbin/partprobe",
     "/usr/bin/udevadm",
     "/usr/sbin/mkfs.ext4",
-    "/usr/sbin/mkfs.btrfs",
-    "/usr/sbin/mkfs.xfs",
     "/usr/sbin/mkfs.fat",
     "/usr/bin/mount",
     "/usr/bin/mkdir",
