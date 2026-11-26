@@ -82,7 +82,11 @@ typed plan і preview. Не запускайте executor на фізичном�
 
 ## Guided console flow
 
-The guided console entrypoint uses the same preview-only executor as CLI and
+The guided console and pseudo-graphics TUI entrypoints use the same preview-only executor as CLI and
 Calamares. Its planning and install callbacks return explicit exit codes:
 planning failure stops before the APPLY prompt; an APPLY refusal is propagated
 as a nonzero result and never prints the successful-installation message.
+
+The TUI callback contract is also status-based: it renders its `Done` screen
+only after the install callback explicitly returns zero. A refused APPLY shows
+an error screen and returns a nonzero exit status.
