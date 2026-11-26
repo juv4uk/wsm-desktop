@@ -40,6 +40,13 @@ sha256sum "$(readlink result)"
 - `screendump` через QEMU monitor: 1280×800 графічний framebuffer із
   Breeze-подібним фоном, а не текстова консоль.
 - Після security-fix зібрано новий hardened ISO: SHA-256 `d1a000f8c465b496565b0f611ae6f65095086a8457c663f212ca5b17073fd7ef`; той самий QEMU-boot markers підтверджено, `Login incorrect` не з'являвся, графічний framebuffer 1280×800 збережено. Це ще не compatibility-збірка з NVIDIA.
+- 26.11.2026 о 22:45/22:58 EET зібрано `-login`-версії обох профілів:
+  `wsm-desktop-kde-hardened-20261126-login.iso` (SHA-256
+  `deec276886656b99c3f3f58e51d9fd3fc89baf814e38e5f6e9ddc704976b17f7`) і
+  `wsm-desktop-kde-compat-nvidia-20261126-login.iso` (SHA-256
+  `41486ff5c86db95c63a45c7fb1cf753e604eb97fef1f777093c4325a4edebd60`).
+  У них консольний вхід `wsm`/`wsm`, користувач у `wheel`, `sudo` працює з
+  тим самим паролем; QEMU TCG підтвердив shell і `sudo -S id -u -> 0`.
 - Копія на Ventoy: `D:\wsm-desktop-kde-20261125.iso`, поруч із початковим
   `omarchy-4.5.0-x86.iso` (його не змінено). SHA-256 копії, порахований на
   Windows-боці: `C054C6F7AF5119F96739CDAB4FC540449FFB2136A10A92554AC01D887590CBB9`

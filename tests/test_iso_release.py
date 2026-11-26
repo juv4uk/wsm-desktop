@@ -10,6 +10,14 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class IsoReleaseTests(unittest.TestCase):
+    def test_live_profiles_define_console_password_and_wheel(self) -> None:
+        shadow = "$6$saltWSM$cnmIeJgvQ38p5Wy5YgmTnHnFhAtoHwikjDotqpSoIRHdmGjWQWyLKU4L67GZBKvv0YNgBMUqCWmHQC4gFMnoY0"
+        for profile in ("systems/live-compat.scm", "systems/live-iso.scm"):
+            text = (ROOT / profile).read_text(encoding="utf-8")
+            self.assertIn(shadow, text, profile)
+            self.assertIn('"wheel"', text, profile)
+            self.assertIn("(allow-empty-passwords? #f)", text, profile)
+
     def test_reassembly_script_is_present_and_executable(self) -> None:
         script = ROOT / "scripts" / "reassemble-iso.sh"
         self.assertTrue(script.is_file())
@@ -17,15 +25,27 @@ class IsoReleaseTests(unittest.TestCase):
         text = script.read_text(encoding="utf-8")
         self.assertIn('sha256sum "$output"', text)
 
-    def test_checksums_name_the_hardened_image(self) -> None:
+    def test_checksums_name_the_hardened_images(self) -> None:
         sums = (ROOT / "ISO-CHECKSUMS.sha256").read_text(encoding="utf-8")
-        self.assertIn("wsm-desktop-kde-hardened-20261125.iso", sums)
-        self.assertIn("d1a000f8c465b496565b0f611ae6f65095086a8457c663f212ca5b17073fd7ef", sums)
+        for name, digest in (
+            ("wsm-desktop-kde-hardened-20261125.iso",
+             "d1a000f8c465b496565b0f611ae6f65095086a8457c663f212ca5b17073fd7ef"),
+            ("wsm-desktop-kde-hardened-20261126-login.iso",
+             "deec276886656b99c3f3f58e51d9fd3fc89baf814e38e5f6e9ddc704976b17f7"),
+        ):
+            self.assertIn(name, sums)
+            self.assertIn(digest, sums)
 
-    def test_checksums_name_the_compatibility_image(self) -> None:
+    def test_checksums_name_the_compatibility_images(self) -> None:
         sums = (ROOT / "ISO-CHECKSUMS.sha256").read_text(encoding="utf-8")
-        self.assertIn("wsm-desktop-kde-compat-nvidia-20261126.iso", sums)
-        self.assertIn("19a1ca6fc1377fbfb878e1cf670fc521faf7ea0389579f3a6501d956b6df6da0", sums)
+        for name, digest in (
+            ("wsm-desktop-kde-compat-nvidia-20261126.iso",
+             "19a1ca6fc1377fbfb878e1cf670fc521faf7ea0389579f3a6501d956b6df6da0"),
+            ("wsm-desktop-kde-compat-nvidia-20261126-login.iso",
+             "41486ff5c86db95c63a45c7fb1cf753e604eb97fef1f777093c4325a4edebd60"),
+        ):
+            self.assertIn(name, sums)
+            self.assertIn(digest, sums)
 
     def test_release_notes_explain_the_split(self) -> None:
         notes = (ROOT / "ISO-RELEASE.md").read_text(encoding="utf-8")

@@ -513,10 +513,13 @@ class LiveIsoSecurityTests(unittest.TestCase):
             raise AssertionError("live ISO must declare its dedicated unprivileged live account")
         cls.user = match.group(1)
 
-    def test_live_account_has_no_reusable_or_empty_password(self) -> None:
-        self.assertIn("(password #f)", self.user)
+    def test_live_account_has_a_hashed_console_password(self) -> None:
+        # The live ISO intentionally ships a known console password so the
+        # owner can open a shell; it is stored as SHA-512 crypt, not plaintext.
+        self.assertIn('(password "$6$saltWSM$', self.user)
         self.assertNotIn('(password "wsm")', self.user)
-        self.assertNotIn('"wheel"', self.user)
+        self.assertNotIn("(password #f)", self.user)
+        self.assertIn('"wheel"', self.user)
         self.assertIn('(auto-login-user "wsm")', self.text)
         self.assertIn('(auto-login-session "plasma")', self.text)
 
@@ -528,7 +531,9 @@ class LiveIsoSecurityTests(unittest.TestCase):
     def test_live_image_does_not_enable_passwordless_sudo(self) -> None:
         self.assertNotIn("NOPASSWD", self.text)
         self.assertNotIn("sudoers", self.text.lower())
-        self.assertNotIn('"wheel"', self.user)
+        # wheel membership grants sudo only after the live password is entered.
+        self.assertIn('"wheel"', self.user)
+        self.assertIn('(password "$6$saltWSM$', self.user)
 
 
 class IsoScriptTests(unittest.TestCase):

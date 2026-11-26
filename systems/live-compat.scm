@@ -274,8 +274,10 @@
                  (name "wsm")
                  (comment "WSM live user")
                  (group "users")
-                 (password #f)
-                 (supplementary-groups '("audio" "video" "netdev")))
+                 ;; Консольний вхід: логін `wsm`, пароль `wsm` (SHA-512 crypt).
+                 (password "$6$saltWSM$cnmIeJgvQ38p5Wy5YgmTnHnFhAtoHwikjDotqpSoIRHdmGjWQWyLKU4L67GZBKvv0YNgBMUqCWmHQC4gFMnoY0")
+                 ;; wheel потрібен, щоб sudo працював у live-сесії.
+                 (supplementary-groups '("audio" "video" "netdev" "wheel")))
                %base-user-accounts))
   ;; man-db викликає profile-hook manual-database, який на 850 записах іде
   ;; понад годину в ізольованому store. Для live ISO man-база не потрібна.

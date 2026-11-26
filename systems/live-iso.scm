@@ -27,7 +27,8 @@
              (guix build-system trivial)
              (guix gexp)
              ((guix licenses) #:prefix license:)
-             (guix packages))
+             (guix packages)
+             (srfi srfi-1))
 (use-service-modules base desktop sddm networking xorg)
 
 ;; Локальні інструменти з цього ж репозиторію. Відносний local-file Guix
@@ -149,10 +150,15 @@
                  (name "wsm")
                  (comment "WSM live user")
                  (group "users")
-                 (password #f)
-                 (supplementary-groups '("audio" "video" "netdev")))
+                 ;; Консольний вхід: логін `wsm`, пароль `wsm` (SHA-512 crypt).
+                 (password "$6$saltWSM$cnmIeJgvQ38p5Wy5YgmTnHnFhAtoHwikjDotqpSoIRHdmGjWQWyLKU4L67GZBKvv0YNgBMUqCWmHQC4gFMnoY0")
+                 ;; wheel потрібен, щоб sudo працював у live-сесії.
+                 (supplementary-groups '("audio" "video" "netdev" "wheel")))
                %base-user-accounts))
-  (packages (cons* wsm-live-tools screen %base-packages))
+  (packages (cons* wsm-live-tools screen
+                   (remove (lambda (p)
+                             (string=? (package-name p) "man-db"))
+                           %base-packages)))
   (services
    (append
     (list wsm-live-ready-marker
