@@ -265,7 +265,10 @@ class AdversarialStructureTests(unittest.TestCase):
 class LockSelectionTests(unittest.TestCase):
     def test_each_policy_has_its_own_default_lock(self) -> None:
         self.assertEqual(default_lock("free").name, "channels.lock.scm")
-        self.assertEqual(default_lock("compatibility").name, "channels/compatibility.lock.scm")
+        self.assertEqual(
+            default_lock("compatibility").relative_to(ROOT).as_posix(),
+            "channels/compatibility.lock.scm",
+        )
         self.assertNotEqual(POLICY_LOCKS["free"], POLICY_LOCKS["compatibility"])
 
     def test_compatibility_default_does_not_fall_back_to_free_lock(self) -> None:
@@ -282,8 +285,8 @@ class LockSelectionTests(unittest.TestCase):
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
         target = makefile.split("check-channels:", 1)[1].split("\n\n", 1)[0]
         self.assertIn("--policy free --lock channels.lock.scm", target)
-        self.assertIn("if test -f channels.compatibility.lock.scm", target)
-        self.assertIn("--policy compatibility --lock channels.compatibility.lock.scm", target)
+        self.assertIn("if test -f channels/compatibility.lock.scm", target)
+        self.assertIn("--policy compatibility --lock channels/compatibility.lock.scm", target)
         self.assertIn("Compatibility lock NOT_CONFIGURED", target)
 
 
@@ -297,6 +300,24 @@ class RepositoryTests(unittest.TestCase):
                 "free",
                 "--lock",
                 str(ROOT / "channels.lock.scm"),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("structural", completed.stdout)
+        self.assertIn("NOT verified", completed.stdout)
+
+    def test_committed_compatibility_lock_passes_structural_policy_only(self) -> None:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "scripts" / "check_channels.py"),
+                "--policy",
+                "compatibility",
+                "--lock",
+                str(ROOT / "channels" / "compatibility.lock.scm"),
             ],
             capture_output=True,
             text=True,
