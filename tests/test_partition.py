@@ -124,8 +124,19 @@ class RefusalTests(unittest.TestCase):
             acknowledgement="/dev/nvme0n1",
         )
 
-    def test_empty_disk_needs_no_acknowledgement(self) -> None:
-        layout = plan(disk(has_existing_data=False), "uefi")
+    def test_empty_disk_still_needs_named_acknowledgement(self) -> None:
+        self.assertRefused(
+            "disk.acknowledgement",
+            disk=disk(has_existing_data=False),
+            firmware="uefi",
+        )
+
+    def test_empty_disk_with_exact_acknowledgement_is_accepted(self) -> None:
+        layout = plan(
+            disk(has_existing_data=False),
+            "uefi",
+            acknowledgement="/dev/nvme0n1",
+        )
         self.assertEqual(layout.partitions[0]["role"], "esp")
 
 
