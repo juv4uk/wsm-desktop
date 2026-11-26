@@ -148,7 +148,7 @@ def run_tui(
             "",
             "1/2 або стрілки — змінити; Enter — далі; q/й — вихід.",
         ]))
-        key = screen.read_key()
+        key = normalize_key(screen.read_key())
         if key == "quit":
             return 1
         if key in {"1"}:
@@ -172,7 +172,7 @@ def run_tui(
             "",
             f"  > {typed}_",
         ]))
-        key = screen.read_key()
+        key = normalize_key(screen.read_key())
         if key == "quit":
             return 1
         if key == "enter":
