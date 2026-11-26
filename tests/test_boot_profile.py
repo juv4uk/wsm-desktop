@@ -111,7 +111,6 @@ class BootCommandTests(unittest.TestCase):
             self.assertTrue(kwargs["capture_output"])
             self.assertEqual(kwargs["env"]["LC_ALL"], "C")
             self.assertNotIn("SHEPHERD_SOCKET", kwargs["env"])
-            self.assertNotIn("SHEPHERD_SOCKET", kwargs["env"])
             self.assertLessEqual(kwargs["timeout"], boot.MAX_TIMEOUT_SECONDS)
             self.assertEqual(argv[0], "/usr/bin/systemd-analyze")
 
@@ -250,6 +249,7 @@ class BootCommandTests(unittest.TestCase):
             self.assertNotIn("shell", kwargs)
             self.assertEqual(kwargs["stdin"], subprocess.DEVNULL)
             self.assertEqual(kwargs["env"]["LC_ALL"], "C")
+            self.assertNotIn("SHEPHERD_SOCKET", kwargs["env"])
             self.assertNotIn("SHEPHERD_SOCKET", kwargs["env"])
             self.assertLessEqual(kwargs["timeout"], boot.MAX_TIMEOUT_SECONDS)
 
