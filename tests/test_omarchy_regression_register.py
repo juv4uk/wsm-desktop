@@ -140,6 +140,23 @@ class OmarchyRegisterTest(unittest.TestCase):
         self.assertEqual(row[3].strip("`"), "not-covered")
         self.assertEqual(row[4], "—")
 
+    def test_rollcall_functional_checks_remain_partial_in_wsm_inventory(self) -> None:
+        row = self._row_for_source("Omarchy #20107")
+        self.assertIn("inventory", row[0])
+        self.assertIn("driver binding", row[1])
+        self.assertIn("functional_tests", row[2])
+        self.assertEqual(row[3].strip("`"), "partial")
+        self.assertIn(
+            "tests/test_hwcheck.py::test_inventory_separates_driver_binding_and_functional_tests",
+            row[4],
+        )
+        self.assertIn(
+            "tests/test_hwcheck.py::test_report_is_local_and_does_not_include_sensitive_identifiers",
+            row[4],
+        )
+        self.assertIn("user-disabled skip", self.text)
+
+
     def test_boot_update_esp_identity_is_not_claimed_covered_without_updater(self) -> None:
         row = self._row_for_source("Omarchy #15435")
         self.assertIn("не-booted ESP", row[0])
