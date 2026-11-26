@@ -14,7 +14,7 @@ SPDX-License-Identifier = "LicenseRef-Volnist"
 SPDX-FileCopyrightText = "2026 WSM Desktop authors"
 
 [[annotations]]
-path = ["schemas/**", "requirements-dev.txt"]
+path = ["schemas/**", "drivers/**", "requirements-dev.txt"]
 precedence = "aggregate"
 SPDX-License-Identifier = "LicenseRef-Volnist"
 SPDX-FileCopyrightText = "2026 WSM Desktop authors"
