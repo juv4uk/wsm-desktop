@@ -12,6 +12,8 @@
 
 (define-module (wsm packages wsm)
   #:use-module (guix packages)
+  ;; version-major+minor is exported by (guix utils) in the pinned channel.
+  #:use-module (guix utils)
   #:use-module (guix gexp)
   #:use-module (guix download)
   #:use-module (guix git-download)
