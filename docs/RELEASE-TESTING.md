@@ -146,35 +146,50 @@ guix time-machine -C channels.lock.scm -- system vm --no-graphic systems/minimal
 ## Один вердикт: `release-gate`
 
 ```sh
-python3 scripts/release_gate.py --iso build/wsm-desktop.iso --boot
+python3 scripts/release_gate.py --product free --iso build/wsm-desktop.iso --boot
 ```
 
-Запускає всі перевірки й пише `wsm-release-gate/1`:
+Запускає всі перевірки для явно вибраного продукту й пише `wsm-release-gate/1`.
+
+Параметр `--product` обов'язковий: `free`, `compatibility` або `all`. Це не дозволяє приписати Free ISO стан необраного Compatibility продукту. Для першого Free ISO використовуйте `--product free`; для окремої перевірки Compatibility потрібен її власний lock; `all` перевіряє обидва продукти.
 
 | Критерій | Що перевіряє |
 | --- | --- |
 | `docs` | посилання, наявність заголовків, заборонені шаблони |
-| `channels` | lock-файл за політиками `free` і `compatibility` |
+| `channels` | lock лише вибраного продукту; `all` перевіряє обидва |
 | `tests` | усі набори тестів |
 | `profile-evidence` | валідність bundle-ів заліза |
 | `image` | хеш, маніфест, ISO9660, завантаження в BIOS і UEFI |
 
 `overall` буває `pass`, `fail` або **`incomplete`**. Одне `not-run` робить
 вердикт неповним: перевірка, яку не вдалося виконати, не доводить нічого.
+У режимі `--product free` Compatibility lock взагалі не оцінюється й жодного
+твердження про Compatibility не робиться. У режимі `--product compatibility`
+відсутній Compatibility lock має статус `NOT_CONFIGURED`/`not-run`. У режимі
+`--product all` його відсутність робить загальний verdict `incomplete`.
+Обов'язковий lock вибраного продукту має бути наявним і проходити перевірку.
 
-Код виходу 1 буває лише при справжньому провалі. `incomplete` — це не привід
-зупиняти роботу, це привід знати, чого саме бракує.
+Коди завершення придатні для shell та CI:
 
-Приклад сьогоднішнього стану:
+- `0` — усі критерії мають `pass`;
+- `1` — є щонайменше один справжній `fail`;
+- `2` — немає `fail`, але принаймні один критерій `not-run`, отже verdict
+  `incomplete`.
+
+Не використовуйте `incomplete` як успіх release job. Це не привід припиняти
+розробку, але це заборона позначати артефакт придатним до публікації.
+
+Приклад сьогоднішнього стану для `--product all` без Compatibility lock та ISO:
 
 ```
 overall: incomplete
   docs               pass
-  channels           pass
+  channels           not-run   compatibility: NOT_CONFIGURED
   tests              pass
   profile-evidence   not-run   no hardware profile bundles exist yet
   image              not-run   no --iso supplied; nothing to verify
 ```
 
-Тобто: документація й канали в порядку, тести зелені, але **образу немає**, і
-доказів заліза теж. Це чесна картина, а не «майже готово».
+Тобто: documentation і тестовий набір зелені, але Compatibility lock не
+налаштований, реальних profile bundles немає й **образ не перевірено**. Це
+чесна картина, а не «майже готово».
