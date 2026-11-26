@@ -301,16 +301,22 @@ jobs:
             echo ""
             echo "Commit: \`$GITHUB_SHA\`"
             echo ""
-            for log in "$RUNNER_TEMP/wsm-live-build/step.log" \
-                       "$RUNNER_TEMP/wsm-live-build/build.log" \
-                       "$RUNNER_TEMP/wsm-live-build/channel-resolution.log"; do
-              if [ -f "$log" ]; then
-                echo "#### $(basename "$log")"
-                echo '```'
-                tail -60 "$log"
-                echo '```'
-              fi
+            # Not just the three files we expected: any step may fail, and a
+            # step that failed is the one whose output matters. Dump whatever
+            # the build directory actually holds, newest last.
+            for log in "$RUNNER_TEMP"/wsm-live-build/*.log \
+                       "$RUNNER_TEMP"/wsm-live-build/*.json \
+                       "$RUNNER_TEMP"/wsm-live-dist/*.json; do
+              [ -f "$log" ] || continue
+              echo "#### $(basename "$log")"
+              echo '```'
+              tail -60 "$log"
+              echo '```'
             done
+            echo "#### образи в каталозі збірки"
+            echo '```'
+            ls -la "$RUNNER_TEMP/wsm-live-build" "$RUNNER_TEMP/wsm-live-dist" 2>&1 || true
+            echo '```'
             df -h / || true
           } > "$BODY"
           # Логи задачі потребують авторизації; коментар до коміту читається
