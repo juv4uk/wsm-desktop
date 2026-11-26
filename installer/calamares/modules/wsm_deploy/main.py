@@ -103,7 +103,7 @@ def _deploy(dry_run: bool) -> tuple[str, str] | None:
     if not size:
         return (
             "Target disk size is unknown",
-            "The size is how a swapped disk is detected, so it cannot be guessed.",
+            "This is a user-supplied planning estimate, not measured block-device capacity.",
         )
 
     evidence_path = _global("wsmProfileEvidence")
@@ -128,8 +128,7 @@ def _deploy(dry_run: bool) -> tuple[str, str] | None:
         layout = plan_layout(
             Disk(path=str(disk_path), size_bytes=int(size), has_existing_data=True),
             firmware,
-            acknowledgement=str(disk_path) if not dry_run else str(disk_path),
-            expected_size_bytes=int(size),
+            acknowledgement=str(disk_path),
         )
         steps = plan_steps(layout)
         handoff = backend_command(layout, str(_global("wsmSystemFile", "systems/desktop.scm")))
