@@ -483,10 +483,9 @@ class HomeEnvironmentTests(unittest.TestCase):
         self.assertIn("(wsm packages wsm)", text)
         self.assertIn("wsm-tools", text)
         self.assertIn("home-xdg-configuration-files-service-type", text)
-        self.assertRegex(
+        self.assertIn(
+            '(list "autostart/wsm-session-readiness.desktop"\n           wsm-session-readiness-desktop)',
             text,
-            r'\\(list "autostart/wsm-session-readiness\\.desktop"\\s+'
-            r'wsm-session-readiness-desktop\\)',
         )
         self.assertNotIn("(cons \"autostart/wsm-session-readiness.desktop\"", text)
         self.assertIn("autostart/wsm-session-readiness.desktop", text)
