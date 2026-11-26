@@ -235,6 +235,30 @@ class DesktopCompletenessTests(unittest.TestCase):
         self.assertNotIn("pulseaudio-service-type", profile("desktop.scm"))
 
 
+class PublishedIsoTests(unittest.TestCase):
+    """Every live profile must carry the acceptance marker.
+
+    The published 0.1.0-rc2-live-iso image was checked byte for byte: it contains
+    wsm-install, but no WSM_LIVE_READY anywhere. The profile that built it
+    (systems/live-iso.scm) had no marker service, so no acceptance check could
+    ever have passed on that image.
+    """
+
+    def test_every_live_profile_prints_the_marker(self) -> None:
+        for name in ("live.scm", "live-minimal.scm", "live-iso.scm"):
+            with self.subTest(profile=name):
+                self.assertIn("WSM_LIVE_READY", profile(name))
+
+    def test_every_live_profile_registers_the_marker_service(self) -> None:
+        for name in ("live.scm", "live-minimal.scm", "live-iso.scm"):
+            with self.subTest(profile=name):
+                self.assertIn("wsm-live-ready-marker", profile(name))
+
+    def test_the_iso_profile_ships_the_installer_tools(self) -> None:
+        """The image must contain what it is supposed to install with."""
+        self.assertIn("wsm-live-tools", profile("live-iso.scm"))
+
+
 class MinimalLiveTests(unittest.TestCase):
     """A second live image, for hardware that cannot run a graphical installer."""
 
