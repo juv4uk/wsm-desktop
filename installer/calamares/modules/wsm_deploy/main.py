@@ -142,8 +142,8 @@ def _deploy(dry_run: bool) -> tuple[str, str] | None:
         execute(
             steps,
             disk=str(disk_path),
-            acknowledgement=str(disk_path),
-            dry_run=dry_run,
+            dry_run=True,
+
         )
     except ExecutorError as exc:
         return ("WSM deployment failed", f"{exc.code}: {exc.message}")
