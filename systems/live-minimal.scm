@@ -18,6 +18,7 @@
 ;; він потребує Qt, а вся суть цього образу — обійтися без нього.
 
 (use-modules (gnu)
+             (gnu system locale)
              (gnu services)
              (gnu services base)
              (gnu services networking)

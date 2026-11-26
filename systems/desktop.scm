@@ -21,6 +21,7 @@
 ;;   - автоматичного встановлення: цей файл описує систему, а не інсталятор.
 
 (use-modules (gnu)
+             (gnu system locale)
              (wsm systems performance)
              (gnu services desktop)
              (gnu services networking)

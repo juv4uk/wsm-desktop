@@ -51,20 +51,41 @@ class MinimalLiveProfileTests(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
         self.assertIn("branches: [main]", workflow)
 
-    def test_locked_guix_load_path_is_a_time_machine_option(self) -> None:
+    def test_locked_guix_load_path_is_applied_at_both_cli_levels(self) -> None:
         builder = (ROOT / "scripts" / "build_iso.sh").read_text(encoding="utf-8")
-        self.assertIn('guix time-machine -C "$LOCK" -L "$ROOT" -- system image', builder)
+        self.assertIn(
+            'guix time-machine -C "$LOCK" -L "$ROOT" -- system -L "$ROOT" image',
+            builder,
+        )
+        self.assertIn('guix time-machine -C "$LOCK" -L "$ROOT" -- describe -f channels', builder)
         self.assertNotIn('guix time-machine -C "$LOCK" -- -L "$ROOT"', builder)
-        self.assertIn('"guix", "time-machine", "-C", str(lock), "-L", str(repo_root), "--", "system", "image"', builder)
+        self.assertIn(
+            '"guix", "time-machine", "-C", str(lock), "-L", str(repo_root), "--", '
+            '"system", "-L", str(repo_root), "image"',
+            builder,
+        )
         self.assertIn('WSM_REPO_ROOT="$ROOT"', builder)
         self.assertIn('repo_root = Path(os.environ["WSM_REPO_ROOT"])', builder)
 
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
         evaluation = makefile.split("check-guix-eval:", 1)[1].split("\n\n", 1)[0]
-        self.assertIn("-C channels.lock.scm -L . -- system build systems/live-minimal.scm --dry-run", evaluation)
-        self.assertIn("-C channels.lock.scm -L . -- system build systems/desktop.scm --dry-run", evaluation)
-        self.assertIn("-C channels.lock.scm -L . -- home build systems/home.scm --dry-run", evaluation)
-        self.assertIn("-C channels/compatibility.lock.scm -L . -- system build systems/live-compat.scm --dry-run", evaluation)
+        self.assertIn(
+            "-C channels.lock.scm -L . -- system -L . build systems/live-minimal.scm --dry-run",
+            evaluation,
+        )
+        self.assertIn(
+            "-C channels.lock.scm -L . -- system -L . build systems/desktop.scm --dry-run",
+            evaluation,
+        )
+        self.assertIn(
+            "-C channels.lock.scm -L . -- home -L . build systems/home.scm --dry-run",
+            evaluation,
+        )
+        self.assertIn(
+            "-C channels/compatibility.lock.scm -L . -- system -L . build systems/live-compat.scm --dry-run",
+            evaluation,
+        )
+        self.assertIn("(gnu system locale)", (ROOT / "systems" / "live-minimal.scm").read_text(encoding="utf-8"))
 
     def test_release_request_pins_one_tag_and_ignores_comments(self) -> None:
         lines = (ROOT / "RELEASE-REQUEST.txt").read_text(encoding="utf-8").splitlines()
