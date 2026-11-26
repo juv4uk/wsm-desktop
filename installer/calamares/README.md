@@ -33,6 +33,11 @@ Calamares не має окремого шляху до sgdisk, mkfs, mount чи 
 APPLY потребуватиме окремого reviewed контракту, перевірки block-device
 identity та destructive acceptance на одноразових QEMU-дисках.
 
+Навіть коли wsmDryRun=true і preview успішно згенеровано, jobmodule повертає
+non-success результат із повідомленням «APPLY вимкнено; систему НЕ встановлено».
+Це навмисно: Calamares не повинен трактувати показ плану як успішне виконання
+обов'язкового deployment job.
+
 ## Контракт jobmodule
 
 - `run()` повертає `None` при успіху;
