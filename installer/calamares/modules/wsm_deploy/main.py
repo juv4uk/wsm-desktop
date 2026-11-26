@@ -128,8 +128,7 @@ def _deploy(dry_run: bool) -> tuple[str, str] | None:
         layout = plan_layout(
             Disk(path=str(disk_path), size_bytes=int(size), has_existing_data=True),
             firmware,
-            acknowledgement=str(disk_path) if not dry_run else str(disk_path),
-            expected_size_bytes=int(size),
+            acknowledgement=str(disk_path),
         )
         steps = plan_steps(layout)
         handoff = backend_command(layout, str(_global("wsmSystemFile", "systems/desktop.scm")))
@@ -142,13 +141,18 @@ def _deploy(dry_run: bool) -> tuple[str, str] | None:
         execute(
             steps,
             disk=str(disk_path),
-            acknowledgement=str(disk_path),
             dry_run=dry_run,
         )
     except ExecutorError as exc:
         return ("WSM deployment failed", f"{exc.code}: {exc.message}")
 
-    return None
+    if dry_run:
+        return (
+            "WSM APPLY is disabled; preview generated, system NOT installed",
+            "This Calamares job is intentionally non-successful in preview mode. "
+            "No disk commands were executed and no operating system was installed.",
+        )
+    return ("WSM APPLY is disabled", "The system was not installed.")
 
 
 def run() -> tuple[str, str] | None:
