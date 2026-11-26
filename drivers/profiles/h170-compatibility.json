@@ -87,10 +87,10 @@
             },
             {
               "kind": "upstream-reference",
-              "source": "NVIDIA Linux 580.126.09 Supported GPU Products",
-              "source_url": "https://download.nvidia.com/XFree86/Linux-x86_64/580.126.09/README/supportedchips.html",
+              "source": "NVIDIA Linux 580.196.11 Supported Products",
+              "source_url": "https://www.nvidia.com/en-us/drivers/details/285683/",
               "observed_at": "2026-11-26",
-              "summary": "NVIDIA's supported-product list for Linux driver 580.126.09 explicitly includes GeForce GTX 1050 Ti with device ID 1C82. This confirms that this published 580.126.09 release lists the observed GPU ID; it does not prove that the pinned Guix/Nonguix package resolves to this exact release, builds for the selected kernel, loads, or functions on the H170 machine."
+              "summary": "NVIDIA's official Linux driver page for 580.196.11 (released 2026-11-23) explicitly lists GeForce GTX 1050 Ti among Supported Products. This is current upstream product-list evidence for the model family; it does not prove the exact PCI ID in the pinned Guix/Nonguix package, package resolution to 580.196.11, kernel build, runtime binding, or function on the H170 machine."
             }
           ],
           "notes": [
