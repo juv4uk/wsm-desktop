@@ -112,10 +112,14 @@ def _safe_plan_output_path(
         except OSError as exc:
             return None, f"cannot resolve protected input path {source}: {exc}"
         if destination == source_resolved:
+            if source in extra_protected_paths:
+                return None, "plan output must not overwrite a protected input"
             return None, "plan output must not overwrite the report or schema input"
         if destination.exists():
             try:
                 if os.path.samefile(destination, source):
+                    if source in extra_protected_paths:
+                        return None, "plan output must not alias a protected input"
                     return None, "plan output must not alias the report or schema input"
             except OSError as exc:
                 return None, f"cannot verify plan output identity: {exc}"
