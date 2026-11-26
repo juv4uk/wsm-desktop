@@ -56,13 +56,21 @@ class ReleaseAssetVerificationTests(unittest.TestCase):
 
         steps = workflow["jobs"]["build-and-publish"]["steps"]
         names = [step.get("name", "") for step in steps]
-        readback = names.index("Перевірити завантажені assets до публікації")
+        request = steps[names.index("Перевірити запит релізу")]["run"]
+        self.assertIn('if [ "$GITHUB_REF" != "refs/heads/main" ]', request)
         attest_index = names.index("Підписати provenance релізних артефактів")
+        gh_version_index = names.index("Перевірити версію GitHub CLI для перевірки provenance")
         verify_index = names.index("Перевірити provenance артефактів перед публікацією")
+        readback = names.index("Перевірити завантажені assets до публікації")
         publish = names.index("Опублікувати перевірений GitHub pre-release")
         self.assertLess(readback, attest_index)
-        self.assertLess(attest_index, verify_index)
+        self.assertLess(attest_index, gh_version_index)
+        self.assertLess(gh_version_index, verify_index)
         self.assertLess(verify_index, publish)
+        version_check = steps[gh_version_index]["run"]
+        self.assertIn("gh version", version_check)
+        self.assertIn("2.102.0", version_check)
+        self.assertIn("sort -V", version_check)
 
         attest = steps[attest_index]
         self.assertEqual(attest["uses"], "actions/attest@v4")
@@ -86,6 +94,7 @@ class ReleaseAssetVerificationTests(unittest.TestCase):
         self.assertIn("bundle-path", verification)
         self.assertIn('"$release_dist/$ASSET"', verification)
         self.assertIn("--signer-workflow", verification)
+        self.assertIn("--source-ref refs/heads/main", verification)
         self.assertIn("release-minimal-live.yml", verification)
         self.assertIn("https://slsa.dev/provenance/v1", verification)
         for filename in (
