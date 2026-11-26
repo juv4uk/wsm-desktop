@@ -86,9 +86,10 @@
    (modify-services
     (append (list
              wsm-live-ready-marker
+             ;; NetworkManager owns link configuration and DHCP. A second
+             ;; dhcpcd daemon would compete for the same managed interfaces.
              (service network-manager-service-type)
-             (service wpa-supplicant-service-type)
-             (service dhcp-client-service-type))
+             (service wpa-supplicant-service-type))
             %base-services)
     ;; %base-services уже має один console-font-service для tty1–tty6.
     ;; Змінюємо шрифт tty2 у ньому, не додаючи дубль Shepherd service.

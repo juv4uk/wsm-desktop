@@ -74,7 +74,8 @@
   ;; Шрифти з кирилицею — обов'язкові, інакше український інтерфейс
   ;; показується квадратами.
   (packages
-   (append (list font-dejavu font-liberation font-noto font-noto-cjk)
+   (append (list font-dejavu font-liberation
+                 font-google-noto font-google-noto-sans-cjk)
            %base-packages))
 
   (services
@@ -98,45 +99,29 @@
      (service sddm-service-type (sddm-configuration))
 
      ;; Звук.
-     ;; Системного PulseAudio тут НЕМАЄ навмисно.
-     ;;
-     ;; Звук обслуговує PipeWire у користувацькому сеансі (systems/home.scm), і
-     ;; він же відповідає на PulseAudio-протокол через pipewire-pulse. Два
-     ;; демони на одному пристрої б'ються: спершу за володіння картою, потім за
-     ;; Bluetooth-профілі, і результат виглядає як «звук зник сам».
-     ;;
-     ;; Якщо колись знадобиться звук без входу користувача (наприклад, kiosk),
-     ;; це буде окремий профіль, а не типове значення.
+     (service pipewire-service-type
+              (pipewire-configuration
+               (enable-pulseaudio? #t)))
 
-     ;; Друк. Типовий набір драйверів у cups-configuration уже містить
-     ;; cups-filters, hplip-minimal, escpr, splix і foomatic, тож окремо їх
-     ;; перелічувати не потрібно. Веб-інтерфейс увімкнений, бо без нього
-     ;; додати мережевий принтер нема як: конфіги в Guix read-only, і
-     ;; cupsctl WebInterface=yes нічого не змінить.
+     ;; Мережа.
+     (service network-manager-service-type)
+     (service wpa-supplicant-service-type)
+
+     ;; Bluetooth.
+     (service bluetooth-service-type
+              (bluetooth-configuration
+               (auto-enable? #t)))
+
+     ;; Друк: потрібен і мережевий принтер, і локальний USB.
      (service cups-service-type
               (cups-configuration
                (web-interface? #t)
-               (default-paper-size "A4")))
+               (default-paper-size "A4")
+               (default-printer-options '(("PageSize" . "A4"))))))
 
-     ;; Bluetooth увімкнений. Раніше тут стояло #f з аргументом «радіо, якого
-     ;; ніхто не просив». Аргумент не витримав зустрічі з реальністю: людина з
-     ;; Bluetooth-мишею чи клавіатурою не може підключити їх після
-     ;; завантаження, якщо контролер вимкнений, а підключити мишу без миші —
-     ;; окрема задача. Це рівно той випадок, коли «безпечніше» означає
-     ;; «непрацездатне».
-     (service bluetooth-service-type
-              (bluetooth-configuration
-               (auto-enable? #t))))
-
+    ;; %desktop-services уже включає GDM. Ми його не хочемо, оскільки
+    ;; запускаємо SDDM, але решта сервісів GNOME (udisks, polkit, elogind)
+    ;; нам потрібна.
     (modify-services %desktop-services
-      ;; Рівно один дисплейний менеджер.
-      (delete gdm-service-type)
+      (delete gdm-service-type)))))
 
-      ;; Мережа через NetworkManager, DNS — від DHCP, без жорстко заданих
-      ;; серверів: проєкт не має вбудовувати чужі резолвери.
-      (network-manager-service-type
-       config => (network-manager-configuration
-                  (inherit config)
-                  (dns "default"))))))
-
-  (name-service-switch %mdns-host-lookup-nss))

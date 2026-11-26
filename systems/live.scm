@@ -70,7 +70,7 @@
    (cons* wsm-tools
           font-dejavu
           font-liberation
-          font-noto
+          font-google-noto
           (operating-system-packages base-os)))
 
   ;; У live-сесії немає сенсу тримати повний набір локалей у пам'яті.
@@ -85,3 +85,4 @@
   (services
    (append (list wsm-live-ready-marker)
            (operating-system-services base-os))))
+
