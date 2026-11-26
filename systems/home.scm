@@ -75,5 +75,7 @@
     'wsm-session-readiness-autostart
     home-xdg-configuration-files-service-type
     (list
-     (cons "autostart/wsm-session-readiness.desktop"
+     ;; Guix Home files service expects each entry as a two-element list,
+     ;; not a dotted pair; files->files-directory matches (file _).
+     (list "autostart/wsm-session-readiness.desktop"
            wsm-session-readiness-desktop))))))
