@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""Collect a read-only systemd boot profile for one current boot."""
+"""Collect a read-only boot profile from the active systemd or Shepherd manager."""
 
 from __future__ import annotations
 
@@ -10,8 +10,27 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+
+
+def package_search_path(
+    root: Path,
+    python_version: tuple[int, int] = (sys.version_info.major, sys.version_info.minor),
+) -> Path | None:
+    """Resolve source-checkout or installed Guix site-packages without cwd assumptions."""
+    if (root / "wsm_perf").is_dir():
+        return root
+    packaged_site = (
+        root
+        / "lib"
+        / f"python{python_version[0]}.{python_version[1]}"
+        / "site-packages"
+    )
+    return packaged_site if (packaged_site / "wsm_perf").is_dir() else None
+
+
+MODULE_ROOT = package_search_path(ROOT)
+if MODULE_ROOT is not None and str(MODULE_ROOT) not in sys.path:
+    sys.path.insert(0, str(MODULE_ROOT))
 
 from wsm_perf.boot import (  # noqa: E402
     DEFAULT_TIMEOUT_SECONDS,
@@ -25,8 +44,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="wsm-boot-profile",
         description=(
-            "Collect read-only systemd boot milestones and service critical paths "
-            "for the current boot."
+            "Collect read-only boot/service-manager evidence for the current boot."
         ),
     )
     parser.add_argument(
