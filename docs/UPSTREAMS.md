@@ -102,7 +102,7 @@ GPL-3.0-or-later, і жодна частина цього репозиторію
   Тобто XWayland не є запасною повноцінною Plasma/X11-сесією.
 - WSM не вибирає версію Plasma сам: `plasma-desktop-service-type` приходить із
   зафіксованого Guix-зрізу, тому фактична версія — похідна від піна каналу
-  ([#39](https://github.com/juv4uk/wsm-desktop)). **Відкритий пункт:** перевірити,
+  ([#39](https://github.com/juv4uk/wsm-desktop/issues/39)). **Відкритий пункт:** перевірити,
   яку саме версію несе поточний пін. Без Guix evaluation/build не можна
   стверджувати ні «у нас 6.8+», ні «у нас LTS».
 - Поточний minimal-live напрям WSM — CLI/TUI, а Calamares deprioritized.
@@ -129,5 +129,3 @@ GPL-3.0-or-later, і жодна частина цього репозиторію
 - [KDE Plasma 6.6.7 LTS, 16.10.2026](https://kde.org/announcements/plasma/6/6.6.7/)
 - [KDE Plasma LTS support policy](https://kde.org/support/compliance/)
 - [Official Plasma source release archive](https://download.kde.org/stable/plasma/)
-- [KDE Plasma 6.8.3, bugfix release 10.11.2026](https://kde.org/announcements/plasma/6/6.8.3/)
-- [KDE Plasma 6.8 announcement, 14.10.2026](https://kde.org/announcements/plasma/6/6.8.0/)
