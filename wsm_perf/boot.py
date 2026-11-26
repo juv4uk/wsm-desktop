@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""Read-only systemd boot milestones and critical-path capture."""
+"""Read-only boot/service-manager evidence for systemd and GNU Shepherd."""
 
 from __future__ import annotations
 
@@ -17,13 +17,13 @@ from typing import Any, Callable
 from wsm_hwcheck.collector import collect_report
 
 SCHEMA = "wsm-boot-profile/1"
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 DEFAULT_TIMEOUT_SECONDS = 10.0
 MAX_TIMEOUT_SECONDS = 60.0
 MAX_OUTPUT_BYTES = 64 * 1024
 
-# Fixed argument allowlist. No shell, user-supplied unit names or arbitrary argv.
-COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+# Fixed argument allowlists. No shell, user-supplied unit names or arbitrary argv.
+SYSTEMD_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("version", ("--version",)),
     ("time", ("--no-pager", "time")),
     ("blame", ("--no-pager", "blame")),
@@ -33,8 +33,16 @@ COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ("--no-pager", "critical-chain", "graphical.target"),
     ),
 )
+SHEPHERD_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("version", ("--version",)),
+    ("status", ("status",)),
+    ("log", ("--log-history=500", "log")),
+    ("graph", ("graph",)),
+)
+# Backward-compatible name for existing systemd-focused test fixtures.
+COMMANDS = SYSTEMD_COMMANDS
 
-RECOMMENDED_WARNINGS = (
+SYSTEMD_WARNINGS = (
     "systemd-analyze time ends when services have been spawned; it does not prove "
     "that every service finished initialization or that the disk is idle.",
     "systemd-analyze blame measures activating time, omits Type=simple and queue "
@@ -47,6 +55,54 @@ RECOMMENDED_WARNINGS = (
     "This artifact is one observation of the current boot, not a five-run sample "
     "or a complete desktop-readiness measurement.",
 )
+SHEPHERD_WARNINGS = (
+    "herd status is a snapshot of the services visible through the current "
+    "Shepherd socket; it is not a historical boot timeline.",
+    "herd log is limited to the most recent 500 service events. It can be "
+    "incomplete after history rotation or if the system manager was not observed.",
+    "herd graph reports service dependencies, not measured critical-path duration "
+    "or proof that a graphical desktop session is ready.",
+    "When run as a non-root user, herd observes that user's Shepherd instance, "
+    "not the PID 1 system manager. The manager scope is recorded explicitly; "
+    "the collector never invokes sudo or escalates privileges.",
+    "This artifact is one observation of the current boot, not a five-run sample "
+    "or a complete desktop-readiness measurement.",
+)
+
+
+def _detect_manager(proc_root: Path) -> str:
+    """Identify the init/service manager from PID 1 without guessing."""
+    try:
+        name = (proc_root / "1/comm").read_text(encoding="utf-8").strip().lower()
+    except (OSError, UnicodeError):
+        return "unknown"
+    return name if name in {"systemd", "shepherd"} else "unknown"
+
+
+def _manager_scope(manager: str) -> str:
+    """Describe which manager instance herd/systemd-analyze will observe."""
+    if manager == "systemd":
+        return "system"
+    if manager == "shepherd":
+        try:
+            return "system" if os.geteuid() == 0 else "user"
+        except AttributeError:
+            return "unknown"
+    return "unknown"
+
+
+def _collection_status(
+    commands: dict[str, dict[str, Any]],
+    required: tuple[str, ...],
+) -> str:
+    successful = sum(commands.get(name, {}).get("status") == "success" for name in required)
+    if successful == len(required) and all(
+        result.get("status") == "success" for result in commands.values()
+    ):
+        return "available"
+    if successful:
+        return "partial"
+    return "unavailable"
 
 
 def _bounded_text(value: str | bytes | None) -> tuple[str, bool]:
@@ -63,12 +119,13 @@ def _bounded_text(value: str | bytes | None) -> tuple[str, bool]:
 
 
 def _command_result(
+    program: str,
     argv: tuple[str, ...],
     executable: str | None,
     timeout_seconds: float,
     runner: Callable[..., Any],
 ) -> dict[str, Any]:
-    normalized_argv = ["systemd-analyze", *argv]
+    normalized_argv = [program, *argv]
     if executable is None:
         return {
             "status": "unavailable",
@@ -218,7 +275,7 @@ def collect_boot_profile(
     runner: Callable[..., Any] | None = None,
     which: Callable[[str], str | None] | None = None,
 ) -> dict[str, Any]:
-    """Collect one read-only boot profile from the current systemd manager."""
+    """Collect one read-only boot profile from the manager that actually runs PID 1."""
     if (
         not math.isfinite(timeout_seconds)
         or timeout_seconds <= 0
@@ -228,28 +285,43 @@ def collect_boot_profile(
             f"timeout must be greater than 0 and at most {MAX_TIMEOUT_SECONDS:g} seconds"
         )
 
+    manager = _detect_manager(proc_root)
+    scope = _manager_scope(manager)
     command_runner = runner or subprocess.run
     executable_lookup = which or shutil.which
-    executable = executable_lookup("systemd-analyze")
-    commands = {
-        name: _command_result(args, executable, timeout_seconds, command_runner)
-        for name, args in COMMANDS
-    }
 
-    required = ("time", "blame", "critical_chain_default")
-    successful_required = sum(
-        commands[name]["status"] == "success" for name in required
-    )
-    if successful_required == len(required):
-        collection_status = (
-            "available"
-            if all(result["status"] == "success" for result in commands.values())
-            else "partial"
-        )
-    elif successful_required:
-        collection_status = "partial"
+    if manager == "systemd":
+        program = "systemd-analyze"
+        command_set = SYSTEMD_COMMANDS
+        required = ("time", "blame", "critical_chain_default")
+        warnings = SYSTEMD_WARNINGS
+    elif manager == "shepherd":
+        program = "herd"
+        command_set = SHEPHERD_COMMANDS
+        required = ("status", "log", "graph")
+        warnings = list(SHEPHERD_WARNINGS)
+        if scope == "user":
+            warnings.append(
+                "The current process is unprivileged: service data belongs to the "
+                "user Shepherd instance, not the system-wide Guix boot."
+            )
     else:
-        collection_status = "unavailable"
+        program = None
+        command_set = ()
+        required = ()
+        warnings = (
+            "PID 1 is neither systemd nor GNU Shepherd, or /proc/1/comm is unavailable. "
+            "No substitute manager was guessed and no command was executed.",
+            "This artifact is one observation of the current boot, not a five-run sample "
+            "or a complete desktop-readiness measurement.",
+        )
+
+    executable = executable_lookup(program) if program is not None else None
+    commands = {
+        name: _command_result(program, args, executable, timeout_seconds, command_runner)
+        for name, args in command_set
+    }
+    collection_status = _collection_status(commands, required)
 
     return {
         "schema": SCHEMA,
@@ -257,6 +329,11 @@ def collect_boot_profile(
         "collected_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
         "scope": "system-boot",
         "collection_status": collection_status,
+        "manager": {
+            "name": manager,
+            "scope": scope,
+            "detection_source": "/proc/1/comm",
+        },
         "boot_identity": _boot_identity(proc_root),
         "uptime_seconds": _uptime_seconds(proc_root),
         "environment": {
@@ -265,5 +342,5 @@ def collect_boot_profile(
             "virtualization": _virtualization_evidence(),
         },
         "commands": commands,
-        "warnings": list(RECOMMENDED_WARNINGS),
+        "warnings": list(warnings),
     }
