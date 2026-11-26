@@ -95,6 +95,8 @@ def _collection_status(
     commands: dict[str, dict[str, Any]],
     required: tuple[str, ...],
 ) -> str:
+    if not required:
+        return "unavailable"
     successful = sum(commands.get(name, {}).get("status") == "success" for name in required)
     if successful == len(required) and all(
         result.get("status") == "success" for result in commands.values()
@@ -323,11 +325,17 @@ def collect_boot_profile(
     }
     collection_status = _collection_status(commands, required)
 
+    observation_scope = (
+        "user-service-manager"
+        if manager == "shepherd" and scope == "user"
+        else "system-boot" if manager in {"systemd", "shepherd"} and scope == "system"
+        else "unknown"
+    )
     return {
         "schema": SCHEMA,
         "tool_version": VERSION,
         "collected_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-        "scope": "system-boot",
+        "scope": observation_scope,
         "collection_status": collection_status,
         "manager": {
             "name": manager,
