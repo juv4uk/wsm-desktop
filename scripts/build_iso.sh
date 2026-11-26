@@ -89,9 +89,9 @@ for output in "$ISO_OUTPUT" "$BUILD_LOG" "$CHANNELS_FILE" "$CHANNELS_LOG" "$MANI
     fi
 done
 
-# Pass -L to the inferior Guix itself, not to the outer time-machine command.
-# Everything after "--" is argv for the locked Guix instance.
-GUIX_LOCKED_VERSION=$(guix time-machine -C "$LOCK" -- -L "$ROOT" --version | sed -n '1p')
+# -L is an option of time-machine and must precede its "--" separator.
+# Only the command and arguments after "--" are passed to the locked Guix.
+GUIX_LOCKED_VERSION=$(guix time-machine -C "$LOCK" -L "$ROOT" -- --version | sed -n '1p')
 PROFILE_SHA256=$(python3 - "$PROFILE" <<'PY'
 import hashlib
 import sys
@@ -108,7 +108,7 @@ printf '%s\n' "build-iso: output=$ISO_OUTPUT"
 printf '%s\n' "build-iso: resolving locked channels (Guix authentication is not disabled)"
 
 # Resolve the exact channel set through the same time-machine lock used below.
-if guix time-machine -C "$LOCK" -- -L "$ROOT" describe -f channels >"$CHANNELS_FILE" 2>"$CHANNELS_LOG"; then
+if guix time-machine -C "$LOCK" -L "$ROOT" -- describe -f channels >"$CHANNELS_FILE" 2>"$CHANNELS_LOG"; then
     :
 else
     status=$?
@@ -127,7 +127,7 @@ if grep -Eiq 'channel authentication disabled' "$CHANNELS_FILE" "$CHANNELS_LOG";
 fi
 
 printf '%s\n' "build-iso: building with locked Guix channel; see build.log"
-if guix time-machine -C "$LOCK" -- -L "$ROOT" system image \
+if guix time-machine -C "$LOCK" -L "$ROOT" -- system image \
     --no-grafts \
     --root="$ISO_OUTPUT" \
     --image-type=iso9660 \
@@ -237,7 +237,7 @@ manifest = {
     },
     "build": {
         "command": [
-            "guix", "time-machine", "-C", str(lock), "--", "-L", str(repo_root), "system", "image",
+            "guix", "time-machine", "-C", str(lock), "-L", str(repo_root), "--", "system", "image",
             "--no-grafts", f"--root={iso}", "--image-type=iso9660",
             "--system=x86_64-linux", str(profile),
         ],
