@@ -25,7 +25,7 @@ class DocumentationTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
-class DocumentationLanguageTests(unittest.TestCase):
+class CanonicalDocumentationLanguageGateTests(unittest.TestCase):
     """A document under docs/ is Ukrainian, or it is a *.en.md translation."""
 
     def test_ukrainian_document_is_dominant(self) -> None:
@@ -43,7 +43,7 @@ class DocumentationLanguageTests(unittest.TestCase):
         self.assertFalse(check_docs.is_ukrainian_dominant(text))
 
     def test_symbol_only_document_is_not_judged(self) -> None:
-        self.assertTrue(check_docs.is_ukrainian_dominant("|---|---|\n| a | b |\n"))
+        self.assertTrue(check_docs.is_ukrainian_dominant("|---|---|\n| 1 | 2 |\n"))
 
     def test_every_canonical_document_passes_the_rule(self) -> None:
         self.assertEqual(check_docs.check_docs_language(), [])
@@ -61,7 +61,7 @@ class InstallerDocumentationPolicyTests(unittest.TestCase):
         self.assertIn("Умовний workflow Calamares (не реалізовано)", document)
 
 
-class DocumentationLanguageTests(unittest.TestCase):
+class DocumentationEntryPointLanguageTests(unittest.TestCase):
     def test_ukrainian_detection(self) -> None:
         self.assertTrue(
             check_docs.is_ukrainian(
