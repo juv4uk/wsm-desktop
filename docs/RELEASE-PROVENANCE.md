@@ -42,6 +42,30 @@ gh attestation verify wsm-desktop-live.iso --repo juv4uk/wsm-desktop
 - **Не для тестових збірок.** Атестувати кожен CI-прогін — це шум; сенс мають лише артефакти, які людина справді запускає.
 - **Інфраструктурна залежність.** У публічному репозиторії використовується публічний Sigstore; у приватному — приватний Sigstore GitHub, і для цього потрібен Enterprise Cloud. Для нашого випадку (публічний репозиторій) це не обмеження, але воно стане ним, якщо репозиторій колись закриють.
 
+## Відтворюваність образу — не те саме, що provenance
+
+Provenance відповідає на «хто і з якого коміту це зібрав». Відтворюваність
+відповідає на інше: «чи дасть повторна збірка ті самі байти?». Друге — єдине,
+що робить опублікований SHA-256 перевірюваним кимось, крім нас.
+
+Що вимагає [reproducible-builds.org](https://reproducible-builds.org/docs/system-images/)
+для ISO-образів: свіжий `xorriso`, який поважає `SOURCE_DATE_EPOCH`; передача
+`--modification-date`; фіксований `isohybrid --id`; відтворювані initramfs.
+Автор `xorriso` додає важливе уточнення: ISO відтворюваний гарантовано лише
+**тією ж версією** `xorriso`, `libisofs` і `libisoburn`, тому версії цих
+інструментів треба записувати й публікувати разом з образом.
+
+Наш `manifest.json` уже фіксує: коміт джерела, `profile_sha256`, `channel_lock_sha256`,
+`locked_guix_channel_commit`, вивід `guix --version` під `time-machine`, SHA-256
+образу й команду збірки. Версія `xorriso` прямо не записана, але вона похідна
+від зафіксованого коміту каналу — тобто пін каналу і є фіксацією інструментів.
+Окреме поле з версіями додало б читабельності, але не додало б доказу.
+
+**Чого в нас немає:** жодного прогону, який довів би, що дві збірки дають той
+самий SHA-256. Тому WSM не заявляє відтворюваність образу — лише provenance і
+цілісність. Твердження «відтворювано» вимагає двох незалежних збірок і
+порівняння байтів; доти це `not-tested`, а не властивість.
+
 ## Що з цим робити
 
 Нічого не змінюємо в цьому документі: це вхідні дані. Рішення про provenance і підпис оформлюється окремим ADR разом із політикою підпису образів (M6), і в ньому має бути три речі:
@@ -50,4 +74,4 @@ gh attestation verify wsm-desktop-live.iso --repo juv4uk/wsm-desktop
 2. чи входить `gh attestation verify` в інструкцію перевірки поруч із `SHA256SUMS`;
 3. чи додаємо ми власний підпис поверх атестації, чи поки покладаємося на неї.
 
-Джерела: [GitHub Docs — artifact attestations](https://docs.github.com/en/actions/concepts/security/artifact-attestations), [actions/attest](https://github.com/actions/attest/), [gh attestation verify](https://cli.github.com/manual/gh_attestation_verify).
+Джерела: [reproducible-builds.org — system images](https://reproducible-builds.org/docs/system-images/), [xorriso: reproducibility залежить від версії інструментів](https://lists.reproducible-builds.org/pipermail/rb-general/2025-April/003728.html), [GitHub Docs — artifact attestations](https://docs.github.com/en/actions/concepts/security/artifact-attestations), [actions/attest](https://github.com/actions/attest/), [gh attestation verify](https://cli.github.com/manual/gh_attestation_verify).
