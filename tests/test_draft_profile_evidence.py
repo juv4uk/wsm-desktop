@@ -384,5 +384,52 @@ class CliTests(unittest.TestCase):
             self.assertFalse(out.exists())
 
 
+class FormatCheckerVisibilityTests(unittest.TestCase):
+    """A validator that cannot check a format must say so, not pass silently."""
+
+    def test_formats_are_collected_from_the_schema(self) -> None:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "draft_profile_evidence", ROOT / "scripts" / "draft_profile_evidence.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+
+        schema = json.loads(
+            (ROOT / "schemas" / "hardware-report.schema.json").read_text(encoding="utf-8")
+        )
+        self.assertIn("date-time", module.formats_used(schema))
+
+        class Empty:
+            checkers: dict = {}
+
+        self.assertIn("date-time", module.missing_format_checkers(schema, Empty()))
+
+    def test_a_report_with_an_invalid_timestamp_is_refused_or_refused_wholesale(self) -> None:
+        """Either the date is checked, or validation refuses because it cannot check it."""
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "draft_profile_evidence", ROOT / "scripts" / "draft_profile_evidence.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+
+        report = json.loads(
+            (ROOT / "tests" / "fixtures" / "hardware" / "desktop-observed.json").read_text(encoding="utf-8")
+        )
+        report["collected_at"] = "2026-99-99T99:99:99Z"
+        problems = module.validate_hardware_report(report)
+        self.assertTrue(problems, "an invalid collected_at must not validate")
+        joined = " ".join(problems)
+        self.assertTrue(
+            "collected_at" in joined or "format validation is unavailable" in joined,
+            joined,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

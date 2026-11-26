@@ -32,7 +32,8 @@ class LiveProfileMarkerTests(unittest.TestCase):
     def test_marker_service_is_registered_in_services(self) -> None:
         text = (ROOT / "systems" / "live.scm").read_text(encoding="utf-8")
         self.assertIn("wsm-live-ready-marker", text)
-        self.assertIn("(operating-system-services base-os)", text)
+        self.assertIn("(operating-system-user-services base-os)", text)
+        self.assertNotIn("(operating-system-services base-os)", text)
 
     def test_marker_write_cannot_break_boot(self) -> None:
         """A missing console must mean 'no marker', not 'system does not boot'."""

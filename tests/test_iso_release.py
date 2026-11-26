@@ -52,6 +52,25 @@ class IsoReleaseTests(unittest.TestCase):
         self.assertIn("2 GiB", notes)
         self.assertIn(".part001", notes)
 
+    def test_compatibility_candidate_is_not_misrepresented_as_published(self) -> None:
+        notes = (ROOT / "ISO-RELEASE.md").read_text(encoding="utf-8")
+        profile = (ROOT / "systems/live-compat.scm").read_text(encoding="utf-8")
+        self.assertIn("шість бінарних частин ще не завантажено до GitHub Release", notes)
+        self.assertIn("не повертає жодної з шести", notes)
+        self.assertIn("580.178.04", notes)
+        self.assertIn("7.3.5", notes)
+        self.assertIn("§1.1(d)", notes)
+        self.assertIn("patchelf", notes)
+        self.assertIn("не призначений для публічного binary distribution", notes)
+        self.assertIn("NVIDIA binary redistribution: NOT CLEARED", profile)
+        self.assertIn("580.196.11", notes)
+        self.assertIn("7.3.6", notes)
+        self.assertIn("локально зібрано в", profile)
+        self.assertIn("QEMU TCG BIOS boot", profile)
+        self.assertIn("ще не завантажено до GitHub Release", profile)
+        self.assertIn("Physical H170 / GTX 1050 Ti binding", profile)
+        self.assertNotIn("Compatibility package closure та image build: NOT RUN", profile)
+
     def test_release_documents_hardware_targeted_compatibility_build(self) -> None:
         notes = (ROOT / "ISO-RELEASE.md").read_text(encoding="utf-8")
         for fact in ("localmodconfig", "69 модулів", "580.178.04",

@@ -115,6 +115,18 @@ class MinimalLiveProfileTests(unittest.TestCase):
         self.assertIn("if-no-files-found: ignore", section)
         self.assertIn("retention-days: 7", section)
 
+    def test_minimal_live_marker_is_routed_to_serial_console(self) -> None:
+        profile = (ROOT / "systems/live-minimal.scm").read_text(encoding="utf-8")
+        self.assertIn('(call-with-output-file "/dev/console"', profile)
+        self.assertIn(
+            '(kernel-arguments ' + "'" + '("console=tty1" "console=ttyS0,115200"))',
+            profile,
+        )
+        self.assertNotIn(
+            '(kernel-arguments ' + "'" + '("console=ttyS0,115200" "console=tty1"))',
+            profile,
+        )
+
     def test_release_workflow_uses_current_node24_actions(self) -> None:
         workflow = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
         self.assertIn("actions/checkout@v7", workflow)
@@ -258,6 +270,95 @@ class UefiEvidenceTests(unittest.TestCase):
                                   "--ovmf-code",str(iso),"--dry-run"])
             self.assertEqual(status,2)
             self.assertIn("--ovmf-vars",error.getvalue())
+
+class FailureReporterTests(unittest.TestCase):
+    """When a step fails, the reason must end up where it can be read.
+
+    Job logs need authentication this project's tools do not have. The commit
+    comment is the only channel that survives, so the reporter must not depend
+    on knowing in advance which step failed.
+    """
+
+    def test_reporter_dumps_every_log_in_the_build_directory(self) -> None:
+        text = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
+        self.assertIn('"$RUNNER_TEMP"/wsm-live-build/*.log', text)
+        self.assertIn('"$RUNNER_TEMP"/wsm-live-dist/*.json', text)
+
+    def test_reporter_lists_the_build_directory(self) -> None:
+        """A step can fail before writing any log at all."""
+        text = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
+        self.assertIn("ls -la", text)
+
+    def test_reporter_posts_a_commit_comment(self) -> None:
+        text = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
+        self.assertIn("/commits/$GITHUB_SHA/comments", text)
+        self.assertIn("if: failure()", text)
+
+class SplitAssetTests(unittest.TestCase):
+    """A Guix closure does not fit one GitHub asset, and refusing means never shipping."""
+
+    def setUp(self) -> None:
+        self.text = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
+
+    def test_split_runs_after_acceptance_and_manifest(self) -> None:
+        """Acceptance boots the image; it must exist as one file when it runs."""
+        split = self.text.index("Поділити образ на частини")
+        self.assertGreater(split, self.text.index("BIOS boot acceptance"))
+        self.assertGreater(split, self.text.index("UEFI boot acceptance"))
+        self.assertGreater(split, self.text.index("Маніфест і контрольні суми"))
+
+    def test_split_happens_before_the_upload(self) -> None:
+        self.assertLess(
+            self.text.index("Поділити образ на частини"),
+            self.text.index("Створити чернетку релізу"),
+        )
+
+    def test_parts_are_listed_as_assets(self) -> None:
+        self.assertIn('"$release_dist/$release_iso".part*', self.text)
+
+    def test_whole_step_output_is_captured(self) -> None:
+        """The refusal used to print to the job log, which needs authentication."""
+        self.assertIn('exec > >(tee -a "$WSM_ISO_DIR/step.log")', self.text)
+
+    def test_iso_size_is_reported_before_any_decision(self) -> None:
+        self.assertIn("ISO size:", self.text)
+
+class SplitChecksumTests(unittest.TestCase):
+    """After a split, the manifests must describe what is actually published."""
+
+    def setUp(self) -> None:
+        self.text = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
+
+    def test_checksums_are_rewritten_after_the_split(self) -> None:
+        split = self.text.index("Поділити образ на частини")
+        rewrite = self.text.index("checksums rewritten for", split)
+        self.assertGreater(rewrite, split)
+
+    def test_manifest_records_parts(self) -> None:
+        self.assertIn('artifact["published_as"] = "parts"', self.text)
+        self.assertIn('artifact["parts"] = parts', self.text)
+
+    def test_sha256sums_covers_the_parts_not_the_removed_image(self) -> None:
+        """The read-back check rejects a listed file that is not in the upload."""
+        self.assertIn("covered = [root / name for name in parts]", self.text)
+        self.assertIn("if not split:", self.text)
+
+class ReassemblyDocTests(unittest.TestCase):
+    """A published artifact nobody can assemble is not published."""
+
+    def setUp(self) -> None:
+        self.notes = (ROOT / "docs" / "RELEASE-MINIMAL-LIVE.md").read_text(encoding="utf-8")
+
+    def test_notes_explain_how_to_join_the_parts(self) -> None:
+        self.assertIn("cat WSM-Desktop-*.iso.part*", self.notes)
+
+    def test_notes_point_at_the_whole_image_digest(self) -> None:
+        self.assertIn("artifact.sha256", self.notes)
+        self.assertIn("published_as", self.notes)
+
+    def test_notes_warn_about_the_device_not_the_partition(self) -> None:
+        self.assertIn("/dev/sdX1", self.notes)
+
 
 
 if __name__ == "__main__":
