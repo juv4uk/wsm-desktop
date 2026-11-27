@@ -222,6 +222,13 @@
               "source_url": "https://nouveau.freedesktop.org/FeatureMatrix.html",
               "observed_at": "2026-11-27",
               "summary": "Nouveau upstream lists Vulkan support from Kepler onward, but notes that GP10x Pascal has no practical reclocking path because the required firmware access is signature-restricted. This is a generation-level performance limitation; it does not establish exact GP107 runtime binding, firmware presence, package closure, or H170 functional validation."
+            },
+            {
+              "kind": "upstream-reference",
+              "source": "Pinned GNU Guix Mesa/Linux-libre package definitions",
+              "source_url": "https://codeberg.org/guix/guix/src/commit/4e5195be20d9b124df8a8bb69213412236e4668e/gnu/packages/gl.scm",
+              "observed_at": "2026-11-27",
+              "summary": "At pinned Guix channel commit 4e5195be (2026-11-25), Mesa 26.2.6 explicitly enables the nouveau Vulkan driver on x86_64 with -Dvulkan-drivers=amd,intel,intel_hasvk,nouveau,swrast,virtio and includes Mesa Cargo inputs. The default linux-libre alias is 7.3.5, above NVK's Linux 6.6 minimum. This proves package configuration intent only, not a successful Guix build, ICD installation, runtime binding, firmware load, or GP107 functional test."
             }
           ],
           "notes": [
