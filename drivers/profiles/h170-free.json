@@ -208,6 +208,13 @@
             "source_url": "https://codebrowser.dev/linux/linux/drivers/gpu/drm/nouveau/nvkm/engine/gr/gp107.c.html",
             "observed_at": "2026-11-27",
             "summary": "Upstream GP107 GR declares FECS/GPCCS firmware and GR software-context blobs. Its firmware interface selects gm200_gr_load with ACR handlers for FECS and GPCCS; the no-firmware fallback returns -ENODEV. These blobs are required for Nouveau GP107 GR 3D/compute initialization. This does not establish basic KMS/display behavior without them, nor Guix package presence, redistribution rights, runtime binding, or H170 functional validation."
+          },
+          {
+            "kind": "upstream-reference",
+            "source": "Linux-firmware WHENCE and NVIDIA firmware license",
+            "source_url": "https://kernel.googlesource.com/pub/scm/linux/kernel/git/firmware/linux-firmware/+/refs/heads/main/WHENCE",
+            "observed_at": "2026-11-27",
+            "summary": "The GP107 Nouveau firmware group is listed as redistributable under LICENCE.nvidia. This is a vendor license, not an open-source license; it contains restrictions on reverse engineering and firmware translation. This evidence does not resolve jurisdiction-specific interoperability exceptions or establish package integration. The WSM Free profile must not ship these blobs."
           }
         ]
       },
