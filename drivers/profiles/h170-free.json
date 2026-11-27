@@ -193,7 +193,7 @@
         }
       ],
       "firmware": {
-        "requirement": "unknown",
+        "requirement": "required",
         "package_candidates": [],
         "package_resolution": "not-assessed",
         "live_rootfs": "not-assessed",
@@ -201,7 +201,15 @@
         "installed_rootfs": "not-assessed",
         "runtime_load": "not-assessed",
         "redistribution": "unknown",
-        "evidence": []
+        "evidence": [
+          {
+            "kind": "upstream-reference",
+            "source": "Linux Nouveau GP107 GR implementation and ACR fallback",
+            "source_url": "https://codebrowser.dev/linux/linux/drivers/gpu/drm/nouveau/nvkm/engine/gr/gp107.c.html",
+            "observed_at": "2026-11-27",
+            "summary": "Upstream GP107 GR declares FECS/GPCCS firmware and GR software-context blobs. Its firmware interface selects gm200_gr_load with ACR handlers for FECS and GPCCS; the no-firmware fallback returns -ENODEV. These blobs are required for Nouveau GP107 GR 3D/compute initialization. This does not establish basic KMS/display behavior without them, nor Guix package presence, redistribution rights, runtime binding, or H170 functional validation."
+          }
+        ]
       },
       "functional_validation": {
         "status": "not-run",
@@ -211,7 +219,8 @@
       "notes": [
         "Windows nvidia-smi reported physical adapter location 00000000:01:00.0. That BDF is not a PCI vendor:device ID.",
         "Do not infer reclocking, full acceleration, firmware presence or usable KDE acceleration from detection. Pascal performance limitations must be documented.",
-        "Separate GP107 research repository documents a physical NVK vector-add pass for PCI ID 10de:1c82 on its own test host. That host is not proven to be this H170 board; the result does not establish H170 runtime binding, display support, daily-driver stability, or this profile's functional_validation."
+        "Separate GP107 research repository documents a physical NVK vector-add pass for PCI ID 10de:1c82 on its own test host. That host is not proven to be this H170 board; the result does not establish H170 runtime binding, display support, daily-driver stability, or this profile's functional_validation.",
+        "GP107 GR firmware dependency is now source-confirmed for 3D/compute: Nouveau declares FECS/GPCCS firmware and its no-firmware fallback returns -ENODEV. Basic display/KMS without GR firmware remains a separate unassessed question."
       ],
       "identity_evidence": [
         {
