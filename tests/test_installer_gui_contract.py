@@ -53,6 +53,11 @@ class InstallerGuiContractTests(unittest.TestCase):
         self.assertNotIn("fully-supported", qml)
         self.assertNotIn("fully_supported", qml)
 
+    def test_package_recipe_returns_value_for_guix_build_f(self) -> None:
+        recipe = (ROOT / "wsm" / "packages" / "installer.scm").read_text(encoding="utf-8")
+        # Guix `build -f` requires the file's final expression to yield a package.
+        self.assertEqual(recipe.rstrip().splitlines()[-1], "wsm-installer")
+
     def test_minimal_live_definitions_do_not_gain_qt_dependencies(self) -> None:
         live_minimal = (ROOT / "systems" / "live-minimal.scm").read_text(encoding="utf-8")
         self.assertNotIn("wsm-installer", live_minimal)
