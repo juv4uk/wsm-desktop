@@ -75,7 +75,7 @@ class MakefileCoverageTests(unittest.TestCase):
     def test_optional_installer_package_build_uses_checkout_load_path(self) -> None:
         block = block_for(self.text, "check-installer-gui-guix")
         self.assertIn(
-            "time-machine -C channels.lock.scm -- build -L . -f wsm/packages/installer.scm",
+            "time-machine -C channels.lock.scm -L . -- build -L . -f wsm/packages/installer.scm",
             block,
         )
 
