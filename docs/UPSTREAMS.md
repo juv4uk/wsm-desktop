@@ -394,3 +394,8 @@ Unified Kernel Image — один PE-файл, у який складені stub
 
 - [Процес REA → незалежна реалізація → upstream → Guix](drivers/REA-TO-UPSTREAM-PROCESS.md) — межі доказів, clean-room/provenance, ліцензійні обмеження, фізичні тести та benchmark acceptance.
 - [GP107 reverse-engineering research](https://github.com/juv4uk/gp107-nvidia-re) — канонічне зовнішнє сховище для GP107 probes, capability matrix та benchmark evidence. WSM зберігає посилання й рішення, а не дублює raw artifacts.
+
+
+## H170 hardware firmware matrix
+
+- [H170 firmware/capability matrix](hardware/H170-FIRMWARE-MATRIX.md) — зведені firmware/microcode залежності, upstream kernel config, Guix support та невідомі фізичні стани.
