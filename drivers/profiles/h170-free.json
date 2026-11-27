@@ -272,19 +272,35 @@
           "kernel_config": "not-assessed",
           "runtime_binding": "unknown",
           "source_license": "unknown",
-          "evidence": []
+          "evidence": [
+            {
+              "kind": "upstream-reference",
+              "source": "Linux alx PCI ID table and LKDDb",
+              "source_url": "https://cateee.net/lkddb/web-lkddb/ALX.html",
+              "observed_at": "2026-11-27",
+              "summary": "The upstream alx PCI table includes ALX_DEV_ID_E2200; LKDDb maps the E2200 controller to PCI ID 1969:e091. The owner inventory names Killer E2200 but does not record its exact PCI ID, so the manifest pci_ids remains empty pending physical/Windows ID evidence."
+            }
+          ]
         }
       ],
       "firmware": {
-        "requirement": "unknown",
+        "requirement": "not-required",
         "package_candidates": [],
         "package_resolution": "not-assessed",
         "live_rootfs": "not-assessed",
         "initrd": "not-assessed",
         "installed_rootfs": "not-assessed",
         "runtime_load": "not-assessed",
-        "redistribution": "unknown",
-        "evidence": []
+        "redistribution": "not-applicable",
+        "evidence": [
+          {
+            "kind": "upstream-reference",
+            "source": "Linux alx driver source audit",
+            "source_url": "https://github.com/torvalds/linux/tree/master/drivers/net/ethernet/atheros/alx",
+            "observed_at": "2026-11-27",
+            "summary": "The seven-file upstream alx driver directory (Makefile, alx.h, ethtool.c, hw.c, hw.h, main.c, reg.h) contains no request_firmware or MODULE_FIRMWARE dependency. This means no host-loadable firmware is required by the alx driver; it does not prove physical binding or traffic functionality."
+          }
+        ]
       },
       "functional_validation": {
         "status": "not-run",
@@ -292,7 +308,8 @@
         "evidence": []
       },
       "notes": [
-        "Owner profile observes a Killer E2200 adapter. Exact PCI vendor:device ID, package availability, binding and DHCP/traffic test remain unknown."
+        "Owner profile observes a Killer E2200 adapter. Exact PCI vendor:device ID, package availability, binding and DHCP/traffic test remain unknown.",
+        "The upstream alx source has no host-loadable firmware dependency. E2200 maps to 1969:e091 in LKDDb, but the exact PCI ID for this machine has not been observed; do not populate pci_ids or claim binding from the model name alone."
       ],
       "identity_evidence": []
     },
@@ -318,15 +335,23 @@
         }
       ],
       "firmware": {
-        "requirement": "unknown",
+        "requirement": "not-required",
         "package_candidates": [],
         "package_resolution": "not-assessed",
         "live_rootfs": "not-assessed",
         "initrd": "not-assessed",
         "installed_rootfs": "not-assessed",
         "runtime_load": "not-assessed",
-        "redistribution": "unknown",
-        "evidence": []
+        "redistribution": "not-applicable",
+        "evidence": [
+          {
+            "kind": "upstream-reference",
+            "source": "Linux NVMe host driver source",
+            "source_url": "https://github.com/torvalds/linux/tree/master/drivers/nvme/host",
+            "observed_at": "2026-11-27",
+            "summary": "The generic Linux NVMe host driver does not request a firmware blob to operate the controller. SSD-internal firmware is device-managed and is not a host-loadable Guix firmware dependency; this does not assess the SSD's own firmware version or update policy."
+          }
+        ]
       },
       "functional_validation": {
         "status": "not-run",
@@ -334,7 +359,8 @@
         "evidence": []
       },
       "notes": [
-        "Storage model/capacity are Windows-observed. No read/write validation or initrd requirement is claimed."
+        "Storage model/capacity are Windows-observed. No read/write validation or initrd requirement is claimed.",
+        "No host-loadable firmware is required by the generic NVMe host driver. The SSD's internal firmware is separate from the host driver and has not been inspected or updated."
       ],
       "identity_evidence": []
     },
@@ -360,15 +386,23 @@
         }
       ],
       "firmware": {
-        "requirement": "unknown",
+        "requirement": "not-required",
         "package_candidates": [],
         "package_resolution": "not-assessed",
         "live_rootfs": "not-assessed",
         "initrd": "not-assessed",
         "installed_rootfs": "not-assessed",
         "runtime_load": "not-assessed",
-        "redistribution": "unknown",
-        "evidence": []
+        "redistribution": "not-applicable",
+        "evidence": [
+          {
+            "kind": "upstream-reference",
+            "source": "Linux AHCI host driver source",
+            "source_url": "https://github.com/torvalds/linux/blob/master/drivers/ata/ahci.c",
+            "observed_at": "2026-11-27",
+            "summary": "The generic AHCI host driver does not request a host firmware blob for ordinary SATA operation. Disk-internal firmware is device-managed and is not part of the Guix host-driver closure; no disk firmware update or write test is implied."
+          }
+        ]
       },
       "functional_validation": {
         "status": "not-run",
@@ -376,7 +410,8 @@
         "evidence": []
       },
       "notes": [
-        "Storage models are Windows-observed. No filesystem, partition or write test has been performed."
+        "Storage models are Windows-observed. No filesystem, partition or write test has been performed.",
+        "No host-loadable firmware is required by the generic AHCI host driver. Firmware inside the SATA drives is separate and has not been inspected or updated."
       ],
       "identity_evidence": []
     },
@@ -402,15 +437,23 @@
         }
       ],
       "firmware": {
-        "requirement": "unknown",
+        "requirement": "not-required",
         "package_candidates": [],
         "package_resolution": "not-assessed",
         "live_rootfs": "not-assessed",
         "initrd": "not-assessed",
         "installed_rootfs": "not-assessed",
         "runtime_load": "not-assessed",
-        "redistribution": "unknown",
-        "evidence": []
+        "redistribution": "not-applicable",
+        "evidence": [
+          {
+            "kind": "upstream-reference",
+            "source": "Linux HD-audio driver documentation",
+            "source_url": "https://cdn.kernel.org/doc/html/latest/sound/hd-audio/notes.html",
+            "observed_at": "2026-11-27",
+            "summary": "The standard HDA codec path does not require a vendor firmware blob. An optional snd-hda-patch-loader feature can load a user-supplied pseudo-firmware initialization patch via request_firmware; that optional override is not a baseline hardware firmware dependency. The exact onboard codec ID remains unconfirmed."
+          }
+        ]
       },
       "functional_validation": {
         "status": "not-run",
@@ -418,7 +461,8 @@
         "evidence": []
       },
       "notes": [
-        "Windows lists audio endpoints. Codec-level enumeration, firmware, audio service setup and playback/capture remain untested."
+        "Windows lists audio endpoints. Codec-level enumeration, firmware, audio service setup and playback/capture remain untested.",
+        "Standard HDA/Realtek codec support has no required vendor firmware blob; an optional user-supplied HDA initialization patch is a separate override. Exact codec ID (including any ALC1150 claim), UCM configuration and playback/capture remain untested."
       ],
       "identity_evidence": []
     }

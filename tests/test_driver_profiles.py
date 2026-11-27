@@ -199,6 +199,15 @@ class DriverProfileManifestTests(unittest.TestCase):
         self.assertEqual(nvidia["source_license"], "unknown")
         self.assertEqual(compat_gpu["functional_validation"]["status"], "not-run")
 
+    def test_host_drivers_without_external_firmware_are_classified_explicitly(self) -> None:
+        for device_id in ("killer-e2200", "hda-audio", "kingston-nv2", "samsung-sata"):
+            device = next(item for item in self.free["devices"] if item["device_id"] == device_id)
+            self.assertEqual(device["firmware"]["requirement"], "not-required")
+            self.assertEqual(device["firmware"]["redistribution"], "not-applicable")
+            self.assertTrue(any(item["kind"] == "upstream-reference" for item in device["firmware"]["evidence"]))
+            self.assertEqual(device["firmware"]["package_resolution"], "not-assessed")
+            self.assertEqual(device["functional_validation"]["status"], "not-run")
+
     def test_wifi_and_bluetooth_remain_unobserved(self) -> None:
         for profile in (self.free, self.compat):
             self.assertIn("wifi", profile["unobserved_device_classes"])
