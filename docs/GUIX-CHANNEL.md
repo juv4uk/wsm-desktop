@@ -14,7 +14,7 @@
 
 | Scheme module | Файл | Стан |
 |---|---|---|
-| `(wsm systems performance)` | `wsm/systems/performance.scm` | існуючий модуль; потребує Guix evaluation у channel context |
+| `(wsm systems performance)` | `wsm/systems/performance.scm` | source-tree evaluation на pinned Guix додано в #536; authenticated channel lookup потребує окремого Phase B bootstrap |
 | `(wsm packages wsm)` | `wsm/packages/wsm.scm` | package metadata має невирішену ліцензійну суперечність #367; не оголошувати release-ready |
 
 Не переносити модулі з `wsm/` без необхідності: цей шлях уже відповідає Scheme namespace `(wsm …)`. Файли `systems/*.scm` залишаються machine/release configurations, а не публічним API channel namespace.
