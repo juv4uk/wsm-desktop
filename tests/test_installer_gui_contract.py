@@ -58,6 +58,15 @@ class InstallerGuiContractTests(unittest.TestCase):
         # Guix `build -f` requires the file's final expression to yield a package.
         self.assertEqual(recipe.rstrip().splitlines()[-1], "wsm-installer")
 
+    def test_guix_smoke_uses_the_installed_optional_package(self) -> None:
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        target = makefile.split("check-installer-gui-guix:", 1)[1]
+        self.assertIn("shell -L . -f wsm/packages/installer.scm", target)
+        self.assertIn("env -u PYTHONPATH", target)
+        self.assertIn("wsm-installer --smoke-test", target)
+        self.assertIn("tests/guix_installer_navigation.py", target)
+        self.assertNotIn("PYTHONPATH=. QT_QPA_PLATFORM=offscreen python3 -m wsm_installer --smoke-test", target)
+
     def test_minimal_live_definitions_do_not_gain_qt_dependencies(self) -> None:
         live_minimal = (ROOT / "systems" / "live-minimal.scm").read_text(encoding="utf-8")
         self.assertNotIn("wsm-installer", live_minimal)
