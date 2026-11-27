@@ -150,6 +150,21 @@ class MinimalLiveProfileTests(unittest.TestCase):
         self.assertIn('--title "$RELEASE_TITLE"', workflow)
         self.assertIn('RELEASE_TITLE: ${{ steps.release.outputs.release_title }}', workflow)
 
+    def test_release_split_mode_is_local_before_manifest_rewrite(self) -> None:
+        workflow = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
+        split_start = workflow.index("name: Поділити образ на частини, якщо він більший за один asset")
+        upload_start = workflow.index("name: Створити чернетку релізу та завантажити assets", split_start)
+        section = workflow[split_start:upload_start]
+
+        self.assertIn('release_parts=1', section)
+        self.assertIn('release_parts=0', section)
+        self.assertIn('echo "release_parts=$release_parts" >> "$GITHUB_ENV"', section)
+        self.assertIn('python - "$release_dist" "$release_iso" "$release_parts" <<\'PY\'', section)
+        self.assertLess(section.index('release_parts=0'), section.index('echo "release_parts=$release_parts"'))
+        self.assertLess(section.index('echo "release_parts=$release_parts"'), section.index('python - "$release_dist"'))
+        self.assertNotIn('echo "release_parts=0" >> "$GITHUB_ENV"', section)
+        self.assertNotIn('echo "release_parts=1" >> "$GITHUB_ENV"', section)
+
     def test_attestation_subjects_follow_the_actual_whole_or_split_image_form(self) -> None:
         workflow = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
         prepare = workflow.index("name: Підготувати точний перелік provenance subjects")
