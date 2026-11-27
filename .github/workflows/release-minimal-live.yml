@@ -144,7 +144,6 @@ jobs:
           path: |
             ${{ runner.temp }}/wsm-live-dist/boot-bios.json
             ${{ runner.temp }}/wsm-live-dist/boot-uefi.json
-            ${{ runner.temp }}/wsm-live-dist/ISO-CHECKSUMS.sha256
           if-no-files-found: ignore
           retention-days: 7
       - name: Маніфест і контрольні суми
@@ -336,6 +335,7 @@ jobs:
             ${{ runner.temp }}/wsm-live-dist/release-manifest.json
             ${{ runner.temp }}/wsm-live-dist/boot-bios.json
             ${{ runner.temp }}/wsm-live-dist/boot-uefi.json
+            ${{ runner.temp }}/wsm-live-dist/ISO-CHECKSUMS.sha256
           create-storage-record: false
       - name: Перевірити версію GitHub CLI для перевірки provenance
         run: |
