@@ -1,405 +1,153 @@
-{
-  "schema_version": "1.2.0",
-  "profile_id": "h170-free",
-  "profile_class": "free",
-  "profile_status": "draft",
-  "enabled_by_default": true,
-  "base_profile": null,
-  "target": {
-    "target_id": "h170-gaming-3-owner-reference",
-    "board_vendor": "Gigabyte Technology Co., Ltd.",
-    "board_model": "H170-Gaming 3",
-    "firmware_vendor": "American Megatrends Inc.",
-    "firmware_version": "F22e",
-    "boot_mode": "uefi",
-    "secure_boot": "unknown",
-    "evidence_source": "https://github.com/juv4uk/wsm-os/blob/40ef00079d478d43fa496ec066bb96ac4c0850a3/docs/OWNER-HARDWARE-PROFILE.md",
-    "evidence_date": "2026-09-02"
-  },
-  "source": {
-    "repository": "juv4uk/wsm-desktop",
-    "source_commit": null,
-    "channel_lock_file": "channels.lock.scm",
-    "channel_authentication_evidence": "authenticated-pull-recorded-build-not-evaluated",
-    "notes": "Authenticated Guix pull/channel introduction was recorded for this pinned Free channel. This profile has not been evaluated or built on the channel; the lock is not package or firmware evidence.",
-    "channel_revisions": [
-      {
-        "name": "guix",
-        "url": "https://git.guix.gnu.org/guix.git",
-        "commit": "4e5195be20d9b124df8a8bb69213412236e4668e"
-      }
-    ]
-  },
-  "kernel": {
-    "package_candidate": "linux-libre (candidate only; exact package and closure not evaluated)",
-    "version": null,
-    "configuration_status": "not-assessed",
-    "notes": "Kernel package/configuration, modules and initrd contents must be evaluated against the pinned channel before image integration."
-  },
-  "unobserved_device_classes": [
-    "wifi",
-    "bluetooth",
-    "thunderbolt",
-    "webcam"
-  ],
-  "devices": [
-    {
-      "device_id": "h170-board",
-      "device_class": "platform",
-      "model": "Gigabyte H170-Gaming 3",
-      "evidence_class": "windows-observed",
-      "observed_bdf": null,
-      "pci_ids": [],
-      "driver_candidates": [],
-      "firmware": {
-        "requirement": "unknown",
-        "package_candidates": [],
-        "package_resolution": "not-assessed",
-        "live_rootfs": "not-assessed",
-        "initrd": "not-assessed",
-        "installed_rootfs": "not-assessed",
-        "runtime_load": "not-assessed",
-        "redistribution": "unknown",
-        "evidence": []
-      },
-      "functional_validation": {
-        "status": "not-run",
-        "environment": "none",
-        "evidence": []
-      },
-      "notes": [
-        "Board model and BIOS F22e are Windows-observed. Secure Boot state remains unknown.",
-        "No chipset or board driver requirement is inferred from the model name."
-      ],
-      "identity_evidence": []
-    },
-    {
-      "device_id": "skylake-i5-6400",
-      "device_class": "cpu",
-      "model": "Intel Core i5-6400 (Skylake)",
-      "evidence_class": "windows-observed",
-      "observed_bdf": null,
-      "pci_ids": [],
-      "driver_candidates": [],
-      "firmware": {
-        "requirement": "unknown",
-        "package_candidates": [],
-        "package_resolution": "not-assessed",
-        "live_rootfs": "not-assessed",
-        "initrd": "not-assessed",
-        "installed_rootfs": "not-assessed",
-        "runtime_load": "not-assessed",
-        "redistribution": "unknown",
-        "evidence": []
-      },
-      "functional_validation": {
-        "status": "not-run",
-        "environment": "none",
-        "evidence": []
-      },
-      "notes": [
-        "CPU identification is Windows-observed. This profile makes no claim about microcode package inclusion."
-      ],
-      "identity_evidence": []
-    },
-    {
-      "device_id": "intel-hd-530",
-      "device_class": "graphics",
-      "model": "Intel HD Graphics 530",
-      "evidence_class": "windows-observed",
-      "observed_bdf": null,
-      "pci_ids": [],
-      "driver_candidates": [
-        {
-          "candidate_id": "i915-mesa",
-          "name": "Intel i915 + Mesa graphics stack",
-          "kernel_module": "i915",
-          "userspace_candidates": [
-            "Mesa Intel userspace"
-          ],
-          "package_candidates": [],
-          "package_resolution": "not-assessed",
-          "kernel_config": "not-assessed",
-          "runtime_binding": "unknown",
-          "source_license": "unknown",
-          "evidence": []
-        }
-      ],
-      "firmware": {
-        "requirement": "unknown",
-        "package_candidates": [],
-        "package_resolution": "not-assessed",
-        "live_rootfs": "not-assessed",
-        "initrd": "not-assessed",
-        "installed_rootfs": "not-assessed",
-        "runtime_load": "not-assessed",
-        "redistribution": "unknown",
-        "evidence": []
-      },
-      "functional_validation": {
-        "status": "not-run",
-        "environment": "none",
-        "evidence": []
-      },
-      "notes": [
-        "Candidate free graphics path only. DRM/KMS, firmware needs, Guix package closure and Plasma session have not been tested on this target."
-      ],
-      "identity_evidence": []
-    },
-    {
-      "device_id": "nvidia-gtx-1050-ti",
-      "device_class": "graphics",
-      "model": "NVIDIA GeForce GTX 1050 Ti (Pascal, sm_61)",
-      "evidence_class": "windows-observed",
-      "observed_bdf": "00000000:01:00.0",
-      "pci_ids": [
-        "10de:1c82"
-      ],
-      "driver_candidates": [
-        {
-          "candidate_id": "nouveau-pascal",
-          "name": "Nouveau + Mesa/NVK (upstream lists Kepler and later; H170 validation pending)",
-          "kernel_module": "nouveau",
-          "userspace_candidates": [
-            "Mesa",
-            "NVK (upstream generation range includes Kepler/Pascal; exact 10de:1c82 runtime not assessed)"
-          ],
-          "package_candidates": [],
-          "package_resolution": "not-assessed",
-          "kernel_config": "not-assessed",
-          "runtime_binding": "unknown",
-          "source_license": "unknown",
-          "evidence": [
-            {
-              "kind": "upstream-reference",
-              "source": "Mesa NVK driver documentation",
-              "source_url": "https://docs.mesa3d.org/drivers/nvk.html",
-              "observed_at": "2026-11-26",
-              "summary": "Current upstream documentation lists Kepler and later GPU generations for NVK, Vulkan 1.4 conformance for officially supported GPUs, and Linux kernel >=6.6. A developer-only override may enumerate poorly tested or broken GPUs. This is generation-level upstream evidence only; exact 10de:1c82 enumeration, Guix package closure, firmware, binding and functional validation remain unassessed."
-            },
-            {
-              "kind": "upstream-reference",
-              "source": "Nouveau upstream feature matrix",
-              "source_url": "https://nouveau.freedesktop.org/FeatureMatrix.html",
-              "observed_at": "2026-11-27",
-              "summary": "Nouveau upstream lists Vulkan support from Kepler onward, but notes that GP10x Pascal has no practical reclocking path because the required firmware access is signature-restricted. This is a generation-level performance limitation; it does not establish exact GP107 runtime binding, firmware presence, package closure, or H170 functional validation."
-            }
-          ],
-          "notes": [
-            "Windows nvidia-smi reported physical adapter location 00000000:01:00.0. That BDF is not a PCI vendor:device ID.",
-            "Do not infer reclocking, full acceleration, firmware presence or usable KDE acceleration from detection. Pascal performance limitations must be documented.",
-            "Mesa's current NVK documentation lists Kepler and later GPUs, states a Linux 6.6 minimum, and documents a developer-only override that can expose poorly tested or broken GPUs. This upstream scope does not prove enumeration or functional support for PCI ID 10de:1c82."
-          ]
-        }
-      ],
-      "firmware": {
-        "requirement": "unknown",
-        "package_candidates": [],
-        "package_resolution": "not-assessed",
-        "live_rootfs": "not-assessed",
-        "initrd": "not-assessed",
-        "installed_rootfs": "not-assessed",
-        "runtime_load": "not-assessed",
-        "redistribution": "unknown",
-        "evidence": []
-      },
-      "functional_validation": {
-        "status": "not-run",
-        "environment": "none",
-        "evidence": []
-      },
-      "notes": [
-        "Windows nvidia-smi reported physical adapter location 00000000:01:00.0. That BDF is not a PCI vendor:device ID.",
-        "Do not infer reclocking, full acceleration, firmware presence or usable KDE acceleration from detection. Pascal performance limitations must be documented.",
-        "Separate GP107 research repository documents a physical NVK vector-add pass for PCI ID 10de:1c82 on its own test host. That host is not proven to be this H170 board; the result does not establish H170 runtime binding, display support, daily-driver stability, or this profile's functional_validation."
-      ],
-      "identity_evidence": [
-        {
-          "kind": "owner-hardware-profile",
-          "source": "Owner-shared Windows PowerShell Get-PnpDevice -Class Display inventory",
-          "observed_at": "2026-09-02",
-          "summary": "VEN_10DE DEV_1C82 SUBSYS_33511462 REV_A1. The separately observed BDF 00000000:01:00.0 is a bus address, not a vendor:device identifier."
-        }
-      ]
-    },
-    {
-      "device_id": "killer-e2200",
-      "device_class": "network",
-      "model": "Killer E2200 Gigabit Ethernet Controller",
-      "evidence_class": "windows-observed",
-      "observed_bdf": null,
-      "pci_ids": [],
-      "driver_candidates": [
-        {
-          "candidate_id": "alx-e2200",
-          "name": "Linux alx driver",
-          "kernel_module": "alx",
-          "userspace_candidates": [],
-          "package_candidates": [],
-          "package_resolution": "not-assessed",
-          "kernel_config": "not-assessed",
-          "runtime_binding": "unknown",
-          "source_license": "unknown",
-          "evidence": []
-        }
-      ],
-      "firmware": {
-        "requirement": "unknown",
-        "package_candidates": [],
-        "package_resolution": "not-assessed",
-        "live_rootfs": "not-assessed",
-        "initrd": "not-assessed",
-        "installed_rootfs": "not-assessed",
-        "runtime_load": "not-assessed",
-        "redistribution": "unknown",
-        "evidence": []
-      },
-      "functional_validation": {
-        "status": "not-run",
-        "environment": "none",
-        "evidence": []
-      },
-      "notes": [
-        "Owner profile observes a Killer E2200 adapter. Exact PCI vendor:device ID, package availability, binding and DHCP/traffic test remain unknown."
-      ],
-      "identity_evidence": []
-    },
-    {
-      "device_id": "kingston-nv2",
-      "device_class": "nvme-storage",
-      "model": "Kingston SNV2S1000G NVMe SSD",
-      "evidence_class": "windows-observed",
-      "observed_bdf": null,
-      "pci_ids": [],
-      "driver_candidates": [
-        {
-          "candidate_id": "nvme-controller",
-          "name": "Linux NVMe core driver",
-          "kernel_module": "nvme",
-          "userspace_candidates": [],
-          "package_candidates": [],
-          "package_resolution": "not-assessed",
-          "kernel_config": "not-assessed",
-          "runtime_binding": "unknown",
-          "source_license": "unknown",
-          "evidence": []
-        }
-      ],
-      "firmware": {
-        "requirement": "unknown",
-        "package_candidates": [],
-        "package_resolution": "not-assessed",
-        "live_rootfs": "not-assessed",
-        "initrd": "not-assessed",
-        "installed_rootfs": "not-assessed",
-        "runtime_load": "not-assessed",
-        "redistribution": "unknown",
-        "evidence": []
-      },
-      "functional_validation": {
-        "status": "not-run",
-        "environment": "none",
-        "evidence": []
-      },
-      "notes": [
-        "Storage model/capacity are Windows-observed. No read/write validation or initrd requirement is claimed."
-      ],
-      "identity_evidence": []
-    },
-    {
-      "device_id": "samsung-sata",
-      "device_class": "sata-storage",
-      "model": "Samsung 850 EVO 120 GB and Samsung HD321KJ 320 GB",
-      "evidence_class": "windows-observed",
-      "observed_bdf": null,
-      "pci_ids": [],
-      "driver_candidates": [
-        {
-          "candidate_id": "ahci-controller",
-          "name": "Linux AHCI/SATA driver",
-          "kernel_module": "ahci",
-          "userspace_candidates": [],
-          "package_candidates": [],
-          "package_resolution": "not-assessed",
-          "kernel_config": "not-assessed",
-          "runtime_binding": "unknown",
-          "source_license": "unknown",
-          "evidence": []
-        }
-      ],
-      "firmware": {
-        "requirement": "unknown",
-        "package_candidates": [],
-        "package_resolution": "not-assessed",
-        "live_rootfs": "not-assessed",
-        "initrd": "not-assessed",
-        "installed_rootfs": "not-assessed",
-        "runtime_load": "not-assessed",
-        "redistribution": "unknown",
-        "evidence": []
-      },
-      "functional_validation": {
-        "status": "not-run",
-        "environment": "none",
-        "evidence": []
-      },
-      "notes": [
-        "Storage models are Windows-observed. No filesystem, partition or write test has been performed."
-      ],
-      "identity_evidence": []
-    },
-    {
-      "device_id": "hda-audio",
-      "device_class": "audio",
-      "model": "High Definition Audio / Intel and NVIDIA display audio endpoints",
-      "evidence_class": "windows-observed",
-      "observed_bdf": null,
-      "pci_ids": [],
-      "driver_candidates": [
-        {
-          "candidate_id": "snd-hda-intel",
-          "name": "Linux HDA driver",
-          "kernel_module": "snd_hda_intel",
-          "userspace_candidates": [],
-          "package_candidates": [],
-          "package_resolution": "not-assessed",
-          "kernel_config": "not-assessed",
-          "runtime_binding": "unknown",
-          "source_license": "unknown",
-          "evidence": []
-        }
-      ],
-      "firmware": {
-        "requirement": "unknown",
-        "package_candidates": [],
-        "package_resolution": "not-assessed",
-        "live_rootfs": "not-assessed",
-        "initrd": "not-assessed",
-        "installed_rootfs": "not-assessed",
-        "runtime_load": "not-assessed",
-        "redistribution": "unknown",
-        "evidence": []
-      },
-      "functional_validation": {
-        "status": "not-run",
-        "environment": "none",
-        "evidence": []
-      },
-      "notes": [
-        "Windows lists audio endpoints. Codec-level enumeration, firmware, audio service setup and playback/capture remain untested."
-      ],
-      "identity_evidence": []
-    }
-  ],
-  "policy": {
-    "nonfree_components_included": false,
-    "automatic_firmware_updates": false,
-    "host_disk_writes": false,
-    "unknown_must_remain_unknown": true,
-    "notes": [
-      "Free baseline only; no Nonguix channel, proprietary NVIDIA package, substitute key or firmware bundle is added.",
-      "No driver candidate in this draft is asserted present, bound or functional.",
-      "The owner profile is Windows-observed; WSL2/QEMU inventory cannot prove physical Linux PCI binding."
-    ]
-  }
-}
+# Профілі драйверів і firmware
+
+<!-- SPDX-License-Identifier: LicenseRef-Volnist -->
+
+## Призначення
+
+Каталог містить окремі машиночитані профілі для конкретної reference-машини H170-Gaming 3. Це реєстр доказів і кандидатів, а не список гарантій сумісності й не автоматичний пакет для встановлення.
+
+- drivers/profiles/h170-free.json — базовий вільний профіль.
+- drivers/profiles/h170-compatibility.json — окремий opt-in запис кандидата NVIDIA 580.x для Pascal. Він не вмикає й не розповсюджує драйвер.
+- drivers/schema/profile.schema.json — JSON Schema Draft 2020-12.
+
+## Рівні доказів
+
+Поля навмисно розділяють етапи, які не можна зводити до одного прапорця:
+
+1. package_resolution — чи знайдено пакет у конкретному pinned Guix channel.
+2. kernel_config — чи драйвер вбудований або доступний як модуль у конкретному ядрі.
+3. live_rootfs, initrd, installed_rootfs — чи є потрібні файли саме на відповідному етапі завантаження/роботи.
+4. runtime_binding і runtime_load — чи драйвер реально прив'язався до пристрою та чи завантажив потрібне firmware.
+5. functional_validation — окремий тест функції пристрою в названому середовищі.
+
+not-assessed означає, що перевірки ще не було. unknown означає, що наявних даних недостатньо. Ні те, ні інше не означає ані успіх, ані помилку.
+
+## Зв'язок із evidence bundle WSM
+
+Цей manifest — каталог кандидатів і стадій інтеграції драйвера; він не є
+підтвердженням функціональної сумісності. Загальний контракт
+[`wsm-profile-evidence/2`](../HARDWARE-PROFILE-EVIDENCE.md) має іншу
+роль: прив'язує точні bytes hardware report і `profile.scm`, а кожен
+функціональний `pass`/`fail` — до окремого hashed functional-test
+artifact. Не зливайте ці схеми в одну й не підвищуйте статус manifest
+через сам факт наявності evidence bundle.
+
+Поточні H170 manifests навмисно лишаються `profile_status: draft`:
+channel lock не доводить package resolution/build; Windows PCI identity
+не доводить Linux binding; перелік candidate packages не доводить
+firmware в live rootfs/initrd; жоден functional test не позначений
+`pass`. Інтеграція з installer можлива лише після окремої реалізації
+та acceptance policy, що споживає обидва контракти.
+
+
+## Початковий H170 target
+
+Фізичний профіль із juv4uk/wsm-os/docs/OWNER-HARDWARE-PROFILE.md, повторно перевірений 2026-09-02, описує Gigabyte H170-Gaming 3 / Intel Core i5-6400 / Intel HD Graphics 530 / NVIDIA GTX 1050 Ti Pascal / Killer E2200 / Kingston NVMe / Samsung SATA / HDA audio.
+
+Профіль джерела є Windows-observed і закріплений на [wsm-os@40ef00079d478d43fa496ec066bb96ac4c0850a3](https://github.com/juv4uk/wsm-os/blob/40ef00079d478d43fa496ec066bb96ac4c0850a3/docs/OWNER-HARDWARE-PROFILE.md). Для NVIDIA GeForce GTX 1050 Ti Windows PnP зафіксував vendor:device ID `10de:1c82` (`VEN_10DE DEV_1C82`, subsystem `SUBSYS_33511462`); це є доказом ідентичності пристрою у Windows, але не Linux driver binding. BDF `00000000:01:00.0` — лише адреса пристрою на шині й не є PCI ID. Для інших адаптерів PCI IDs не вигадуються та залишаються порожніми до read-only Linux inventory на фізичній машині. Wi-Fi та Bluetooth не підтверджені й залишаються `unobserved`. Windows identity сама по собі не доводить наявність Linux-модуля, firmware у rootfs/initrd, runtime binding чи функціональність.
+
+## Provenance джерел і каналів
+
+- **Free:** `channels.lock.scm` фіксує лише офіційний Guix channel `4e5195be20d9b124df8a8bb69213412236e4668e`. Для нього записано authenticated pull/channel introduction, але package query, system evaluation, build та ISO не виконані.
+- **Compatibility:** `channels/compatibility.lock.scm` окремо фіксує Guix `4e5195be20d9b124df8a8bb69213412236e4668e` і Nonguix `6b8897cd6f3223b158c070cdc9cc638279f8c337`. Структурна наявність цих revisions у lock не є доказом криптографічної автентифікації: її ще треба виконати через pinned `guix time-machine`; тому маніфест чесно ставить `channel_authentication_evidence: not-evaluated`.
+- **Owner hardware evidence:** обидва профілі посилаються на незмінний snapshot [`wsm-os@40ef00079d478d43fa496ec066bb96ac4c0850a3`](https://github.com/juv4uk/wsm-os/blob/40ef00079d478d43fa496ec066bb96ac4c0850a3/docs/OWNER-HARDWARE-PROFILE.md). У ньому BIOS F22e та UEFI спостережені у Windows; Secure Boot лишається `unknown`.
+- Channel revisions — лише identity inputs. Вони не доводять package resolution, kernel configuration, firmware у rootfs/initrd, runtime binding чи функціональність.
+
+
+## Оновлені upstream-орієнтири для GTX 1050 Ti (2026-11-26)
+
+Ці довідки уточнюють покоління-кандидати, але не підвищують жоден runtime/build статус у маніфестах:
+
+- **Вільний шлях Nouveau/NVK:** актуальна [документація Mesa NVK](https://docs.mesa3d.org/drivers/nvk.html) вказує Kepler і новіші покоління, Vulkan 1.4 для офіційно підтриманих GPU та мінімальне ядро Linux 6.6. Документація окремо попереджає, що developer-only override може відкрити навіть погано перевірені або зламані GPU. Це не доводить роботу PCI ID `10de:1c82`, Guix-пакета чи KDE acceleration на H170.
+
+- **Compatibility-шлях NVIDIA:** NVIDIA визначає Linux 580.x як останню Unix-гілку для Pascal ([строки підтримки](https://nvidia.custhelp.com/app/answers/detail/a_id/3142/kw/windows%20supported/related/1)). Для Pascal потрібен proprietary kernel-module flavor; відкриті NVIDIA kernel modules доступні лише для Turing і новіших поколінь ([офіційний посібник](https://docs.nvidia.com/datacenter/tesla/driver-installation-guide/610/kernel-modules.html)). Не підміняти цю залежність open-module пакетом.
+
+Станом на 2026-11-26 офіційна сторінка Linux 580.196.11 (реліз 23.11.2026) прямо перелічує GeForce GTX 1050 Ti у Supported Products: [NVIDIA 580.196.11](https://www.nvidia.com/en-us/drivers/details/285683/). Це лише product-list evidence; pinned Nonguix revision не означає, що package version дорівнює 580.196.11.
+
+Це лише upstream references. У профілях навмисно залишаються `package_resolution: not-assessed`, `kernel_config: not-assessed`, `runtime_binding: unknown`, `functional_validation: not-run` та невизначені license/redistribution. Наступний доказ — точний Guix package/closure і ABI на зафіксованому channel; після цього окремо потрібні image/rootfs/initrd inspection та фактичний тест. Не використовувати developer override як production acceptance.
+
+## Окремий шлях оцінювання та збірки Compatibility
+
+Compatibility не можна перевіряти через Free lock. Для нього є окремі Make targets,
+які завжди передають `channels/compatibility.lock.scm` до `guix time-machine`:
+
+| Команда | Що доводить | Чого не доводить |
+| --- | --- | --- |
+| `make describe-compatibility-lock` | Guix може розв'язати pinned Guix + Nonguix channels із перевіркою автентичності за замовчуванням | package resolution, build або роботу пристрою |
+| `make check-compatibility-eval` | structural lock policy, channel resolution та успішний `guix system build ... --dry-run` для `systems/live-compat.scm` | що derivations побудовані або образ завантажується |
+| `make build-compatibility-system` | повну побудову system derivation у Guix store | ISO image, BIOS/UEFI boot чи фізичну роботу NVIDIA |
+| `make image-live-compat` | побудову Compatibility ISO через той самий lock-aware `scripts/build_iso.sh`, із manifest та SHA-256 | BIOS/UEFI/QEMU acceptance або фізичну функціональність GPU |
+
+Приклад послідовності після commit у чистому checkout:
+
+```sh
+make describe-compatibility-lock
+make check-compatibility-eval
+make build-compatibility-system
+WSM_ISO_DIR="$PWD/build/compatibility-$(git rev-parse --short HEAD)" make image-live-compat
+```
+
+`scripts/build_iso.sh` відмовляється працювати з dirty worktree, повторно
+використовувати попередні output files або вимикати channel authentication.
+Для наступної спроби задавайте новий порожній `WSM_ISO_DIR`; не видаляйте
+попередні build logs до розбору результату.
+
+Ці targets навмисно **не входять** до `make check`, Free Minimal release workflow
+або default image target. Вони потребують Guix, часу та дискового місця для
+окремого opt-in Compatibility closure. Навіть успішний `build-compatibility-system`
+чи `image-live-compat` не змінює manifest status на functional pass:
+після build окремо потрібні BIOS/UEFI QEMU smoke, перевірка rootfs/initrd,
+а для твердження про GTX 1050 Ti — дозволена фізична перевірка на H170.
+Жодна з цих команд не запускає `guix system init`, не змінює фізичний диск,
+EFI/NVRAM або firmware хоста.
+
+## Валідація
+
+Запустити:
+
+    python3 tests/test_driver_profiles.py
+
+До інтеграції у Live ISO потрібно заповнити кожне поле реальним результатом pinned package query/build, перевірити rootfs/initrd окремо та зберегти точні логи/версії. Для функціонального статусу потрібен окремий QEMU або дозволений physical test; QEMU/WSL не доводять binding на фізичному H170.
+
+## Межі безпеки
+
+Профілі не виконують firmware update, не завантажують модулі, не монтують/форматують диски та не змінюють EFI. `profile_class: free` і `enabled_by_default: true` описують клас та політику ввімкнення, а не підтверджують Free-сумісність кожного пакета. Для неперевірених кандидатів `source_license` лишається `unknown`, а `package_resolution` — `not-assessed`, доки пакет не перевірено на точній ревізії з `channels.lock.scm` і не завершено окремий license review. Free profile не містить Nonguix або proprietary components. Compatibility profile вимкнений за замовчуванням; ліцензія, ABI, походження та право розповсюдження NVIDIA package залишаються unknown до окремого review.
+
+## Наявний system-level Compatibility профіль
+
+`systems/compatibility.scm` тепер існує в `main` як окремий opt-in рецепт Nonguix/NVIDIA `nvda-580`. Це не робить H170 compatibility manifest buildable: наявний `channels.lock.scm` фіксує лише офіційний Guix, а recipe потребує `(nonguix transformations)` і `(nongnu packages ...)`. Окремий `channels/compatibility.lock.scm` уже фіксує Guix + Nonguix commits та introduction fingerprints, але його криптографічну автентифікацію ще не виконано. Тому package resolution/build/redistribution у H170 Compatibility лишаються `not-assessed`/`unknown`. Free profile та основний `systems/live.scm` не повинні імпортувати Compatibility чи Nonguix.
+
+
+## GP107 Pascal: firmware is a separate acceptance gate
+
+Для NVIDIA GTX 1050 Ti (GP107) не можна робити висновок, що відкритий
+kernel module автоматично дає повноцінне 3D/compute прискорення без firmware.
+
+Upstream Nouveau:
+- [gp107.c](https://codebrowser.dev/linux/linux/drivers/gpu/drm/nouveau/nvkm/engine/gr/gp107.c.html)
+  оголошує FECS/GPCCS та GR software-context firmware dependencies.
+- [gm200.c](https://codebrowser.dev/linux/linux/drivers/gpu/drm/nouveau/nvkm/engine/gr/gm200.c.html)
+  завантажує FECS і GPCCS через ACR handlers; fallback
+  `gm200_gr_nofw()` повідомляє про відсутнє firmware та повертає
+  `-ENODEV`.
+
+Отже, для GP107 GR 3D/compute потрібні відповідні firmware artifacts.
+Linux-libre без цих nonfree firmware blobs не можна рекламувати як
+повноцінно прискорений GP107 3D/compute stack. Це **не доводить**, що
+basic display/KMS також неможливий без GR firmware: display acceptance
+потрібно перевіряти окремо.
+
+Важливо розрізняти:
+- firmware, яке можна redistributable за окремою vendor license;
+- firmware, яке є вільним/відкритим;
+- незалежну open firmware implementation.
+
+Сам факт присутності NVIDIA firmware у linux-firmware не робить його
+open-source. Перш ніж заявляти про повністю вільний GP107 acceleration,
+потрібно довести законний і технічно реалістичний шлях незалежної
+відкритої реалізації. Не обходити ACR/signature chain і не змінювати
+firmware acceptance statuses без окремого доказу.
+
+Це обмеження не змінює H170 profile на функціонально перевірений:
+`runtime_binding`, package resolution, firmware package stages та
+`functional_validation` залишаються окремими й непідтвердженими.
