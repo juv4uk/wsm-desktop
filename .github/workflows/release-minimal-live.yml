@@ -296,7 +296,7 @@ jobs:
           else
             gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" --draft --prerelease \
-              --title "WSM Desktop 0.1.0-rc3 — Minimal Live Installer Preview" \
+              --title "$RELEASE_TITLE" \
               --notes-file "$release_dist/RELEASE-NOTES.md"
           fi
           gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" "${ASSETS[@]}"
