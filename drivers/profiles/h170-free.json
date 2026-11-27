@@ -82,15 +82,37 @@
       "pci_ids": [],
       "driver_candidates": [],
       "firmware": {
-        "requirement": "unknown",
+        "requirement": "optional",
         "package_candidates": [],
         "package_resolution": "not-assessed",
         "live_rootfs": "not-assessed",
         "initrd": "not-assessed",
         "installed_rootfs": "not-assessed",
         "runtime_load": "not-assessed",
-        "redistribution": "unknown",
-        "evidence": []
+        "redistribution": "nonfree",
+        "evidence": [
+          {
+            "kind": "owner-hardware-profile",
+            "source": "wsm-os BIOS F22e FIT and physical microcode evidence",
+            "source_url": "https://github.com/juv4uk/wsm-os/blob/main/hardware/bios-f22e/FIT-AND-STRUCTURE-ANALYSIS.md",
+            "observed_at": "2026-09-03",
+            "summary": "For exact CPUID 0x000506E3 (i5-6400), BIOS F22e contains microcode revision 0xC2 dated 2017-11-16; the UEFI pre-OS probe observed 0xC2, while the Windows host later reported 0xD6 dated 2019-10-03. Without an OS early-update package, Linux can still boot using BIOS-provided 0xC2; this evidence does not assert the latest available Intel revision."
+          },
+          {
+            "kind": "upstream-reference",
+            "source": "Linux x86 microcode loader documentation",
+            "source_url": "https://www.kernel.org/doc/html/next/x86/microcode.html",
+            "observed_at": "2026-11-27",
+            "summary": "The Linux kernel can apply Intel microcode early from the initrd at kernel/x86/microcode/GenuineIntel.bin. This is an OS firmware package path separate from the BIOS-provided microcode; early loading is distinct from the unsafe/disabled-by-default late-load path."
+          },
+          {
+            "kind": "upstream-reference",
+            "source": "Intel official Linux processor microcode repository license",
+            "source_url": "https://github.com/intel/Intel-Linux-Processor-Microcode-Data-Files/blob/main/license",
+            "observed_at": "2026-11-27",
+            "summary": "Intel's official microcode package license permits binary redistribution without modification and prohibits reverse engineering, decompilation and disassembly. The update package is nonfree; it must not enter the WSM Free closure."
+          }
+        ]
       },
       "functional_validation": {
         "status": "not-run",
@@ -98,7 +120,8 @@
         "evidence": []
       },
       "notes": [
-        "CPU identification is Windows-observed. This profile makes no claim about microcode package inclusion."
+        "CPU identification is Windows-observed. This profile makes no claim about microcode package inclusion.",
+        "BIOS F22e already loads microcode 0xC2 for this exact CPU before the OS; Windows later applies 0xD6. A Linux-libre Free profile without Intel's nonfree early-update package can boot on BIOS microcode 0xC2, but does not reproduce the observed Windows 0xD6 update. Keep microcode revision in benchmark metadata; do not late-load or reverse engineer the blob."
       ],
       "identity_evidence": []
     },
