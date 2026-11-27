@@ -194,6 +194,9 @@ jobs:
         run: |
           set -euo pipefail
           SIZE="$(stat -c '%s' "$release_dist/$release_iso")"
+          # This variable is local to this shell step. GITHUB_ENV is only
+          # visible to subsequent steps, never to the current Python command.
+          release_parts=0
           # GitHub caps one release asset at 2 GiB. A Guix system closure does
           # not fit, and refusing outright would mean never shipping: the
           # previous release shipped as parts with a checksum file.
@@ -204,11 +207,12 @@ jobs:
             split -b 1900M -d -a 3 "$release_dist/$release_iso" \
               "$release_dist/$release_iso.part"
             rm -f "$release_dist/$release_iso"
-            echo "release_parts=1" >> "$GITHUB_ENV"
+            release_parts=1
           else
             echo "ISO is $SIZE bytes; publishing whole"
-            echo "release_parts=0" >> "$GITHUB_ENV"
+            release_parts=0
           fi
+          echo "release_parts=$release_parts" >> "$GITHUB_ENV"
           # The checksum manifest and the release manifest were written while
           # the whole image still existed. Once it is split, both must describe
           # what is actually published, or the read-back check rejects the
