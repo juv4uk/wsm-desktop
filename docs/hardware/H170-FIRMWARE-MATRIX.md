@@ -75,3 +75,35 @@ Pinned Guix channel commit
 - Повна Guix system build/ISO closure та physical boot на H170.
 
 До виконання цих перевірок manifest зберігає `not-assessed`, `unknown` та `not-run`; не перетворює package/config evidence на hardware certification.
+
+
+## 7. Реалістичність незалежної відкритої реалізації
+
+| Компонент | Поточна оцінка | Що реально робити | Межа / що не обіцяти |
+| --- | --- | --- | --- |
+| GP107 GR FECS/GPCCS | **Hard limit для поточного Free path** | Продовжувати відкритий Nouveau/NVK driver work, досліджувати публічні протоколи та незалежні hardware observations у межах прав | Без потрібної NVIDIA-signed firmware upstream fallback повертає `-ENODEV`; звичайний kernel patch не замінить signed Falcon firmware. Відкриту сумісну firmware реалізацію не знайдено |
+| GP107 Pascal reclocking | **Hard limit у поточному Nouveau** | Оптимізувати queueing, memory residency, synchronization та userspace workloads у доступному power state | Nouveau Feature Matrix вказує на відсутність практичного reclocking шляху для GP10x через підписані firmware. Не обіцяти частоти/продуктивність на рівні NVIDIA proprietary |
+| Intel HD 530 DMC | **Обмежена функціональність** | Зберегти відкритий i915/Mesa; оптимізувати базову графіку та workload paths; окремо вимірювати idle/power | Без nonfree DMC firmware upstream вимикає runtime power management. Відкриту заміну DMC не підтверджено |
+| Intel GuC/HuC | **Optional capability gap** | Перевірити workloads, які реально потребують GuC/HuC; оптимізувати доступні без них шляхи | Не називати media/scheduling capabilities доступними без відповідного firmware evidence |
+| Intel CPU microcode | **Nonfree optional update** | Використовувати BIOS-provided 0xC2 у Free profile; фіксувати revision у benchmark metadata | OS update до 0xD6 потребує Intel nonfree package. Відкритої заміни microcode не знайдено; не декомпілювати blob |
+| Intel ME/CSME | **Pre-OS domain, поза Guix host closure** | Підтримувати відкритий host-side MEI/HECI driver та документувати доступні інтерфейси | ME 11.8.50.3425 лишається в BIOS/SPI. Це не Linux driver firmware; не обіцяти заміну CSME в межах desktop profile |
+| Killer E2200 family / alx | **Software-optimization opportunity** | Оптимізувати open alx path лише за виміряного bottleneck; перевірити точний PCI ID | Зовнішня host firmware не потрібна у перевіреному alx source; точний silicon/PCI ID ще unknown |
+| HDA / Realtek | **Software-optimization opportunity** | Налаштувати ALSA/UCM, codec verbs та power states після точного codec enumeration | Базовий HDA path не потребує vendor firmware; ALC1150 поки board-spec evidence, не фізично прочитаний codec ID |
+| SATA/AHCI, NVMe, USB/xHCI | **Software-optimization opportunity** | Профілювати I/O queues, scheduler, latency та power; окремо тестувати кожний пристрій | Host driver не потребує зовнішнього firmware у перевірених шляхах; firmware всередині SSD/контролера не є Guix host package |
+
+**Важливо:** "Hard limit" означає, що в цьому аудиті не знайдено підтвердженого відкритого й законного шляху до повної функції. Це не твердження про математичну неможливість майбутнього рішення. Не обходити ACR/signature chain і не робити firmware reverse engineering без окремої правової оцінки.
+
+## 8. Завершення статичного аудиту та наступні перевірки
+
+Статичний firmware/license audit вважається завершеним, коли:
+- кожен відомий H170 компонент має host-driver/firmware classification або явний unknown;
+- відомі nonfree firmware/microcode не приховані як unknown і не включені до Free closure;
+- кожен висновок має джерело та межу доказу;
+- physical/runtime checks винесені в окремі задачі.
+
+Залишкові physical/runtime роботи ведуться окремо:
+- #511 — benchmark baseline та актуальний NVK A/B;
+- #512 — GP107 capability gaps та H170 decision;
+- #514 — Guix profile build/closure та фізична інтеграція.
+
+До окремого owner approval не виконувати GPU enumeration, Vulkan channel init/submit, reboot, firmware update або destructive storage tests.
