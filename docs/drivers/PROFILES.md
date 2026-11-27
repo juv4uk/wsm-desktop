@@ -207,3 +207,16 @@ ACR без попередньої правової оцінки. Дослідж�
 за конкретними функціями. У H170 manifest firmware позначено
 `optional` для базової графіки та `nonfree` за ліцензією; це не
 підвищує package, runtime або functional-validation statuses.
+
+
+### Як читати firmware.redistribution у Free manifest
+
+Поле `firmware.redistribution` описує відомий клас ліцензії
+мікропрограми, а не факт її включення до образу. Тому Free manifest
+може чесно позначити відому залежність як `nonfree`, водночас залишаючи
+`package_candidates: []`, `package_resolution: not-assessed` і всі
+стадії присутності/завантаження непідтвердженими. Саме
+`policy.nonfree_components_included: false` та відсутність package
+candidates гарантують, що відома невільна мікропрограма не стає частиною
+Free closure. Не приховуйте невільну залежність значенням `unknown`,
+якщо її ліцензія вже встановлена.
