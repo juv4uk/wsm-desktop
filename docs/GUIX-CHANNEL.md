@@ -14,7 +14,7 @@
 
 | Scheme module | Файл | Стан |
 |---|---|---|
-| `(wsm systems performance)` | `wsm/systems/performance.scm` | існуючий модуль; потребує Guix evaluation у channel context |
+| `(wsm systems performance)` | `wsm/systems/performance.scm` | source-tree evaluation проти pinned Guix додається у CI; authenticated channel lookup — тільки після Phase B |
 | `(wsm packages wsm)` | `wsm/packages/wsm.scm` | package metadata має невирішену ліцензійну суперечність #367; не оголошувати release-ready |
 
 Не переносити модулі з `wsm/` без необхідності: цей шлях уже відповідає Scheme namespace `(wsm …)`. Файли `systems/*.scm` залишаються machine/release configurations, а не публічним API channel namespace.
@@ -104,13 +104,22 @@ Bootstrap має бути виконаний власником ключа:
 
 Після introduction кожен commit у каналі має бути підписаний авторизованим ключем. Не використовувати непідписані GitHub-generated merge commits у захищеній історії; узгодити signed fast-forward/rebase workflow та правила GitHub перед вмиканням channel release. Не використовувати `--disable-authentication` для acceptance.
 
+## Що перевіряє CI до trust bootstrap
+
+До появи owner-signed introduction CI може перевіряти сумісність WSM Scheme source tree з API pinned Guix. Smoke-test імпортує `(wsm systems performance)` через локальний load-path `-L .` і перевіряє, що експортований набір служб не порожній. Його результат позначається `WSM-SOURCE-MODULE-EVAL-OK`.
+
+Це **source-tree module evaluation**, а не завантаження WSM із Guix channel: локальний checkout додається до module load path. Цей тест не доводить channel lookup, authentication, package closure або runtime. CI явно виводить `WSM_CHANNEL_AUTHENTICATION=NOT_TESTED`.
+
+Після Phase B потрібна окрема перевірка реального channel consumer: owner-approved WSM commit у двоканальному H170 lock, стандартний `guix time-machine` **без** `-L .` і без `--disable-authentication`, після чого імпорт того самого public module. Не вмикати цей gate до підписаного introduction та підтвердженого authorization chain.
+
 ## Release gates
 
 | Рівень | Що доводить | Чого не доводить |
 |---|---|---|
 | Channel metadata | Guix розпізнає структуру репозиторію | Authentication або package correctness |
 | Authentication | Commit chain походить від authorized key | Scheme evaluation/build |
-| Module evaluation | WSM Scheme modules імпортуються на pinned Guix | Package closure або runtime |
+| Source-tree module evaluation (CI) | WSM Scheme module imports/evaluation сумісні з pinned Guix API під час завантаження з checkout (`-L .`) | Завантаження WSM як channel, authentication, closure або runtime |
+| Authenticated channel consumer test | Після owner-signed bootstrap `guix time-machine` завантажує точний WSM commit без локального `-L .` | Package/system build або hardware runtime |
 | Package/system build | Derivations і closure збираються | Boot або фізичне обладнання |
 | QEMU boot | Загальний boot path у VM | Фізичну H170/GPU функціональність |
 | H170 functional test | Точна функція перевірена на цільовому ПК | Інші пристрої/конфігурації |

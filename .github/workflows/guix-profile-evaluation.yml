@@ -4,7 +4,10 @@ on:
   pull_request:
     paths:
       - ".github/workflows/guix-profile-evaluation.yml"
+      - ".guix-channel"
+      - ".guix-authorizations"
       - "channels.lock.scm"
+      - "tests/guix/**"
       - "channels/**"
       - "systems/**/*.scm"
       - "wsm/**/*.scm"
@@ -48,10 +51,11 @@ jobs:
           sudo systemctl enable --now guix-daemon.service
           guix --version
 
-      - name: Evaluate profiles with authenticated channel locks
+      - name: Evaluate pinned Guix profiles with local WSM source modules
         run: |
           set -euo pipefail
           make check-guix-eval
+          echo "WSM_CHANNEL_AUTHENTICATION=NOT_TESTED"
 
       - name: Save Guix checkout cache
         if: success() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
