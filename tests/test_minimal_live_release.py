@@ -343,31 +343,29 @@ class SplitAssetTests(unittest.TestCase):
         self.assertIn("ISO size:", self.text)
 
 class SplitChecksumTests(unittest.TestCase):
-    """After a split, the manifests must describe what is actually published."""
+    """The release workflow delegates checksum creation to the tested helper."""
 
     def setUp(self) -> None:
-        self.text = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
+        self.text = (ROOT / ".github" / "workflows" / "release-minimal-live.yml").read_text(encoding="utf-8")
 
-    def test_checksums_are_rewritten_after_the_split(self) -> None:
+    def test_shared_checksum_preparer_runs_after_split_and_before_upload(self) -> None:
         split = self.text.index("Поділити образ на частини")
-        rewrite = self.text.index("checksums rewritten for", split)
-        self.assertGreater(rewrite, split)
+        prepare = self.text.index('python scripts/prepare_release_checksums.py "$release_dist" "$release_iso" "$release_parts"')
+        verify = self.text.index('(cd "$release_dist" && sha256sum -c SHA256SUMS)', prepare)
+        upload = self.text.index("Створити чернетку релізу та завантажити assets")
+        self.assertLess(split, prepare)
+        self.assertLess(prepare, verify)
+        self.assertLess(verify, upload)
 
-    def test_manifest_records_parts(self) -> None:
-        self.assertIn('artifact["published_as"] = "parts"', self.text)
-        self.assertIn('artifact["parts"] = parts', self.text)
+    def test_sidecar_is_uploaded_and_attested_for_both_iso_forms(self) -> None:
+        upload = self.text[self.text.index("Створити чернетку релізу та завантажити assets"):self.text.index("Перевірити завантажені assets до публікації")]
+        attest = self.text[self.text.index("Підписати provenance релізних артефактів"):self.text.index("Перевірити версію GitHub CLI")]
+        verify = self.text[self.text.index("Перевірити provenance артефактів перед публікацією"):self.text.index("Опублікувати перевірений GitHub pre-release")]
+        self.assertIn('"$release_dist/ISO-CHECKSUMS.sha256"', upload)
+        self.assertIn("ISO-CHECKSUMS.sha256", attest)
+        self.assertIn('"ISO-CHECKSUMS.sha256"', verify)
+        self.assertIn('test "$VERIFIED_COUNT" -ge 7', verify)
 
-    def test_split_sidecar_is_covered_by_top_level_checksums(self) -> None:
-        sidecar = self.text.index('sidecar = root / "ISO-CHECKSUMS.sha256"')
-        append = self.text.index("covered.append(sidecar)", sidecar)
-        top_level = self.text.index('(root / "SHA256SUMS").write_text', sidecar)
-        self.assertLess(sidecar, append)
-        self.assertLess(append, top_level)
-
-    def test_sha256sums_covers_the_parts_not_the_removed_image(self) -> None:
-        """The read-back check rejects a listed file that is not in the upload."""
-        self.assertIn("covered = [root / name for name in parts]", self.text)
-        self.assertIn("if not split:", self.text)
 
 class ReassemblyDocTests(unittest.TestCase):
     """A published artifact nobody can assemble is not published."""
