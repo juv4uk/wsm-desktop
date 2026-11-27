@@ -39,11 +39,32 @@ Release target — одна конкретна платформа власник
 - Для Intel HD 530 відокремлювати базовий i915 graphics від DMC-backed runtime power management та інших optional capabilities.
 - CPU microcode, firmware і кожна периферійна функція мають окремий evidence state.
 
-### H170 Compatibility
+### H170 Compatibility — лише явний opt-in
 
-- Лише явний opt-in, окремий lock і окрема збірка.
-- NVIDIA 580.x для Pascal — кандидат, а не готовий пакет: потрібні exact source/package resolution, kernel ABI build, module signing/runtime binding та redistribution review.
-- Compatibility не змінює Free closure і не може бути непомітною залежністю Free channel.
+Compatibility — це окрема родина профілів, а не один змішаний набір драйверів. Кожен варіант має власний system definition, closure, release evidence та чітко визначений активний GPU driver. У межах одного boot profile не завантажувати Nouveau і proprietary NVIDIA kernel driver одночасно.
+
+#### Nouveau + nonfree GP107 firmware
+
+Цей варіант зберігає відкритий kernel/userspace stack Nouveau + Mesa/NVK, але явно додає потрібні NVIDIA GP107 firmware blobs із linux-firmware. Це не Free-профіль: для GP107 GR 3D/compute потрібні FECS/GPCCS та пов'язаний набір firmware, який має окремі vendor license terms.
+
+- Не переносити nonfree firmware до H170 Free.
+- Linux-libre Free profile не є автоматично придатною основою для цього варіанту; потрібно окремо вибрати й перевірити kernel package/configuration, який може завантажувати зовнішні firmware.
+- Перевірити exact GP107 file set, WHENCE entries, усі symlink targets, SHA-256, provenance, license files, redistributability, package closure та presence в live rootfs, initrd й installed rootfs.
+- Не додавати весь linux-firmware набором «на всяк випадок». Власний subset допустимий лише після доказу повного dependency set і ліцензійної повноти.
+- Не вважати успішний Kali/NVK compute witness доказом роботи цього Guix Compatibility closure.
+
+#### Proprietary NVIDIA 580.x
+
+Це інший, взаємовиключний boot path: proprietary NVIDIA kernel modules/userspace для Pascal та їхній власний firmware stack.
+
+- NVIDIA 580.x — кандидатна гілка для Pascal, не release-ready package.
+- У pinned Nonguix recipe nvidia-firmware-580 є GSP firmware для proprietary NVIDIA driver; це **не** Nouveau FECS/GPCCS firmware. Для Nouveau потрібен окремий linux-firmware path.
+- Потрібні точна версія/source archive, kernel ABI build, module signing/runtime binding, userspace closure, firmware provenance й redistribution review.
+- Перевіряти також ELF patching/relocation у package recipe проти умов NVIDIA EULA; не публікувати відповідні binary artifacts, доки ліцензійний review не завершено.
+
+Обидва Compatibility paths є дослідницькими кандидатами. Їх не можна вважати готовими лише через наявність recipe, firmware package або драйверного модуля в ISO. Package resolution, build, closure, initrd/rootfs presence, runtime binding та функціональні тести залишаються окремими acceptance gates.
+
+Compatibility не змінює H170 Free closure і не може бути непомітною залежністю Free channel.
 
 Wi-Fi, Bluetooth, Thunderbolt, webcam та інша неінвентаризована периферія залишаються `unknown/not-assessed`. Не обіцяти універсальну підтримку ПК у першому релізі.
 
