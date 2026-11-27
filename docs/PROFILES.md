@@ -160,7 +160,7 @@ WSM відрізняється від голого Guix тим, що має да
 
 ```sh
 python3 scripts/check_channels.py --policy free --lock channels.lock.scm
-python3 scripts/check_channels.py --policy compatibility --lock channels.compatibility.lock.scm
+python3 scripts/check_channels.py --policy compatibility --lock channels/compatibility.lock.scm
 ```
 
 Політика `free` дозволяє лише офіційний Guix. Політика `compatibility`
