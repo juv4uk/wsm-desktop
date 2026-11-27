@@ -355,6 +355,18 @@ class SplitAssetTests(unittest.TestCase):
     def test_parts_are_listed_as_assets(self) -> None:
         self.assertIn('"$release_dist/$release_iso".part*', self.text)
 
+    def test_release_parts_flag_is_local_before_manifest_rewrite(self) -> None:
+        """GITHUB_ENV is for later steps, not variables in the current shell."""
+        start = self.text.index("name: Поділити образ на частини")
+        end = self.text.index("name: Створити чернетку релізу та завантажити assets", start)
+        step = self.text[start:end]
+        self.assertRegex(step, r"(?m)^\s*release_parts=0$")
+        self.assertRegex(step, r"(?m)^\s*release_parts=1$")
+        self.assertIn('echo "release_parts=$release_parts" >> "$GITHUB_ENV"', step)
+        python_rewrite = step.index('python - "$release_dist" "$release_iso" "$release_parts"')
+        self.assertLess(step.index("release_parts=0"), python_rewrite)
+        self.assertLess(step.index("release_parts=1"), python_rewrite)
+
     def test_whole_step_output_is_captured(self) -> None:
         """The refusal used to print to the job log, which needs authentication."""
         self.assertIn('exec > >(tee -a "$WSM_ISO_DIR/step.log")', self.text)
