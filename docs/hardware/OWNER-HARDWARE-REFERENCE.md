@@ -161,3 +161,45 @@ channel, Linux-libre чи повний склад саме цієї H170 кон�
 
 Для зведеного огляду firmware, microcode, ліцензій і функціональних обмежень
 див. [H170 firmware/capability matrix](H170-FIRMWARE-MATRIX.md).
+
+## Актуалізація GP107: software hardening і межа апаратних доказів (2026-11-28)
+
+Канонічний знімок зовнішнього дослідницького репозиторію:
+[juv4uk/gp107-nvidia-re @ 8cb70ae489474eccbec9ce7809f642a11eefc8c1](https://github.com/juv4uk/gp107-nvidia-re/tree/8cb70ae489474eccbec9ce7809f642a11eefc8c1).
+Це пізніший source snapshot для GP107 research, а не доказ на H170.
+
+- [docs/29](https://github.com/juv4uk/gp107-nvidia-re/blob/8cb70ae489474eccbec9ce7809f642a11eefc8c1/docs/29-userspace-capability-driver.md)
+  і [docs/30](https://github.com/juv4uk/gp107-nvidia-re/blob/8cb70ae489474eccbec9ce7809f642a11eefc8c1/docs/30-userspace-capability-ledger.md)
+  описують C11 userspace/sysfs identity, fail-closed driver binding та capability ledger.
+  Після merged hardening приватний mapper використовує pinned PCI directory fd:
+  перевіряє BDF, vendor/device/revision, subsystem IDs, `uevent` і PCI config
+  через цей самий fd; `resource0` відкривається відносно нього з
+  `O_NOFOLLOW`, розмір перевіряється через `fstat`, а driver binding
+  повторно перевіряється перед read-only mapping. Synthetic substitution
+  witnesses доводять відмову на підміні BDF/device у fixture, а не на фізичній H170.
+- Це **не** означає, що фізичний BAR0 read став безпечним або був виконаний.
+  У поточному GP107 `master` лишається production path до
+  `openat(resource0)` / `mmap(PROT_READ)`; сам `PROT_READ` не доводить,
+  що читання довільного регістру не має side effects. Фізичний MMIO/BAR,
+  driver unbind і BOOT0 залишаються **NOT AUTHORIZED / NOT RUN / UNPROVEN**.
+- [GP107 PR #53](https://github.com/juv4uk/gp107-nvidia-re/pull/53) пропонує
+  наступний безпечніший крок: після identity/driver/BAR/offset software gates
+  повертати `read-safe-offset-unproven`, не відкривати `resource0` і не
+  виконувати mapping/read. На момент цього знімка PR **не злитий**:
+  exact-head run `46084831447` завершився failure у необов'язковому host
+  inventory tail; review також вимагає перенести новий pinned-dirfd захист із
+  master у PR перед повторним CI. Тому це pending candidate, не чинний
+  merged contract і не підстава запускати MMIO.
+- GP107 [docs/20–21](https://github.com/juv4uk/gp107-nvidia-re/tree/8cb70ae489474eccbec9ce7809f642a11eefc8c1/docs)
+  лишаються NVIDIA R580-only HOST_VISIBLE/HOST_COHERENT baseline та матрицею
+  108 точок на окремому тестовому host. Це не NVK A/B і не H170 performance
+  baseline. [docs/22](https://github.com/juv4uk/gp107-nvidia-re/blob/8cb70ae489474eccbec9ce7809f642a11eefc8c1/docs/22-device-local-transfer-and-compute-phases.md)
+  містить виправлений command-stream код із memory dependencies та
+  `memoryTypeBits` check, але виправлення ще потребує build, synchronization
+  validation і нових фізичних повторів; історичні DEVICE_LOCAL цифри лишаються
+  **NOT ACCEPTED / EXPLORATORY**.
+- Для WSM це лише зовнішня device-level/software evidence. Вона не підвищує
+  H170 `runtime_binding`, firmware presence, KMS/display, functional validation
+  або Free/Compatibility profile verdicts. Їхні стани лишаються такими, як
+  підтверджено власними H170 manifests; потрібен окремий native Linux
+  `wsm-hwcheck` report на самій платі.
