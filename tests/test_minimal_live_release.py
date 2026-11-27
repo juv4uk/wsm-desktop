@@ -155,15 +155,15 @@ class MinimalLiveProfileTests(unittest.TestCase):
         prepare = workflow.index("name: Підготувати точний перелік provenance subjects")
         attest = workflow.index("name: Підписати provenance релізних артефактів")
         verify = workflow.index("name: Перевірити provenance артефактів перед публікацією")
-        publish = workflow.index("name: Опублікувати перевірений GitHub pre-release")
+        final_step = workflow.index("name: Залишити перевірений prerelease чернеткою для owner approval")
         self.assertLess(prepare, attest)
         self.assertLess(attest, verify)
-        self.assertLess(verify, publish)
+        self.assertLess(verify, final_step)
         prepare_section = workflow[prepare:attest]
         self.assertIn("scripts/prepare_release_attestation_subjects.py", prepare_section)
         attest_section = workflow[attest:verify]
         self.assertIn('${{ steps.attestation-subjects.outputs.paths }}', attest_section)
-        verify_section = workflow[verify:publish]
+        verify_section = workflow[verify:final_step]
         self.assertIn('mapfile -t SUBJECTS < "$SUBJECT_FILE"', verify_section)
         self.assertIn('test "${#SUBJECTS[@]}" -eq "$EXPECTED_COUNT"', verify_section)
         self.assertIn('test "$VERIFIED_COUNT" -eq "$EXPECTED_COUNT"', verify_section)
