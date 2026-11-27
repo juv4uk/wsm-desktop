@@ -1,4 +1,4 @@
-# WSM Desktop 0.1.0-rc3 — Minimal Live Installer Preview
+# WSM Desktop — Minimal Live Installer Preview
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
@@ -167,7 +167,7 @@ build-provenance через GitHub Artifact Attestations і Sigstore. Реліз
 Локальна перевірка завантаженого ISO:
 
 ```sh
-gh attestation verify WSM-Desktop-0.1.0-rc3-Minimal-Live.iso \
+gh attestation verify WSM-Desktop-0.1.0-rc4-Minimal-Live.iso \
   --repo juv4uk/wsm-desktop \
   --signer-workflow juv4uk/wsm-desktop/.github/workflows/release-minimal-live.yml
 ```
