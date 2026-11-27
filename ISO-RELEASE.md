@@ -2,15 +2,19 @@
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-Реліз `0.1.0-rc2-live-iso` містить завантажувальні assets Free hardened ISO,
-включно з новою `-login`-версією. Compatibility/NVIDIA ISO зібрано локально
-та перевірено за SHA-256, але його шість бінарних частин ще не завантажено до GitHub Release. Тому checksum manifest не означає, що Compatibility ISO вже
-можна завантажити. Публікацію також відкладено до ліцензійної перевірки NVIDIA
-binary payload: чинна NVIDIA EULA §1.1(d) вимагає незмінених binary files для
-Linux distribution exception і передачі угоди одержувачам, тоді як pinned
-Nonguix recipe виконує `patchelf` над ELF у driver package. Це не юридичний
-висновок про конкретний archive 580.178.04; потрібна перевірка bundled EULA
-або письмове підтвердження.
+Реліз `0.1.0-rc2-live-iso` містить assets Free hardened ISO та шість базових
+частин Compatibility/NVIDIA ISO. Наявність Compatibility parts у GitHub Release
+підтверджена повторною перевіркою Release API 28.11.2026; це виправляє попередній
+стан документа, який помилково називав їх лише локальним кандидатом.
+
+**Публікація asset ≠ ліцензійне схвалення ≠ доказ походження ≠ апаратна сертифікація.**
+Для Compatibility/NVIDIA binary payload redistribution status залишається
+`NOT CLEARED`: NVIDIA EULA §1.1(d) містить умову щодо незмінених binary files,
+а pinned Nonguix recipe виконує `patchelf` над ELF у driver package. Це не
+юридичний висновок щодо конкретного archive 580.178.04. Не створювати нові
+дзеркала, повторні завантаження чи релізи цих binary assets до перевірки точного
+bundled EULA та окремого licensing review. Рішення про вже опубліковані assets
+не приймається цим документальним виправленням.
 
 GitHub обмежує один release asset до 2 GiB, тому ISO розбивається на частини.
 Загальний розмір релізу не обмежений; бінарні частини не додаються до Git-історії.
@@ -21,19 +25,36 @@ GitHub обмежує один release asset до 2 GiB, тому ISO розби
 | --- | --- | --- | ---: | --- |
 | Free, hardened | Опубліковано частинами | `wsm-desktop-kde-hardened-20261125.iso` | 8303056896 | `d1a000f8c465b496565b0f611ae6f65095086a8457c663f212ca5b17073fd7ef` |
 | Free, hardened (з консольним доступом) | Опубліковано частинами | `wsm-desktop-kde-hardened-20261126-login.iso` | 8277964800 | `deec276886656b99c3f3f58e51d9fd3fc89baf814e38e5f6e9ddc704976b17f7` |
-| Compatibility/NVIDIA | Зібрано локально; 6 частин ще не завантажено | `wsm-desktop-kde-compat-nvidia-20261126.iso` | 10382727168 | `19a1ca6fc1377fbfb878e1cf670fc521faf7ea0389579f3a6501d956b6df6da0` |
-| Compatibility/NVIDIA (з консольним доступом) | Зібрано локально; 6 частин ще не завантажено до GitHub Release | `wsm-desktop-kde-compat-nvidia-20261126-login.iso` | 10382725120 | `41486ff5c86db95c63a45c7fb1cf753e604eb97fef1f777093c4325a4edebd60` |
+| Compatibility/NVIDIA | 6 базових `.partNNN` assets присутні в RC2; redistribution NOT CLEARED | `wsm-desktop-kde-compat-nvidia-20261126.iso` | 10382727168 | `19a1ca6fc1377fbfb878e1cf670fc521faf7ea0389579f3a6501d956b6df6da0` |
+| Compatibility/NVIDIA (з консольним доступом) | Локальний кандидат; до RC2 не завантажений | `wsm-desktop-kde-compat-nvidia-20261126-login.iso` | 10382725120 | `41486ff5c86db95c63a45c7fb1cf753e604eb97fef1f777093c4325a4edebd60` |
 
 Частини мають вигляд `<ім'я ISO>.part001`, `.part002`, … і кожна менша за 2 GiB.
-Локальний Compatibility candidate розбито на 6 частин (перші п'ять по 1992294400
-байт, остання 421255168 байт); контрольні суми частин і цілого ISO лежать у
-`SHA256SUMS-compat`, суми релізних ISO — у `ISO-CHECKSUMS.sha256`.
-Зворотне складання локальних частин перевірено `scripts/reassemble-iso.sh`: 6
-частин, розмір збігається з таблицею, SHA-256 збігся. Станом на 26.11.2026 GitHub
-Release API повертає `SHA256SUMS-compat`, але не повертає жодної з шести
-Compatibility `.partNNN` частин. Тому команди завантаження нижче стосуються
-лише Free hardened ISO; для Compatibility спершу потрібно опублікувати payload
-і завершити ліцензійну перевірку.
+GitHub Release API для `0.1.0-rc2-live-iso` підтверджує шість базових
+Compatibility assets станом на 28.11.2026:
+
+| Asset | Розмір (байт) | GitHub API SHA-256 |
+| --- | ---: | --- |
+| `.part001` | 1992294400 | `909c33c038ab8504a4782f741ec13f6063335606f6db7051675d75436fc9f517` |
+| `.part002` | 1992294400 | `98e8e71a2ba1eb931c13dbeee926424c2e0380392a8447828af7d8e8b2e209eb` |
+| `.part003` | 1992294400 | `9f7d1d274efe494bf94c522ec688f24d41d6e0ec86c006afc9f281c9d9009dd0` |
+| `.part004` | 1992294400 | `6ac5a190260543e315c0e80efa26d258463f3879918bf1f1fed95bcaac6d8a19` |
+| `.part005` | 1992294400 | `2e4c4ab45a6acdb42506f6352f6de51b48e90f21059f227b415aaeeaade7926d` |
+| `.part006` | 421255168 | `557e8f1f3baa6456bf6cd6fe5ef28df424a42e1df58f300b22bedb6349cbb33a` |
+
+П'ять перших частин мають по 1992294400 байт, остання — 421255168 байт; сума
+розмірів дорівнює 10382727168 байт із таблиці. GitHub API також повертає
+`SHA256SUMS-compat` та `ISO-CHECKSUMS.sha256`. Однак у фактичному asset list
+RC2 **немає `release-manifest.json`**, тому `source_commit` для цих Compatibility
+parts не можна підтвердити за релізним manifest і він лишається `unknown`.
+Наведені digest-и — значення asset metadata GitHub API; повне завантаження,
+повторне складання та звіряння із `SHA256SUMS-compat` у цій перевірці не
+виконувалися. Не позначати цей Compatibility образ як artifact-verified.
+
+Локальне зворотне складання шести частин раніше перевірялося
+`scripts/reassemble-iso.sh`; це свідчення локального кандидата, а не доказ, що
+опубліковані частини мають той самий source commit. Для Compatibility `-login`
+варіанта частин у RC2 немає. Приклад завантаження нижче лишається для Free
+hardened ISO; наявність Compatibility parts не знімає `redistribution NOT CLEARED`.
 
 ## Збирання ISO з частин
 
