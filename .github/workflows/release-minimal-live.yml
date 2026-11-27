@@ -59,7 +59,18 @@ jobs:
             exit 1
           fi
           TAG="$(printf '%s' "${REQUEST_TAGS[0]}" | tr -d '[:space:]')"
-          test "$TAG" = "0.1.0-rc3-minimal-live"
+          case "$TAG" in
+            0.1.0-rc3-minimal-live|0.1.0-rc4-minimal-live) ;;
+            *)
+              echo "Unsupported Minimal Live tag: $TAG" >&2
+              exit 1
+              ;;
+          esac
+          VERSION="${TAG%-minimal-live}"
+          ISO_NAME="WSM-Desktop-${VERSION}-Minimal-Live.iso"
+          RELEASE_TITLE="WSM Desktop ${VERSION} — Minimal Live Installer Preview"
+          echo "iso_name=$ISO_NAME" >> "$GITHUB_OUTPUT"
+          echo "release_title=$RELEASE_TITLE" >> "$GITHUB_OUTPUT"
           RELEASE_EXISTS=false
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             RELEASE_INFO="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,targetCommitish)"
@@ -94,7 +105,7 @@ jobs:
           test -s "$ISO_STORE"
           DIST="$RUNNER_TEMP/wsm-live-dist"
           mkdir -p "$DIST"
-          ISO_NAME="WSM-Desktop-0.1.0-rc3-Minimal-Live.iso"
+          ISO_NAME="${{ steps.release.outputs.iso_name }}"
           cp -- "$ISO_STORE" "$DIST/$ISO_NAME"
           chmod 0644 "$DIST/$ISO_NAME"
           SIZE="$(stat -c '%s' "$DIST/$ISO_NAME")"
@@ -133,6 +144,7 @@ jobs:
           path: |
             ${{ runner.temp }}/wsm-live-dist/boot-bios.json
             ${{ runner.temp }}/wsm-live-dist/boot-uefi.json
+            ${{ runner.temp }}/wsm-live-dist/ISO-CHECKSUMS.sha256
           if-no-files-found: ignore
           retention-days: 7
       - name: Маніфест і контрольні суми
@@ -253,6 +265,7 @@ jobs:
       - name: Створити чернетку релізу та завантажити assets
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_TITLE: ${{ steps.release.outputs.release_title }}
           RELEASE_EXISTS: ${{ steps.release.outputs.release_exists }}
         run: |
           set -euo pipefail
@@ -316,8 +329,8 @@ jobs:
           # a glob would satisfy the split case but silently attest nothing if
           # the name ever changed.
           subject-path: |
-            ${{ runner.temp }}/wsm-live-dist/WSM-Desktop-0.1.0-rc3-Minimal-Live.iso
-            ${{ runner.temp }}/wsm-live-dist/WSM-Desktop-0.1.0-rc3-Minimal-Live.iso.part*
+            ${{ runner.temp }}/wsm-live-dist/${{ steps.release.outputs.iso_name }}
+            ${{ runner.temp }}/wsm-live-dist/${{ steps.release.outputs.iso_name }}.part*
             ${{ runner.temp }}/wsm-live-dist/SHA256SUMS
             ${{ runner.temp }}/wsm-live-dist/build-manifest.json
             ${{ runner.temp }}/wsm-live-dist/release-manifest.json
@@ -344,21 +357,21 @@ jobs:
           set -euo pipefail
           BUNDLE="${{ steps.attest-release-artifacts.outputs.bundle-path }}"
           test -s "$BUNDLE"
-          for ASSET in \
-            "WSM-Desktop-0.1.0-rc3-Minimal-Live.iso" \
-            "SHA256SUMS" \
-            "build-manifest.json" \
-            "release-manifest.json" \
-            "boot-bios.json" \
-            "boot-uefi.json"
-          do
+          VERIFIED_COUNT=0
+          for ASSET in "$release_iso" "$release_iso".part* \
+                       "ISO-CHECKSUMS.sha256" "SHA256SUMS" \
+                       "build-manifest.json" "release-manifest.json" \
+                       "boot-bios.json" "boot-uefi.json"; do
+            [ -f "$release_dist/$ASSET" ] || continue
             gh attestation verify "$release_dist/$ASSET" \
               --bundle "$BUNDLE" \
               --repo "$GITHUB_REPOSITORY" \
               --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release-minimal-live.yml" \
               --source-ref refs/heads/main \
               --predicate-type "https://slsa.dev/provenance/v1"
+            VERIFIED_COUNT=$((VERIFIED_COUNT + 1))
           done
+          test "$VERIFIED_COUNT" -ge 7
           {
             echo "### Криптографічна перевірка походження"
             echo ""

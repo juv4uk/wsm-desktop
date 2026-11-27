@@ -139,7 +139,26 @@ class MinimalLiveProfileTests(unittest.TestCase):
         lines = (ROOT / "RELEASE-REQUEST.txt").read_text(encoding="utf-8").splitlines()
         requested = [line.split("#", 1)[0].strip() for line in lines]
         tags = [line for line in requested if line]
-        self.assertEqual(tags, ["0.1.0-rc3-minimal-live"])
+        self.assertIn(tags, [["0.1.0-rc3-minimal-live"], ["0.1.0-rc4-minimal-live"]])
+
+    def test_release_workflow_derives_iso_name_and_title_from_allowed_tag(self) -> None:
+        workflow = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
+        self.assertIn("0.1.0-rc3-minimal-live|0.1.0-rc4-minimal-live", workflow)
+        self.assertIn('VERSION="${TAG%-minimal-live}"', workflow)
+        self.assertIn('ISO_NAME="WSM-Desktop-${VERSION}-Minimal-Live.iso"', workflow)
+        self.assertIn('echo "iso_name=$ISO_NAME" >> "$GITHUB_OUTPUT"', workflow)
+        self.assertIn('--title "$RELEASE_TITLE"', workflow)
+        self.assertIn('RELEASE_TITLE: ${{ steps.release.outputs.release_title }}', workflow)
+
+    def test_attestation_verifies_the_published_iso_form_and_sidecar(self) -> None:
+        workflow = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
+        section = workflow[workflow.index("name: Підписати provenance"):workflow.index("name: Перевірити версію GitHub CLI")]
+        self.assertIn('${{ steps.release.outputs.iso_name }}', section)
+        self.assertIn('${{ steps.release.outputs.iso_name }}.part*', section)
+        self.assertIn("ISO-CHECKSUMS.sha256", section)
+        verify = workflow[workflow.index("name: Перевірити provenance артефактів перед публікацією"):workflow.index("name: Опублікувати перевірений GitHub pre-release")]
+        self.assertIn('for ASSET in "$release_iso" "$release_iso".part*', verify)
+        self.assertIn('test "$VERIFIED_COUNT" -ge 7', verify)
 
     def test_release_workflow_requires_exactly_one_non_comment_tag(self) -> None:
         workflow = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")

@@ -1,4 +1,4 @@
-# WSM Desktop 0.1.0-rc3 — Minimal Live Installer Preview
+# WSM Desktop — Minimal Live Installer Preview
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
