@@ -61,6 +61,7 @@ class IsoReleaseTests(unittest.TestCase):
         self.assertIn("source_commit", notes)
         self.assertIn("немає release-manifest.json", notes)
         self.assertIn("909c33c038ab8504a4782f741ec13f6063335606f6db7051675d75436fc9f517", notes)
+        self.assertIn("98e8e71a2ba1eb931c13dbeee926424c2e0380392a8447828f7d8e8b2e209eb", notes)
         self.assertIn("557e8f1f3baa6456bf6cd6fe5ef28df424a42e1df58f300b22bedb6349cbb33a", notes)
         self.assertIn("580.178.04", notes)
         self.assertIn("7.3.5", notes)
