@@ -199,6 +199,16 @@ class DriverProfileManifestTests(unittest.TestCase):
         self.assertEqual(nvidia["source_license"], "unknown")
         self.assertEqual(compat_gpu["functional_validation"]["status"], "not-run")
 
+    def test_guix_enables_nvk_but_profile_does_not_claim_runtime_support(self) -> None:
+        gpu = next(item for item in self.free["devices"] if item["device_id"] == "nvidia-gtx-1050-ti")
+        candidate = next(item for item in gpu["driver_candidates"] if item["candidate_id"] == "nouveau-pascal")
+        self.assertTrue(any(item["source"] == "Pinned GNU Guix Mesa/Linux-libre package definitions" for item in candidate["evidence"]))
+        self.assertEqual(candidate["package_resolution"], "not-assessed")
+        self.assertEqual(gpu["runtime_binding"]["status"], "unknown")
+        self.assertEqual(gpu["functional_validation"]["status"], "not-run")
+        self.assertEqual(gpu["firmware"]["requirement"], "required")
+        self.assertEqual(gpu["firmware"]["redistribution"], "nonfree")
+
     def test_cpu_microcode_is_documented_but_not_shipped_in_free_profile(self) -> None:
         cpu = next(item for item in self.free["devices"] if item["device_id"] == "skylake-i5-6400")
         firmware = cpu["firmware"]
