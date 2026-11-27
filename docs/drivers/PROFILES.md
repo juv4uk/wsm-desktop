@@ -248,3 +248,30 @@ Free closure. Не приховуйте невільну залежність з
 Вони не доводять package resolution, kernel config, фізичне binding,
 мережевий трафік, звук, storage I/O чи suspend/resume. У manifest
 відповідні стани лишаються окремими й непідтвердженими.
+
+
+## Intel Core i5-6400: BIOS microcode та раннє оновлення ОС
+
+Для точного CPUID `0x000506E3` (i5-6400) власне дослідження BIOS
+F22e у [wsm-os](https://github.com/juv4uk/wsm-os/blob/main/hardware/bios-f22e/FIT-AND-STRUCTURE-ANALYSIS.md)
+підтвердило:
+- BIOS містить мікрокод ревізії `0xC2` від 2017-11-16;
+- UEFI-проба до запуску ОС побачила саме `0xC2`;
+- Windows після завантаження повідомляє `0xD6` від 2019-10-03.
+
+Отже, Linux-libre без зовнішнього Intel microcode package **не означає
+відсутність мікрокоду**: CPU стартує з `0xC2`, уже наданого BIOS.
+Але без раннього оновлення ОС профіль не повторює підтверджену Windows
+ревізію `0xD6`. Ядро Linux підтримує раннє завантаження мікрокоду з
+initrd за шляхом `kernel/x86/microcode/GenuineIntel.bin`; див.
+[документацію Linux microcode loader](https://www.kernel.org/doc/html/next/x86/microcode.html).
+
+Офіційний [Intel microcode repository](https://github.com/intel/Intel-Linux-Processor-Microcode-Data-Files)
+постачає мікрокод як бінарні оновлення. Його
+[ліцензія](https://github.com/intel/Intel-Linux-Processor-Microcode-Data-Files/blob/main/license)
+дозволяє лише незмінене бінарне поширення та забороняє зворотний
+аналіз, декомпіляцію й дизасемблювання. Тому цей пакет класифіковано
+як `nonfree`; він не входить до WSM Free closure. Ревізію мікрокоду
+потрібно записувати в benchmark metadata, оскільки вона може впливати
+на errata, безпеку та відтворюваність результатів. Не застосовувати
+late-load і не досліджувати бінарний blob декомпіляцією.
