@@ -339,6 +339,6 @@ Compatibility `localmodconfig` до Free profile: це непомітно вил
 ## Дослідження драйверів та незалежні реалізації
 
 Для переходу від апаратних доказів до незалежного відкритого коду
-використовуйте [процес REA → upstream → Guix](drivers/REA-TO-UPSTREAM-PROCESS.md).
+використовуйте [процес REA → upstream → Guix](REA-TO-UPSTREAM-PROCESS.md).
 Він визначає межі між low-level GP107 research, WSM hardware decisions,
 upstream patches та пакетною інтеграцією.
