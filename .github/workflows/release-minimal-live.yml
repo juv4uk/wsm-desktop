@@ -232,15 +232,20 @@ jobs:
               covered.append(root / iso_name)
           covered += [root / "build-manifest.json", manifest_path,
                       root / "boot-bios.json", root / "boot-uefi.json"]
+          if split:
+              sidecar = root / "ISO-CHECKSUMS.sha256"
+              sidecar.write_text(
+                  "".join(f"{sha(root / name)}  {name}\n" for name in parts),
+                  encoding="utf-8",
+              )
+              # The read-back verifier compares the remote asset set with
+              # every entry in SHA256SUMS. The parts sidecar is itself a
+              # published asset, so the top-level manifest must cover it too.
+              covered.append(sidecar)
           (root / "SHA256SUMS").write_text(
               "".join(f"{sha(path)}  {path.name}\n" for path in covered),
               encoding="utf-8",
           )
-          if split:
-              (root / "ISO-CHECKSUMS.sha256").write_text(
-                  "".join(f"{sha(root / name)}  {name}\n" for name in parts),
-                  encoding="utf-8",
-              )
           print("checksums rewritten for", artifact["published_as"])
           PY
           ls -la "$release_dist"
