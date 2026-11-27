@@ -181,3 +181,42 @@ ACR без попередньої правової оцінки. Дослідж�
 `runtime_binding`, розв'язання пакетів, наявність мікропрограми на
 етапах завантаження та `functional_validation` залишаються окремими
 непідтвердженими станами.
+
+
+## Intel HD Graphics 530 (Skylake): DMC, GuC та HuC
+
+Для Skylake i915 потрібно розрізняти базову графіку та функції
+мікроконтролерів:
+- **DMC** керує станами дисплейного рушія з низьким енергоспоживанням.
+  У [upstream i915](https://code.googlesource.com/linux/torvalds/linux/+/69ffab9b9e698248cbb4042e47f82afb00dc1bb4/drivers/gpu/drm/i915/display/intel_dmc.c)
+  відсутність мікропрограми DMC призводить до вимкнення керування
+  живленням під час роботи. Це не є доказом, що базова графіка або KMS не працюватимуть.
+- **GuC** не є обов'язковим для базової роботи драйвера; він може
+  забезпечувати планування графічних контекстів і керування живленням.
+  **HuC** потрібен лише для окремих медіаможливостей. Див.
+  [документацію i915](https://docs.kernel.org/6.18/gpu/i915.html).
+- Linux-firmware [WHENCE](https://kernel.googlesource.com/pub/scm/linux/kernel/git/firmware/linux-firmware/+/refs/heads/main/WHENCE)
+  перелічує Skylake DMC/GuC firmware під Intel LICENSE.i915.
+  Ця ліцензія дозволяє лише незмінене бінарне поширення та забороняє
+  зворотний аналіз, декомпіляцію та дизасемблювання:
+  [LICENSE.i915](https://kernel.googlesource.com/pub/scm/linux/kernel/git/firmware/linux-firmware/%2B/refs/tags/20250211/LICENSE.i915).
+
+Для вільного профілю це означає: i915 можна оцінювати як відкритий
+драйвер, але повноцінне керування живленням дисплея через DMC не можна
+заявляти без відповідної мікропрограми. GuC/HuC оцінюються окремо
+за конкретними функціями. У H170 manifest firmware позначено
+`optional` для базової графіки та `nonfree` за ліцензією; це не
+підвищує package, runtime або functional-validation statuses.
+
+
+### Як читати firmware.redistribution у Free manifest
+
+Поле `firmware.redistribution` описує відомий клас ліцензії
+мікропрограми, а не факт її включення до образу. Тому Free manifest
+може чесно позначити відому залежність як `nonfree`, водночас залишаючи
+`package_candidates: []`, `package_resolution: not-assessed` і всі
+стадії присутності/завантаження непідтвердженими. Саме
+`policy.nonfree_components_included: false` та відсутність package
+candidates гарантують, що відома невільна мікропрограма не стає частиною
+Free closure. Не приховуйте невільну залежність значенням `unknown`,
+якщо її ліцензія вже встановлена.
