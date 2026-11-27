@@ -21,7 +21,9 @@
 ;; - QEMU TCG BIOS boot: гість досяг login prompt; ранній Guile init segfault
 ;;   лишається зафіксованим діагностичним сигналом. TCG не емулює GTX 1050 Ti.
 ;; - QEMU UEFI acceptance: окремого доказу наразі немає.
-;; - Compatibility .part001–.part006: ще не завантажено до GitHub Release.
+;; - Базові Compatibility .part001–.part006 присутні у RC2 GitHub Release
+;;   (API verified 2026-11-28); source manifest відсутній, source_commit unknown,
+;;   redistribution NOT CLEARED. -login parts до RC2 не завантажувалися.
 ;; - NVIDIA binary redistribution: NOT CLEARED. Pinned Nonguix package inherits
 ;;   patch-elf/patchelf over installed ELF files; compare the exact driver EULA
 ;;   and obtain licensing review/permission before publishing binary assets.
