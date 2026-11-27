@@ -216,7 +216,7 @@
         "initrd": "not-assessed",
         "installed_rootfs": "not-assessed",
         "runtime_load": "not-assessed",
-        "redistribution": "unknown",
+        "redistribution": "nonfree",
         "evidence": [
           {
             "kind": "upstream-reference",
