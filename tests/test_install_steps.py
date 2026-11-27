@@ -59,7 +59,7 @@ class LayoutConsentTests(unittest.TestCase):
 
 
 class OrderingTests(unittest.TestCase):
-    def test_partition_table_is_created_before_rescan_and_formatting(self) -> None:
+    def test_partition_table_is_reread_before_formatting(self) -> None:
         current = layout()
         commands = current.commands()
         steps = plan_steps(current)
