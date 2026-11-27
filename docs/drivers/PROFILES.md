@@ -342,3 +342,9 @@ Compatibility `localmodconfig` до Free profile: це непомітно вил
 використовуйте [процес REA → upstream → Guix](REA-TO-UPSTREAM-PROCESS.md).
 Він визначає межі між low-level GP107 research, WSM hardware decisions,
 upstream patches та пакетною інтеграцією.
+
+
+## Зведена апаратна матриця
+
+[H170 firmware/capability matrix](../hardware/H170-FIRMWARE-MATRIX.md)
+зводить firmware dependencies, ліцензійні обмеження та межі Free profile.
