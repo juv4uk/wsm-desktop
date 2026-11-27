@@ -1,7 +1,7 @@
 # Один непорожній рядок із tag запитує одну збірку; рядки з # є коментарями.
-0.1.0-rc3-minimal-live
-# Повторна RC3-збірка після load-path на обох рівнях і locale import (#439), read-back перевірка assets — #438.
-# Retry Minimal Live after #461: NetworkManager now owns DHCP; the removed Guix dhcp-client-service-type is no longer referenced.
+0.1.0-rc4-minimal-live
+# Новий non-destructive RC4 після merged sidecar/read-back fix (#538) і dynamic tag/provenance preparation (#541).
+# Старий draft 0.1.0-rc3-minimal-live збережено; цей запит створює новий draft від точного main commit.
 
 
 
