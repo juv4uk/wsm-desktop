@@ -34,7 +34,7 @@
     "package_candidate": "linux-libre (Guix default alias)",
     "version": "7.3.5",
     "configuration_status": "available",
-    "notes": "Pinned Guix commit 4e5195be (2026-11-25) selects linux-libre 7.3.5 by default and provides gnu/packages/aux-files/linux-libre/7.3-x86_64.conf. That config enables i915, nouveau, alx, snd_hda_intel/Realtek codec, SATA_AHCI, NVMe and xHCI. This is package-source/config evidence only; kernel build, package closure, initrd inclusion, runtime binding and physical function remain unassessed."
+    "notes": "Pinned Guix commit 4e5195be (2026-11-25) selects linux-libre 7.3.5 by default and provides gnu/packages/aux-files/linux-libre/7.3-x86_64.conf. That config enables i915, nouveau, alx, snd_hda_intel/Realtek codec, SATA_AHCI, NVMe and xHCI. This is package-source/config evidence only; kernel build, package closure, initrd inclusion, runtime binding and physical function remain unassessed. The separate systems/wsm-gp107.modconfig belongs only to the proprietary NVIDIA Compatibility ISO and intentionally disables nouveau/i915; it must not be reused for this Free profile, which uses the stock linux-libre config."
   },
   "unobserved_device_classes": [
     "wifi",
