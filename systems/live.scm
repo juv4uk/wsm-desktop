@@ -20,6 +20,11 @@
 ;; захардкоджений пароль гірший за відсутній. Додайте (password ...) у
 ;; user-account або входьте через root у консолі.
 
+;; H170 Free hardware target: inherit the stock Guix linux-libre kernel from %base.
+;; The pinned Guix Mesa recipe already enables NVK on x86_64; see
+;; docs/hardware/H170-FIRMWARE-MATRIX.md for firmware gaps and acceptance gates.
+;; Do not reuse systems/wsm-gp107.modconfig here: it belongs only to the
+;; proprietary NVIDIA Compatibility ISO and intentionally disables i915/Nouveau.
 (use-modules (gnu)
              (gnu system locale)
              (gnu services)
