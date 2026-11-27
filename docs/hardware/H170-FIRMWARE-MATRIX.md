@@ -27,7 +27,7 @@ fork лише для ввімкнення i915/Nouveau/NVK/alx/HDA/AHCI/NVMe н�
 | --- | --- | --- | --- | --- |
 | Intel Core i5-6400 (Skylake) | x86 CPU + kernel microcode loader | OS update optional, nonfree; BIOS уже містить 0xC2 | Без раннього Intel package Linux використовує BIOS 0xC2; Windows owner evidence показує 0xD6 | CPUID 0x506E3, BIOS/UEFI 0xC2, Windows 0xD6 у [wsm-os FIT analysis](https://github.com/juv4uk/wsm-os/blob/main/hardware/bios-f22e/FIT-AND-STRUCTURE-ANALYSIS.md). Runtime Linux revision не перевірена |
 | Intel HD Graphics 530 | i915, Mesa | DMC optional/nonfree; GuC/HuC окремі optional capabilities | Без DMC i915 вимикає runtime power management; це не означає відсутність базової графіки | [i915 DMC source](https://kernel.googlesource.com/pub/scm/linux/kernel/git/soc/soc/+/e805c06a80fb657f568ea36600a8e1e6746c2987/drivers/gpu/drm/i915/display/intel_dmc.c); exact physical binding не перевірений |
-| NVIDIA GTX 1050 Ti / GP107 | nouveau + Mesa NVK | GR FECS/GPCCS required/nonfree | Без потрібної firmware fallback повертає -ENODEV для GR; 3D/compute не можна заявляти. Basic KMS/display — окреме неперевірене питання. Pascal GP10x не має практичного reclocking шляху | [GP107 firmware declarations](https://linux.googlesource.com/linux/kernel/git/tip/tip/+/refs/heads/perf/urgent/drivers/gpu/drm/nouveau/nvkm/engine/gr/gp107.c), [no-firmware fallback](https://linux.googlesource.com/linux/kernel/git/tip/tip/+/refs/heads/x86/urgent/drivers/gpu/drm/nouveau/nvkm/engine/gr/gm200.c), [Nouveau feature matrix](https://nouveau.freedesktop.org/FeatureMatrix.html). H170 physical runtime не перевірений |
+| NVIDIA GTX 1050 Ti / GP107 | nouveau + Mesa NVK | GR FECS/GPCCS required/nonfree | Без потрібної firmware fallback повертає -ENODEV для GR. Водночас зовнішній GP107 repo зафіксував фізичний Nouveau binding і один NVK vector-add compute pass під Kali 7.2.15/Mesa 26.1.6; exact GR firmware package/blob provenance не записано, тому це не доказ strict Free profile. Basic KMS/display та power/reclocking оцінюються окремо | [GP107 firmware declarations](https://linux.googlesource.com/linux/kernel/git/tip/tip/+/refs/heads/perf/urgent/drivers/gpu/drm/nouveau/nvkm/engine/gr/gp107.c), [no-firmware fallback](https://linux.googlesource.com/linux/kernel/git/tip/tip/+/refs/heads/x86/urgent/drivers/gpu/drm/nouveau/nvkm/engine/gr/gm200.c), [NVK compute witness](https://github.com/juv4uk/gp107-nvidia-re/blob/master/docs/14-nvk-vector-add-compute-result.md), [Nouveau feature matrix](https://nouveau.freedesktop.org/FeatureMatrix.html). External runtime proof exists; WSM Free profile remains not-run |
 | Killer Ethernet (Windows label E2200) | alx candidate | Не потрібна зовнішня host firmware | alx source не містить request_firmware/MODULE_FIRMWARE у перевірених файлах. Точний PCI ID невідомий | Owner profile: Windows label E2200. GIGABYTE Rev. 1.0 вказує E2201, Rev. 1.1 — E2400; [Rev. 1.0 spec](https://www.gigabyte.com/Motherboard/GA-H170-Gaming-3-rev-10/sp), [Rev. 1.1 spec](https://www.gigabyte.com/Motherboard/GA-H170-Gaming-3-rev-11/sp). Не виводити PCI ID з назви |
 | HDA audio | snd_hda_intel + Realtek codec candidate | Не потрібна для стандартного codec path | Optional user-supplied HDA patch loader — окрема override; не vendor firmware. Board spec lists ALC1150, exact codec ID не спостерігався | [HDA notes](https://cdn.kernel.org/doc/html/latest/sound/hd-audio/notes.html), [GIGABYTE Rev. 1.0](https://www.gigabyte.com/Motherboard/GA-H170-Gaming-3-rev-10/sp) |
 | SATA/AHCI + Samsung drives | ahci | Не потрібна зовнішня host firmware для generic AHCI | Внутрішня firmware диска — окремий компонент пристрою, не host package Guix | [Linux AHCI source](https://github.com/torvalds/linux/blob/master/drivers/ata/ahci.c); disk firmware не перевірялася й не оновлювалася |
@@ -60,13 +60,23 @@ Pinned Guix channel commit
 ## 5. Межі продуктивності
 
 - NVK офіційно охоплює Kepler і новіші покоління, включно з Pascal, та потребує Linux 6.6+; pinned Guix stack відповідає цій вимозі.
-- Але GP107 GR firmware та Pascal reclocking — окремі обмеження. Відкритий kernel driver + Mesa package не гарантують повної продуктивності.
-- У gp107-nvidia-re є сучасна proprietary-only baseline та optimization matrix; попередній NVK-vs-NVIDIA A/B оголошений історичним після виправлення harness. Сучасний NVK A/B на тому самому harness ще не виконано.
+- **Функціональний факт:** на фізичній GTX 1050 Ti уже пройшов один clean-room NVK vector-add workload (1024 елементи, fence, host readback, checksum match). Це доводить, що Nouveau/NVK може виконувати compute на цій карті в протестованому середовищі Kali Linux 7.2.15/Mesa 26.1.6.
+- Firmware provenance того запуску не записаний. GR firmware, необхідна для успішного compute, була доступна в тестовому середовищі, але package/blob/version не зафіксовано; `pmu: firmware unavailable` у kernel log стосується окремого PMU шляху. Тому цей результат не доводить, що strict WSM Free closure може повторити тест.
+- У gp107-nvidia-re є proprietary-only baseline та optimization matrix; попередній NVK-vs-NVIDIA A/B (docs/17) є історичним і передує виправленням надійності harness (docs/18). Сучасний NVK A/B на виправленому harness ще не виконано.
+- Proprietary-only matrix (docs/21) показує submit batching як спосіб амортизувати CPU overhead, а DEVICE_LOCAL compute на 32 Mi — близько 90.46 GB/s умовного traffic; але повний staging→compute→readback chain (52.39 ms) повільніший за HOST_VISIBLE (42.58 ms). Це підказує оптимізувати VRAM residency та уникати зайвих копій, але не є NVK результатом.
 - Не заявляти перевагу над NVIDIA, доки не буде коректного A/B на тому самому GP107, workload, memory type, clocks/thermal state та версіях.
 
 Канонічні GPU дослідження: [gp107-nvidia-re](https://github.com/juv4uk/gp107-nvidia-re), [benchmark reliability issue](https://github.com/juv4uk/gp107-nvidia-re/issues/28).
 
-## 6. Що ще невідомо / потребує owner-approved перевірки
+## 6. Зовнішній physical NVK witness та межа профілю
+
+[GP107 docs/13](https://github.com/juv4uk/gp107-nvidia-re/blob/master/docs/13-nouveau-nvk-boot-witness-result.md) підтверджує на цій платі `Kernel driver in use: nouveau`, NVK `driverID=24`, Mesa 26.1.6 та Vulkan API 1.3.354. [docs/14](https://github.com/juv4uk/gp107-nvidia-re/blob/master/docs/14-nvk-vector-add-compute-result.md) підтверджує один реальний GPU dispatch, fence, host readback і checksum. Це **functional smoke**, не benchmark.
+
+Тест виконано на Kali Linux 7.2.15, а не на pinned Guix Mesa 26.2.6/Linux-libre 7.3.5. Точний пакет і hash GR firmware у capture не зафіксовано; успішний GR compute означає, що необхідна firmware була доступна, але не доводить її походження або ліцензійний склад. У kernel log є `pmu: firmware unavailable`; це окремий PMU firmware path і він не завадив цьому workload. Через це `h170-free.json` зберігає `functional_validation=not-run` для strict Free profile, але candidate `runtime_binding=bound` і evidence посилаються на зовнішній фізичний тест.
+
+Попередній NVK/NVIDIA A/B з docs/17 позначено історичним після виправлень надійності в docs/18. Актуальний benchmark на виправленому harness ще не виконаний.
+
+## 7. Що ще невідомо / потребує owner-approved перевірки
 
 - Точна ревізія GA-H170-Gaming 3 та точний PCI ID Killer Ethernet.
 - Фактичний codec ID HDA; ALC1150 підтверджений лише специфікацією плати.
@@ -77,7 +87,7 @@ Pinned Guix channel commit
 До виконання цих перевірок manifest зберігає `not-assessed`, `unknown` та `not-run`; не перетворює package/config evidence на hardware certification.
 
 
-## 7. Реалістичність незалежної відкритої реалізації
+## 8. Реалістичність незалежної відкритої реалізації
 
 | Компонент | Поточна оцінка | Що реально робити | Межа / що не обіцяти |
 | --- | --- | --- | --- |
@@ -93,7 +103,7 @@ Pinned Guix channel commit
 
 **Важливо:** "Hard limit" означає, що в цьому аудиті не знайдено підтвердженого відкритого й законного шляху до повної функції. Це не твердження про математичну неможливість майбутнього рішення. Не обходити ACR/signature chain і не робити firmware reverse engineering без окремої правової оцінки.
 
-## 8. Завершення статичного аудиту та наступні перевірки
+## 9. Завершення статичного аудиту та наступні перевірки
 
 Статичний firmware/license audit вважається завершеним, коли:
 - кожен відомий H170 компонент має host-driver/firmware classification або явний unknown;
