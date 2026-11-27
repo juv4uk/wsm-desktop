@@ -199,6 +199,25 @@ class DriverProfileManifestTests(unittest.TestCase):
         self.assertEqual(nvidia["source_license"], "unknown")
         self.assertEqual(compat_gpu["functional_validation"]["status"], "not-run")
 
+    def test_pinned_linux_libre_kernel_config_exposes_h170_drivers(self) -> None:
+        self.assertEqual(self.free["kernel"]["version"], "7.3.5")
+        self.assertEqual(self.free["kernel"]["configuration_status"], "available")
+        expected = {
+            "intel-hd-530": ("i915-mesa", "module-available"),
+            "nvidia-gtx-1050-ti": ("nouveau-pascal", "module-available"),
+            "killer-e2200": ("alx-e2200", "module-available"),
+            "kingston-nv2": ("nvme-controller", "built-in"),
+            "samsung-sata": ("ahci-controller", "module-available"),
+            "hda-audio": ("snd-hda-intel", "module-available"),
+        }
+        for device_id, (candidate_id, status) in expected.items():
+            device = next(item for item in self.free["devices"] if item["device_id"] == device_id)
+            candidate = next(item for item in device["driver_candidates"] if item["candidate_id"] == candidate_id)
+            self.assertEqual(candidate["kernel_config"], status)
+            self.assertTrue(any(item["source"] == "Pinned Guix Linux-libre 7.3 x86_64 default kernel configuration" for item in candidate["evidence"]))
+            self.assertEqual(candidate["package_resolution"], "not-assessed")
+            self.assertEqual(candidate["runtime_binding"], "unknown")
+
     def test_guix_enables_nvk_but_profile_does_not_claim_runtime_support(self) -> None:
         gpu = next(item for item in self.free["devices"] if item["device_id"] == "nvidia-gtx-1050-ti")
         candidate = next(item for item in gpu["driver_candidates"] if item["candidate_id"] == "nouveau-pascal")
