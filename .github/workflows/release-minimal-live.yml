@@ -4,6 +4,12 @@ on:
     branches: [main]
     paths: ["RELEASE-REQUEST.txt"]
   workflow_dispatch:
+    inputs:
+      publish_prerelease:
+        description: "Explicitly authorize publication of the verified Minimal Live prerelease."
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -384,6 +390,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Опублікувати перевірений GitHub pre-release
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true }}
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
@@ -392,6 +399,15 @@ jobs:
           RELEASE_INFO="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,targetCommitish)"
           test "$(jq -r '.isDraft' <<< "$RELEASE_INFO")" = "false"
           test "$(jq -r '.targetCommitish' <<< "$RELEASE_INFO")" = "$GITHUB_SHA"
+      - name: Залишити перевірений prerelease як чернетку
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.publish_prerelease != true }}
+        run: |
+          {
+            echo "### Публікація не виконувалася"
+            echo ""
+            echo "Перевірений prerelease залишено в стані чернетки."
+            echo "Для публікації потрібен окремий workflow_dispatch з publish_prerelease=true."
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Повідомити причину збою
         if: failure()
         env:
