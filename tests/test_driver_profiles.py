@@ -228,6 +228,16 @@ class DriverProfileManifestTests(unittest.TestCase):
         self.assertEqual(gpu["firmware"]["requirement"], "required")
         self.assertEqual(gpu["firmware"]["redistribution"], "nonfree")
 
+    def test_intel_mei_heci_is_separate_from_pre_os_csme_firmware(self) -> None:
+        mei = next(item for item in self.free["devices"] if item["device_id"] == "intel-mei-heci")
+        self.assertEqual(mei["pci_ids"], ["8086:a13a"])
+        candidate = next(item for item in mei["driver_candidates"] if item["candidate_id"] == "mei-me")
+        self.assertEqual(candidate["kernel_module"], "mei_me")
+        self.assertEqual(candidate["kernel_config"], "module-available")
+        self.assertEqual(candidate["runtime_binding"], "unknown")
+        self.assertEqual(mei["firmware"]["requirement"], "not-required")
+        self.assertEqual(mei["functional_validation"]["status"], "not-run")
+
     def test_cpu_microcode_is_documented_but_not_shipped_in_free_profile(self) -> None:
         cpu = next(item for item in self.free["devices"] if item["device_id"] == "skylake-i5-6400")
         firmware = cpu["firmware"]
