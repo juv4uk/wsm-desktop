@@ -262,5 +262,5 @@ check-tests:
 # Build the optional GUI candidate and load its QML with the exact pinned Guix Qt/Kirigami stack.
 # This is a technical validation only; the package is not in a live profile and is not public-shippable.
 check-installer-gui-guix:
-	$(GUIX) time-machine -C channels.lock.scm -L . -- build -f wsm/packages/installer.scm
+	$(GUIX) time-machine -C channels.lock.scm -- build -L . -f wsm/packages/installer.scm
 	$(GUIX) time-machine -C channels.lock.scm -- shell python python-pyside-6 qtdeclarative kirigami python-jsonschema -- env PYTHONPATH=. QT_QPA_PLATFORM=offscreen python3 -m wsm_installer --smoke-test
