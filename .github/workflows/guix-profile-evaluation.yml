@@ -18,8 +18,6 @@ on:
 
 permissions:
   contents: read
-  # Коментар до коміту з причиною збою — див. docs/ECOSYSTEM-PRINCIPLES.md.
-  pull-requests: read
 
 concurrency:
   group: guix-profile-evaluation-${{ github.event.pull_request.number || github.ref }}
@@ -58,6 +56,15 @@ jobs:
           make check-guix-eval
           echo "WSM_CHANNEL_AUTHENTICATION=NOT_TESTED" | tee -a "$GITHUB_STEP_SUMMARY"
 
+      - name: Summarize Guix evaluation failure
+        if: failure()
+        run: |
+          {
+            echo "### Guix profile evaluation failed"
+            echo "The first failing command and its exact output are in the preceding step logs."
+            echo "WSM_CHANNEL_AUTHENTICATION=NOT_TESTED"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Save Guix checkout cache
         if: success() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
         uses: actions/cache/save@v4
@@ -87,7 +94,7 @@ jobs:
           {
             echo "### Guix profile evaluation: оцінювання не завершилось"
             echo ""
-            echo "Commit: `$GITHUB_SHA`"
+            echo "Commit: $GITHUB_SHA"
             echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
             echo ""
             echo "Логи evaluation job доступні в цьому workflow run."
@@ -95,4 +102,4 @@ jobs:
             echo "і exact pinned WSM/Guix revisions."
           } > "$BODY"
           gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
-            -F body=@"$BODY" >/dev/null
+            -F body=@"$BODY" >/dev/null || { echo "::warning::Could not publish Guix evaluation failure comment"; echo "Failure comment could not be posted; inspect this workflow run logs." >> "$GITHUB_STEP_SUMMARY"; }
