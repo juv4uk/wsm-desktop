@@ -325,6 +325,13 @@
               "source_url": "https://codeberg.org/guix/guix/src/commit/4e5195be20d9b124df8a8bb69213412236e4668e/gnu/packages/aux-files/linux-libre/7.3-x86_64.conf",
               "observed_at": "2026-11-27",
               "summary": "The default Linux-libre 7.3 x86_64 config at pinned Guix commit 4e5195be sets CONFIG_DRM_NOUVEAU=m. This establishes that the driver is configured as a built-in or module in the source config; it does not prove a built kernel, package/initrd inclusion, runtime binding, or physical function."
+            },
+            {
+              "kind": "functional-test",
+              "source": "gp107-nvidia-re physical Nouveau/NVK boot and vector-add witness",
+              "source_url": "https://github.com/juv4uk/gp107-nvidia-re/blob/master/docs/14-nvk-vector-add-compute-result.md",
+              "observed_at": "2026-11-27",
+              "summary": "On the external GP107 research test host, PCI 10de:1c82 at 0000:01:00.0 bound to nouveau under Kali Linux 7.2.15+kali-amd64; NVK driverID=24, Mesa 26.1.6-1, Vulkan API 1.3.354. A clean-room 1024-element vector-add dispatch completed, fence signaled, host readback checksum matched (0xa52ce165), and a no-op negative control failed as expected. This proves Nouveau binding and one NVK compute workload for a GP107/GTX 1050 Ti on that external test host. Its motherboard/CPU/BIOS are not proven to match the H170 reference machine. Exact GP107 GR firmware package/blob provenance was not captured; kernel log says PMU firmware unavailable (a separate path). This is not validation of the WSM Guix Free profile or H170 runtime."
             }
           ],
           "notes": [
@@ -369,7 +376,8 @@
         "Windows nvidia-smi reported physical adapter location 00000000:01:00.0. That BDF is not a PCI vendor:device ID.",
         "Do not infer reclocking, full acceleration, firmware presence or usable KDE acceleration from detection. Pascal performance limitations must be documented.",
         "Separate GP107 research repository documents a physical NVK vector-add pass for PCI ID 10de:1c82 on its own test host. That host is not proven to be this H170 board; the result does not establish H170 runtime binding, display support, daily-driver stability, or this profile's functional_validation.",
-        "GP107 GR firmware dependency is now source-confirmed for 3D/compute: Nouveau declares FECS/GPCCS firmware and its no-firmware fallback returns -ENODEV. Basic display/KMS without GR firmware remains a separate unassessed question."
+        "GP107 GR firmware dependency is now source-confirmed for 3D/compute: Nouveau declares FECS/GPCCS firmware and its no-firmware fallback returns -ENODEV. Basic display/KMS without GR firmware remains a separate unassessed question.",
+        "External GP107 research-host evidence proves Nouveau binding and a clean-room NVK vector-add compute pass on a GTX 1050 Ti under Kali Linux 7.2.15/Mesa 26.1.6. The test host is not proven to be the H170 reference machine, and exact GR firmware package/blob provenance was not captured. This is not H170 or WSM Guix Free-profile validation; keep H170 runtime_binding unknown and functional_validation not-run."
       ],
       "identity_evidence": [
         {
