@@ -78,8 +78,10 @@ class ReleaseAssetVerificationTests(unittest.TestCase):
         self.assertEqual(attest["uses"], "actions/attest@v4")
         self.assertIs(attest["with"]["create-storage-record"], False)
         subjects = attest["with"]["subject-path"]
+        self.assertIn("${{ steps.release.outputs.iso_name }}", subjects)
+        self.assertIn("${{ steps.release.outputs.iso_name }}.part*", subjects)
         for filename in (
-            "WSM-Desktop-0.1.0-rc3-Minimal-Live.iso",
+            "ISO-CHECKSUMS.sha256",
             "SHA256SUMS",
             "build-manifest.json",
             "release-manifest.json",
@@ -99,8 +101,11 @@ class ReleaseAssetVerificationTests(unittest.TestCase):
         self.assertIn("--source-ref refs/heads/main", verification)
         self.assertIn("release-minimal-live.yml", verification)
         self.assertIn("https://slsa.dev/provenance/v1", verification)
+        self.assertIn('for ASSET in "$release_iso" "$release_iso".part*', verification)
+        self.assertIn('"ISO-CHECKSUMS.sha256"', verification)
+        self.assertIn('test "$VERIFIED_COUNT" -ge 7', verification)
         for filename in (
-            "WSM-Desktop-0.1.0-rc3-Minimal-Live.iso",
+            "ISO-CHECKSUMS.sha256",
             "SHA256SUMS",
             "build-manifest.json",
             "release-manifest.json",

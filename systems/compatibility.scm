@@ -19,7 +19,7 @@
 ;; лише передає sddm-service-type у конфігурацію Xorg.
 ;;
 ;; ЗБИРАТИ:
-;;   guix time-machine -C channels.lock.scm -- system build systems/compatibility.scm
+;;   guix time-machine -C channels/compatibility.lock.scm -L . -- system -L . build systems/compatibility.scm --dry-run
 ;;
 ;; Перед включенням драйвера в ISO перевірити право на розповсюдження: Nonguix
 ;; завантажує бінарники з NVIDIA, і це не те саме, що право покласти їх в образ.

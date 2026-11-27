@@ -140,3 +140,8 @@ WSM не повинна повторно компілювати upstream-ком�
 `unknown` та `not-tested` не можна перетворювати на `failed` або `supported` без доказів. Відсутність запису у базі не доводить несумісність.
 
 Початковий технічний напрямок реалізується в [hardware preflight issues](https://github.com/juv4uk/wsm-desktop/issues/3) та [draft PR #9](https://github.com/juv4uk/wsm-desktop/pull/9).
+
+## UX-дослідження KDE та Omarchy
+
+Результат дослідження повторного використання upstream UX практик зафіксовано в [адаптації Omarchy до KDE Plasma](desktop/OMARCHY-ADAPTATION.md). KDE Plasma 6 залишається desktop stack WSM; Quickshell/plugin runtime не переноситься. Документ відрізняє source-level package evidence від build, closure, QEMU та фізичної перевірки.
+

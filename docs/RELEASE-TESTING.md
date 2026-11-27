@@ -188,7 +188,7 @@ make release-gate PRODUCT=all
 ```
 
 - `free` перевіряє лише `channels.lock.scm` і не робить заяви про Compatibility.
-- `compatibility` вимагає окремий `channels.compatibility.lock.scm`; його відсутність дає `incomplete / NOT_CONFIGURED`, а не PASS.
+- `compatibility` вимагає окремий `channels/compatibility.lock.scm`; його відсутність дає `incomplete / NOT_CONFIGURED`, а не PASS.
 - `all` вимагає обидва lock-файли й обидва результати.
 - Вкладена перевірка ISO звіряє точну назву артефакту, SHA-256, повний набір критеріїв і узгодженість aggregate verdict.
 
