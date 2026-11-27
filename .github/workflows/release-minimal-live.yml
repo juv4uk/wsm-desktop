@@ -383,15 +383,23 @@ jobs:
             echo "Source ref: refs/heads/main"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Опублікувати перевірений GitHub pre-release
+      - name: Залишити перевірений prerelease чернеткою для owner approval
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           set -euo pipefail
-          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false
           RELEASE_INFO="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,targetCommitish)"
-          test "$(jq -r '.isDraft' <<< "$RELEASE_INFO")" = "false"
+          test "$(jq -r '.isDraft' <<< "$RELEASE_INFO")" = "true"
           test "$(jq -r '.targetCommitish' <<< "$RELEASE_INFO")" = "$GITHUB_SHA"
+          {
+            echo "### Перевірений prerelease залишено чернеткою"
+            echo ""
+            echo "ISO build, BIOS/UEFI boot markers, exact remote asset read-back та SLSA provenance пройшли."
+            echo "Tag: $RELEASE_TAG"
+            echo "Source: $GITHUB_SHA"
+            echo "Publication: OWNER_ACTION_REQUIRED"
+            echo "Не публікувати, доки власник не перевірить ліцензії та redistribution rights."
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Повідомити причину збою
         if: failure()
         env:
