@@ -198,11 +198,11 @@ ACR без попередньої правової оцінки. Дослідж�
 - Linux-firmware [WHENCE](https://kernel.googlesource.com/pub/scm/linux/kernel/git/firmware/linux-firmware/+/refs/heads/main/WHENCE)
   перелічує Skylake DMC/GuC firmware під Intel LICENSE.i915.
   Ця ліцензія дозволяє лише незмінене бінарне поширення та забороняє
-  reverse engineering/decompilation/disassembly:
+  зворотний аналіз, декомпіляцію та дизасемблювання:
   [LICENSE.i915](https://kernel.googlesource.com/pub/scm/linux/kernel/git/firmware/linux-firmware/%2B/refs/tags/20250211/LICENSE.i915).
 
 Для вільного профілю це означає: i915 можна оцінювати як відкритий
-драйвер, але повний DMC-backed runtime power management не можна
+драйвер, але повний DMC-backed керування живленням під час роботи не можна
 заявляти без відповідної мікропрограми. GuC/HuC оцінюються окремо
 за конкретними функціями. У H170 manifest firmware позначено
 `optional` для базової графіки та `nonfree` за ліцензією; це не
