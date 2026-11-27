@@ -118,61 +118,66 @@ EFI/NVRAM або firmware хоста.
 `systems/compatibility.scm` тепер існує в `main` як окремий opt-in рецепт Nonguix/NVIDIA `nvda-580`. Це не робить H170 compatibility manifest buildable: наявний `channels.lock.scm` фіксує лише офіційний Guix, а recipe потребує `(nonguix transformations)` і `(nongnu packages ...)`. Окремий `channels/compatibility.lock.scm` уже фіксує Guix + Nonguix commits та introduction fingerprints, але його криптографічну автентифікацію ще не виконано. Тому package resolution/build/redistribution у H170 Compatibility лишаються `not-assessed`/`unknown`. Free profile та основний `systems/live.scm` не повинні імпортувати Compatibility чи Nonguix.
 
 
-## GP107 Pascal: firmware is a separate acceptance gate
 
-Для NVIDIA GTX 1050 Ti (GP107) не можна робити висновок, що відкритий
-kernel module автоматично дає повноцінне 3D/compute прискорення без firmware.
+## GP107 Pascal: окрема перевірка мікропрограми
 
-Upstream Nouveau:
+Для NVIDIA GTX 1050 Ti (GP107) не можна робити висновок, що сам відкритий
+модуль ядра автоматично забезпечує повноцінне 3D-прискорення та обчислення
+без мікропрограми.
+
+У відкритій реалізації Nouveau:
 - [gp107.c](https://codebrowser.dev/linux/linux/drivers/gpu/drm/nouveau/nvkm/engine/gr/gp107.c.html)
-  оголошує FECS/GPCCS та GR software-context firmware dependencies.
+  оголошує залежності графічного рушія від мікропрограм FECS/GPCCS та
+  файлів контексту GR.
 - [gm200.c](https://codebrowser.dev/linux/linux/drivers/gpu/drm/nouveau/nvkm/engine/gr/gm200.c.html)
-  завантажує FECS і GPCCS через ACR handlers; fallback
-  `gm200_gr_nofw()` повідомляє про відсутнє firmware та повертає
+  завантажує FECS і GPCCS через механізм ACR; резервна функція
+  `gm200_gr_nofw()` повідомляє про відсутню мікропрограму та повертає
   `-ENODEV`.
 
-Отже, для GP107 GR 3D/compute потрібні відповідні firmware artifacts.
-Linux-libre без цих nonfree firmware blobs не можна рекламувати як
-повноцінно прискорений GP107 3D/compute stack. Це **не доводить**, що
-basic display/KMS також неможливий без GR firmware: display acceptance
-потрібно перевіряти окремо.
+Отже, для ініціалізації графічного рушія GP107, потрібного для 3D та
+обчислень, необхідні відповідні файли мікропрограми. Linux-libre без цих
+невільних файлів не можна називати повноцінно прискореним стеком GP107
+для 3D та обчислень. Це **не доводить**, що базовий вивід зображення
+та KMS також неможливі без мікропрограми GR: підтримку дисплея потрібно
+перевіряти окремо.
 
 Важливо розрізняти:
-- firmware, яке можна redistributable за окремою vendor license;
-- firmware, яке є вільним/відкритим;
-- незалежну open firmware implementation.
+- мікропрограму, яку дозволено поширювати за окремою ліцензією виробника;
+- вільну мікропрограму з доступним для змін вихідним кодом;
+- незалежну відкриту реалізацію мікропрограми.
 
-Сам факт присутності NVIDIA firmware у linux-firmware не робить його
-open-source. Перш ніж заявляти про повністю вільний GP107 acceleration,
-потрібно довести законний і технічно реалістичний шлях незалежної
-відкритої реалізації. Не обходити ACR/signature chain і не змінювати
-firmware acceptance statuses без окремого доказу.
+Сам факт присутності файлів NVIDIA у linux-firmware не робить їх
+вільним програмним забезпеченням. Перш ніж заявляти про повністю вільне
+прискорення GP107, потрібно довести законний і технічно реалістичний
+шлях незалежної відкритої реалізації. Не обходити ланцюжок перевірки
+підпису ACR і не змінювати статуси мікропрограми без окремих доказів.
 
-Це обмеження не змінює H170 profile на функціонально перевірений:
-`runtime_binding`, package resolution, firmware package stages та
-`functional_validation` залишаються окремими й непідтвердженими.
-
-
-### Ліцензійна межа NVIDIA firmware
+### Ліцензійні обмеження мікропрограми NVIDIA
 
 У поточному [linux-firmware WHENCE](https://kernel.googlesource.com/pub/scm/linux/kernel/git/firmware/linux-firmware/+/refs/heads/main/WHENCE)
-GP107 firmware group входить до блоку Nouveau та позначена як
-`Redistributable. See LICENCE.nvidia`. Це означає дозвіл на
-розповсюдження за окремими умовами, а не вільну/open-source ліцензію.
+групу мікропрограм GP107 для Nouveau позначено як таку, що дозволена
+до поширення за умовами `LICENCE.nvidia`. Це дозвіл на поширення за
+окремими умовами, а не вільна ліцензія з правом змінювати мікропрограму.
 
 [LICENCE.nvidia](https://kernel.googlesource.com/pub/scm/linux/kernel/git/firmware/linux-firmware.git/+/133355e89e7f0ab5d61e51eaeda6166c1bb3deb3/LICENCE.nvidia)
-містить обмеження щодо reverse engineering/decompilation/disassembly та
-translation firmware. NVIDIA публікує аналогічні обмеження у
-[Linux driver license](https://www.nvidia.com/en-us/drivers/nvidia-license/).
-Це vendor-license умови; їхній вплив разом із можливими законодавчими
-винятками для interoperability треба оцінювати окремо за застосовним
-правом. Не робити висновок, що сам факт володіння GPU автоматично
-скасовує ці умови.
+містить обмеження щодо зворотного аналізу, декомпіляції, дизасемблювання
+та перекладу мікропрограми. NVIDIA публікує аналогічні обмеження у
+[ліцензії драйвера Linux](https://www.nvidia.com/en-us/drivers/nvidia-license/).
+Це умови ліцензії виробника; їхній вплив разом із можливими
+законодавчими винятками для сумісності потрібно оцінювати окремо
+відповідно до застосовного права. Не можна автоматично вважати, що
+сам факт володіння відеокартою скасовує ці умови.
 
-Практичний наслідок для WSM: не включати ці firmware blobs до Free
-profile і не перетворювати REA-дослідження firmware у декомпіляцію,
-переклад або обхід ACR без попередньої правової оцінки. Продовжувати
-можна через upstream open-source code, публічні специфікації,
-незалежні hardware observations та clean-room реалізацію в межах
-підтверджених прав. Redistributable Compatibility path, якщо він колись
-буде потрібний, має бути окремим opt-in профілем із ліцензією поруч.
+Практичний наслідок для WSM: не включати ці файли до вільного профілю
+та не перетворювати дослідження REA на декомпіляцію, переклад або обхід
+ACR без попередньої правової оцінки. Дослідження можна продовжувати
+через відкритий код upstream, публічні специфікації, незалежні
+спостереження за обладнанням і власну реалізацію в межах підтверджених
+прав. Якщо колись знадобиться шлях із дозволеною до поширення
+мікропрограмою, він має бути окремим необов'язковим профілем із
+відповідною ліцензією.
+
+Це обмеження не робить профіль H170 функціонально перевіреним:
+`runtime_binding`, розв'язання пакетів, наявність мікропрограми на
+етапах завантаження та `functional_validation` залишаються окремими
+непідтвердженими станами.
