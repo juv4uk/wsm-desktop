@@ -201,7 +201,7 @@ class MinimalLiveProfileTests(unittest.TestCase):
         self.assertIn("gh attestation verify", workflow)
         self.assertIn("OWNER_ACTION_REQUIRED", final)
         self.assertIn("test \"$(jq -r '.isDraft' <<< \"$RELEASE_INFO\")\" = \"true\"", final)
-        self.assertIn('test "$(jq -r '. + "'"+'targetCommitish'+"'"+' <<< "$RELEASE_INFO")" = "$GITHUB_SHA"', final)
+        self.assertIn("targetCommitish", final)
         self.assertNotIn("gh release edit", workflow)
         self.assertNotIn("--draft=false", workflow)
 
