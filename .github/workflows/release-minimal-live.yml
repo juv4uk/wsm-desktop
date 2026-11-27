@@ -320,22 +320,22 @@ jobs:
             echo "Tag: `$RELEASE_TAG`"
             echo "Source: `$GITHUB_SHA`"
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Підготувати точний перелік provenance subjects
+        id: attestation-subjects
+        run: |
+          set -euo pipefail
+          python scripts/prepare_release_attestation_subjects.py \
+            --release-dir "$release_dist" \
+            --iso-name "$release_iso" \
+            --subject-file "$RUNNER_TEMP/wsm-live-attestation-subjects.txt" \
+            --github-output "$GITHUB_OUTPUT"
       - name: Підписати provenance релізних артефактів
         id: attest-release-artifacts
         uses: actions/attest@v4
         with:
-          # The image may be split into parts by now, so attest both forms:
-          # a glob would satisfy the split case but silently attest nothing if
-          # the name ever changed.
-          subject-path: |
-            ${{ runner.temp }}/wsm-live-dist/${{ steps.release.outputs.iso_name }}
-            ${{ runner.temp }}/wsm-live-dist/${{ steps.release.outputs.iso_name }}.part*
-            ${{ runner.temp }}/wsm-live-dist/SHA256SUMS
-            ${{ runner.temp }}/wsm-live-dist/build-manifest.json
-            ${{ runner.temp }}/wsm-live-dist/release-manifest.json
-            ${{ runner.temp }}/wsm-live-dist/boot-bios.json
-            ${{ runner.temp }}/wsm-live-dist/boot-uefi.json
-            ${{ runner.temp }}/wsm-live-dist/ISO-CHECKSUMS.sha256
+          # The helper selects exactly one published image form (whole ISO or
+          # split parts), then adds the required manifests and split-only sidecar.
+          subject-path: ${{ steps.attestation-subjects.outputs.paths }}
           create-storage-record: false
       - name: Перевірити версію GitHub CLI для перевірки provenance
         run: |
@@ -356,14 +356,17 @@ jobs:
         run: |
           set -euo pipefail
           BUNDLE="${{ steps.attest-release-artifacts.outputs.bundle-path }}"
+          SUBJECT_FILE="$RUNNER_TEMP/wsm-live-attestation-subjects.txt"
+          EXPECTED_COUNT="${{ steps.attestation-subjects.outputs.subject_count }}"
           test -s "$BUNDLE"
+          test -s "$SUBJECT_FILE"
+          [[ "$EXPECTED_COUNT" =~ ^[0-9]+$ ]]
+          mapfile -t SUBJECTS < "$SUBJECT_FILE"
+          test "${#SUBJECTS[@]}" -eq "$EXPECTED_COUNT"
           VERIFIED_COUNT=0
-          for ASSET in "$release_iso" "$release_iso".part* \
-                       "ISO-CHECKSUMS.sha256" "SHA256SUMS" \
-                       "build-manifest.json" "release-manifest.json" \
-                       "boot-bios.json" "boot-uefi.json"; do
-            [ -f "$release_dist/$ASSET" ] || continue
-            gh attestation verify "$release_dist/$ASSET" \
+          for SUBJECT in "${SUBJECTS[@]}"; do
+            test -s "$SUBJECT"
+            gh attestation verify "$SUBJECT" \
               --bundle "$BUNDLE" \
               --repo "$GITHUB_REPOSITORY" \
               --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release-minimal-live.yml" \
@@ -371,11 +374,11 @@ jobs:
               --predicate-type "https://slsa.dev/provenance/v1"
             VERIFIED_COUNT=$((VERIFIED_COUNT + 1))
           done
-          test "$VERIFIED_COUNT" -ge 7
+          test "$VERIFIED_COUNT" -eq "$EXPECTED_COUNT"
           {
             echo "### Криптографічна перевірка походження"
             echo ""
-            echo "SLSA provenance і точний signer/source ref перевірено для кожного release asset."
+            echo "SLSA provenance і точний signer/source ref перевірено для $VERIFIED_COUNT release subjects."
             echo "Signer workflow: $GITHUB_REPOSITORY/.github/workflows/release-minimal-live.yml"
             echo "Source ref: refs/heads/main"
           } >> "$GITHUB_STEP_SUMMARY"
