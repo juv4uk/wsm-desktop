@@ -98,7 +98,7 @@ class DriverProfileManifestTests(unittest.TestCase):
                 else:
                     self.assertEqual(profile["source"]["channel_authentication_evidence"], "not-evaluated")
 
-    def test_free_profile_never_claims_nonfree_or_functional_support(self) -> None:
+    def test_free_profile_does_not_include_nonfree_or_claim_functional_support(self) -> None:
         self.assertEqual(self.free["profile_class"], "free")
         self.assertTrue(self.free["enabled_by_default"])
         self.assertFalse(self.free["policy"]["nonfree_components_included"])
@@ -115,7 +115,16 @@ class DriverProfileManifestTests(unittest.TestCase):
                 else:
                     self.assertEqual(item["pci_ids"], [])
                     self.assertEqual(item["identity_evidence"], [])
-                self.assertEqual(item["firmware"]["redistribution"], "unknown")
+                firmware = item["firmware"]
+                self.assertIn(firmware["redistribution"], {"free", "nonfree", "mixed", "unknown", "not-applicable"})
+                if firmware["redistribution"] in {"nonfree", "mixed"}:
+                    # A known nonfree requirement may be documented without being shipped.
+                    self.assertEqual(firmware["package_candidates"], [])
+                    self.assertEqual(firmware["package_resolution"], "not-assessed")
+                    self.assertEqual(firmware["live_rootfs"], "not-assessed")
+                    self.assertEqual(firmware["initrd"], "not-assessed")
+                    self.assertEqual(firmware["installed_rootfs"], "not-assessed")
+                    self.assertEqual(firmware["runtime_load"], "not-assessed")
                 for candidate in item["driver_candidates"]:
                     self.assertEqual(candidate["package_resolution"], "not-assessed")
                     self.assertEqual(candidate["runtime_binding"], "unknown")
