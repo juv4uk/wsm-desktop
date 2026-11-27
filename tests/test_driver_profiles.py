@@ -204,7 +204,7 @@ class DriverProfileManifestTests(unittest.TestCase):
         candidate = next(item for item in gpu["driver_candidates"] if item["candidate_id"] == "nouveau-pascal")
         self.assertTrue(any(item["source"] == "Pinned GNU Guix Mesa/Linux-libre package definitions" for item in candidate["evidence"]))
         self.assertEqual(candidate["package_resolution"], "not-assessed")
-        self.assertEqual(gpu["runtime_binding"]["status"], "unknown")
+        self.assertEqual(candidate["runtime_binding"], "unknown")
         self.assertEqual(gpu["functional_validation"]["status"], "not-run")
         self.assertEqual(gpu["firmware"]["requirement"], "required")
         self.assertEqual(gpu["firmware"]["redistribution"], "nonfree")
