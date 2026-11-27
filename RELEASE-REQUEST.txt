@@ -2,7 +2,6 @@
 0.1.0-rc4-minimal-live
 # Новий non-destructive RC4 після merged sidecar/read-back fix (#538) і dynamic tag/provenance preparation (#541).
 # Старий draft 0.1.0-rc3-minimal-live збережено; цей запит створює новий draft від точного main commit.
-
-
-
+# Retry after #46079290853 exposed release_parts shell-scope bug; fixed on main 183dd1b.
+# Push-trigger is draft-only; publication still requires separate owner workflow_dispatch approval.
 
