@@ -23,7 +23,7 @@ class InstallerGuiContractTests(unittest.TestCase):
         self.assertIn("--smoke-test", app)
 
     def test_ui_has_no_apply_or_command_execution_api(self) -> None:
-        source = "\\n".join(
+        source = "\n".join(
             (GUI / name).read_text(encoding="utf-8")
             for name in ("controller.py", "preview.py", "app.py")
         )
