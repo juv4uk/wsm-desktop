@@ -150,15 +150,24 @@ class MinimalLiveProfileTests(unittest.TestCase):
         self.assertIn('--title "$RELEASE_TITLE"', workflow)
         self.assertIn('RELEASE_TITLE: ${{ steps.release.outputs.release_title }}', workflow)
 
-    def test_attestation_verifies_the_published_iso_form_and_sidecar(self) -> None:
+    def test_attestation_subjects_follow_the_actual_whole_or_split_image_form(self) -> None:
         workflow = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
-        section = workflow[workflow.index("name: Підписати provenance"):workflow.index("name: Перевірити версію GitHub CLI")]
-        self.assertIn('${{ steps.release.outputs.iso_name }}', section)
-        self.assertIn('${{ steps.release.outputs.iso_name }}.part*', section)
-        self.assertIn("ISO-CHECKSUMS.sha256", section)
-        verify = workflow[workflow.index("name: Перевірити provenance артефактів перед публікацією"):workflow.index("name: Опублікувати перевірений GitHub pre-release")]
-        self.assertIn('for ASSET in "$release_iso" "$release_iso".part*', verify)
-        self.assertIn('test "$VERIFIED_COUNT" -ge 7', verify)
+        prepare = workflow.index("name: Підготувати точний перелік provenance subjects")
+        attest = workflow.index("name: Підписати provenance релізних артефактів")
+        verify = workflow.index("name: Перевірити provenance артефактів перед публікацією")
+        publish = workflow.index("name: Опублікувати перевірений GitHub pre-release")
+        self.assertLess(prepare, attest)
+        self.assertLess(attest, verify)
+        self.assertLess(verify, publish)
+        prepare_section = workflow[prepare:attest]
+        self.assertIn("scripts/prepare_release_attestation_subjects.py", prepare_section)
+        attest_section = workflow[attest:verify]
+        self.assertIn('${{ steps.attestation-subjects.outputs.paths }}', attest_section)
+        verify_section = workflow[verify:publish]
+        self.assertIn('mapfile -t SUBJECTS < "$SUBJECT_FILE"', verify_section)
+        self.assertIn('test "${#SUBJECTS[@]}" -eq "$EXPECTED_COUNT"', verify_section)
+        self.assertIn('test "$VERIFIED_COUNT" -eq "$EXPECTED_COUNT"', verify_section)
+        self.assertNotIn('VERIFIED_COUNT" -ge 7', verify_section)
 
     def test_release_workflow_requires_exactly_one_non_comment_tag(self) -> None:
         workflow = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")

@@ -78,42 +78,20 @@ class ReleaseAssetVerificationTests(unittest.TestCase):
         self.assertEqual(attest["uses"], "actions/attest@v4")
         self.assertIs(attest["with"]["create-storage-record"], False)
         subjects = attest["with"]["subject-path"]
-        self.assertIn("${{ steps.release.outputs.iso_name }}", subjects)
-        self.assertIn("${{ steps.release.outputs.iso_name }}.part*", subjects)
-        for filename in (
-            "ISO-CHECKSUMS.sha256",
-            "SHA256SUMS",
-            "build-manifest.json",
-            "release-manifest.json",
-            "boot-bios.json",
-            "boot-uefi.json",
-        ):
-            with self.subTest(subject=filename):
-                self.assertIn(filename, subjects)
+        self.assertEqual(subjects, "${{ steps.attestation-subjects.outputs.paths }}")
 
         verification = steps[verify_index]["run"]
         self.assertIn("gh attestation verify", verification)
         self.assertIn('--repo "$GITHUB_REPOSITORY"', verification)
         self.assertIn("--bundle", verification)
         self.assertIn("bundle-path", verification)
-        self.assertIn('"$release_dist/$ASSET"', verification)
+        self.assertIn('mapfile -t SUBJECTS < "$SUBJECT_FILE"', verification)
+        self.assertIn('test "${#SUBJECTS[@]}" -eq "$EXPECTED_COUNT"', verification)
+        self.assertIn('test "$VERIFIED_COUNT" -eq "$EXPECTED_COUNT"', verification)
         self.assertIn("--signer-workflow", verification)
         self.assertIn("--source-ref refs/heads/main", verification)
         self.assertIn("release-minimal-live.yml", verification)
         self.assertIn("https://slsa.dev/provenance/v1", verification)
-        self.assertIn('for ASSET in "$release_iso" "$release_iso".part*', verification)
-        self.assertIn('"ISO-CHECKSUMS.sha256"', verification)
-        self.assertIn('test "$VERIFIED_COUNT" -ge 7', verification)
-        for filename in (
-            "ISO-CHECKSUMS.sha256",
-            "SHA256SUMS",
-            "build-manifest.json",
-            "release-manifest.json",
-            "boot-bios.json",
-            "boot-uefi.json",
-        ):
-            with self.subTest(verified_subject=filename):
-                self.assertIn(filename, verification)
 
     def test_valid_download_matches_local_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
