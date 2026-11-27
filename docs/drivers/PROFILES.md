@@ -334,3 +334,11 @@ Compatibility `localmodconfig` до Free profile: це непомітно вил
 саме ті відкриті GPU drivers, які ми перевіряємо.
 Деталі обмежень Compatibility ISO наведено в
 [`ISO-RELEASE.md`](../../ISO-RELEASE.md).
+
+
+## Дослідження драйверів та незалежні реалізації
+
+Для переходу від апаратних доказів до незалежного відкритого коду
+використовуйте [процес REA → upstream → Guix](REA-TO-UPSTREAM-PROCESS.md).
+Він визначає межі між low-level GP107 research, WSM hardware decisions,
+upstream patches та пакетною інтеграцією.

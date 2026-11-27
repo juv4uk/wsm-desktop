@@ -388,3 +388,9 @@ Unified Kernel Image — один PE-файл, у який складені stub
 - [KDE Plasma 6.6.7 LTS, 16.10.2026](https://kde.org/announcements/plasma/6/6.6.7/)
 - [KDE Plasma LTS support policy](https://kde.org/support/compliance/)
 - [Official Plasma source release archive](https://download.kde.org/stable/plasma/)
+
+
+## Дослідження драйверів та REA
+
+- [Процес REA → незалежна реалізація → upstream → Guix](drivers/REA-TO-UPSTREAM-PROCESS.md) — межі доказів, clean-room/provenance, ліцензійні обмеження, фізичні тести та benchmark acceptance.
+- [GP107 reverse-engineering research](https://github.com/juv4uk/gp107-nvidia-re) — канонічне зовнішнє сховище для GP107 probes, capability matrix та benchmark evidence. WSM зберігає посилання й рішення, а не дублює raw artifacts.
