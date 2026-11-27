@@ -338,6 +338,13 @@ class SplitChecksumTests(unittest.TestCase):
         self.assertIn('artifact["published_as"] = "parts"', self.text)
         self.assertIn('artifact["parts"] = parts', self.text)
 
+    def test_split_sidecar_is_covered_by_top_level_checksums(self) -> None:
+        sidecar = self.text.index('sidecar = root / "ISO-CHECKSUMS.sha256"')
+        append = self.text.index("covered.append(sidecar)", sidecar)
+        top_level = self.text.index('(root / "SHA256SUMS").write_text', sidecar)
+        self.assertLess(sidecar, append)
+        self.assertLess(append, top_level)
+
     def test_sha256sums_covers_the_parts_not_the_removed_image(self) -> None:
         """The read-back check rejects a listed file that is not in the upload."""
         self.assertIn("covered = [root / name for name in parts]", self.text)
