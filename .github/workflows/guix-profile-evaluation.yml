@@ -5,6 +5,7 @@ on:
     paths:
       - ".github/workflows/guix-profile-evaluation.yml"
       - ".guix-channel"
+      - ".guix-authorizations"
       - "channels.lock.scm"
       - "tests/guix/**"
       - "channels/**"
