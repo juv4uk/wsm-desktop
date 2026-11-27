@@ -207,58 +207,8 @@ jobs:
           # the whole image still existed. Once it is split, both must describe
           # what is actually published, or the read-back check rejects the
           # upload for a file that is no longer supposed to be there.
-          python - "$release_dist" "$release_iso" "$release_parts" <<'PY'
-          import hashlib, json, sys
-          from pathlib import Path
-          root = Path(sys.argv[1]); iso_name = sys.argv[2]; split = sys.argv[3] == "1"
-
-          def sha(path):
-              digest = hashlib.sha256()
-              with path.open("rb") as handle:
-                  for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                      digest.update(chunk)
-              return digest.hexdigest()
-
-          manifest_path = root / "release-manifest.json"
-          manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-          artifact = manifest["artifact"]
-          parts = sorted(p.name for p in root.glob(iso_name + ".part*"))
-          if split:
-              artifact["published_as"] = "parts"
-              artifact["parts"] = parts
-              artifact["parts_count"] = len(parts)
-              artifact["note"] = (
-                  "The image exceeds one GitHub asset; concatenate the parts in "
-                  "lexical order to obtain the file whose sha256 is recorded here."
-              )
-          else:
-              artifact["published_as"] = "whole"
-          manifest_path.write_text(
-              json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-              encoding="utf-8",
-          )
-
-          covered = [root / name for name in parts]
-          if not split:
-              covered.append(root / iso_name)
-          covered += [root / "build-manifest.json", manifest_path,
-                      root / "boot-bios.json", root / "boot-uefi.json"]
-          if split:
-              sidecar = root / "ISO-CHECKSUMS.sha256"
-              sidecar.write_text(
-                  "".join(f"{sha(root / name)}  {name}\n" for name in parts),
-                  encoding="utf-8",
-              )
-              # The read-back verifier compares the remote asset set with
-              # every entry in SHA256SUMS. The parts sidecar is itself a
-              # published asset, so the top-level manifest must cover it too.
-              covered.append(sidecar)
-          (root / "SHA256SUMS").write_text(
-              "".join(f"{sha(path)}  {path.name}\n" for path in covered),
-              encoding="utf-8",
-          )
-          print("checksums rewritten for", artifact["published_as"])
-          PY
+          python scripts/prepare_release_checksums.py "$release_dist" "$release_iso" "$release_parts"
+          (cd "$release_dist" && sha256sum -c SHA256SUMS)
           ls -la "$release_dist"
 
       - name: Створити чернетку релізу та завантажити assets
