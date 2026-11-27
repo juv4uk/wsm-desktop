@@ -6,6 +6,7 @@ import org.kde.kirigami as Kirigami
 
 Kirigami.ApplicationWindow {
     id: root
+    objectName: "wsm-installer-window"
     width: 1040
     height: 760
     minimumWidth: 760
@@ -247,11 +248,13 @@ Kirigami.ApplicationWindow {
                 }
                 Item { Layout.fillWidth: true }
                 Controls.Button {
+                    objectName: "wsm-installer-back"
                     text: qsTr("Назад")
                     enabled: root.step > 0
                     onClicked: root.step -= 1
                 }
                 Controls.Button {
+                    objectName: "wsm-installer-next"
                     text: root.step === 3 ? qsTr("Готово") : qsTr("Далі")
                     highlighted: true
                     enabled: root.step < 2
