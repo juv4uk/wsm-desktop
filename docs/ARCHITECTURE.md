@@ -138,3 +138,8 @@ WSM не повинна повторно компілювати upstream-ком�
 `unknown` та `not-tested` не можна перетворювати на `failed` або `supported` без доказів. Відсутність запису у базі не доводить несумісність.
 
 Початковий технічний напрямок реалізується в [hardware preflight issues](https://github.com/juv4uk/wsm-desktop/issues/3) та [draft PR #9](https://github.com/juv4uk/wsm-desktop/pull/9).
+
+
+## Desktop experience та upstream UX research
+
+WSM використовує KDE Plasma 6 як desktop stack першого релізу. Практики інших дистрибутивів оцінюються як UX/engineering references, а не як підстава створювати паралельну оболонку. Поточний аналіз Omarchy, зіставлення з можливостями Plasma та перевірку пакетів на locked Guix revision наведено в [OMARCHY-ADAPTATION.md](desktop/OMARCHY-ADAPTATION.md). Результати не змінюють backend ownership, scope першого ISO або власність KDE над стандартними desktop services.
