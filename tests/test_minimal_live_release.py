@@ -352,6 +352,14 @@ class SplitAssetTests(unittest.TestCase):
             self.text.index("Створити чернетку релізу"),
         )
 
+    def test_split_state_is_set_in_the_current_shell(self) -> None:
+        split = self.text.index("Поділити образ на частини")
+        upload = self.text.index("Створити чернетку релізу", split)
+        section = self.text[split:upload]
+        self.assertIn('release_parts=1\\n            echo "release_parts=1" >> "$GITHUB_ENV"', section)
+        self.assertIn('release_parts=0\\n            echo "release_parts=0" >> "$GITHUB_ENV"', section)
+        self.assertLess(section.index('release_parts=1'), section.index('python - "$release_dist" "$release_iso" "$release_parts"'))
+
     def test_parts_are_listed_as_assets(self) -> None:
         self.assertIn('"$release_dist/$release_iso".part*', self.text)
 
