@@ -126,15 +126,30 @@
         }
       ],
       "firmware": {
-        "requirement": "unknown",
+        "requirement": "optional",
         "package_candidates": [],
         "package_resolution": "not-assessed",
         "live_rootfs": "not-assessed",
         "initrd": "not-assessed",
         "installed_rootfs": "not-assessed",
         "runtime_load": "not-assessed",
-        "redistribution": "unknown",
-        "evidence": []
+        "redistribution": "nonfree",
+        "evidence": [
+          {
+            "kind": "upstream-reference",
+            "source": "Linux i915 Skylake DMC firmware path",
+            "source_url": "https://code.googlesource.com/linux/torvalds/linux/+/69ffab9b9e698248cbb4042e47f82afb00dc1bb4/drivers/gpu/drm/i915/display/intel_dmc.c",
+            "observed_at": "2026-11-27",
+            "summary": "The Skylake i915 driver loads DMC firmware; if it is unavailable, upstream logs that runtime power management is disabled. This makes DMC optional for basic graphics but required for the full DMC-backed runtime power-management path. This evidence does not prove the firmware is present in Guix, H170 runtime binding, or physical display/graphics validation."
+          },
+          {
+            "kind": "upstream-reference",
+            "source": "Linux-firmware Skylake i915 firmware inventory and Intel license",
+            "source_url": "https://kernel.googlesource.com/pub/scm/linux/kernel/git/firmware/linux-firmware/+/refs/heads/main/WHENCE",
+            "observed_at": "2026-11-27",
+            "summary": "WHENCE lists Skylake DMC and GuC firmware under LICENSE.i915. The vendor license permits binary redistribution only without modification and prohibits reverse engineering/decompilation/disassembly. This is nonfree firmware; it must not enter the WSM Free closure. GuC/HuC features require separate workload-specific assessment."
+          }
+        ]
       },
       "functional_validation": {
         "status": "not-run",
@@ -142,7 +157,8 @@
         "evidence": []
       },
       "notes": [
-        "Candidate free graphics path only. DRM/KMS, firmware needs, Guix package closure and Plasma session have not been tested on this target."
+        "Candidate free graphics path only. DRM/KMS, firmware needs, Guix package closure and Plasma session have not been tested on this target.",
+        "Skylake i915 DMC firmware is used for display runtime power management; without it upstream disables runtime PM, while basic graphics is a separate path. GuC is optional for base driver operation and HuC/media features are workload-specific. DMC/GuC firmware is distributed under Intel's nonfree LICENSE.i915, not part of the WSM Free closure."
       ],
       "identity_evidence": []
     },
