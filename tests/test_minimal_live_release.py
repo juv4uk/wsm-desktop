@@ -389,6 +389,17 @@ class SplitChecksumTests(unittest.TestCase):
         self.assertIn("covered = [root / name for name in parts]", self.text)
         self.assertIn("if not split:", self.text)
 
+    def test_split_flag_is_defined_in_the_same_shell_step(self) -> None:
+        """GITHUB_ENV is only visible to later workflow steps, not this Python call."""
+        start = self.text.index("name: Поділити образ на частини")
+        end = self.text.index("name: Створити чернетку релізу", start)
+        section = self.text[start:end]
+        self.assertIn("release_parts=0", section)
+        self.assertIn("release_parts=1", section)
+        self.assertIn('python - "$release_dist" "$release_iso" "$release_parts"', section)
+        self.assertNotIn('echo "release_parts=1" >> "$GITHUB_ENV"', section)
+        self.assertNotIn('echo "release_parts=0" >> "$GITHUB_ENV"', section)
+
 class ReassemblyDocTests(unittest.TestCase):
     """A published artifact nobody can assemble is not published."""
 
