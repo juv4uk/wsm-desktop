@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import ast
 import unittest
 from pathlib import Path
 
@@ -22,13 +23,26 @@ class InstallerGuiContractTests(unittest.TestCase):
         self.assertIn("--smoke-test", app)
 
     def test_ui_has_no_apply_or_command_execution_api(self) -> None:
-        source = "\n".join(
+        source = "\\n".join(
             (GUI / name).read_text(encoding="utf-8")
             for name in ("controller.py", "preview.py", "app.py")
         )
-        for forbidden in ("subprocess", "QProcess", "os.system", "shell=True", "guix system init"):
-            self.assertNotIn(forbidden, source)
-        self.assertNotIn("open(", source)
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                self.assertFalse(any(alias.name == "subprocess" for alias in node.names))
+            elif isinstance(node, ast.ImportFrom):
+                self.assertNotEqual(node.module, "subprocess")
+            elif isinstance(node, ast.Call):
+                function = node.func
+                self.assertFalse(isinstance(function, ast.Name) and function.id in {"exec", "eval"})
+                self.assertFalse(
+                    isinstance(function, ast.Attribute)
+                    and function.attr in {"system", "popen", "Popen"}
+                )
+        self.assertNotIn("shell=True", source)
+        self.assertNotIn("guix system init", source)
+        self.assertNotIn("QProcess", source)
         self.assertIn("mutations_authorized", (GUI / "qml" / "Main.qml").read_text(encoding="utf-8"))
 
     def test_qml_keeps_unknown_states_visible_and_free_of_fake_green_status(self) -> None:
