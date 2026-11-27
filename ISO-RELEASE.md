@@ -121,8 +121,10 @@ Ventoy на цільовій машині.
 module build, rebuild ISO та повторним BIOS/UEFI й physical acceptance.
 
 NVIDIA License: [Driver License Agreement](https://www.nvidia.com/en-us/drivers/nvidia-license/),
-§1.1(d) та §2.3. До окремого licensing review Compatibility ISO залишається
-локальним build candidate і не призначений для публічного binary distribution.
+§1.1(d) та §2.3. Базові Compatibility `.part001`–`.part006` уже присутні у
+RC2 Release, але їхній redistribution status лишається `NOT CLEARED`; факт
+наявності asset-ів не є ліцензійним висновком. До завершення окремого review не
+повторно розповсюджувати, дзеркалити або перепаковувати ці binary payloads.
 
 Джерела: [NVIDIA 580.196.11](https://www.nvidia.com/en-us/drivers/details/285683/),
 [NVIDIA legacy GPU support timeframe](https://nvidia.custhelp.com/app/answers/detail/a_id/3142/),
