@@ -363,7 +363,8 @@
       },
       "notes": [
         "Owner profile observes a Killer E2200 adapter. Exact PCI vendor:device ID, package availability, binding and DHCP/traffic test remain unknown.",
-        "The upstream alx source has no host-loadable firmware dependency. E2200 maps to 1969:e091 in LKDDb, but the exact PCI ID for this machine has not been observed; do not populate pci_ids or claim binding from the model name alone."
+        "The upstream alx source has no host-loadable firmware dependency. E2200 maps to 1969:e091 in LKDDb, but the exact PCI ID for this machine has not been observed; do not populate pci_ids or claim binding from the model name alone.",
+        "GIGABYTE board specifications differ by revision: Rev. 1.0 lists Killer E2201, Rev. 1.1 lists Killer E2400; Windows owner inventory reports the E2200 device label. Board revision and exact PCI ID are not recorded, so the E2200 label is not treated as a confirmed silicon revision."
       ],
       "identity_evidence": []
     },
@@ -541,7 +542,8 @@
       "notes": [
         "Windows lists audio endpoints. Codec-level enumeration, firmware, audio service setup and playback/capture remain untested.",
         "Standard HDA/Realtek codec support has no required vendor firmware blob; an optional user-supplied HDA initialization patch is a separate override. Exact codec ID (including any ALC1150 claim), UCM configuration and playback/capture remain untested.",
-        "The same pinned kernel config enables CONFIG_SND_HDA_PATCH_LOADER=y; this enables the optional user-supplied patch mechanism, not a required vendor firmware blob."
+        "The same pinned kernel config enables CONFIG_SND_HDA_PATCH_LOADER=y; this enables the optional user-supplied patch mechanism, not a required vendor firmware blob.",
+        "GIGABYTE specifications for GA-H170-Gaming 3 Rev. 1.0 and Rev. 1.1 list Realtek ALC1150; this is board-vendor evidence, not physical codec enumeration. Keep exact codec ID unknown until observed."
       ],
       "identity_evidence": []
     }
