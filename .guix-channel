@@ -1,0 +1,9 @@
+;; SPDX-License-Identifier: LicenseRef-Volnist
+;;
+;; GNU Guix channel metadata for WSM Desktop.
+;; The repository root is the channel root; Scheme modules live under wsm/.
+;; Channel authentication is bootstrapped separately by a signed introduction
+;; commit plus .guix-authorizations and the public keyring branch.
+(channel
+ (version 0)
+ (url "https://github.com/juv4uk/wsm-desktop"))
