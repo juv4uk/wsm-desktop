@@ -362,6 +362,17 @@ class SplitAssetTests(unittest.TestCase):
     def test_iso_size_is_reported_before_any_decision(self) -> None:
         self.assertIn("ISO size:", self.text)
 
+    def test_release_parts_is_local_before_python_manifest_rewrite(self) -> None:
+        """GITHUB_ENV is visible only to subsequent steps, not this shell."""
+        start = self.text.index("Поділити образ на частини")
+        end = self.text.index("Створити чернетку релізу", start)
+        step = self.text[start:end]
+        self.assertLess(step.index("release_parts=0"), step.index('if [ "$SIZE"'))
+        self.assertIn("release_parts=1", step)
+        self.assertIn('echo "release_parts=$release_parts" >> "$GITHUB_ENV"', step)
+        self.assertIn('python - "$release_dist" "$release_iso" "$release_parts"', step)
+        self.assertNotIn('"$GITHUB_ENV"\n          python -', step)
+
 class SplitChecksumTests(unittest.TestCase):
     """After a split, the manifests must describe what is actually published."""
 
