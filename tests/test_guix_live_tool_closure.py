@@ -29,6 +29,11 @@ class GuixLiveToolClosureTests(unittest.TestCase):
         self.assertTrue({"sgdisk", "partprobe", "udevadm", "mkfs.ext4", "mkfs.fat", "mount", "mkdir"}
                         .issubset(set(TRUSTED_TOOLS)))
         self.assertTrue(all("/" not in value for value in TRUSTED_TOOLS.values()))
+        implementation = (ROOT / "wsm_install" / "install_steps.py").read_text(encoding="utf-8")
+        self.assertNotIn("/usr/bin/", implementation)
+        self.assertNotIn("/usr/sbin/", implementation)
+        self.assertIn('Path("/run/current-system/profile")', implementation)
+        self.assertIn('for directory in ("bin", "sbin")', implementation)
 
     def test_resolver_uses_only_system_profile_bin_and_sbin(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
