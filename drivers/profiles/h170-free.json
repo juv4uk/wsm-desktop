@@ -176,6 +176,13 @@
               "source_url": "https://docs.mesa3d.org/drivers/nvk.html",
               "observed_at": "2026-11-26",
               "summary": "Current upstream documentation lists Kepler and later GPU generations for NVK, Vulkan 1.4 conformance for officially supported GPUs, and Linux kernel >=6.6. A developer-only override may enumerate poorly tested or broken GPUs. This is generation-level upstream evidence only; exact 10de:1c82 enumeration, Guix package closure, firmware, binding and functional validation remain unassessed."
+            },
+            {
+              "kind": "upstream-reference",
+              "source": "Nouveau upstream feature matrix",
+              "source_url": "https://nouveau.freedesktop.org/FeatureMatrix.html",
+              "observed_at": "2026-11-27",
+              "summary": "Nouveau upstream lists Vulkan support from Kepler onward, but notes that GP10x Pascal has no practical reclocking path because the required firmware access is signature-restricted. This is a generation-level performance limitation; it does not establish exact GP107 runtime binding, firmware presence, package closure, or H170 functional validation."
             }
           ],
           "notes": [
@@ -203,7 +210,8 @@
       },
       "notes": [
         "Windows nvidia-smi reported physical adapter location 00000000:01:00.0. That BDF is not a PCI vendor:device ID.",
-        "Do not infer reclocking, full acceleration, firmware presence or usable KDE acceleration from detection. Pascal performance limitations must be documented."
+        "Do not infer reclocking, full acceleration, firmware presence or usable KDE acceleration from detection. Pascal performance limitations must be documented.",
+        "Separate GP107 research repository documents a physical NVK vector-add pass for PCI ID 10de:1c82 on its own test host. That host is not proven to be this H170 board; the result does not establish H170 runtime binding, display support, daily-driver stability, or this profile's functional_validation."
       ],
       "identity_evidence": [
         {
