@@ -56,7 +56,7 @@
                 (copy-file "installer/gui/assets/wsm-installer.svg"
                            (string-append icons "/wsm-installer.svg"))))))))
     (propagated-inputs
-     (list python python-pyside-6 kirigami wsm-tools))
+     (list python python-pyside-6 qtdeclarative kirigami wsm-tools))
     (home-page "https://github.com/juv4uk/wsm-desktop")
     (synopsis "WSM read-only KDE hardware preflight preview")
     (description
