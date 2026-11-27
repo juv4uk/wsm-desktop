@@ -151,3 +151,28 @@ firmware acceptance statuses без окремого доказу.
 Це обмеження не змінює H170 profile на функціонально перевірений:
 `runtime_binding`, package resolution, firmware package stages та
 `functional_validation` залишаються окремими й непідтвердженими.
+
+
+### Ліцензійна межа NVIDIA firmware
+
+У поточному [linux-firmware WHENCE](https://kernel.googlesource.com/pub/scm/linux/kernel/git/firmware/linux-firmware/+/refs/heads/main/WHENCE)
+GP107 firmware group входить до блоку Nouveau та позначена як
+`Redistributable. See LICENCE.nvidia`. Це означає дозвіл на
+розповсюдження за окремими умовами, а не вільну/open-source ліцензію.
+
+[LICENCE.nvidia](https://kernel.googlesource.com/pub/scm/linux/kernel/git/firmware/linux-firmware.git/+/133355e89e7f0ab5d61e51eaeda6166c1bb3deb3/LICENCE.nvidia)
+містить обмеження щодо reverse engineering/decompilation/disassembly та
+translation firmware. NVIDIA публікує аналогічні обмеження у
+[Linux driver license](https://www.nvidia.com/en-us/drivers/nvidia-license/).
+Це vendor-license умови; їхній вплив разом із можливими законодавчими
+винятками для interoperability треба оцінювати окремо за застосовним
+правом. Не робити висновок, що сам факт володіння GPU автоматично
+скасовує ці умови.
+
+Практичний наслідок для WSM: не включати ці firmware blobs до Free
+profile і не перетворювати REA-дослідження firmware у декомпіляцію,
+переклад або обхід ACR без попередньої правової оцінки. Продовжувати
+можна через upstream open-source code, публічні специфікації,
+незалежні hardware observations та clean-room реалізацію в межах
+підтверджених прав. Redistributable Compatibility path, якщо він колись
+буде потрібний, має бути окремим opt-in профілем із ліцензією поруч.
