@@ -33,6 +33,7 @@ class PreviewController(QObject):
     disksChanged = Signal()
     selectedDiskChanged = Signal()
     reviewChanged = Signal()
+    canReviewChanged = Signal()
 
     def __init__(
         self,
@@ -124,14 +125,19 @@ class PreviewController(QObject):
     def reviewed(self) -> bool:
         return self._reviewed
 
-    @Property(bool, notify=stateChanged)
+    @Property(bool, notify=canReviewChanged)
     def canReview(self) -> bool:
-        return self._state == "ready" and self._disk_inventory_state == "loaded"
+        return (
+            self._state == "ready"
+            and self._disk_inventory_state == "loaded"
+            and self._selected_disk is not None
+        )
 
     def _set_state(self, value: str) -> None:
         if self._state != value:
             self._state = value
             self.stateChanged.emit()
+            self.canReviewChanged.emit()
 
     def _set_status(self, value: str) -> None:
         if self._status != value:
@@ -178,8 +184,18 @@ class PreviewController(QObject):
     @Slot()
     def refresh(self) -> None:
         """Collect local sysfs/procfs facts only; no subprocess or privilege."""
+        # Never let a failed refresh leave an old report or disk target visible.
+        # The selected target is session-local evidence and must be recollected.
+        self._clear_report()
+        self._disks = ()
+        self._disk_inventory_state = "not-run"
+        self._selected_disk = None
         self._reviewed = False
+        self.reportChanged.emit()
+        self.disksChanged.emit()
+        self.selectedDiskChanged.emit()
         self.reviewChanged.emit()
+        self.canReviewChanged.emit()
         self._set_state("loading")
         self._set_error("")
         self._set_status("Збираємо локальні апаратні відомості лише для читання.")
@@ -228,9 +244,8 @@ class PreviewController(QObject):
             self._disks = ()
             self._disk_inventory_state = "unavailable"
             self._set_error(str(exc))
-        self._selected_disk = None
         self.disksChanged.emit()
-        self.selectedDiskChanged.emit()
+        self.canReviewChanged.emit()
         self.reportChanged.emit()
         self._set_state("ready")
         self._set_status(
@@ -257,6 +272,7 @@ class PreviewController(QObject):
         self._reviewed = False
         self.selectedDiskChanged.emit()
         self.reviewChanged.emit()
+        self.canReviewChanged.emit()
         self._set_error("")
 
     @Slot()
@@ -265,6 +281,7 @@ class PreviewController(QObject):
         self._reviewed = False
         self.selectedDiskChanged.emit()
         self.reviewChanged.emit()
+        self.canReviewChanged.emit()
 
     @Slot(result=bool)
     def review(self) -> bool:
