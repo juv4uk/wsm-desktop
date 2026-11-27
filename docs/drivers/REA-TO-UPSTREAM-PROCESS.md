@@ -59,8 +59,8 @@ REA — засіб отримання перевірюваних знань, а 
 4. відокремити дослідника від реалізатора, якщо доступні окремі агенти/люди: реалізатор отримує лише незалежну специфікацію, provenance та тестові vectors, а не vendor binaries, декомпільований вивід або vendor pseudocode;
 5. реалізувати власний код без копіювання vendor source, pseudocode або декомпільованих фрагментів;
 6. додати unit/synthetic tests, потім physical tests за дозволом;
-6. виміряти регресії та продуктивність;
-7. запропонувати загальну зміну upstream; WSM-specific patch залишати лише за документованої причини.
+7. виміряти регресії та продуктивність;
+8. запропонувати загальну зміну upstream; WSM-specific patch залишати лише за документованої причини.
 
 Для GP107 low-level evidence лишається в [канонічній capability matrix](https://github.com/juv4uk/gp107-nvidia-re/blob/master/docs/05-gp107-capability-matrix.md). Дослідницькі приклади й межі описані в [FPC clean-room probe](https://github.com/juv4uk/gp107-nvidia-re/blob/master/docs/03-fpc-clean-room-probe.md), [proprietary artifact ABI facts](https://github.com/juv4uk/gp107-nvidia-re/blob/master/docs/11-proprietary-shipped-artifact-abi-facts.md) та [REA/ICD boundary](https://github.com/juv4uk/gp107-nvidia-re/blob/master/docs/19-rea-icd-boundary-and-memory-controls.md). WSM не створює другу matrix.
 
@@ -72,7 +72,7 @@ WSM Free не залежить від Nonguix, proprietary drivers або nonfre
 - GP107 GR використовує FECS/GPCCS firmware через ACR; без потрібних blobs fallback повертає `-ENODEV`. Не обходити ACR/signature chain.
 - Skylake i915 DMC потрібен для повного DMC-backed runtime power management; базову графіку оцінювати окремо.
 - Intel CPU microcode може бути наданий BIOS; OS early-update package є окремою залежністю.
-- NVIDIA та Intel firmware/microcode ліцензії містять обмеження щодо модифікації та reverse engineering. Перед декомпіляцією, перекладом firmware, обходом технічного захисту або розповсюдженням похідних матеріалів потрібна окрема правова оцінка застосовного права.
+- [NVIDIA Linux driver license](https://www.nvidia.com/en-us/drivers/nvidia-license/), [LICENCE.nvidia](https://kernel.googlesource.com/pub/scm/linux/kernel/git/firmware/linux-firmware.git/+/133355e89e7f0ab5d61e51eaeda6166c1bb3deb3/LICENCE.nvidia), [Intel LICENSE.i915](https://kernel.googlesource.com/pub/scm/linux/kernel/git/firmware/linux-firmware/%2B/refs/tags/20250211/LICENSE.i915) та [Intel microcode license](https://github.com/intel/Intel-Linux-Processor-Microcode-Data-Files/blob/main/license) містять обмеження щодо модифікації, зворотного аналізу або перекладу firmware/microcode. Перед декомпіляцією, перекладом firmware, обходом технічного захисту або розповсюдженням похідних матеріалів потрібна окрема правова оцінка застосовного права.
 
 Це не юридичний висновок про всі можливі interoperability exceptions. До правової оцінки працювати з відкритим upstream source, публічною документацією, незалежними hardware observations та власними clean-room реалізаціями. Не зберігати vendor blobs, ключі, дампи або декомпільований код у WSM.
 
