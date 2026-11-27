@@ -296,3 +296,26 @@ late-load і не досліджувати бінарний blob декомпі�
 binding або функціональність GP107. Головна перешкода Free-профілю
 залишається окремою: GP107 GR потребує FECS/GPCCS firmware, яке має
 невільну ліцензію та проходить через ACR.
+
+
+## Підтримка драйверів у типовій конфігурації Linux-libre
+
+У тому самому pinned Guix commit
+`4e5195be20d9b124df8a8bb69213412236e4668e` типовий
+[Linux-libre 7.3 x86_64 config](https://codeberg.org/guix/guix/src/commit/4e5195be20d9b124df8a8bb69213412236e4668e/gnu/packages/aux-files/linux-libre/7.3-x86_64.conf)
+містить такі символи:
+- `CONFIG_DRM_I915=m` — Intel HD Graphics 530;
+- `CONFIG_DRM_NOUVEAU=m` — NVIDIA Nouveau;
+- `CONFIG_ALX=m` — Killer E2200;
+- `CONFIG_SND_HDA_INTEL=m` і `CONFIG_SND_HDA_CODEC_REALTEK=m` — HDA/Realtek;
+- `CONFIG_SATA_AHCI=m` — SATA/AHCI;
+- `CONFIG_NVME_CORE=y` і `CONFIG_BLK_DEV_NVME=y` — NVMe;
+- `CONFIG_USB_XHCI_HCD=y` і `CONFIG_USB_XHCI_PCI=y` — xHCI;
+- `CONFIG_MICROCODE=y` — підтримка завантажувача CPU microcode.
+
+Це означає, що типова конфігурація ядра вже має потрібні драйвери;
+власні kernel patches лише для їхнього ввімкнення не потрібні.
+Але значення `m` або `y` у конфігурації не доводить, що ядро
+зібрано, модуль потрапив до конкретного образу/initrd, прив'язався
+до пристрою або пройшов функціональний тест. Ці стани не згортаються
+в одне твердження «підтримується».
