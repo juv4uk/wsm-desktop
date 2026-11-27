@@ -10,13 +10,14 @@ anything. The caller decides, one step at a time.
 
 The ordering matters and is the whole point:
 
-1. re-read the partition table - the kernel does not always notice new
+1. replace the existing partition table and create the selected GPT entries;
+2. re-read the partition table - the kernel does not always notice new
    partitions on its own, and formatting a stale device node formats the wrong
    thing;
-2. format the ESP and the root;
-3. mount root, then the ESP *inside* it - a bootloader installed into an ESP
+3. format the ESP and the root;
+4. mount root, then the ESP *inside* it - a bootloader installed into an ESP
    that is not part of the target tree lands on the live system;
-4. only then hand the target to the backend.
+5. only then hand the target to the backend.
 
 The first supported Guix target, systems/desktop.scm, declares an ext4 root.
 Until WSM has a reviewed generator that changes the Guix declaration together
