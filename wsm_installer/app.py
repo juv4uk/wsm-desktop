@@ -29,9 +29,14 @@ def main(argv: list[str] | None = None) -> int:
     app.setApplicationVersion("0.1.0")
     controller = PreviewController()
     engine = QQmlApplicationEngine()
-    for path in os.environ.get("QML_IMPORT_PATH", "").split(os.pathsep):
-        if path:
-            engine.addImportPath(path)
+    import_paths = (
+        os.environ.get("QML_IMPORT_PATH", ""),
+        os.environ.get("QML2_IMPORT_PATH", ""),
+    )
+    for configured in import_paths:
+        for path in configured.split(os.pathsep):
+            if path:
+                engine.addImportPath(path)
     engine.rootContext().setContextProperty("wsmController", controller)
 
     qml_path = Path(__file__).resolve().parent / "qml" / "Main.qml"
