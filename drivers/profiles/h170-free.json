@@ -31,10 +31,10 @@
     ]
   },
   "kernel": {
-    "package_candidate": "linux-libre (candidate only; exact package and closure not evaluated)",
-    "version": null,
-    "configuration_status": "not-assessed",
-    "notes": "Kernel package/configuration, modules and initrd contents must be evaluated against the pinned channel before image integration."
+    "package_candidate": "linux-libre (Guix default alias)",
+    "version": "7.3.5",
+    "configuration_status": "available",
+    "notes": "Pinned Guix commit 4e5195be (2026-11-25) selects linux-libre 7.3.5 by default and provides gnu/packages/aux-files/linux-libre/7.3-x86_64.conf. That config enables i915, nouveau, alx, snd_hda_intel/Realtek codec, SATA_AHCI, NVMe and xHCI. This is package-source/config evidence only; kernel build, package closure, initrd inclusion, runtime binding and physical function remain unassessed."
   },
   "unobserved_device_classes": [
     "wifi",
@@ -69,7 +69,8 @@
       },
       "notes": [
         "Board model and BIOS F22e are Windows-observed. Secure Boot state remains unknown.",
-        "No chipset or board driver requirement is inferred from the model name."
+        "No chipset or board driver requirement is inferred from the model name.",
+        "The pinned Linux-libre 7.3 x86_64 config has CONFIG_USB_XHCI_HCD=y and CONFIG_USB_XHCI_PCI=y; this is config evidence only, not physical USB controller or peripheral validation."
       ],
       "identity_evidence": []
     },
@@ -121,7 +122,8 @@
       },
       "notes": [
         "CPU identification is Windows-observed. This profile makes no claim about microcode package inclusion.",
-        "BIOS F22e already loads microcode 0xC2 for this exact CPU before the OS; Windows later applies 0xD6. A Linux-libre Free profile without Intel's nonfree early-update package can boot on BIOS microcode 0xC2, but does not reproduce the observed Windows 0xD6 update. Keep microcode revision in benchmark metadata; do not late-load or reverse engineer the blob."
+        "BIOS F22e already loads microcode 0xC2 for this exact CPU before the OS; Windows later applies 0xD6. A Linux-libre Free profile without Intel's nonfree early-update package can boot on BIOS microcode 0xC2, but does not reproduce the observed Windows 0xD6 update. Keep microcode revision in benchmark metadata; do not late-load or reverse engineer the blob.",
+        "The pinned Linux-libre 7.3 x86_64 config has CONFIG_MICROCODE=y and disables late loading; the early Intel update package remains optional/nonfree and is not included in the Free closure."
       ],
       "identity_evidence": []
     },
@@ -142,10 +144,18 @@
           ],
           "package_candidates": [],
           "package_resolution": "not-assessed",
-          "kernel_config": "not-assessed",
+          "kernel_config": "module-available",
           "runtime_binding": "unknown",
           "source_license": "unknown",
-          "evidence": []
+          "evidence": [
+            {
+              "kind": "upstream-reference",
+              "source": "Pinned Guix Linux-libre 7.3 x86_64 default kernel configuration",
+              "source_url": "https://codeberg.org/guix/guix/src/commit/4e5195be20d9b124df8a8bb69213412236e4668e/gnu/packages/aux-files/linux-libre/7.3-x86_64.conf",
+              "observed_at": "2026-11-27",
+              "summary": "The default Linux-libre 7.3 x86_64 config at pinned Guix commit 4e5195be sets CONFIG_DRM_I915=m. This establishes that the driver is configured as a built-in or module in the source config; it does not prove a built kernel, package/initrd inclusion, runtime binding, or physical function."
+            }
+          ]
         }
       ],
       "firmware": {
@@ -205,7 +215,7 @@
           ],
           "package_candidates": [],
           "package_resolution": "not-assessed",
-          "kernel_config": "not-assessed",
+          "kernel_config": "module-available",
           "runtime_binding": "unknown",
           "source_license": "unknown",
           "evidence": [
@@ -229,6 +239,13 @@
               "source_url": "https://codeberg.org/guix/guix/src/commit/4e5195be20d9b124df8a8bb69213412236e4668e/gnu/packages/gl.scm",
               "observed_at": "2026-11-27",
               "summary": "At pinned Guix channel commit 4e5195be (2026-11-25), Mesa 26.2.6 explicitly enables the nouveau Vulkan driver on x86_64 with -Dvulkan-drivers=amd,intel,intel_hasvk,nouveau,swrast,virtio and includes Mesa Cargo inputs. The default linux-libre alias is 7.3.5, above NVK's Linux 6.6 minimum. This proves package configuration intent only, not a successful Guix build, ICD installation, runtime binding, firmware load, or GP107 functional test."
+            },
+            {
+              "kind": "upstream-reference",
+              "source": "Pinned Guix Linux-libre 7.3 x86_64 default kernel configuration",
+              "source_url": "https://codeberg.org/guix/guix/src/commit/4e5195be20d9b124df8a8bb69213412236e4668e/gnu/packages/aux-files/linux-libre/7.3-x86_64.conf",
+              "observed_at": "2026-11-27",
+              "summary": "The default Linux-libre 7.3 x86_64 config at pinned Guix commit 4e5195be sets CONFIG_DRM_NOUVEAU=m. This establishes that the driver is configured as a built-in or module in the source config; it does not prove a built kernel, package/initrd inclusion, runtime binding, or physical function."
             }
           ],
           "notes": [
@@ -299,7 +316,7 @@
           "userspace_candidates": [],
           "package_candidates": [],
           "package_resolution": "not-assessed",
-          "kernel_config": "not-assessed",
+          "kernel_config": "module-available",
           "runtime_binding": "unknown",
           "source_license": "unknown",
           "evidence": [
@@ -309,6 +326,13 @@
               "source_url": "https://cateee.net/lkddb/web-lkddb/ALX.html",
               "observed_at": "2026-11-27",
               "summary": "The upstream alx PCI table includes ALX_DEV_ID_E2200; LKDDb maps the E2200 controller to PCI ID 1969:e091. The owner inventory names Killer E2200 but does not record its exact PCI ID, so the manifest pci_ids remains empty pending physical/Windows ID evidence."
+            },
+            {
+              "kind": "upstream-reference",
+              "source": "Pinned Guix Linux-libre 7.3 x86_64 default kernel configuration",
+              "source_url": "https://codeberg.org/guix/guix/src/commit/4e5195be20d9b124df8a8bb69213412236e4668e/gnu/packages/aux-files/linux-libre/7.3-x86_64.conf",
+              "observed_at": "2026-11-27",
+              "summary": "The default Linux-libre 7.3 x86_64 config at pinned Guix commit 4e5195be sets CONFIG_ALX=m. This establishes that the driver is configured as a built-in or module in the source config; it does not prove a built kernel, package/initrd inclusion, runtime binding, or physical function."
             }
           ]
         }
@@ -358,10 +382,18 @@
           "userspace_candidates": [],
           "package_candidates": [],
           "package_resolution": "not-assessed",
-          "kernel_config": "not-assessed",
+          "kernel_config": "built-in",
           "runtime_binding": "unknown",
           "source_license": "unknown",
-          "evidence": []
+          "evidence": [
+            {
+              "kind": "upstream-reference",
+              "source": "Pinned Guix Linux-libre 7.3 x86_64 default kernel configuration",
+              "source_url": "https://codeberg.org/guix/guix/src/commit/4e5195be20d9b124df8a8bb69213412236e4668e/gnu/packages/aux-files/linux-libre/7.3-x86_64.conf",
+              "observed_at": "2026-11-27",
+              "summary": "The default Linux-libre 7.3 x86_64 config at pinned Guix commit 4e5195be sets CONFIG_NVME_CORE=y and CONFIG_BLK_DEV_NVME=y. This establishes that the driver is configured as a built-in or module in the source config; it does not prove a built kernel, package/initrd inclusion, runtime binding, or physical function."
+            }
+          ]
         }
       ],
       "firmware": {
@@ -409,10 +441,18 @@
           "userspace_candidates": [],
           "package_candidates": [],
           "package_resolution": "not-assessed",
-          "kernel_config": "not-assessed",
+          "kernel_config": "module-available",
           "runtime_binding": "unknown",
           "source_license": "unknown",
-          "evidence": []
+          "evidence": [
+            {
+              "kind": "upstream-reference",
+              "source": "Pinned Guix Linux-libre 7.3 x86_64 default kernel configuration",
+              "source_url": "https://codeberg.org/guix/guix/src/commit/4e5195be20d9b124df8a8bb69213412236e4668e/gnu/packages/aux-files/linux-libre/7.3-x86_64.conf",
+              "observed_at": "2026-11-27",
+              "summary": "The default Linux-libre 7.3 x86_64 config at pinned Guix commit 4e5195be sets CONFIG_SATA_AHCI=m. This establishes that the driver is configured as a built-in or module in the source config; it does not prove a built kernel, package/initrd inclusion, runtime binding, or physical function."
+            }
+          ]
         }
       ],
       "firmware": {
@@ -460,10 +500,18 @@
           "userspace_candidates": [],
           "package_candidates": [],
           "package_resolution": "not-assessed",
-          "kernel_config": "not-assessed",
+          "kernel_config": "module-available",
           "runtime_binding": "unknown",
           "source_license": "unknown",
-          "evidence": []
+          "evidence": [
+            {
+              "kind": "upstream-reference",
+              "source": "Pinned Guix Linux-libre 7.3 x86_64 default kernel configuration",
+              "source_url": "https://codeberg.org/guix/guix/src/commit/4e5195be20d9b124df8a8bb69213412236e4668e/gnu/packages/aux-files/linux-libre/7.3-x86_64.conf",
+              "observed_at": "2026-11-27",
+              "summary": "The default Linux-libre 7.3 x86_64 config at pinned Guix commit 4e5195be sets CONFIG_SND_HDA_INTEL=m and CONFIG_SND_HDA_CODEC_REALTEK=m. This establishes that the driver is configured as a built-in or module in the source config; it does not prove a built kernel, package/initrd inclusion, runtime binding, or physical function."
+            }
+          ]
         }
       ],
       "firmware": {
@@ -492,7 +540,8 @@
       },
       "notes": [
         "Windows lists audio endpoints. Codec-level enumeration, firmware, audio service setup and playback/capture remain untested.",
-        "Standard HDA/Realtek codec support has no required vendor firmware blob; an optional user-supplied HDA initialization patch is a separate override. Exact codec ID (including any ALC1150 claim), UCM configuration and playback/capture remain untested."
+        "Standard HDA/Realtek codec support has no required vendor firmware blob; an optional user-supplied HDA initialization patch is a separate override. Exact codec ID (including any ALC1150 claim), UCM configuration and playback/capture remain untested.",
+        "The same pinned kernel config enables CONFIG_SND_HDA_PATCH_LOADER=y; this enables the optional user-supplied patch mechanism, not a required vendor firmware blob."
       ],
       "identity_evidence": []
     }
