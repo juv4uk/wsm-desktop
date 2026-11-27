@@ -319,3 +319,18 @@ binding або функціональність GP107. Головна переш
 зібрано, модуль потрапив до конкретного образу/initrd, прив'язався
 до пристрою або пройшов функціональний тест. Ці стани не згортаються
 в одне твердження «підтримується».
+
+
+### Не змішувати Free та Compatibility kernel configs
+
+`systems/wsm-gp107.modconfig` використовується лише окремим
+proprietary NVIDIA Compatibility ISO. Його whitelist навмисно вимикає
+`nouveau` та `i915`, оскільки цей образ використовує NVIDIA 580.x.
+Це не конфігурація Free profile.
+
+Free profile має спиратися на типовий Guix Linux-libre 7.3.5 config,
+у якому `CONFIG_DRM_NOUVEAU=m` та `CONFIG_DRM_I915=m`. Не копіювати
+Compatibility `localmodconfig` до Free profile: це непомітно вилучило б
+саме ті відкриті GPU drivers, які ми перевіряємо.
+Деталі обмежень Compatibility ISO наведено в
+[`ISO-RELEASE.md`](../../ISO-RELEASE.md).
