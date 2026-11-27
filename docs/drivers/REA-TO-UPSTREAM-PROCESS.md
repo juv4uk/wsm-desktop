@@ -56,12 +56,13 @@ REA — засіб отримання перевірюваних знань, а 
 1. спершу перевірити, чи потрібна функція вже є в Linux/Mesa/upstream;
 2. відокремити апаратне обмеження від обмеження драйвера, firmware, API чи конфігурації;
 3. написати незалежну специфікацію з provenance;
-4. реалізувати власний код без копіювання vendor source, pseudocode або декомпільованих фрагментів;
-5. додати unit/synthetic tests, потім physical tests за дозволом;
+4. відокремити дослідника від реалізатора, якщо доступні окремі агенти/люди: реалізатор отримує лише незалежну специфікацію, provenance та тестові vectors, а не vendor binaries, декомпільований вивід або vendor pseudocode;
+5. реалізувати власний код без копіювання vendor source, pseudocode або декомпільованих фрагментів;
+6. додати unit/synthetic tests, потім physical tests за дозволом;
 6. виміряти регресії та продуктивність;
 7. запропонувати загальну зміну upstream; WSM-specific patch залишати лише за документованої причини.
 
-Для GP107 low-level evidence лишається в [канонічній capability matrix](https://github.com/juv4uk/gp107-nvidia-re/blob/master/docs/05-gp107-capability-matrix.md), а правила дослідницької межі — у відповідних GP107 docs. WSM не створює другу matrix.
+Для GP107 low-level evidence лишається в [канонічній capability matrix](https://github.com/juv4uk/gp107-nvidia-re/blob/master/docs/05-gp107-capability-matrix.md). Дослідницькі приклади й межі описані в [FPC clean-room probe](https://github.com/juv4uk/gp107-nvidia-re/blob/master/docs/03-fpc-clean-room-probe.md), [proprietary artifact ABI facts](https://github.com/juv4uk/gp107-nvidia-re/blob/master/docs/11-proprietary-shipped-artifact-abi-facts.md) та [REA/ICD boundary](https://github.com/juv4uk/gp107-nvidia-re/blob/master/docs/19-rea-icd-boundary-and-memory-controls.md). WSM не створює другу matrix.
 
 ## 4. Ліцензійні та технічні межі
 
