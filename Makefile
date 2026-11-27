@@ -259,8 +259,9 @@ check-ci-failure-visibility:
 check-tests:
 	$(PYTHON) -m unittest discover -s tests -p 'test_*.py'
 
-# Build the optional GUI candidate and load its QML with the exact pinned Guix Qt/Kirigami stack.
-# This is a technical validation only; the package is not in a live profile and is not public-shippable.
+# Validate the real installed optional package, then exercise its controller/QML using pinned Qt.
+# This is technical validation only; the package is not in a live profile and is not public-shippable.
 check-installer-gui-guix:
-	$(GUIX) time-machine -C channels.lock.scm -- build -L . -f wsm/packages/installer.scm
-	$(GUIX) time-machine -C channels.lock.scm -- shell python python-pyside-6 qtdeclarative kirigami python-jsonschema -- env PYTHONPATH=. QT_QPA_PLATFORM=offscreen python3 -m wsm_installer --smoke-test
+	$(GUIX) time-machine -C channels.lock.scm -L . -- build -L . -f wsm/packages/installer.scm
+	$(GUIX) time-machine -C channels.lock.scm -L . -- shell -L . -f wsm/packages/installer.scm -- env -u PYTHONPATH -u PYTHONHOME QT_QPA_PLATFORM=offscreen wsm-installer --smoke-test
+	$(GUIX) time-machine -C channels.lock.scm -L . -- shell python python-pyside-6 qtdeclarative kirigami python-jsonschema -- env PYTHONPATH=. QT_QPA_PLATFORM=offscreen python3 tests/guix_installer_navigation.py
