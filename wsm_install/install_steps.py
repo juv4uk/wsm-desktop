@@ -39,6 +39,7 @@ from wsm_install.partition import Layout, Refused
 # (fix #8172). The same shape applies here - these steps are meant to be run as
 # root - so no step may rely on PATH lookup at all.
 TRUSTED_TOOLS = {
+    "sgdisk": "/usr/sbin/sgdisk",
     "partprobe": "/usr/sbin/partprobe",
     "udevadm": "/usr/bin/udevadm",
     "mkfs.ext4": "/usr/sbin/mkfs.ext4",
@@ -115,7 +116,37 @@ def plan_steps(
         esp = _partition_by_role(layout, "esp")
 
     root_device = device_for(layout.disk, root["number"])
-    steps: list[Step] = [
+
+    # Partition-table writes are part of the plan, not an implicit precondition.
+    # Keep the planner argv, but bind the executable to the absolute-path policy.
+    # This is still preview data; it does not authorize APPLY.
+    partition_table_steps: list[Step] = []
+    for index, command in enumerate(layout.commands()):
+        if not command or command[0] != "sgdisk":
+            raise Refused(
+                "partition.command",
+                "layout planner returned an unknown partition-table executable",
+            )
+        if index == 0:
+            purpose = (
+                "replace the existing partition table before creating the selected GPT layout; "
+                "all previous partition entries are destroyed"
+            )
+        else:
+            partition = layout.partitions[index - 1]
+            purpose = (
+                f"create GPT partition {partition['number']} "
+                f"({partition['name']}, role {partition['role']})"
+            )
+        partition_table_steps.append(
+            Step(
+                [TRUSTED_TOOLS["sgdisk"], *command[1:]],
+                purpose,
+                destructive=True,
+            )
+        )
+
+    steps: list[Step] = partition_table_steps + [
         Step(
             [TRUSTED_TOOLS["partprobe"], layout.disk],
             "re-read the partition table; the kernel does not always notice new partitions",
