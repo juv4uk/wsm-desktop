@@ -200,15 +200,18 @@ jobs:
           # This runs after acceptance and the manifest, which need the whole
           # file - so the image is split only on its way out.
           if [ "$SIZE" -gt 2147483647 ]; then
+            release_parts=1
             echo "ISO is $SIZE bytes; publishing as parts"
             split -b 1900M -d -a 3 "$release_dist/$release_iso" \
               "$release_dist/$release_iso.part"
             rm -f "$release_dist/$release_iso"
-            echo "release_parts=1" >> "$GITHUB_ENV"
           else
+            release_parts=0
             echo "ISO is $SIZE bytes; publishing whole"
-            echo "release_parts=0" >> "$GITHUB_ENV"
           fi
+          # GITHUB_ENV only affects subsequent steps; keep a local variable
+          # for the Python rewrite executed in this same shell step.
+          echo "release_parts=$release_parts" >> "$GITHUB_ENV"
           # The checksum manifest and the release manifest were written while
           # the whole image still existed. Once it is split, both must describe
           # what is actually published, or the read-back check rejects the
