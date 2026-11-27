@@ -1,8 +1,7 @@
 # Один непорожній рядок із tag запитує одну збірку; рядки з # є коментарями.
 0.1.0-rc4-minimal-live
 # Новий non-destructive RC4 після merged sidecar/read-back fix (#538) і dynamic tag/provenance preparation (#541).
-# Старий draft 0.1.0-rc3-minimal-live збережено; цей запит створює/оновлює лише чернетку від точного main commit.
-# Публікація не автоматизована: після build/read-back/SLSA власник окремо перевіряє ліцензії й вручну публікує реліз.
+# Старий draft 0.1.0-rc3-minimal-live збережено; цей запит створює новий draft від точного main commit.
 
 
 
