@@ -71,5 +71,3 @@ profiles.")
 
 ;; `guix build -f` evaluates the final expression as its package target.
 wsm-installer
-
-wsm-installer
