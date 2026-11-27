@@ -105,16 +105,19 @@ channel, Linux-libre чи повний склад саме цієї H170 кон�
   містить 108 успішних NVIDIA runtime points. Вона вказує на помітний
   submit overhead для малих задач і workload-залежний вплив local size.
 - [DEVICE_LOCAL transfer/compute](https://github.com/juv4uk/gp107-nvidia-re/blob/master/docs/22-device-local-transfer-and-compute-phases.md)
-  вимірює для 32 Mi приблизно 4.45 ms / 90.46 GB/s умовного traffic
-  для compute над уже resident DEVICE_LOCAL даними. Повний staging →
-  compute → readback chain займає приблизно 52.39 ms, тобто повільніше
-  за виміряний HOST_VISIBLE шлях приблизно 42.58 ms. Ці похідні GB/s
-  не є виміром фізичної пропускної здатності VRAM або PCIe.
+  має 12 exploratory points і корисні raw logs, але локальне рев'ю
+  GP107 issue #28 виявило відсутні Vulkan memory dependencies між H2D →
+  compute → D2H, неперевірений `memoryTypeBits` та відсутність GPU
+  timestamp queries. Тому docs/22 зараз **EXPLORATORY / NOT ACCEPTED**;
+  його 90.46 GB/s і 52.39 ms не використовувати як валідні висновки.
+  Потрібні barriers, synchronization validation, memoryTypeBits checks
+  та повторний запуск із новими артефактами.
 
 ### Обмеження й незакриті питання
 
 - Оновлений NVK A/B на виправленому benchmark harness ще не виконаний.
-  Сучасні docs/20–22 — NVIDIA-only measurements; старе docs/17 не можна
+  docs/20–21 — NVIDIA-only baselines; docs/22 залишається EXPLORATORY / NOT
+  ACCEPTED до виправлення synchronization; старе docs/17 не можна
   використовувати як остаточний NVK-vs-NVIDIA висновок.
 - Canonical NVK acceptance harness — [GP107 PR #21](https://github.com/juv4uk/gp107-nvidia-re/pull/21),
   наразі Draft. Додаткові PR #23/#24 також Draft; не запускати паралельні
@@ -126,6 +129,8 @@ channel, Linux-libre чи повний склад саме цієї H170 кон�
   channel/VM/BO об'єкти; це не read-only операція. До такого дозволу
   не запускати `vulkaninfo --summary`, Vulkan enumeration, channel init,
   compute submit чи reboot.
+- Офіційний [Nouveau thermal hwmon documentation](https://docs.kernel.org/driver-api/thermal/nouveau_thermal.html) описує read-only `temp1_input` там, де датчик експонується; це можна best-effort записувати до/після кожного повтору.
+- `VK_KHR_pipeline_executable_properties` може надати shader executable statistics (instruction counts/spills тощо), якщо extension реально доступний на конкретному NVK runtime; це instrumentation candidate, не гарантія підтримки GP107.
 - Офіційний [Nouveau feature status](https://nouveau.freedesktop.org/FeatureMatrix.html)
   зазначає, що reclocking доступний для деяких старіших поколінь та Turing+,
   але для GP10x Pascal існує firmware-signing обмеження. Це важливий
@@ -143,9 +148,10 @@ channel, Linux-libre чи повний склад саме цієї H170 кон�
    firmware presence, runtime binding і functional validation лишаються
    `not-assessed` / `unknown` до H170-specific evidence.
 3. Найближча оптимізаційна гіпотеза — мінімізувати зайві submit/fence
-   цикли та тримати повторно використовувані дані у DEVICE_LOCAL пам'яті,
-   якщо workload amortizes staging cost. Це потрібно окремо перевірити
-   під NVK; proprietary-only результати не доводять виграш NVK.
+   цикли та тримати повторно використовувані дані у DEVICE_LOCAL пам'яті.
+   Проте docs/22 поки не має коректних memory dependencies і не приймається;
+   спочатку виправити synchronization та measurement methodology, потім
+   повторити proprietary baseline і лише після цього порівнювати з NVK.
 4. Не обіцяти універсальне перевершення NVIDIA. Спершу визначити workload,
    де WSM має виміряну перевагу; окремо документувати обмеження reclocking,
    power/clock control та відсутні функції.
