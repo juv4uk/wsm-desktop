@@ -64,7 +64,7 @@ class InstallerGuiContractTests(unittest.TestCase):
         self.assertIn("shell -L . -f wsm/packages/installer.scm", target)
         self.assertIn("env -u PYTHONPATH", target)
         self.assertIn("wsm-installer --smoke-test", target)
-        self.assertIn("tests/guix_installer_navigation.py", target)
+        self.assertIn("tests/guix/installer_navigation.py", target)
         self.assertNotIn("PYTHONPATH=. QT_QPA_PLATFORM=offscreen python3 -m wsm_installer --smoke-test", target)
 
     def test_minimal_live_definitions_do_not_gain_qt_dependencies(self) -> None:
