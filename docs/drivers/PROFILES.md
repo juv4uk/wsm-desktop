@@ -275,3 +275,24 @@ initrd за шляхом `kernel/x86/microcode/GenuineIntel.bin`; див.
 потрібно записувати в benchmark metadata, оскільки вона може впливати
 на errata, безпеку та відтворюваність результатів. Не застосовувати
 late-load і не досліджувати бінарний blob декомпіляцією.
+
+
+## Guix channel: NVK уже ввімкнений у Mesa для x86_64
+
+У зафіксованому каналі Guix, commit
+`4e5195be20d9b124df8a8bb69213412236e4668e` від 2026-11-25:
+- [gnu/packages/gl.scm](https://codeberg.org/guix/guix/src/commit/4e5195be20d9b124df8a8bb69213412236e4668e/gnu/packages/gl.scm)
+  визначає Mesa 26.2.6; для x86_64 передає
+  `-Dvulkan-drivers=amd,intel,intel_hasvk,nouveau,swrast,virtio`
+  та додає Cargo inputs для Mesa. Отже NVK уже ввімкнений у package recipe.
+- [gnu/packages/linux.scm](https://codeberg.org/guix/guix/src/commit/4e5195be20d9b124df8a8bb69213412236e4668e/gnu/packages/linux.scm)
+  визначає типовий `linux-libre` як 7.3.5.
+- [Документація NVK](https://docs.mesa3d.org/drivers/nvk.html)
+  вказує мінімальне ядро Linux 6.6.
+
+Отже, не потрібно форкувати Mesa або створювати окремий Guix recipe
+лише для ввімкнення NVK на x86_64. Але це **не** доводить успішну
+збірку конкретного WSM system closure, встановлення ICD, runtime
+binding або функціональність GP107. Головна перешкода Free-профілю
+залишається окремою: GP107 GR потребує FECS/GPCCS firmware, яке має
+невільну ліцензію та проходить через ACR.
