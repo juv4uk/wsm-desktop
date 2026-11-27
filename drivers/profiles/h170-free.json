@@ -70,7 +70,8 @@
       "notes": [
         "Board model and BIOS F22e are Windows-observed. Secure Boot state remains unknown.",
         "No chipset or board driver requirement is inferred from the model name.",
-        "The pinned Linux-libre 7.3 x86_64 config has CONFIG_USB_XHCI_HCD=y and CONFIG_USB_XHCI_PCI=y; this is config evidence only, not physical USB controller or peripheral validation."
+        "The pinned Linux-libre 7.3 x86_64 config has CONFIG_USB_XHCI_HCD=y and CONFIG_USB_XHCI_PCI=y; this is config evidence only, not physical USB controller or peripheral validation.",
+        "Intel PCH xHCI PCI host path does not request external firmware; a separate Renesas xHCI controller driver has a firmware loader, but that path is not the Intel H170 PCH controller. No physical USB enumeration has been performed."
       ],
       "identity_evidence": []
     },
