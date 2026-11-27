@@ -66,7 +66,7 @@ class IsoReleaseTests(unittest.TestCase):
         self.assertIn("7.3.5", notes)
         self.assertIn("§1.1(d)", notes)
         self.assertIn("patchelf", notes)
-        self.assertIn("не призначений для публічного binary distribution", notes)
+        self.assertIn("їхній redistribution status лишається `NOT CLEARED`", notes)
         self.assertIn("NVIDIA binary redistribution: NOT CLEARED", profile)
         self.assertIn("580.196.11", notes)
         self.assertIn("7.3.6", notes)
