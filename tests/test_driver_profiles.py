@@ -247,7 +247,9 @@ class DriverProfileManifestTests(unittest.TestCase):
         self.assertEqual(candidate["kernel_config"], "module-available")
         self.assertEqual(candidate["runtime_binding"], "unknown")
         self.assertEqual(mei["firmware"]["requirement"], "not-required")
-        self.assertEqual(mei["functional_validation"]["status"], "not-run")
+        self.assertEqual(mei["functional_validation"]["status"], "passed")
+        self.assertEqual(mei["functional_validation"]["environment"], "physical-linux")
+        self.assertTrue(any(e["source"] == "wsm-os HECI hardware trace (bare-metal Kali Linux)" for e in mei["functional_validation"]["evidence"]))
 
     def test_cpu_microcode_is_documented_but_not_shipped_in_free_profile(self) -> None:
         cpu = next(item for item in self.free["devices"] if item["device_id"] == "skylake-i5-6400")
