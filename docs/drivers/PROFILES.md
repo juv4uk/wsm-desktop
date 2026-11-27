@@ -275,3 +275,62 @@ initrd за шляхом `kernel/x86/microcode/GenuineIntel.bin`; див.
 потрібно записувати в benchmark metadata, оскільки вона може впливати
 на errata, безпеку та відтворюваність результатів. Не застосовувати
 late-load і не досліджувати бінарний blob декомпіляцією.
+
+
+## Guix channel: NVK уже ввімкнений у Mesa для x86_64
+
+У зафіксованому каналі Guix, commit
+`4e5195be20d9b124df8a8bb69213412236e4668e` від 2026-11-25:
+- [gnu/packages/gl.scm](https://codeberg.org/guix/guix/src/commit/4e5195be20d9b124df8a8bb69213412236e4668e/gnu/packages/gl.scm)
+  визначає Mesa 26.2.6; для x86_64 передає
+  `-Dvulkan-drivers=amd,intel,intel_hasvk,nouveau,swrast,virtio`
+  та додає Cargo inputs для Mesa. Отже NVK уже ввімкнений у package recipe.
+- [gnu/packages/linux.scm](https://codeberg.org/guix/guix/src/commit/4e5195be20d9b124df8a8bb69213412236e4668e/gnu/packages/linux.scm)
+  визначає типовий `linux-libre` як 7.3.5.
+- [Документація NVK](https://docs.mesa3d.org/drivers/nvk.html)
+  вказує мінімальне ядро Linux 6.6.
+
+Отже, не потрібно форкувати Mesa або створювати окремий Guix recipe
+лише для ввімкнення NVK на x86_64. Але це **не** доводить успішну
+збірку конкретного WSM system closure, встановлення ICD, runtime
+binding або функціональність GP107. Головна перешкода Free-профілю
+залишається окремою: GP107 GR потребує FECS/GPCCS firmware, яке має
+невільну ліцензію та проходить через ACR.
+
+
+## Підтримка драйверів у типовій конфігурації Linux-libre
+
+У тому самому pinned Guix commit
+`4e5195be20d9b124df8a8bb69213412236e4668e` типовий
+[Linux-libre 7.3 x86_64 config](https://codeberg.org/guix/guix/src/commit/4e5195be20d9b124df8a8bb69213412236e4668e/gnu/packages/aux-files/linux-libre/7.3-x86_64.conf)
+містить такі символи:
+- `CONFIG_DRM_I915=m` — Intel HD Graphics 530;
+- `CONFIG_DRM_NOUVEAU=m` — NVIDIA Nouveau;
+- `CONFIG_ALX=m` — Killer E2200;
+- `CONFIG_SND_HDA_INTEL=m` і `CONFIG_SND_HDA_CODEC_REALTEK=m` — HDA/Realtek;
+- `CONFIG_SATA_AHCI=m` — SATA/AHCI;
+- `CONFIG_NVME_CORE=y` і `CONFIG_BLK_DEV_NVME=y` — NVMe;
+- `CONFIG_USB_XHCI_HCD=y` і `CONFIG_USB_XHCI_PCI=y` — xHCI;
+- `CONFIG_MICROCODE=y` — підтримка завантажувача CPU microcode.
+
+Це означає, що типова конфігурація ядра вже має потрібні драйвери;
+власні kernel patches лише для їхнього ввімкнення не потрібні.
+Але значення `m` або `y` у конфігурації не доводить, що ядро
+зібрано, модуль потрапив до конкретного образу/initrd, прив'язався
+до пристрою або пройшов функціональний тест. Ці стани не згортаються
+в одне твердження «підтримується».
+
+
+### Не змішувати Free та Compatibility kernel configs
+
+`systems/wsm-gp107.modconfig` використовується лише окремим
+proprietary NVIDIA Compatibility ISO. Його whitelist навмисно вимикає
+`nouveau` та `i915`, оскільки цей образ використовує NVIDIA 580.x.
+Це не конфігурація Free profile.
+
+Free profile має спиратися на типовий Guix Linux-libre 7.3.5 config,
+у якому `CONFIG_DRM_NOUVEAU=m` та `CONFIG_DRM_I915=m`. Не копіювати
+Compatibility `localmodconfig` до Free profile: це непомітно вилучило б
+саме ті відкриті GPU drivers, які ми перевіряємо.
+Деталі обмежень Compatibility ISO наведено в
+[`ISO-RELEASE.md`](../../ISO-RELEASE.md).
