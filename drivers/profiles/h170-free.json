@@ -79,7 +79,7 @@
       "device_id": "intel-mei-heci",
       "device_class": "platform",
       "model": "Intel Management Engine HECI controller",
-      "evidence_class": "windows-observed",
+      "evidence_class": "linux-physical-observed",
       "observed_bdf": null,
       "pci_ids": [
         "8086:a13a"
@@ -126,14 +126,22 @@
         ]
       },
       "functional_validation": {
-        "status": "not-run",
-        "environment": "none",
-        "evidence": []
+        "status": "passed",
+        "environment": "physical-linux",
+        "evidence": [
+          {
+            "kind": "functional-test",
+            "source": "wsm-os HECI hardware trace (bare-metal Kali Linux)",
+            "source_url": "https://github.com/juv4uk/wsm-os/blob/main/docs/HECI-HARDWARE-TRACE.md",
+            "observed_at": "2026-09-03",
+            "summary": "On physical Skylake/i5-6400 hardware, /dev/mei0 exchanged MKHI firmware-version and capability requests/responses; PCI ID 8086:a13a and ME firmware 11.8.50.3425 were observed. This proves the basic HECI path on the prior Kali Linux environment, not WSM Guix runtime binding or every MEI client feature."
+          }
+        ]
       },
       "notes": [
-        "Owner-specific read-only trace records PCI ID 8086:a13a; exact BDF is not recorded.",
+        "Owner-specific bare-metal Kali Linux trace observed PCI ID 8086:a13a and successful basic MKHI request/response through /dev/mei0; BDF is not recorded.",
         "The host-side mei_me driver is separate from Intel CSME firmware 11.8.50.3425, which remains in the motherboard BIOS/SPI domain.",
-        "No Linux runtime binding, MEI client operation or physical functional test is claimed."
+        "This physical test does not prove runtime binding in the WSM Guix profile or all MEI client functions."
       ],
       "identity_evidence": [
         {
