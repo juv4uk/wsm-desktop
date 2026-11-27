@@ -204,9 +204,11 @@ jobs:
             split -b 1900M -d -a 3 "$release_dist/$release_iso" \
               "$release_dist/$release_iso.part"
             rm -f "$release_dist/$release_iso"
+            release_parts=1
             echo "release_parts=1" >> "$GITHUB_ENV"
           else
             echo "ISO is $SIZE bytes; publishing whole"
+            release_parts=0
             echo "release_parts=0" >> "$GITHUB_ENV"
           fi
           # The checksum manifest and the release manifest were written while
