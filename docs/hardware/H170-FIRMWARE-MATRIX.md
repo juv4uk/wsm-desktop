@@ -117,3 +117,36 @@ Pinned Guix channel commit
 - #514 — Guix profile build/closure та фізична інтеграція.
 
 До окремого owner approval не виконувати GPU enumeration, Vulkan channel init/submit, reboot, firmware update або destructive storage tests.
+
+
+## 10. Мінімальна acceptance matrix саме для H170
+
+Це план майбутньої перевірки, не твердження, що тести вже виконані.
+Кожен результат має бути прив'язаний до exact H170 board revision,
+BIOS F22e, CPU CPUID, PCI ID/BDF, kernel, Mesa, driver та firmware
+package/hash. Зовнішній GP107 test host не замінює H170.
+
+| Рівень | Підсистема | Мінімальний тест | Умови / межі |
+| --- | --- | --- | --- |
+| 0 — build | Guix / Linux-libre | Чиста оцінка й збірка system closure, kernel, Mesa, ICD та initrd; перевірка, що nonfree firmware не потрапила у Free closure | Без фізичного boot; зафіксувати channel commit і closure |
+| 1 — read-only inventory | CPU / PCI / USB | CPUID + microcode revision; `lspci -nnk`; `lsusb -t`; module/config/firmware metadata | Без module reload, PCI config writes, reboot або firmware update |
+| 1 — read-only inventory | MEI/HECI | Перевірити `/dev/mei*`, module binding та read-only version query | Базовий MKHI вже фізично пройшов у Kali; повтор на WSM Guix окремо |
+| 2 — functional | Ethernet | Link negotiation, packet loss, throughput і reconnect | Не змінювати permanent network config; фіксувати точний PCI ID |
+| 2 — functional | HDA | Playback + capture, codec enumeration, jack/mixer controls | Підтвердити фактичний codec ID, не лише board spec |
+| 2 — functional | SATA/NVMe | SMART/read-only health + file-backed read/write/checksum test | Тільки тимчасові файли на явно обраному томі; жодних destructive/raw-device tests |
+| 2 — functional | USB | Контролер/порт topology, input devices та file-backed transfer test | Не прошивати периферію; зафіксувати speed/port/controller |
+| 2 — functional | Intel HD 530 | KMS/modeset, OpenGL render, video decode/encode capability checks | DMC absent означає окремо позначений runtime-PM gap; не плутати з базовою графікою |
+| 2 — functional | GTX 1050 Ti / Nouveau | KMS/display, OpenGL, Vulkan device enumeration, NVK compute witness і correctness/readback | Vulkan enumeration/channel init/submit — лише після GP107 #18 preflight та explicit owner approval; external GP107 witness не є H170 proof |
+| 3 — performance | CPU/GPU/memory | Repeatable workload matrix: sizes, workgroup sizes, batching, HOST_VISIBLE vs DEVICE_LOCAL, transfer/compute/readback phases | Однакові firmware, clocks, thermals, driver versions, correctness checks; median + spread, не один запуск |
+| 3 — power/stability | GPU/CPU/system | Idle/load power, clock/temperature, long-run stability, suspend/resume | Окреме explicit approval; не виконувати автоматично під час benchmark bring-up |
+
+### Критерій прийняття
+
+- **Build pass**: точний Guix closure зібрався; не означає hardware support.
+- **Driver-bound pass**: конкретний модуль прив'язався до exact PCI ID/BDF на H170.
+- **Firmware pass**: усі потрібні файли й версії встановлено/завантажено; для Free closure — тільки дозволені компоненти.
+- **Functional pass**: workload пройшов correctness/readback та повторюється.
+- **Performance win**: порівняння з baseline на тій самій H170 і в однакових умовах; не переносити результати з GP107 test host.
+- **Profile pass**: усі попередні рівні підтверджені саме для заявленого профілю (Free або Compatibility), а manifest зберігає provenance.
+
+Поки ці критерії не виконані, H170 profile залишається draft, а невідомі стани не підвищуються.
