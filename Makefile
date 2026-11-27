@@ -102,6 +102,7 @@ check-licences:
 # Manual, needs Guix: evaluates the Scheme without building anything.
 # Not part of `check` on purpose - a contributor without Guix must still pass.
 check-guix-eval:
+	$(GUIX) time-machine -C channels.lock.scm -- repl -L . tests/guix/source-module-evaluation.scm
 	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/minimal.scm --dry-run
 	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/desktop.scm --dry-run
 	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/live.scm --dry-run
