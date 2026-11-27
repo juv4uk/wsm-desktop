@@ -115,6 +115,16 @@ class ReleaseAssetVerificationTests(unittest.TestCase):
             with self.subTest(verified_subject=filename):
                 self.assertIn(filename, verification)
 
+
+    def test_release_workflow_uses_shared_whole_and_split_checksum_preparer(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "release-minimal-live.yml").read_text(encoding="utf-8")
+        self.assertIn(
+            'python scripts/prepare_release_checksums.py "$release_dist" "$release_iso" "$release_parts"',
+            workflow,
+        )
+        self.assertIn('(cd "$release_dist" && sha256sum -c SHA256SUMS)', workflow)
+        self.assertIn('"$release_dist/ISO-CHECKSUMS.sha256"', workflow)
+
     def test_valid_download_matches_local_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             expected, downloaded = make_bundle(Path(temporary))
