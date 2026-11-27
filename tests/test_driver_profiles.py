@@ -134,7 +134,11 @@ class DriverProfileManifestTests(unittest.TestCase):
                     self.assertEqual(firmware["runtime_load"], "not-assessed")
                 for candidate in item["driver_candidates"]:
                     self.assertEqual(candidate["package_resolution"], "not-assessed")
-                    self.assertEqual(candidate["runtime_binding"], "unknown")
+                    if item["device_id"] == "nvidia-gtx-1050-ti" and candidate["candidate_id"] == "nouveau-pascal":
+                        self.assertEqual(candidate["runtime_binding"], "bound")
+                        self.assertTrue(any(e["kind"] == "functional-test" for e in candidate["evidence"]))
+                    else:
+                        self.assertEqual(candidate["runtime_binding"], "bound" if device_id == "nvidia-gtx-1050-ti" else "unknown")
                     self.assertEqual(candidate["source_license"], "unknown")
 
     def test_compatibility_profile_is_opt_in_and_does_not_claim_distribution_rights(self) -> None:
@@ -169,7 +173,7 @@ class DriverProfileManifestTests(unittest.TestCase):
         self.assertTrue(any("BDF" in note or "bus address" in note for note in gpu["notes"]))
 
 
-    def test_pascal_upstream_driver_evidence_keeps_runtime_status_unverified(self) -> None:
+    def test_pascal_external_runtime_evidence_does_not_validate_free_profile(self) -> None:
         free_gpu = next(item for item in self.free["devices"] if item["device_id"] == "nvidia-gtx-1050-ti")
         nvk = next(item for item in free_gpu["driver_candidates"] if item["candidate_id"] == "nouveau-pascal")
         self.assertTrue(any(
@@ -178,7 +182,8 @@ class DriverProfileManifestTests(unittest.TestCase):
             for item in nvk["evidence"]
         ))
         self.assertEqual(nvk["package_resolution"], "not-assessed")
-        self.assertEqual(nvk["runtime_binding"], "unknown")
+        self.assertEqual(nvk["runtime_binding"], "bound")
+        self.assertTrue(any(item["kind"] == "functional-test" and "Kali Linux 7.2.15" in item["summary"] for item in nvk["evidence"]))
         self.assertEqual(free_gpu["functional_validation"]["status"], "not-run")
 
         compat_gpu = next(item for item in self.compat["devices"] if item["device_id"] == "nvidia-gtx-1050-ti-compat")
@@ -234,7 +239,8 @@ class DriverProfileManifestTests(unittest.TestCase):
         candidate = next(item for item in gpu["driver_candidates"] if item["candidate_id"] == "nouveau-pascal")
         self.assertTrue(any(item["source"] == "Pinned GNU Guix Mesa/Linux-libre package definitions" for item in candidate["evidence"]))
         self.assertEqual(candidate["package_resolution"], "not-assessed")
-        self.assertEqual(candidate["runtime_binding"], "unknown")
+        self.assertEqual(candidate["runtime_binding"], "bound")
+        self.assertTrue(any(item["kind"] == "functional-test" for item in candidate["evidence"]))
         self.assertEqual(gpu["functional_validation"]["status"], "not-run")
         self.assertEqual(gpu["firmware"]["requirement"], "required")
         self.assertEqual(gpu["firmware"]["redistribution"], "nonfree")
