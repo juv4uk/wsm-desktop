@@ -52,11 +52,16 @@ class IsoReleaseTests(unittest.TestCase):
         self.assertIn("2 GiB", notes)
         self.assertIn(".part001", notes)
 
-    def test_compatibility_candidate_is_not_misrepresented_as_published(self) -> None:
+    def test_compatibility_assets_are_recorded_without_overclaiming_provenance(self) -> None:
         notes = (ROOT / "ISO-RELEASE.md").read_text(encoding="utf-8")
         profile = (ROOT / "systems/live-compat.scm").read_text(encoding="utf-8")
-        self.assertIn("шість бінарних частин ще не завантажено до GitHub Release", notes)
-        self.assertIn("не повертає жодної з шести", notes)
+        self.assertIn("шість базових\nчастин Compatibility/NVIDIA ISO", notes)
+        self.assertIn("Публікація asset ≠ ліцензійне схвалення", notes)
+        self.assertIn("redistribution NOT CLEARED", notes)
+        self.assertIn("source_commit", notes)
+        self.assertIn("немає `release-manifest.json`", notes)
+        self.assertIn("909c33c038ab8504a4782f741ec13f6063335606f6db7051675d75436fc9f517", notes)
+        self.assertIn("557e8f1f3baa6456bf6cd6fe5ef28df424a42e1df58f300b22bedb6349cbb33a", notes)
         self.assertIn("580.178.04", notes)
         self.assertIn("7.3.5", notes)
         self.assertIn("§1.1(d)", notes)
@@ -67,7 +72,8 @@ class IsoReleaseTests(unittest.TestCase):
         self.assertIn("7.3.6", notes)
         self.assertIn("локально зібрано в", profile)
         self.assertIn("QEMU TCG BIOS boot", profile)
-        self.assertIn("ще не завантажено до GitHub Release", profile)
+        self.assertIn("API verified 2026-11-28", profile)
+        self.assertIn("source_commit unknown", profile)
         self.assertIn("Physical H170 / GTX 1050 Ti binding", profile)
         self.assertNotIn("Compatibility package closure та image build: NOT RUN", profile)
 
