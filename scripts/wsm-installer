@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: LicenseRef-Volnist
+from wsm_installer.app import main
+
+raise SystemExit(main())

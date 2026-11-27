@@ -12,6 +12,13 @@
 
 > Цей документ описує початковий Guix-oriented deployment design. Nix/NixOS backend потребуватиме окремого adapter design; Guix-specific кроки не можна переносити до нього.
 
+
+## Необов'язковий KDE preview frontend
+
+У каталозі [installer/gui](../installer/gui/README.md) розробляється окремий PySide6 / Qt 6 / Kirigami frontend для повної KDE live session. Він повторно використовує report validation та diagnostic-only plan API з Python core і sysfs-only inventory provider. Це **preview-only prototype**, не default installer і не APPLY path.
+
+Minimal-live продовжує використовувати CLI/TUI та не отримує Qt/PySide6 залежностей. Guix package candidate описаний у модулі (wsm packages installer), але не входить до жодного system profile. Його license metadata навмисно лишається #f до вирішення #367; це технічний build candidate, не public-shippable artifact.
+
 ## Один typed contract, поточний CLI/TUI шлях
 
 | Поверхня | Статус | Межі |
