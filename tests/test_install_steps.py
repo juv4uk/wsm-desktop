@@ -15,6 +15,7 @@ from wsm_install.install_steps import (  # noqa: E402
     device_for,
     plan_steps,
     render,
+    TRUSTED_TOOLS,
 )
 from wsm_install.partition import Disk, Layout, Refused, plan  # noqa: E402
 
@@ -58,11 +59,27 @@ class LayoutConsentTests(unittest.TestCase):
 
 
 class OrderingTests(unittest.TestCase):
-    def test_partition_table_is_reread_before_formatting(self) -> None:
-        steps = plan_steps(layout())
+    def test_partition_table_is_created_before_rescan_and_formatting(self) -> None:
+        current = layout()
+        commands = current.commands()
+        steps = plan_steps(current)
         names = [tool(step) for step in steps]
-        self.assertEqual(names[0], "partprobe")
+        self.assertEqual(names[:len(commands)], ["sgdisk"] * len(commands))
+        self.assertEqual(names[len(commands)], "partprobe")
         self.assertLess(names.index("partprobe"), names.index("mkfs.ext4"))
+
+    def test_partition_table_argv_is_complete_and_destructive(self) -> None:
+        current = layout()
+        commands = current.commands()
+        steps = plan_steps(current)[:len(commands)]
+        expected = [
+            [TRUSTED_TOOLS["sgdisk"], *command[1:]]
+            for command in commands
+        ]
+        self.assertEqual([step.command for step in steps], expected)
+        self.assertTrue(all(step.destructive for step in steps))
+        self.assertIn("--zap-all", steps[0].command)
+        self.assertEqual(steps[0].command[-1], current.disk)
 
     def test_root_is_mounted_before_the_esp(self) -> None:
         steps = plan_steps(layout())
@@ -116,7 +133,7 @@ class PathHijackTests(unittest.TestCase):
                     )
 
     def test_no_command_is_a_bare_tool_name(self) -> None:
-        bare = {"partprobe", "udevadm", "mount", "mkdir", "mkfs.ext4", "mkfs.fat"}
+        bare = {"sgdisk", "partprobe", "udevadm", "mount", "mkdir", "mkfs.ext4", "mkfs.fat"}
         for step in plan_steps(layout()):
             self.assertNotIn(step.command[0], bare)
 
