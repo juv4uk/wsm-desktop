@@ -47,6 +47,12 @@ class InstallModeTests(unittest.TestCase):
         payload = json.loads(result.stdout)
         self.assertEqual(payload["mode"], "dry-run")
         self.assertTrue(all(step["status"] == "not-run" for step in payload["steps"]))
+        commands = [step["command"] for step in payload["steps"]]
+        names = [Path(command[0]).name for command in commands]
+        self.assertEqual(names[:3], ["sgdisk", "sgdisk", "sgdisk"])
+        self.assertEqual(names[3:5], ["partprobe", "udevadm"])
+        self.assertTrue(all(step["destructive"] for step in payload["steps"][:3]))
+        self.assertEqual(commands[0][1:], ["--zap-all", "/dev/nvme0n1"])
         self.assertEqual(payload["handoff"][:3], ["guix", "system", "init"])
 
     def test_btrfs_and_xfs_are_refused_by_first_guix_preview(self) -> None:
