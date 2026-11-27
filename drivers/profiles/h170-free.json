@@ -70,9 +70,88 @@
       "notes": [
         "Board model and BIOS F22e are Windows-observed. Secure Boot state remains unknown.",
         "No chipset or board driver requirement is inferred from the model name.",
-        "The pinned Linux-libre 7.3 x86_64 config has CONFIG_USB_XHCI_HCD=y and CONFIG_USB_XHCI_PCI=y; this is config evidence only, not physical USB controller or peripheral validation."
+        "The pinned Linux-libre 7.3 x86_64 config has CONFIG_USB_XHCI_HCD=y and CONFIG_USB_XHCI_PCI=y; this is config evidence only, not physical USB controller or peripheral validation.",
+        "Intel PCH xHCI PCI host path does not request external firmware; a separate Renesas xHCI controller driver has a firmware loader, but that path is not the Intel H170 PCH controller. No physical USB enumeration has been performed."
       ],
       "identity_evidence": []
+    },
+    {
+      "device_id": "intel-mei-heci",
+      "device_class": "platform",
+      "model": "Intel Management Engine HECI controller",
+      "evidence_class": "linux-physical-observed",
+      "observed_bdf": null,
+      "pci_ids": [
+        "8086:a13a"
+      ],
+      "driver_candidates": [
+        {
+          "candidate_id": "mei-me",
+          "name": "Linux Intel MEI / HECI driver",
+          "kernel_module": "mei_me",
+          "userspace_candidates": [],
+          "package_candidates": [],
+          "package_resolution": "not-assessed",
+          "kernel_config": "module-available",
+          "runtime_binding": "unknown",
+          "source_license": "unknown",
+          "evidence": [
+            {
+              "kind": "upstream-reference",
+              "source": "Pinned Guix Linux-libre 7.3 x86_64 kernel config",
+              "source_url": "https://codeberg.org/guix/guix/src/commit/4e5195be20d9b124df8a8bb69213412236e4668e/gnu/packages/aux-files/linux-libre/7.3-x86_64.conf",
+              "observed_at": "2026-11-27",
+              "summary": "The pinned default config sets CONFIG_INTEL_MEI=m and CONFIG_INTEL_MEI_ME=m. This establishes module availability in the source config, not package/initrd inclusion or runtime binding."
+            }
+          ]
+        }
+      ],
+      "firmware": {
+        "requirement": "not-required",
+        "package_candidates": [],
+        "package_resolution": "not-assessed",
+        "live_rootfs": "not-assessed",
+        "initrd": "not-assessed",
+        "installed_rootfs": "not-assessed",
+        "runtime_load": "not-assessed",
+        "redistribution": "not-applicable",
+        "evidence": [
+          {
+            "kind": "owner-hardware-profile",
+            "source": "wsm-os HECI hardware trace and CSME architecture",
+            "source_url": "https://github.com/juv4uk/wsm-os/blob/main/docs/HECI-HARDWARE-TRACE.md",
+            "observed_at": "2026-09-03",
+            "summary": "The observed HECI PCI function is 8086:a13a. ME firmware 11.8.50.3425 is a separate pre-OS BIOS/CSME firmware domain; the Linux MEI host interface does not load that firmware as a Guix host package."
+          }
+        ]
+      },
+      "functional_validation": {
+        "status": "passed",
+        "environment": "physical-linux",
+        "evidence": [
+          {
+            "kind": "functional-test",
+            "source": "wsm-os HECI hardware trace (bare-metal Kali Linux)",
+            "source_url": "https://github.com/juv4uk/wsm-os/blob/main/docs/HECI-HARDWARE-TRACE.md",
+            "observed_at": "2026-09-03",
+            "summary": "On physical Skylake/i5-6400 hardware, /dev/mei0 exchanged MKHI firmware-version and capability requests/responses; PCI ID 8086:a13a and ME firmware 11.8.50.3425 were observed. This proves the basic HECI path on the prior Kali Linux environment, not WSM Guix runtime binding or every MEI client feature."
+          }
+        ]
+      },
+      "notes": [
+        "Owner-specific bare-metal Kali Linux trace observed PCI ID 8086:a13a and successful basic MKHI request/response through /dev/mei0; BDF is not recorded.",
+        "The host-side mei_me driver is separate from Intel CSME firmware 11.8.50.3425, which remains in the motherboard BIOS/SPI domain.",
+        "This physical test does not prove runtime binding in the WSM Guix profile or all MEI client functions."
+      ],
+      "identity_evidence": [
+        {
+          "kind": "owner-hardware-profile",
+          "source": "wsm-os HECI hardware trace",
+          "source_url": "https://github.com/juv4uk/wsm-os/blob/main/docs/HECI-HARDWARE-TRACE.md",
+          "observed_at": "2026-09-03",
+          "summary": "Owner-specific read-only hardware trace observed HECI PCI ID 8086:a13a; BDF not recorded."
+        }
+      ]
     },
     {
       "device_id": "skylake-i5-6400",
@@ -363,7 +442,8 @@
       },
       "notes": [
         "Owner profile observes a Killer E2200 adapter. Exact PCI vendor:device ID, package availability, binding and DHCP/traffic test remain unknown.",
-        "The upstream alx source has no host-loadable firmware dependency. E2200 maps to 1969:e091 in LKDDb, but the exact PCI ID for this machine has not been observed; do not populate pci_ids or claim binding from the model name alone."
+        "The upstream alx source has no host-loadable firmware dependency. E2200 maps to 1969:e091 in LKDDb, but the exact PCI ID for this machine has not been observed; do not populate pci_ids or claim binding from the model name alone.",
+        "GIGABYTE board specifications differ by revision: Rev. 1.0 lists Killer E2201, Rev. 1.1 lists Killer E2400; Windows owner inventory reports the E2200 device label. Board revision and exact PCI ID are not recorded, so the E2200 label is not treated as a confirmed silicon revision."
       ],
       "identity_evidence": []
     },
@@ -541,7 +621,8 @@
       "notes": [
         "Windows lists audio endpoints. Codec-level enumeration, firmware, audio service setup and playback/capture remain untested.",
         "Standard HDA/Realtek codec support has no required vendor firmware blob; an optional user-supplied HDA initialization patch is a separate override. Exact codec ID (including any ALC1150 claim), UCM configuration and playback/capture remain untested.",
-        "The same pinned kernel config enables CONFIG_SND_HDA_PATCH_LOADER=y; this enables the optional user-supplied patch mechanism, not a required vendor firmware blob."
+        "The same pinned kernel config enables CONFIG_SND_HDA_PATCH_LOADER=y; this enables the optional user-supplied patch mechanism, not a required vendor firmware blob.",
+        "GIGABYTE specifications for GA-H170-Gaming 3 Rev. 1.0 and Rev. 1.1 list Realtek ALC1150; this is board-vendor evidence, not physical codec enumeration. Keep exact codec ID unknown until observed."
       ],
       "identity_evidence": []
     }

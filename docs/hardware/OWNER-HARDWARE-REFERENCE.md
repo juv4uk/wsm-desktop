@@ -149,3 +149,9 @@ channel, Linux-libre чи повний склад саме цієї H170 кон�
 4. Не обіцяти універсальне перевершення NVIDIA. Спершу визначити workload,
    де WSM має виміряну перевагу; окремо документувати обмеження reclocking,
    power/clock control та відсутні функції.
+
+
+## Пов'язана матриця firmware та microcode
+
+Для зведеного огляду firmware, microcode, ліцензій і функціональних обмежень
+див. [H170 firmware/capability matrix](H170-FIRMWARE-MATRIX.md).

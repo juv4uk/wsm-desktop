@@ -98,7 +98,7 @@ class DriverProfileManifestTests(unittest.TestCase):
                 else:
                     self.assertEqual(profile["source"]["channel_authentication_evidence"], "not-evaluated")
 
-    def test_free_profile_does_not_include_nonfree_or_claim_functional_support(self) -> None:
+    def test_free_profile_excludes_nonfree_and_only_claims_evidence_backed_functions(self) -> None:
         self.assertEqual(self.free["profile_class"], "free")
         self.assertTrue(self.free["enabled_by_default"])
         self.assertFalse(self.free["policy"]["nonfree_components_included"])
@@ -107,14 +107,21 @@ class DriverProfileManifestTests(unittest.TestCase):
         self.assertIn("не підтверджують Free-сумісність кожного пакета", docs)
         for item in self.free["devices"]:
             with self.subTest(device=item["device_id"]):
-                self.assertEqual(item["functional_validation"]["status"], "not-run")
-                self.assertEqual(item["functional_validation"]["environment"], "none")
-                if item["device_id"] == "nvidia-gtx-1050-ti":
-                    self.assertEqual(item["pci_ids"], ["10de:1c82"])
+                if item["device_id"] == "intel-mei-heci":
+                    self.assertEqual(item["functional_validation"]["status"], "passed")
+                    self.assertEqual(item["functional_validation"]["environment"], "physical-linux")
+                    self.assertEqual(item["pci_ids"], ["8086:a13a"])
                     self.assertEqual(len(item["identity_evidence"]), 1)
+                    self.assertTrue(any(e["kind"] == "functional-test" for e in item["functional_validation"]["evidence"]))
                 else:
-                    self.assertEqual(item["pci_ids"], [])
-                    self.assertEqual(item["identity_evidence"], [])
+                    self.assertEqual(item["functional_validation"]["status"], "not-run")
+                    self.assertEqual(item["functional_validation"]["environment"], "none")
+                    if item["device_id"] == "nvidia-gtx-1050-ti":
+                        self.assertEqual(item["pci_ids"], ["10de:1c82"])
+                        self.assertEqual(len(item["identity_evidence"]), 1)
+                    else:
+                        self.assertEqual(item["pci_ids"], [])
+                        self.assertEqual(item["identity_evidence"], [])
                 firmware = item["firmware"]
                 self.assertIn(firmware["redistribution"], {"free", "nonfree", "mixed", "unknown", "not-applicable"})
                 if firmware["redistribution"] in {"nonfree", "mixed"}:
@@ -142,7 +149,7 @@ class DriverProfileManifestTests(unittest.TestCase):
         self.assertEqual(candidate["source_license"], "unknown")
         self.assertEqual(self.compat["devices"][0]["functional_validation"]["status"], "not-run")
 
-    def test_only_windows_observed_nvidia_id_is_populated(self) -> None:
+    def test_only_evidence_backed_pci_ids_are_populated(self) -> None:
         for profile in (self.free, self.compat):
             for item in profile["devices"]:
                 with self.subTest(profile=profile["profile_id"], device=item["device_id"]):
@@ -150,6 +157,10 @@ class DriverProfileManifestTests(unittest.TestCase):
                         self.assertEqual(item["pci_ids"], ["10de:1c82"])
                         self.assertEqual(len(item["identity_evidence"]), 1)
                         self.assertIn("VEN_10DE DEV_1C82", item["identity_evidence"][0]["summary"])
+                    elif item["device_id"] == "intel-mei-heci" and profile["profile_id"] == "h170-free":
+                        self.assertEqual(item["pci_ids"], ["8086:a13a"])
+                        self.assertEqual(len(item["identity_evidence"]), 1)
+                        self.assertIn("8086:a13a", item["identity_evidence"][0]["summary"])
                     else:
                         self.assertEqual(item["pci_ids"], [])
                         self.assertEqual(item["identity_evidence"], [])
@@ -227,6 +238,18 @@ class DriverProfileManifestTests(unittest.TestCase):
         self.assertEqual(gpu["functional_validation"]["status"], "not-run")
         self.assertEqual(gpu["firmware"]["requirement"], "required")
         self.assertEqual(gpu["firmware"]["redistribution"], "nonfree")
+
+    def test_intel_mei_heci_is_separate_from_pre_os_csme_firmware(self) -> None:
+        mei = next(item for item in self.free["devices"] if item["device_id"] == "intel-mei-heci")
+        self.assertEqual(mei["pci_ids"], ["8086:a13a"])
+        candidate = next(item for item in mei["driver_candidates"] if item["candidate_id"] == "mei-me")
+        self.assertEqual(candidate["kernel_module"], "mei_me")
+        self.assertEqual(candidate["kernel_config"], "module-available")
+        self.assertEqual(candidate["runtime_binding"], "unknown")
+        self.assertEqual(mei["firmware"]["requirement"], "not-required")
+        self.assertEqual(mei["functional_validation"]["status"], "passed")
+        self.assertEqual(mei["functional_validation"]["environment"], "physical-linux")
+        self.assertTrue(any(e["source"] == "wsm-os HECI hardware trace (bare-metal Kali Linux)" for e in mei["functional_validation"]["evidence"]))
 
     def test_cpu_microcode_is_documented_but_not_shipped_in_free_profile(self) -> None:
         cpu = next(item for item in self.free["devices"] if item["device_id"] == "skylake-i5-6400")
