@@ -68,3 +68,6 @@ profiles.")
     ;; Do not invent a Guix license value: package redistribution remains
     ;; unapproved until issue #367 resolves the effective WSM license.
     (license #f)))
+
+;; `guix build -f` evaluates the final expression as its package target.
+wsm-installer
