@@ -20,6 +20,9 @@
 ;;   - Nonguix: Free-профіль не повинен від нього залежати (ADR 0003);
 ;;   - автоматичного встановлення: цей файл описує систему, а не інсталятор.
 
+;; Keep the Free desktop on the stock linux-libre + Mesa path. Hardware-specific
+;; firmware requirements and validation states live in the H170 matrix; do not
+;; import the Compatibility-only wsm-gp107.modconfig into this system.
 (use-modules (gnu)
              (gnu system locale)
              (wsm systems performance)
