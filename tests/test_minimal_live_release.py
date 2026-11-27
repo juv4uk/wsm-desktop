@@ -169,6 +169,17 @@ class MinimalLiveProfileTests(unittest.TestCase):
         self.assertIn('test "$VERIFIED_COUNT" -eq "$EXPECTED_COUNT"', verify_section)
         self.assertNotIn('VERIFIED_COUNT" -ge 7', verify_section)
 
+    def test_publication_requires_a_separate_explicit_dispatch_approval(self) -> None:
+        workflow = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
+        self.assertIn("publish_prerelease:", workflow)
+        self.assertIn("default: false", workflow)
+        self.assertIn(
+            "if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true }}",
+            workflow,
+        )
+        self.assertIn("Перевірений prerelease залишено в стані чернетки.", workflow)
+        self.assertIn("окремий workflow_dispatch з publish_prerelease=true", workflow)
+
     def test_release_workflow_requires_exactly_one_non_comment_tag(self) -> None:
         workflow = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
         self.assertIn("mapfile -t REQUEST_TAGS", workflow)
