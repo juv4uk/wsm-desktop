@@ -48,6 +48,62 @@ Pinned Guix channel commit
 
 Це package-source/config evidence, не доказ, що конкретний WSM ISO вже зібрано або що модулі завантажилися на фізичній H170.
 
+### 3.1. NVK у точному upstream Mesa 26.2.6: source-only аудит GP107
+
+Тарґет для цього висновку — upstream tag `mesa-26.2.6`, commit
+`8e87a503ebd91408c88596d1b9eeb5f4c0b2088d` (tag object
+`66b63490b62bc685f7075cb9f99d26747ff8d80f`). Release archive має SHA-256
+`b9436b3e1a8be76fbd4823dc884f90596ab7c6ac5e1867a305e66ffccfb31a92`.
+Guix channel лишається pinned на `4e5195be20d9b124df8a8bb69213412236e4668e`;
+цей аудит не змінює lock, Guix recipe чи package inputs.
+
+За точним source snapshot:
+
+- `nvk_get_vk_version()` повертає Vulkan 1.2 до Maxwell, 1.3 для класів
+  від Maxwell до Turing, і 1.4 від Turing. Pascal/GP107 тому має source policy
+  Vulkan 1.3 (якщо немає зовнішнього version override).
+- `nvk_is_conformant()` відхиляє non-discrete devices, але позначає discrete
+  класи Kepler–Ada conformant. Для дискретної GTX 1050 Ti / GP107 це означає,
+  що Pascal не потрапляє в non-conformant escape hatch лише через свій клас.
+- `nvk_create_drm_physical_device()` відхиляє покоління до Kepler і створює
+  NVK physical device тільки після успішного `nvkmd_try_create_pdev_for_drm()`;
+  окремий compiler object створюється через `nak_compiler_create()`.
+- Nouveau KMD path вимагає DRM render node, PCI vendor NVIDIA, успішне
+  розпізнавання Nouveau на render fd та `has_vm_bind`. Саме джерело
+  `drm_device_is_nouveau()` відкриває render node з `O_RDWR|O_CLOEXEC`;
+  отже, цей кодовий шлях не слід називати суто read-only physical probe.
+  У вихідному коді коментар прямо фіксує Linux kernel 6.6+ як вимогу NVK.
+- Дискретний NVK physical device має graphics/compute/transfer queue family;
+  це оголошення можливостей у source, а не доказ успішного GR channel init
+  чи compute dispatch на цій машині.
+
+**Висновок:** `GP107_SOURCE_ELIGIBLE=YES` для NVK у Mesa 26.2.6 за device-class
+policy та compile-time source path. Це не дорівнює
+`H170_RUNTIME_BINDING=PASS`, `GR_FIRMWARE_AVAILABLE=YES`,
+`NVK_ENUMERATION=PASS` або `COMPUTE=PASS`.
+
+#### Незакриті залежності
+
+- NVIDIA-signed FECS/GPCCS firmware для GP107 GR — окремий nonfree dependency.
+  Source-level eligibility NVK не створює firmware, не обходить ACR/signature
+  chain і не дозволяє включати ці blobs у WSM Free closure.
+- Цей аудит не доводить, що firmware package присутній у pinned Guix closure,
+  initrd, live image або встановленій системі; для цього потрібен окремий
+  package/closure/manifest audit без читання чи декомпіляції blob.
+- Не доведено, що конкретний H170 завантажить Nouveau, отримає render node,
+  `VM_BIND`, потрібну firmware або підніме GR.
+- Зовнішній GP107 vector-add witness на Kali/Mesa 26.1.6 залишається окремим
+  device-level свідченням. Він не переноситься на Mesa 26.2.6, H170 чи strict
+  WSM Free profile.
+- Intel HD 530 DMC лишається окремою optional/nonfree capability для повного
+  runtime power management; її відсутність не скасовує базовий i915 display path.
+
+Джерела для точного snapshot:
+[Mesa 26.2.6 release notes and archive hash](https://docs.mesa3d.org/relnotes/26.2.6.html),
+[upstream Mesa 26.2.6 tag/commit](https://chromium.googlesource.com/chromiumos/third_party/mesa/+/refs/tags/upstream/mesa-26.2.6),
+[NVK physical-device policy](https://chromium.googlesource.com/chromiumos/third_party/mesa/+/refs/tags/upstream/mesa-26.2.6/src/nouveau/vulkan/nvk_physical_device.c),
+[Nouveau DRM/VM_BIND gates](https://chromium.googlesource.com/chromiumos/third_party/mesa/+/refs/tags/upstream/mesa-26.2.6/src/nouveau/vulkan/nvkmd/nouveau/nvkmd_nouveau_pdev.c).
+
 ## 4. Відомі невільні залежності та ліцензійні межі
 
 - GP107 firmware group у linux-firmware поширюється за `LICENCE.nvidia`; це не open firmware. NVIDIA license містить заборони на firmware translation, reverse engineering/decompilation/disassembly binary software та обхід authentication mechanisms.
