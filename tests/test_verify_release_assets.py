@@ -62,11 +62,11 @@ class ReleaseAssetVerificationTests(unittest.TestCase):
         gh_version_index = names.index("Перевірити версію GitHub CLI для перевірки provenance")
         verify_index = names.index("Перевірити provenance артефактів перед публікацією")
         readback = names.index("Перевірити завантажені assets до публікації")
-        publish = names.index("Опублікувати перевірений GitHub pre-release")
+        final_step = names.index("Залишити перевірений prerelease чернеткою для owner approval")
         self.assertLess(readback, attest_index)
         self.assertLess(attest_index, gh_version_index)
         self.assertLess(gh_version_index, verify_index)
-        self.assertLess(verify_index, publish)
+        self.assertLess(verify_index, final_step)
         version_check = steps[gh_version_index]["run"]
         self.assertIn("gh version", version_check)
         self.assertIn("2.102.0", version_check)
