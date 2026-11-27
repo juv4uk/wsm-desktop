@@ -72,6 +72,13 @@ class MakefileCoverageTests(unittest.TestCase):
         missing = sorted(self.all_targets - phony_targets(self.text))
         self.assertEqual(missing, [], f"check targets missing from .PHONY: {missing}")
 
+    def test_optional_installer_package_build_uses_checkout_load_path(self) -> None:
+        block = block_for(self.text, "check-installer-gui-guix")
+        self.assertIn(
+            "time-machine -C channels.lock.scm -- build -L . -f wsm/packages/installer.scm",
+            block,
+        )
+
     def test_each_python_target_runs_at_least_one_command(self) -> None:
         for name in sorted(self.python_targets):
             with self.subTest(target=name):
