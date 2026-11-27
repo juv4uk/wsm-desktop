@@ -199,6 +199,17 @@ class DriverProfileManifestTests(unittest.TestCase):
         self.assertEqual(nvidia["source_license"], "unknown")
         self.assertEqual(compat_gpu["functional_validation"]["status"], "not-run")
 
+    def test_cpu_microcode_is_documented_but_not_shipped_in_free_profile(self) -> None:
+        cpu = next(item for item in self.free["devices"] if item["device_id"] == "skylake-i5-6400")
+        firmware = cpu["firmware"]
+        self.assertEqual(firmware["requirement"], "optional")
+        self.assertEqual(firmware["redistribution"], "nonfree")
+        self.assertEqual(firmware["package_candidates"], [])
+        self.assertEqual(firmware["package_resolution"], "not-assessed")
+        self.assertEqual(firmware["initrd"], "not-assessed")
+        self.assertEqual(firmware["runtime_load"], "not-assessed")
+        self.assertTrue(any("Intel official Linux processor microcode repository license" == e["source"] for e in firmware["evidence"]))
+
     def test_host_drivers_without_external_firmware_are_classified_explicitly(self) -> None:
         for device_id in ("killer-e2200", "hda-audio", "kingston-nv2", "samsung-sata"):
             device = next(item for item in self.free["devices"] if item["device_id"] == device_id)
