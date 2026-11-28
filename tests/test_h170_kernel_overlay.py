@@ -63,6 +63,22 @@ class H170LinuxLibreOverlayTests(unittest.TestCase):
         self.assertNotIn("guix archive --export", workflow)
         self.assertNotIn("guix publish", workflow)
         self.assertNotIn("actions/upload-artifact", workflow)
+        data = self._yaml(workflow)
+        h170_job = data["jobs"]["build-h170-kernel"]
+        self.assertEqual(h170_job["timeout-minutes"], "300")
+        h170_steps = h170_job["steps"]
+        module_eval = next(
+            step for step in h170_steps
+            if step.get("name") == "Evaluate the H170 source module against the exact lock"
+        )
+        self.assertIn("guix time-machine -C channels.lock.scm -- repl -L .", module_eval["run"])
+        build_step = next(
+            step for step in h170_steps
+            if step.get("name") == "Build the H170 GP107 kernel package on the exact Guix lock"
+        )
+        self.assertIn('--expression="$PACKAGE_EXPR"', build_step["run"])
+        self.assertNotIn("make check-guix-eval", build_step["run"])
+        self.assertNotIn("guix archive --export", build_step["run"])
 
     def test_release_workflow_is_pinned_to_the_h170_kernel_and_provides_source(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "h170-gp107-release.yml").read_text(
