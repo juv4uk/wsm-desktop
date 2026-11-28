@@ -213,14 +213,14 @@ def parse_authorizations(text: str) -> list[str]:
 
     return parsed
 
-def historical_authorization_fingerprints(root: Path, current_text: str) -> set[str]:
+def historical_authorization_fingerprints(root: Path, current_text: str | None) -> set[str]:
     """Collect every fingerprint ever authorized on this channel history through HEAD.
 
     Guix requires the keyring branch to retain public exports for historical
     authorization entries, including keys that are no longer in the current file.
     A shallow or unavailable Git history cannot prove that set and fails closed.
     """
-    authorized = set(parse_authorizations(current_text))
+    authorized = set(parse_authorizations(current_text)) if current_text is not None else set()
 
     try:
         shallow = subprocess.run(
@@ -330,19 +330,26 @@ def problems(
 ) -> list[str]:
     """Return reasons the authorizations/keyring are not locally consistent."""
     authorizations = root / ".guix-authorizations"
-    if not authorizations.is_file():
+    present = authorizations.is_file()
+
+    try:
+        current_authorizations = read(authorizations) if present else None
+        authorized = historical_authorization_fingerprints(root, current_authorizations)
+    except (OSError, UnicodeError, ValueError) as error:
+        return [f".guix-authorizations/history is invalid: {error}"]
+
+    if not present:
+        if authorized:
+            return [
+                ".guix-authorizations is absent at HEAD but exists in channel history; "
+                "refusing to classify this repository as not bootstrapped"
+            ]
         if require_bootstrapped:
             return [
                 ".guix-authorizations is absent: the channel is not bootstrapped "
                 "(see docs/GUIX-CHANNEL.md, bootstrap step 2)"
             ]
         return []
-
-    try:
-        current_authorizations = read(authorizations)
-        authorized = historical_authorization_fingerprints(root, current_authorizations)
-    except (OSError, UnicodeError, ValueError) as error:
-        return [f".guix-authorizations/history is invalid: {error}"]
 
     if keyring_dir is None:
         return [
