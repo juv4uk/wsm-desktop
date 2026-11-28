@@ -8,10 +8,19 @@
 ;; name - Cuirass would have failed to resolve it, because `wsm/' holds only
 ;; packages and systems.
 ;;
+<<<<<<< HEAD
 ;; `system-image' is the procedure that turns an <image> record into a
 ;; derivation. It takes the image, not the operating system, has no #:target
 ;; keyword, and is monadic - so the store plumbing below is required, not
 ;; decorative.
+=======
+;; This module lives under ci/ rather than wsm/ on purpose: wsm/ is the public
+;; channel namespace, and every module there must be loadable by the channel's
+;; evaluation test. A CI helper is not part of the channel's API. Because of that,
+;; its module name must match this path — a channel with no `directory` resolves
+;; (wsm X) to <checkout>/wsm/X.scm, so a `(wsm ci images)` name here would look for
+;; wsm/ci/images.scm and find nothing.
+>>>>>>> origin/main
 
 (define-module (ci cuirass images)
   #:use-module (guix store)
