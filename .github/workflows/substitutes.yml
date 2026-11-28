@@ -89,7 +89,7 @@ jobs:
             {
               echo "::error::Missing GUIX signing key material."
               echo "Create the key pair on the owner-controlled machine with:"
-              echo "  sudo guix archive --generate-key"
+              echo "Generate the signing-key pair locally on the owner-controlled machine; then configure its private and public files as the repository secret and variable described below."
               echo "Then configure repository secret GUIX_SIGNING_KEY from /etc/guix/signing-key.sec"
               echo "and repository variable GUIX_SIGNING_PUBLIC_KEY from /etc/guix/signing-key.pub."
             } | tee -a "$GITHUB_STEP_SUMMARY"
