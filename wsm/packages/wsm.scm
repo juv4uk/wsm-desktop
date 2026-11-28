@@ -17,6 +17,7 @@
   #:use-module (guix git-download)
   #:use-module (guix build-system python)
   #:use-module (gnu packages python)
+  #:use-module (gnu packages python-build)
   #:use-module (gnu packages python-xyz)
   #:use-module (guix licenses)
   ;; version-major+minor lives here; without it the module fails to load.
@@ -76,7 +77,12 @@
                 (for-each (lambda (name)
                             (chmod (string-append bin "/" name) #o555))
                           '("wsm-hwcheck" "wsm-install" "wsm-install-live"))))))))
-    (propagated-inputs (list python python-jsonschema))
+    ;; python-minimal, not python: the full interpreter drags its own
+    ;; test suite and development headers into every consumer's closure.
+    ;; The published pack carried three separate Python builds (~226 MB of
+    ;; 399 MB); this is the single biggest cut available without touching
+    ;; the code.
+    (propagated-inputs (list python-minimal python-jsonschema))
     (synopsis "Read-only hardware evidence tools for WSM Desktop")
     (description
      "Collects a read-only hardware report from sysfs and procfs, validates it
