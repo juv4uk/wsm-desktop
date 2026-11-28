@@ -10,17 +10,20 @@
   #:use-module (guix build-system gnu)
   #:use-module (gnu packages pascal)
   #:use-module (wsm licenses)
-  #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-13)
   #:export (wsm-hwcheck-fpc wsm-classify-fpc wsm-cpu-isa-fpc))
 
+;; Keep the build source narrow and reproducible: LICENSE plus the Pascal
+;; programs and Makefile only. Python sources, documentation, test fixtures,
+;; generated files and the Git checkout never enter this source object.
 (define wsm-fpc-source
   (local-file "../.." "wsm-desktop-source-fpc"
               #:recursive? #t
               #:select? (lambda (path _stat)
-                          (not (any (lambda (skip)
-                                      (string-contains path skip))
-                                    '("/.git" "/__pycache__" "/build"))))))
+                          (or (string=? path "LICENSE")
+                              (string=? path "tools")
+                              (string=? path "tools/pascal")
+                              (string-prefix? "tools/pascal/" path)))))
 
 (define (wsm-fpc-arguments build-target check-target install-target)
   (list
@@ -80,7 +83,6 @@ bound driver or a candidate and no functional test failed. CERTIFIED remains
 zero because the current report has no complete coverage manifest.")
     (supported-systems '("x86_64-linux"))
     (license wsm-license)))
-
 
 (define-public wsm-cpu-isa-fpc
   (package
