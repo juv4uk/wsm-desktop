@@ -90,7 +90,7 @@ class FailureTests(unittest.TestCase):
 
     def test_missing_report_fails_closed(self) -> None:
         install_fake_libcalamares({"wsmTargetDisk": "/dev/nvme0n1", "wsmTargetSizeBytes": 256 * GIB, "wsmDryRun": True})
-        result = run_preview_module()
+        result = load_module().run()
         self.assertIsNotNone(result)
         message, details = result
         self.assertIn("report", message.lower())
