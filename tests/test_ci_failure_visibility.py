@@ -15,7 +15,7 @@ GUIX_REPORTER = "guix-evaluation-failure-reporter.yml"
 # Existing non-Guix workflows use their own failure-reporting steps. Guix is
 # special: its write-capable reporter must be a separate workflow_run workflow.
 REPORTS = re.compile(
-    r"gh api .*commits/\\$GITHUB_SHA/comments|gh pr comment|gh issue comment"
+    r"gh api .*commits/\$GITHUB_SHA/comments|gh pr comment|gh issue comment"
 )
 
 
@@ -68,7 +68,7 @@ class CiFailureVisibilityTests(unittest.TestCase):
         all_steps = steps_of(workflow)
         self.assertFalse(
             any(REPORTS.search(str(step.get("run", ""))) for step in all_steps),
-            "PR-controlled Guix evaluator YAML must not receive or use a write-capable reporter token",
+            "PR-controlled Guix evaluator YAML must not contain a write-capable reporter",
         )
         self.assertFalse(
             any("issues" in (job.get("permissions") or {}) for job in document["jobs"].values()),
@@ -97,7 +97,7 @@ class CiFailureVisibilityTests(unittest.TestCase):
         self.assertFalse(any("download-artifact" in action for action in uses))
         self.assertFalse(any("upload-artifact" in action for action in uses))
 
-        script = "\\n".join(str(step.get("run", "")) for step in steps)
+        script = "\n".join(str(step.get("run", "")) for step in steps)
         for required in (
             "actions/runs/$RUN_ID",
             "431678119",
@@ -108,7 +108,7 @@ class CiFailureVisibilityTests(unittest.TestCase):
             "RUN_CONCLUSION",
             "failure",
             ".pull_requests[]?",
-            ".base.ref == \\"main\\"",
+            '.base.ref == "main"',
             "issues/$PR_NUMBER/comments",
         ):
             self.assertIn(required, script)
@@ -122,14 +122,14 @@ class CiFailureVisibilityTests(unittest.TestCase):
 
     def test_the_rule_catches_a_workflow_without_a_reporting_step(self) -> None:
         sample = (
-            "name: sample\\n"
-            "on: push\\n"
-            "jobs:\\n"
-            "  build:\\n"
-            "    runs-on: ubuntu-24.04\\n"
-            "    steps:\\n"
-            "      - name: build\\n"
-            "        run: echo hi\\n"
+            "name: sample\n"
+            "on: push\n"
+            "jobs:\n"
+            "  build:\n"
+            "    runs-on: ubuntu-24.04\n"
+            "    steps:\n"
+            "      - name: build\n"
+            "        run: echo hi\n"
         )
         path = WORKFLOWS / "_tmp_sample.yml"
         path.write_text(sample, encoding="utf-8")
