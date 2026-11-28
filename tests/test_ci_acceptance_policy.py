@@ -126,5 +126,47 @@ class ReleaseAcceptanceTimeoutTests(unittest.TestCase):
                 int(step["timeout-minutes"]), 15,
                 f"acceptance step {name!r} may not wait longer than 15 minutes",
             )
+
+class SubstituteCacheWorkflowTests(unittest.TestCase):
+    """The substitute cache must never be published unsigned or over the size guards."""
+
+    WORKFLOW = ROOT / ".github" / "workflows" / "substitute-cache.yml"
+
+    def text(self) -> str:
+        return self.WORKFLOW.read_text(encoding="utf-8")
+
+    def test_the_signing_key_comes_from_a_secret(self) -> None:
+        text = self.text()
+        self.assertIn("secrets.WSM_SUBSTITUTE_SIGNING_KEY", text)
+        self.assertNotIn("BEGIN PGP PRIVATE KEY", text)
+
+    def test_the_job_fails_when_no_key_is_configured(self) -> None:
+        text = self.text()
+        self.assertIn("exit 1", text)
+        self.assertIn("not published", text)
+
+    def test_an_unsigned_narinfo_blocks_the_publish(self) -> None:
+        text = self.text()
+        self.assertIn("^Signature:", text)
+        self.assertIn("carry no signature", text)
+
+    def test_the_pages_size_limits_are_guarded(self) -> None:
+        text = self.text()
+        self.assertIn("900 MB guard", text)
+        self.assertIn("90 MB guard", text)
+
+    def test_the_cache_is_built_on_the_release_lock(self) -> None:
+        self.assertIn("guix time-machine -C channels.lock.scm", self.text())
+
+    def test_the_cache_branch_is_orphan_and_force_pushed(self) -> None:
+        text = self.text()
+        self.assertIn("git init -q -b substitutes", text)
+        self.assertIn("git push --force", text)
+
+    def test_publishing_is_not_automatic_on_every_push(self) -> None:
+        text = self.text()
+        self.assertIn("inputs.publish", text)
+        self.assertNotIn("branches:\n      - main", text)
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,140 @@
+# SPDX-License-Identifier: LicenseRef-Volnist
+name: WSM substitute cache
+
+# Publishes the channel's own packages as a signed Guix substitute cache on the
+# `substitutes` orphan branch, served by GitHub Pages.
+#
+# Why a branch and not the release assets: `guix` can only use a cache it can fetch
+# narinfo and nar files from over HTTP. A release asset is a file you download and
+# import by hand; a branch served by Pages is a URL you put in substitute-urls.
+#
+# Why force-push to an orphan branch: the cache is a snapshot, not history. Keeping
+# every generation would grow the repository without ever making an old narinfo
+# useful again, and Pages has a hard 1 GB site limit.
+#
+# SECURITY: the cache is signed with a key that exists only as a repository secret.
+# If the key is absent the job FAILS instead of publishing an unsigned cache —
+# SECURITY.md lists untrusted substitute servers and incorrect signature checking as
+# threat-model items, and an unsigned cache would be exactly that.
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish the built cache to the substitutes branch"
+        type: boolean
+        default: false
+  push:
+    tags:
+      - "0.1.0-rc*-minimal-live"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wsm-substitute-cache
+  cancel-in-progress: false
+
+jobs:
+  build-and-publish:
+    name: Build, sign and publish the substitute cache
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install Guix
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y guix
+          sudo systemctl enable --now guix-daemon.service
+          guix --version
+
+      - name: Require a signing key before anything is built
+        env:
+          WSM_SUBSTITUTE_SIGNING_KEY: ${{ secrets.WSM_SUBSTITUTE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${WSM_SUBSTITUTE_SIGNING_KEY:-}" ]; then
+            echo "WSM_SUBSTITUTE_SIGNING_KEY is not configured." >&2
+            echo "An unsigned substitute cache is not published: see SECURITY.md." >&2
+            exit 1
+          fi
+          install -d -m 700 "$HOME/.config/guix"
+          printf '%s' "$WSM_SUBSTITUTE_SIGNING_KEY" > "$HOME/.config/guix/signing-key.sexp"
+          chmod 600 "$HOME/.config/guix/signing-key.sexp"
+
+      - name: Build the channel packages on the locked channels
+        run: |
+          set -euo pipefail
+          # The same lock the release uses: a cache built from other channels would
+          # serve substitutes that do not match what the image was built against.
+          guix time-machine -C channels.lock.scm -- build \
+            -L . wsm-tools --no-grafts
+          echo "WSM_SUBSTITUTE_BUILD=ok" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Populate the cache through guix publish
+        run: |
+          set -euo pipefail
+          cache="$(mktemp -d)"
+          echo "WSM_CACHE_DIR=$cache" >> "$GITHUB_ENV"
+          guix publish --cache="$cache" --port=8181 --ttl=31536000 &
+          publish_pid=$!
+          trap 'kill $publish_pid 2>/dev/null || true' EXIT
+          for _ in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8181/nix-cache-info >/dev/null 2>&1 && break
+            sleep 1
+          done
+          # Asking for the narinfo is what makes guix publish sign it and write the
+          # nar into the cache; the cache is the artefact we ship.
+          for store_path in $(guix time-machine -C channels.lock.scm -- build \
+                               -L . wsm-tools --no-grafts); do
+            hash="$(basename "$store_path" | cut -d- -f1)"
+            curl -fsS "http://127.0.0.1:8181/$hash.narinfo" -o /dev/null
+          done
+          find "$cache" -name '*.narinfo' -type f | wc -l | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Refuse to publish a cache that is too large or unsigned
+        run: |
+          set -euo pipefail
+          cache="$WSM_CACHE_DIR"
+          test -f "$cache/nix-cache-info"
+          # Every narinfo must carry a signature: an unsigned entry would be
+          # silently ignored by guix, so the cache would look published and be useless.
+          unsigned="$(grep -L '^Signature:' "$cache"/*.narinfo 2>/dev/null | wc -l)"
+          if [ "$unsigned" -ne 0 ]; then
+            echo "$unsigned narinfo files carry no signature" >&2
+            exit 1
+          fi
+          total="$(du -sm "$cache" | cut -f1)"
+          biggest="$(find "$cache" -type f -printf '%s\n' | sort -n | tail -1)"
+          echo "WSM_SUBSTITUTE_CACHE_MB=$total" | tee -a "$GITHUB_STEP_SUMMARY"
+          # GitHub Pages: 1 GB site, 100 MB per file. Stay well inside both.
+          [ "$total" -le 900 ] || { echo "cache is ${total} MB, over the 900 MB guard" >&2; exit 1; }
+          [ "$biggest" -le 94371840 ] || { echo "a file is over the 90 MB guard" >&2; exit 1; }
+
+      - name: Publish to the substitutes branch
+        if: github.event_name == 'push' || inputs.publish
+        run: |
+          set -euo pipefail
+          cache="$WSM_CACHE_DIR"
+          work="$(mktemp -d)"
+          cd "$work"
+          git init -q -b substitutes
+          git config user.name "wsm-desktop agent"
+          git config user.email "agents@wsm-desktop.invalid"
+          cp -a "$cache"/. .
+          printf 'User-agent: *\nAllow: /\n' > robots.txt
+          cat > index.html <<'HTML'
+          <!doctype html><meta charset="utf-8"><title>WSM substitute cache</title>
+          <p>This branch is a signed Guix substitute cache for the WSM channel.</p>
+          <p>Add it with: <code>--substitute-urls=https://juv4uk.github.io/wsm-desktop</code></p>
+          <p>Signing key fingerprint and verification steps: see docs/SUBSTITUTE-CACHE.md.</p>
+          HTML
+          git add -A
+          git commit -q -m "substitute cache for ${GITHUB_REF_NAME:-manual} at ${GITHUB_SHA}"
+          git push --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" substitutes
