@@ -721,5 +721,34 @@ exit 8
         self.assertIn("--image-type=iso9660", text)
 
 
+class CuirassSpecificationTests(unittest.TestCase):
+    """Cuirass builds the same inputs as the release, or it is not worth running."""
+
+    SPEC = ROOT / "ci" / "cuirass" / "wsm.scm"
+
+    def test_the_specification_exists_and_names_the_images(self) -> None:
+        text = self.SPEC.read_text(encoding="utf-8")
+        self.assertIn("systems/live-minimal.scm", text)
+        self.assertIn("wsm-tools", text)
+        self.assertIn("specification", text)
+
+    def test_the_specification_does_not_pin_its_own_channel_list(self) -> None:
+        """The channels come from channels.lock.scm; a second list would drift."""
+        text = self.SPEC.read_text(encoding="utf-8")
+        for forbidden in ("(channels", "#:channels", "guix.git", "nonguix"):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, text)
+
+    def test_the_specification_says_a_green_build_is_not_acceptance(self) -> None:
+        """A reader must not mistake a Cuirass green for a release approval."""
+        text = self.SPEC.read_text(encoding="utf-8")
+        self.assertIn("not acceptance", text.lower().replace("not an acceptance", "not acceptance"))
+
+    def test_the_locked_channel_file_is_the_one_used_by_the_build(self) -> None:
+        text = self.SPEC.read_text(encoding="utf-8")
+        self.assertIn("channels.lock.scm", text)
+        self.assertTrue((ROOT / "channels.lock.scm").is_file())
+
+
 if __name__ == "__main__":
     unittest.main()
