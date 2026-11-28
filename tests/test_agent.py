@@ -43,7 +43,9 @@ GOOD = [profile_path("mkfs.ext4"), "-F", "/dev/nvme0n1p2"]
 
 
 def validate_command_with_profile(command):
-    with patch("wsm_install.agent.resolve_trusted_tool", side_effect=profile_path):
+    directory = Path(command[0]).parent.name
+    resolver = lambda name: f"/run/current-system/profile/{directory}/{name}"
+    with patch("wsm_install.agent.resolve_trusted_tool", side_effect=resolver):
         return validate_command(command)
 
 
@@ -63,9 +65,11 @@ class AllowlistTests(unittest.TestCase):
             for name in ("sgdisk", "partprobe", "udevadm", "mkfs.ext4", "mkfs.fat", "mount", "mkdir")
         }
         self.assertEqual(ALLOWED_PROGRAMS, expected)
-        for program in sorted(ALLOWED_PROGRAMS):
-            with self.subTest(program=program):
-                validate_command_with_profile([program, "--version"])
+        for directory in ("bin", "sbin"):
+            for name in ("sgdisk", "partprobe", "udevadm", "mkfs.ext4", "mkfs.fat", "mount", "mkdir"):
+                program = f"/run/current-system/profile/{directory}/{name}"
+                with self.subTest(program=program):
+                    validate_command_with_profile([program, "--version"])
 
     def test_shell_and_unknown_programs_are_refused(self) -> None:
         for program in ("/bin/sh", "/run/current-system/profile/bin/dd"):
