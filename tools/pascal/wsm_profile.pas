@@ -183,7 +183,10 @@ end;
 var
   Text: TStringList;
   Parser: TJSONParser;
+  RootData: TJSONData;
   Root: TJSONObject;
+  Output: TJSONObject;
+  OutputProblems: TJSONArray;
   Ok: Boolean;
   I: Integer;
 begin
@@ -206,15 +209,17 @@ begin
     end;
 
     Parser := nil;
+    RootData := nil;
     try
       try
         Parser := TJSONParser.Create(Text.Text);
-        if not (Parser.Parse is TJSONObject) then
+        RootData := Parser.Parse;
+        if not (RootData is TJSONObject) then
         begin
           WriteLn(StdErr, 'wsm-profile: evidence is not a JSON object');
           Halt(4);
         end;
-        Root := TJSONObject(Parser.Parse);
+        Root := TJSONObject(RootData);
       except
         on E: Exception do
         begin
@@ -225,19 +230,26 @@ begin
 
       Ok := CheckBundle(Root, ExtractFileDir(ExpandFileName(ParamStr(1))));
 
-      Write('{"ok":', Ok, ',"schema":"', SupportedSchema, '"');
-      Write(',"digest_verification":"delegated"');
-      Write(',"problems":[');
-      for I := 0 to ProblemCount - 1 do
-      begin
-        if I > 0 then Write(',');
-        Write('"', Problems[I], '"');
+      Output := TJSONObject.Create;
+      OutputProblems := TJSONArray.Create;
+      try
+        Output.Add('ok', Ok);
+        Output.Add('schema', SupportedSchema);
+        Output.Add('digest_verification', 'delegated');
+        for I := 0 to ProblemCount - 1 do
+          OutputProblems.Add(Problems[I]);
+        Output.Add('problems', OutputProblems);
+        OutputProblems := nil;
+        WriteLn(Output.AsJSON);
+      finally
+        OutputProblems.Free;
+        Output.Free;
       end;
-      WriteLn(']}');
 
       if not Ok then
         Halt(5);
     finally
+      RootData.Free;
       Parser.Free;
     end;
   finally
