@@ -60,8 +60,11 @@ class PackageTests(unittest.TestCase):
         self.assertIn("fpc", self.text)
 
     def test_build_source_is_restricted_to_license_and_pascal_tooling(self) -> None:
-        self.assertIn('(string=? path "LICENSE")', self.text)
-        self.assertIn('(string-prefix? "tools/pascal/" path)', self.text)
+        self.assertIn('(string-suffix? "/LICENSE" path)', self.text)
+        self.assertIn('(string-suffix? "/tools" path)', self.text)
+        self.assertIn('(string-suffix? "/tools/pascal" path)', self.text)
+        self.assertIn('(string-contains path "/tools/pascal/")', self.text)
+        self.assertNotIn('(string-prefix? "tools/pascal/" path)', self.text)
         self.assertNotIn('(string-prefix? "wsm_hwcheck/" path)', self.text)
 
     def test_no_python_enters_the_closure(self) -> None:
