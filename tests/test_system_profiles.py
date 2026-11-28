@@ -764,7 +764,7 @@ def commented_provider(package: str, provider: str, text: str) -> bool:
     block: list[str] = []
 
     def matches() -> bool:
-        comment = "\\n".join(block)
+        comment = "\n".join(block)
         return bool(block) and provider in comment and mentions(package, comment)
 
     for line in text.splitlines():
@@ -797,16 +797,16 @@ class TrustedToolClosureTests(unittest.TestCase):
 
     def test_base_package_reason_may_span_one_contiguous_comment_block(self) -> None:
         source = (
-            ";; coreutils supplies mkdir in the live profile\\n"
-            ";; pinned Guix base set: %base-packages-utils\\n"
+            ";; coreutils supplies mkdir in the live profile\n"
+            ";; pinned Guix base set: %base-packages-utils\n"
         )
         self.assertTrue(commented_provider("coreutils", "%base-packages-utils", source))
 
     def test_base_package_reason_must_not_be_borrowed_from_another_block(self) -> None:
         source = (
-            ";; coreutils supplies mkdir in the live profile\\n"
-            "\\n"
-            ";; %base-packages-utils is used elsewhere\\n"
+            ";; coreutils supplies mkdir in the live profile\n"
+            "\n"
+            ";; %base-packages-utils is used elsewhere\n"
         )
         self.assertFalse(commented_provider("coreutils", "%base-packages-utils", source))
 
