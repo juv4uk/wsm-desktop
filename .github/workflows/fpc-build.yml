@@ -114,25 +114,17 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-      - name: Повідомити причину збою
+      - name: Підсумувати причину збою
         if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          set -uo pipefail
-          BODY=$(mktemp)
           {
             echo "### Free Pascal build: компіляція не пройшла"
-            echo ""
-            echo "Commit: \`$GITHUB_SHA\`"
-            echo ""
-            echo "Компілятор відмовився збирати один або кілька Pascal-файлів."
-            echo "Це саме те, що локальне середовище перевірити не може: там немає fpc."
-            echo ""
-            echo "#### зібрані бінарники"
+            echo
+            echo "Компілятор відмовився зібрати один або кілька Pascal entry points."
+            echo "Точна помилка наведена в кроці збірки вище; первинні логи залишаються в цьому Actions run."
+            echo
+            echo "#### Каталог збірки"
             echo '```'
             ls -la build/fpc 2>&1 || true
             echo '```'
-          } > "$BODY"
-          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
-            -F body=@"$BODY" >/dev/null && echo "причину записано коментарем"
+          } >> "$GITHUB_STEP_SUMMARY"
