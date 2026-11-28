@@ -15,7 +15,9 @@
              (wsm systems performance)
              (wsm packages wsm)
              (wsm packages linux-libre)
-             (wsm packages fpc-tools))
+             (wsm packages fpc-tools)
+             (wsm packages wsm-install-fpc)
+             )
 
 (unless (and (list? %wsm-performance-services)
              (pair? %wsm-performance-services))
@@ -25,6 +27,13 @@
 ;; evaluated, and its header said so ("не зібрано й не перевірено").
 (unless (package? wsm-tools)
   (error "WSM package module did not export a package record for wsm-tools"))
+
+;; The compiled front end: it must load, carry the owner's license object, and
+;; build with the Guix `fpc` package rather than a bundled compiler.
+(unless (and (package? wsm-install-fpc)
+             (eq? (package-license wsm-install-fpc) wsm-license)
+             (string=? (package-name wsm-install-fpc) "wsm-install-fpc"))
+  (error "FPC installer front end does not preserve LicenseRef-Volnist"))
 
 ;; Check the exact owner-supplied license metadata, without substituting a category.
 (unless (and (license? wsm-license)

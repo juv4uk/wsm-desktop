@@ -16,7 +16,10 @@ Checked for every tracked `*.pas`, `*.pp` and `*.lpr` outside `third_party/`:
     differently from its file is accepted by fpc and then cannot be found by anything
     else;
   * no `{$IFDEF DEBUG}` block that writes to stdout, because a diagnostic line on stdout
-    corrupts the JSON the collectors emit.
+    corrupts the JSON the collectors emit;
+  * no two-element character set where a range was meant. `['0', '9']` accepts only the
+    characters 0 and 9, which reads as the digit range and is not one. Three bugs of
+    exactly this shape reached CI before the parity harness found them.
 
 Exit 1 with the file and the reason. Nothing here needs a compiler, which is the point:
 it runs where fpc is not installed.
@@ -36,6 +39,10 @@ SPDX = "LicenseRef-Volnist"
 MODE_DIRECTIVE = re.compile(r"\{\$mode\s+(objfpc|delphi|fpc|tp|macpas|iso)\}", re.IGNORECASE)
 DECLARATION = re.compile(r"^\s*(program|unit|library)\s+([A-Za-z_][A-Za-z0-9_]*)", re.IGNORECASE | re.MULTILINE)
 STDOUT_DEBUG = re.compile(r"\{\$ifdef\s+DEBUG\}", re.IGNORECASE)
+# `['0', '9']` is a set of two characters; `['0'..'9']` is the digit range. The first
+# spelling looks like the second and silently rejects everything between them. Three
+# separate bugs of this shape reached CI before anyone noticed.
+TWO_CHAR_SET = re.compile(r"\[\s*'(.)'\s*,\s*'(.)'\s*\]")
 
 
 def tracked_sources(root: Path) -> list[Path]:
@@ -71,6 +78,20 @@ def check(path: Path) -> list[str]:
         if actual != expected:
             problems.append(
                 f"{path}: declares '{actual}' but the file is '{expected}'"
+            )
+
+    for match in TWO_CHAR_SET.finditer(text):
+        low, high = match.group(1), match.group(2)
+        # Adjacent letters ('a', 'b') and any two digits in order ('0', '9') both read
+        # as a range and are not one.
+        if ord(low) < ord(high) and (
+            (low.isdigit() and high.isdigit())
+            or (low.isalpha() and high.isalpha() and ord(high) - ord(low) <= 25)
+        ):
+            line = text[:match.start()].count("\n") + 1
+            problems.append(
+                f"{path}:{line}: set [{low!r}, {high!r}] is two characters, not the "
+                f"range '{low}'..'{high}'; write ['{low}'..'{high}'] if the range is meant"
             )
 
     if STDOUT_DEBUG.search(text):

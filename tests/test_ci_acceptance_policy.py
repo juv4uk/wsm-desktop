@@ -297,6 +297,31 @@ class PascalSourceContractTests(unittest.TestCase):
         )
         self.assertTrue(any("DEBUG" in p for p in self.module.check(path)))
 
+    def test_a_two_character_set_where_a_range_was_meant_is_named(self) -> None:
+        """`['0', '9']` accepts only 0 and 9; three bugs of this shape reached CI."""
+        for body in ("if c in ['0', '9'] then", "if c in ['a', 'z'] then"):
+            with self.subTest(body=body):
+                path = self.write(
+                    "demo.pas",
+                    "// SPDX-License-Identifier: LicenseRef-Volnist\n"
+                    "unit demo;\n{$mode objfpc}\nvar c: Char;\nbegin " + body + " ; end.\n",
+                )
+                problems = self.module.check(path)
+                self.assertTrue(
+                    any("not the" in p and "range" in p for p in problems),
+                    f"the range mistake was not reported: {problems}",
+                )
+
+    def test_a_real_range_and_a_three_character_set_pass(self) -> None:
+        for body in ("if c in ['0'..'9'] then", "if c in ['T', 't', ' '] then"):
+            with self.subTest(body=body):
+                path = self.write(
+                    "demo.pas",
+                    "// SPDX-License-Identifier: LicenseRef-Volnist\n"
+                    "unit demo;\n{$mode objfpc}\nvar c: Char;\nbegin " + body + " ; end.\n",
+                )
+                self.assertEqual(self.module.check(path), [])
+
     def test_an_empty_tree_is_not_a_failure(self) -> None:
         """The check runs before any Pascal exists; it must not block the tree."""
         self.assertIn("no Pascal sources yet", self.SCRIPT.read_text(encoding="utf-8"))

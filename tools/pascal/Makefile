@@ -28,6 +28,13 @@ wsm-preflight: wsm_preflight.pas
 wsm-install: wsm_install.pas
 	$(FPC) $(FPCFLAGS) -owsw-install wsm_install.pas
 
+PASCAL_DIR := $(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
+
+wsm-install-fpc: $(PASCAL_DIR)/wsm_install_cli.lpr $(PASCAL_DIR)/wsmjson.pas
+	$(FPC) $(FPCFLAGS) \
+		-Fu$(PASCAL_DIR) -FU$(PASCAL_DIR) -FE$(PASCAL_DIR) \
+		-o$(PASCAL_DIR)/wsm-install-fpc $(PASCAL_DIR)/wsm_install_cli.lpr
+
 clean:
 	rm -f $(TARGETS) *.o *.ppu
 

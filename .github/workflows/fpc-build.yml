@@ -89,9 +89,12 @@ jobs:
           failed=0
           for program in "${programs[@]}"; do
             echo "::group::fpc $program"
-            # -Fu: каталог модулів, бо програма й unit лежать поруч.
-            if ! fpc -O2 -Mobjfpc -Sh -FUbuild/fpc -FEbuild/fpc \
-                 -Fu"$(dirname "$program")" "$program"; then
+            # -Fu on the program's own directory: fpc searches the *current* directory
+            # for units, not the directory of the file it was given, so a program that
+            # `uses` a unit beside it only compiles when this path is explicit.
+            # wsm_install_cli.lpr uses wsmjson.pas this way.
+            if ! fpc -O2 -Mobjfpc -Sh -Fu"$(dirname "$program")" \
+                     -FUbuild/fpc -FEbuild/fpc "$program"; then
               echo "::error::Free Pascal refused to compile $program"
               failed=$((failed + 1))
             fi

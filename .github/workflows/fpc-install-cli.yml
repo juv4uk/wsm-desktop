@@ -1,0 +1,103 @@
+# SPDX-License-Identifier: LicenseRef-Volnist
+#
+# The Free Pascal front end is only useful if it answers exactly what the Python
+# CLI answers. This workflow is where that claim is tested: Guix builds the
+# binary from the wsm-install-fpc package in wsm/packages/fpc-tools.scm, and
+# scripts/check_fpc_cli_parity.py runs both front ends over the same table of
+# reports and compares exit codes and the first line of stderr.
+#
+# Nothing here is claimed locally: the authoring environment had neither Guix
+# nor fpc. A green run of this workflow is the first real evidence that the
+# Pascal source compiles at all.
+
+name: FPC install CLI parity
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/fpc-install-cli.yml"
+      - "tools/pascal/**"
+      - "scripts/check_pascal_sources.py"
+      - "wsm/packages/fpc-tools.scm"
+      - "wsm/licenses.scm"
+      - "scripts/check_fpc_cli_parity.py"
+      - "tests/test_fpc_cli_parity.py"
+      - "tests/guix/source-module-evaluation.scm"
+      - "wsm_install/**"
+      - "schemas/**"
+      - "tests/fixtures/hardware/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fpc-install-cli-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  parity:
+    name: Build with Guix and compare exit codes with the Python CLI
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      # The Python side is the contract; it needs its own validator.
+      - name: Install the Python front end's dependency
+        run: python -m pip install --quiet 'jsonschema[format]==4.26.0'
+
+      # Runs before Guix on purpose: if the harness itself is broken, the
+      # failure should not look like a Pascal problem.
+      - name: Harness self-test against mocked binaries
+        run: python scripts/check_fpc_cli_parity.py --self-test
+
+      # Re-records the Python side alone. A failure here means the Python
+      # contract moved and the documented table is stale.
+      - name: Record the Python side of the contract
+        run: python scripts/check_fpc_cli_parity.py --python-only
+
+      - name: Install Guix
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y guix
+          sudo systemctl enable --now guix-daemon.service
+          guix --version
+
+      - name: Build the Free Pascal front end
+        run: |
+          set -euo pipefail
+          guix build -L . \
+            -e '(begin (use-modules (wsm packages wsm-install-fpc)) wsm-install-fpc)' \
+            > /tmp/fpc-store-path.txt
+          cat /tmp/fpc-store-path.txt
+          printf 'FPC_STORE_PATH=%s\n' "$(tail -n1 /tmp/fpc-store-path.txt)" >> "$GITHUB_ENV"
+
+      - name: Compare exit codes and first stderr lines
+        run: |
+          set -euo pipefail
+          python scripts/check_fpc_cli_parity.py \
+            --python "python3 -m wsm_install" \
+            --pascal "$FPC_STORE_PATH/bin/wsm-install-fpc"
+
+      - name: Show the built binary's own version
+        run: |
+          set -euo pipefail
+          "$FPC_STORE_PATH/bin/wsm-install-fpc" --version
+
+      - name: Summarize parity failure
+        if: failure()
+        run: |
+          {
+            echo "### FPC install CLI parity failed"
+            echo "The first failing step and its exact output are in the preceding step logs."
+            echo "Reproduce locally with:"
+            echo "  guix build -L . -e '(begin (use-modules (wsm packages wsm-install-fpc)) wsm-install-fpc)'"
+            echo '  python3 scripts/check_fpc_cli_parity.py --pascal <store path>/bin/wsm-install-fpc'
+            echo "A self-test failure means the harness, not the Pascal code, is wrong."
+          } >> "$GITHUB_STEP_SUMMARY"
