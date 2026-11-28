@@ -21,8 +21,8 @@
   #:use-module (guix licenses)
   ;; version-major+minor lives here; without it the module fails to load.
   #:use-module (guix utils)
-  ;; `any` comes from SRFI-1 and `string-contains` from SRFI-13. Both are used
-  ;; in the source select? predicate below; without these two imports the module
+  ;; any comes from SRFI-1 and string-contains from SRFI-13. Both are used
+  ;; in the source select? predicate below; without these imports the module
   ;; does not load at all, and the failure appears only when Guix evaluates it.
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-13)
@@ -46,7 +46,7 @@
     (arguments
      (list
       ;; Тести репозиторію потребують його структури (tests/, scripts/), тому
-      ;; вони виконуються в CI, а не в фазі збірки пакета.
+      ;; вони виконуються в CI, а не у фазі збірки пакета.
       #:tests? #f
       #:phases
       #~(modify-phases %standard-phases
@@ -58,7 +58,9 @@
                                           #$(version-major+minor
                                              (package-version python))
                                           "/site-packages"))
-                     (bin (string-append out "/bin")))
+                     (bin (string-append out "/bin"))
+                     (cuirass (string-append out
+                                             "/share/wsm/ci/cuirass")))
                 (copy-recursively "wsm_hwcheck"
                                   (string-append site "/wsm_hwcheck"))
                 (copy-recursively "wsm_install"
@@ -72,6 +74,11 @@
                            (string-append bin "/wsm-install"))
                 (copy-file "scripts/wsm-install-live.sh"
                            (string-append bin "/wsm-install-live"))
+                ;; The host service loads this specification from the profile.
+                ;; The custom job module remains in the authenticated channel.
+                (mkdir-p cuirass)
+                (copy-file "ci/cuirass/specs.scm"
+                           (string-append cuirass "/specs.scm"))
                 ;; copy-file does not promise to preserve executable bits.
                 (for-each (lambda (name)
                             (chmod (string-append bin "/" name) #o555))
