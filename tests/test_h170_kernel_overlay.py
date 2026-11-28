@@ -59,10 +59,12 @@ class H170LinuxLibreOverlayTests(unittest.TestCase):
         workflow = (ROOT / ".github" / "workflows" / "h170-gp107-release.yml").read_text(
             encoding="utf-8"
         )
-        self.assertIn("workflow_dispatch:", workflow)
-        self.assertIn('GITHUB_EVENT_NAME" != "workflow_dispatch', workflow)
-        self.assertIn('GITHUB_REF" != "refs/heads/main', workflow)
-        self.assertNotIn('publish/h170-gp107/**', workflow)
+        self.assertIn('publish/h170-gp107/**', workflow)
+        self.assertIn('fetch-depth: 0', workflow)
+        self.assertIn('GITHUB_EVENT_NAME" != "push', workflow)
+        self.assertIn('git merge-base --is-ancestor "$GITHUB_SHA" origin/main', workflow)
+        self.assertNotIn("workflow_dispatch:", workflow)
+        self.assertIn('NAR_ARCHIVE_SIZE" -ge 2000000000', workflow)
         self.assertIn("PACKAGE_EXPR='(@ (wsm packages linux-libre) linux-libre-h170)'", workflow)
         self.assertIn('--expression="$PACKAGE_EXPR"', workflow)
         self.assertIn('channels.lock.scm', workflow)
