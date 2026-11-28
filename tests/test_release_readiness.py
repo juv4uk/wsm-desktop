@@ -123,7 +123,7 @@ def make_parts(directory: Path, first: bytes = b"iso-", second: bytes = b"image-
     image.unlink()
     (directory / "ISO-CHECKSUMS.sha256").write_text(
         "".join(
-            f"{checker.sha256_of(directory / name)}  {name}\\n"
+            f"{checker.sha256_of(directory / name)}  {name}\n"
             for name in part_names
         ),
         encoding="utf-8",
