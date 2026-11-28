@@ -40,7 +40,7 @@ class DiskObserver(Protocol):
 
     def block_identity(self, path: str) -> dict[str, object] | None: ...
 
-    def partitions(self, path: str) -> Sequence[str]: ...
+    def partitions(self, path: str) -> Sequence[str] | None: ...
 
     def live_device(self) -> str | None: ...
 
@@ -73,12 +73,19 @@ def capture(observer: DiskObserver, path: str) -> DiskIdentity:
     if not isinstance(removable, bool):
         raise IdentityError("identity.missing", f"{path} reports no removable flag")
 
+    partitions = observer.partitions(path)
+    if partitions is None:
+        raise IdentityError(
+            "identity.missing",
+            f"{path} partition topology could not be read",
+        )
+
     return DiskIdentity(
         path=path,
         major_minor=major_minor,
         size_bytes=size_bytes,
         removable=removable,
-        partitions=tuple(observer.partitions(path)),
+        partitions=tuple(partitions),
     )
 
 
