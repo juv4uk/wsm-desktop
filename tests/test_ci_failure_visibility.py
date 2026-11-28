@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
 """Every workflow must leave a readable reason when it fails.
 
-`docs/ECOSYSTEM-PRINCIPLES.md` forbids leaving a pipeline failure with no cause
+docs/ECOSYSTEM-PRINCIPLES.md forbids leaving a pipeline failure with no cause
 in a place that can be read without authorisation: task logs need auth, so an
 agent without it sees only "Process completed with exit code 2" and spends a
 whole run guessing.
 
 The principle was written after exactly that happened, and only the release
-workflow implemented it. `ci.yml` and `guix-profile-evaluation.yml` did not —
+workflow implemented it. ci.yml and guix-profile-evaluation.yml did not —
 the second one being a 180-minute Guix evaluation, where guessing is most
 expensive.
 
@@ -24,11 +24,11 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 
 # Something that writes where a reader without auth can see it.
-REPORTS = re.compile(r"gh api .*commits/\\$GITHUB_SHA/comments|gh pr comment|gh issue comment")
+REPORTS = re.compile(r"gh api .*commits/\$GITHUB_SHA/comments|gh pr comment|gh issue comment")
 # A GitHub Actions step summary is also readable without downloading the
 # authenticated job log, but a failure report must include useful log context.
-SUMMARY = re.compile(r"\\$GITHUB_STEP_SUMMARY")
-LOG_TAIL = re.compile(r"\\btail\\b")
+SUMMARY = re.compile(r"\$GITHUB_STEP_SUMMARY")
+LOG_TAIL = re.compile(r"\btail\b")
 
 
 def steps_of(workflow: Path) -> list[dict]:
@@ -74,14 +74,14 @@ class CiFailureVisibilityTests(unittest.TestCase):
 
     def test_the_rule_catches_a_workflow_without_a_reporting_step(self) -> None:
         sample = (
-            "name: sample\\n"
-            "on: push\\n"
-            "jobs:\\n"
-            "  build:\\n"
-            "    runs-on: ubuntu-24.04\\n"
-            "    steps:\\n"
-            "      - name: build\\n"
-            "        run: echo hi\\n"
+            "name: sample\n"
+            "on: push\n"
+            "jobs:\n"
+            "  build:\n"
+            "    runs-on: ubuntu-24.04\n"
+            "    steps:\n"
+            "      - name: build\n"
+            "        run: echo hi\n"
         )
         path = WORKFLOWS / "_tmp_sample.yml"
         path.write_text(sample, encoding="utf-8")
@@ -92,14 +92,14 @@ class CiFailureVisibilityTests(unittest.TestCase):
 
     def test_a_step_summary_failure_report_must_include_log_context(self) -> None:
         sample = (
-            "name: sample\\n"
-            "jobs:\\n"
-            "  build:\\n"
-            "    steps:\\n"
-            "      - name: report failure\\n"
-            "        if: failure()\\n"
-            "        run: |\\n"
-            "          tail -100 build.log >> \\\"$GITHUB_STEP_SUMMARY\\\"\\n"
+            "name: sample\n"
+            "jobs:\n"
+            "  build:\n"
+            "    steps:\n"
+            "      - name: report failure\n"
+            "        if: failure()\n"
+            "        run: |\n"
+            "          tail -100 build.log >> \"$GITHUB_STEP_SUMMARY\"\n"
         )
         path = WORKFLOWS / "_tmp_sample.yml"
         path.write_text(sample, encoding="utf-8")
