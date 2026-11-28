@@ -1,0 +1,151 @@
+# SPDX-License-Identifier: LicenseRef-Volnist
+name: Publish H170 GP107 Linux-libre package
+
+on:
+  push:
+    branches:
+      - "publish/h170-gp107/**"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: h170-gp107-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build and publish the pinned H170 GP107 kernel
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install the Guix build host
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y guix
+          sudo systemctl enable --now guix-daemon.service
+          guix --version
+
+      - name: Evaluate and build the exact locked package
+        id: build
+        run: |
+          set -euo pipefail
+          test -s channels.lock.scm
+          test -s wsm/packages/linux-libre.scm
+          STORE_PATH="$(guix time-machine -C channels.lock.scm -- build -L "$GITHUB_WORKSPACE" --no-grafts linux-libre-h170)"
+          test -d "$STORE_PATH"
+          SOURCE_PATH="$(guix time-machine -C channels.lock.scm -- build -S -L "$GITHUB_WORKSPACE" --no-grafts linux-libre-h170)"
+          test -d "$SOURCE_PATH"
+          NAR_SHA256="$(guix hash --recursive --format=hex "$STORE_PATH")"
+          {
+            echo "STORE_PATH=$STORE_PATH" >> "$GITHUB_OUTPUT"
+            echo "SOURCE_PATH=$SOURCE_PATH" >> "$GITHUB_OUTPUT"
+            echo "NAR_SHA256=$NAR_SHA256" >> "$GITHUB_OUTPUT"
+          }
+
+      - name: Prepare an ephemeral release signing key
+        run: |
+          set -euo pipefail
+          sudo install -d -m 700 /etc/guix
+          if [ ! -s /etc/guix/signing-key.sec ] || [ ! -s /etc/guix/signing-key.pub ]; then
+            sudo guix archive --generate-key
+          fi
+          test -s /etc/guix/signing-key.sec
+          test -s /etc/guix/signing-key.pub
+          chmod 700 "$RUNNER_TEMP"
+          mkdir -m 700 "$RUNNER_TEMP/h170-release"
+          sudo install -m 0644 /etc/guix/signing-key.pub "$RUNNER_TEMP/h170-release/signing-key.pub"
+
+      - name: Export the kernel NAR and complete corresponding source
+        env:
+          STORE_PATH: ${{ steps.build.outputs.STORE_PATH }}
+          SOURCE_PATH: ${{ steps.build.outputs.SOURCE_PATH }}
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/h170-release"
+          sudo guix archive --export "$STORE_PATH" > "$OUT/linux-libre-h170.nar"
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
+            -C "$SOURCE_PATH" -cJf "$OUT/linux-libre-h170-source.tar.xz" .
+          printf '%s\n' "$GITHUB_SHA" > "$OUT/wsm-source-commit.txt"
+          printf '%s\n' "4e5195be20d9b124df8a8bb69213412236e4668e" > "$OUT/guix-channel-commit.txt"
+          {
+            echo "WSM package recipe: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/blob/$GITHUB_SHA/wsm/packages/linux-libre.scm"
+            echo "Upstream patch: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/blob/$GITHUB_SHA/wsm/packages/patches/linux-libre-h170-nouveau-atomic.patch"
+            echo "Store path: $STORE_PATH"
+            echo "NAR SHA-256: ${{ steps.build.outputs.NAR_SHA256 }}"
+            echo "Package: linux-libre-h170"
+            echo "License metadata: inherited unchanged from pinned upstream linux-libre"
+            echo "Firmware policy: no NVIDIA firmware, proprietary driver, or Nonguix input"
+          } > "$OUT/provenance.txt"
+          (
+            cd "$OUT"
+            sha256sum linux-libre-h170.nar linux-libre-h170-source.tar.xz \
+              signing-key.pub wsm-source-commit.txt guix-channel-commit.txt provenance.txt \
+              > SHA256SUMS
+          )
+
+      - name: Publish a versioned GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NAR_SHA256: ${{ steps.build.outputs.NAR_SHA256 }}
+          STORE_PATH: ${{ steps.build.outputs.STORE_PATH }}
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/h170-release"
+          SHORT_SHA="${GITHUB_SHA:0:12}"
+          TAG="h170-gp107-linux-libre-7.3.5-$SHORT_SHA"
+          NOTES="$OUT/RELEASE-NOTES.md"
+          cat > "$NOTES" <<EOF
+          # H170 GP107 Linux-libre kernel package
+
+          This release contains the Guix-built linux-libre-h170 package:
+          pinned upstream Linux-libre plus one upstream Nouveau GP107 atomic-KMS fix.
+
+          - Guix lock: 4e5195be20d9b124df8a8bb69213412236e4668e
+          - WSM source commit: $GITHUB_SHA
+          - Store path: $STORE_PATH
+          - NAR SHA-256: $NAR_SHA256
+          - License metadata: inherited from pinned upstream linux-libre.
+          - No NVIDIA firmware, proprietary driver, Nonguix package, or firmware blob is included.
+
+          ## Import
+
+          Inspect provenance.txt and SHA256SUMS. Then authorize this release's ephemeral public key and import the signed archive:
+
+              guix archive --authorize < signing-key.pub
+              guix archive --import < linux-libre-h170.nar
+
+          This release-specific key is ephemeral to this CI run; authorize it only for this exact release. The source tarball is the complete patched kernel source built by Guix. The NAR contains the kernel output, not its entire dependency closure; ordinary Guix upstream substitutes remain available for dependencies.
+
+          This package build is not a hardware certification. It does not prove physical H170 boot, Nouveau binding, KMS, 3D/compute, suspend/resume, or firmware loading. GP107 FECS/GPCCS firmware is not included.
+          EOF
+          (
+            cd "$OUT"
+            sha256sum -c SHA256SUMS
+          )
+          gh release create "$TAG" "$OUT/linux-libre-h170.nar" \
+            "$OUT/linux-libre-h170-source.tar.xz" "$OUT/signing-key.pub" \
+            "$OUT/wsm-source-commit.txt" "$OUT/guix-channel-commit.txt" \
+            "$OUT/provenance.txt" "$OUT/SHA256SUMS" "$NOTES" \
+            --title "H170 GP107 Linux-libre 7.3.5 ($SHORT_SHA)" \
+            --notes-file "$NOTES" --target "$GITHUB_SHA"
+          mkdir -p "$RUNNER_TEMP/h170-readback"
+          gh release download "$TAG" --dir "$RUNNER_TEMP/h170-readback"
+          cp "$OUT/SHA256SUMS" "$RUNNER_TEMP/h170-readback/SHA256SUMS"
+          (
+            cd "$RUNNER_TEMP/h170-readback"
+            sha256sum -c SHA256SUMS
+          )
+          echo "Published release: $TAG" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Summarize publication failure
+        if: failure()
+        run: |
+          {
+            echo "### H170 GP107 kernel publication failed"
+            echo "No success is claimed. Inspect the exact failing step."
+            echo "No source branch receives binary build artifacts."
+          } >> "$GITHUB_STEP_SUMMARY"
