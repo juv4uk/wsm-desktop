@@ -96,21 +96,28 @@ class JobModuleTests(unittest.TestCase):
     def test_the_module_namespace_matches_its_path(self) -> None:
         self.assertIn("(define-module (ci cuirass images)", self.text)
 
-    def test_it_uses_system_image_not_a_procedure_that_does_not_exist(self) -> None:
-        """`operating-system-image' is not in gnu/system/image.scm."""
-        self.assertIn("(system-image image)", self.text)
-        self.assertNotIn("operating-system-image", self.text)
-
-    def test_it_reads_the_systems_key_cuirass_actually_passes(self) -> None:
-        self.assertIn("'systems", self.text)
+    def test_it_uses_cuirass_native_system_selection(self) -> None:
+        self.assertIn("(arguments->systems arguments)", self.text)
+        self.assertNotIn("(define (arguments->systems", self.text)
         self.assertNotIn("'system)", self.text)
 
-    def test_it_lowers_in_a_monadic_store(self) -> None:
-        self.assertIn("run-with-store", self.text)
-        self.assertIn("lower-object", self.text)
-        self.assertIn("(guix monads)", self.text)
+    def test_it_builds_the_release_iso_image_type(self) -> None:
+        self.assertIn("(image-with-os iso9660-image", self.text)
+        self.assertIn("(image->job store image", self.text)
+        self.assertNotIn("efi-disk-image", self.text)
+        self.assertNotIn("system-image", self.text)
+        self.assertNotIn("derivation->job", self.text)
 
-    def test_it_builds_the_same_profile_the_release_builds(self) -> None:
+    def test_it_uses_pinned_guix_ci_helpers(self) -> None:
+        self.assertIn("(gnu ci)", self.text)
+        self.assertIn("(gnu system image)", self.text)
+        self.assertIn("(guix packages)", self.text)
+
+    def test_grafting_is_disabled(self) -> None:
+        """Grafting is disabled for deterministic build-farm jobs."""
+        self.assertIn("(%graft? #f)", self.text)
+
+    def test_it_builds_the_release_profile(self) -> None:
         self.assertIn("systems/live-minimal.scm", self.text)
 
 
