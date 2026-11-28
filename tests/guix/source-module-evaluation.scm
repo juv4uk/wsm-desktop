@@ -9,6 +9,9 @@
 ;; from this list is a module nobody has checked.
 ;; scripts/check_scheme_module_coverage.py enforces that rule.
 (use-modules (guix packages)
+             (gnu ci)
+             (gnu services cuirass)
+             (ci cuirass images)
              (wsm systems performance)
              (wsm packages wsm))
 
@@ -20,6 +23,18 @@
 ;; evaluated, and its header said so ("не зібрано й не перевірено").
 (unless (package? wsm-tools)
   (error "WSM package module did not export a package record for wsm-tools"))
+
+
+;; Cuirass API check against the exact Guix lock. This imports the custom module
+;; from ci/cuirass/images.scm without registering a jobset or authenticating WSM.
+(unless (and (procedure? arguments->systems)
+             (procedure? image->job)
+             (procedure? cuirass-jobs)
+             (procedure? cuirass-service-type))
+  (error "Pinned Guix Cuirass API or WSM image-job module is unavailable"))
+
+(display "WSM-CUIRASS-API-EVAL-OK")
+(newline)
 
 (display "WSM-SOURCE-MODULE-EVAL-OK ")
 (display (length %wsm-performance-services))

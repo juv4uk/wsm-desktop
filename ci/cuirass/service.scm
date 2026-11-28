@@ -1,31 +1,24 @@
 ;; SPDX-License-Identifier: LicenseRef-Volnist
 ;;
-;; Run Cuirass on your own machine, with the WSM specifications.
+;; Cuirass service helper for a dedicated Guix build host.
 ;;
-;; This is a fragment, not a full operating-system declaration: paste the
-;; `services' entry into the system that should host the build farm. It is
-;; written as a fragment on purpose - a complete system definition would become
-;; a second source of truth for how WSM machines are configured.
-;;
-;; What you get: a web interface on port 8081, a PostgreSQL-backed job history,
-;; and substitutes for anything the jobs build. What you do not get: QEMU boot
-;; acceptance. That stays in the release workflow.
+;; This is not part of WSM desktop/live profiles. It deliberately accepts the
+;; specifications gexp from the host configuration: no guessed profile path,
+;; missing package installation, or implicit channel checkout is performed.
+;; Do not add this service to a host until the WSM channel Phase B trust
+;; bootstrap and the Cuirass specification gate have both passed.
 
-(use-modules (gnu services ci)
-             (gnu services)
-             (guix channels))
+(use-modules (gnu services)
+             (gnu services cuirass))
 
-(define %wsm-cuirass-specs
-  ;; Loaded from the file so the CLI and the service cannot drift apart.
-  #~(load "/run/current-system/profile/share/wsm/ci/cuirass/specs.scm"))
+(define (wsm-cuirass-service specifications)
+  "Return the Cuirass service for a dedicated host.
 
-(define wsm-cuirass-service
+SPECIFICATIONS must be an owner-approved gexp that evaluates to the reviewed,
+allowlisted Cuirass specification list after WSM channel authentication."
   (service cuirass-service-type
            (cuirass-configuration
             (host "localhost")
             (port 8081)
-            ;; Substitutes make a build farm useful; without them every job
-            ;; rebuilds its whole closure from source.
-            (use-substitutes? #t)
             (fallback? #t)
-            (specifications %wsm-cuirass-specs))))
+            (specifications specifications))))

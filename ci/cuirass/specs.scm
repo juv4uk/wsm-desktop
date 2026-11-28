@@ -2,26 +2,20 @@
 ;;
 ;; Cuirass specifications for WSM Desktop.
 ;;
-;; Cuirass is GNU Guix's own continuous integration server. Its value here is
-;; not "another CI": it builds *inside Guix*, on top of the exact channel lock
-;; the release uses, and its results become substitutes. GitHub Actions builds
-;; the image and boots it in QEMU; Cuirass proves the derivations actually build
-;; from the pinned channels and warms the store for everyone else.
+;; NOT_REGISTERABLE until the owner completes Guix channel Phase B:
+;; signed introduction, .guix-authorizations, public keyring, and a tested
+;; authenticated consumer path. The WSM commit below is deliberately an
+;; invalid placeholder. Replace it only with the exact owner-approved,
+;; authenticated WSM commit. Never use a moving branch or
+;; --disable-authentication as a workaround.
 ;;
-;; What it does NOT do: boot the image. Cuirass has no QEMU acceptance step, so
-;; a green Cuirass job says "the closure builds", never "the medium boots".
-;; docs/CUIRASS.md keeps that boundary explicit.
-;;
-;; Register with:
-;;   cuirass register --specifications=ci/cuirass/specs.scm \
-;;                    --database="dbname=cuirass host=/var/run/postgresql"
-;;
-;; The file is a plain list of specifications, as `cuirass register` expects;
-;; the same list is used by the service definition in service.scm.
+;; The job list is allowlisted. Cuirass builds/retains local outputs; publishing
+;; substitutes is a separate service and is disabled until #367 and substitute
+;; trust are cleared.
 
 (list
- ;; The channel's own tool package: the smallest job that fails if the pinned
- ;; channels stop being able to build what we ship.
+ ;; Explicit WSM package allowlist. This remains unregistrable until Phase B
+ ;; and the package-license gate #367 have been resolved.
  (specification
   (name "wsm-tools")
   (priority 1)
@@ -40,15 +34,14 @@
          (channel
           (name 'wsm)
           (url "https://github.com/juv4uk/wsm-desktop")
-          (branch "main")))))
+          (commit "OWNER_SIGNED_WSM_COMMIT_REQUIRED")))))
 
- ;; The live image derivation. Cuirass builds the same expression the release
- ;; workflow builds, so a broken profile shows up here within one poll interval
- ;; instead of after a forty-minute Actions run.
+ ;; The live image derivation. Cuirass builds the same OS profile as the
+ ;; release workflow, but does not perform BIOS/UEFI QEMU acceptance.
  (specification
   (name "wsm-live-minimal-image")
   (priority 1)
-  (build '(custom (wsm ci images)))
+  (build '(custom (ci cuirass images)))
   (channels
    (list (channel
           (name 'guix)
@@ -63,4 +56,4 @@
          (channel
           (name 'wsm)
           (url "https://github.com/juv4uk/wsm-desktop")
-          (branch "main"))))))
+          (commit "OWNER_SIGNED_WSM_COMMIT_REQUIRED"))))))
