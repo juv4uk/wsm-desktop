@@ -50,15 +50,17 @@ class CanonicalDocumentationLanguageGateTests(unittest.TestCase):
 
 
 class InstallerDocumentationPolicyTests(unittest.TestCase):
-    def test_installer_doc_matches_current_minimal_live_direction(self) -> None:
+    def test_installer_doc_requires_three_selectable_frontends(self) -> None:
         document = (ROOT / "docs" / "INSTALLER.md").read_text(encoding="utf-8")
         self.assertIn("wsm-install-live", document)
-        self.assertIn("Поточний шлях minimal-live: read-only CLI/TUI preview", document)
-        self.assertIn("Calamares — deprioritized/reference-only", document)
-        self.assertNotIn("| Calamares | опційно", document)
-        self.assertNotIn("Calamares лишається як зручність", document)
-        self.assertNotIn("Початковий кандидат — **Calamares 3.4.2**", document)
-        self.assertIn("Умовний workflow Calamares (не реалізовано)", document)
+        self.assertIn("Консольний CLI", document)
+        self.assertIn("Псевдографічний TUI", document)
+        self.assertIn("Графічний Calamares", document)
+        self.assertIn("WSM Installer Selector", document)
+        self.assertIn("Основний універсальний Live Installer", document)
+        self.assertIn("Цільовий workflow графічного Calamares", document)
+        self.assertIn("У поточних RC APPLY вимкнено", document)
+        self.assertNotIn("Calamares — deprioritized/reference-only", document)
 
 
 class DocumentationEntryPointLanguageTests(unittest.TestCase):
