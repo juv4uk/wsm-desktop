@@ -20,6 +20,8 @@ Two ways to name the tools:
 Deliberate honesty about what a pass means:
 
 * a pass proves the named paths exist and are executable **under --root**;
+* a failure names the Guix package that owns the tool (`wsm_install.tool_map`),
+  because the fix is "add that package to the image", not "create that file";
 * it does not prove they are the right tools, that their argv is understood, or
   that they were built from the pinned sources;
 * when --root is a host filesystem rather than the image, the result is about the
@@ -63,18 +65,24 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from wsm_install.install_steps import TRUSTED_TOOLS  # noqa: E402
+from wsm_install.tool_map import package  # noqa: E402
 from wsm_install.tools import resolve  # noqa: E402
 
 
 def _problem(name: str, root: Path, path: str) -> list[tuple[str, str]]:
-    """Why `path` is not usable under `root`, as a one-element list, or nothing."""
+    """Why `path` is not usable under `root`, as a one-element list, or nothing.
+
+    Every message names the Guix package that owns the tool, because the answer to
+    a missing path is "add this package to the image closure", not "create a file".
+    """
+    owner = package(name)
     candidate = root / path.lstrip("/")
     if not candidate.exists():
-        return [(name, f"{path} does not exist under {root}")]
+        return [(name, f"{path} does not exist under {root} (owned by package {owner})")]
     if not candidate.is_file():
-        return [(name, f"{path} is not a regular file under {root}")]
+        return [(name, f"{path} is not a regular file under {root} (owned by package {owner})")]
     if not os.access(candidate, os.X_OK):
-        return [(name, f"{path} is not executable under {root}")]
+        return [(name, f"{path} is not executable under {root} (owned by package {owner})")]
     return []
 
 
@@ -259,7 +267,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--list",
         action="store_true",
-        help="print the expected tools and exit, without checking anything",
+        help="print the expected tools, their paths and their owning packages, then exit",
     )
     parser.add_argument(
         "--self-check",
@@ -273,7 +281,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.list:
         for name, path in sorted(TRUSTED_TOOLS.items()):
-            print(f"{name}\t{path}")
+            print(f"{name}\t{path}\t{package(name)}")
         return 0
 
     if args.self_check:

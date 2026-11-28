@@ -620,6 +620,17 @@ class ToolClosureTests(unittest.TestCase):
             self.assertEqual(problems[0][0], "sgdisk")
             self.assertIn("does not exist", problems[0][1])
 
+    def test_a_missing_tool_names_the_package_the_image_needs(self) -> None:
+        """The failure has to say which package to add to the closure, not just what is absent."""
+        from wsm_install.tool_map import package
+
+        module = _load_tool_closure_module()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._populate(root, skip="sgdisk")
+            problems = module.check(root)
+            self.assertIn(package("sgdisk"), problems[0][1])
+
     def test_a_non_executable_tool_is_named(self) -> None:
         module = _load_tool_closure_module()
         with tempfile.TemporaryDirectory() as temporary:
