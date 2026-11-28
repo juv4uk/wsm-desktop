@@ -1,11 +1,6 @@
 name: H170 Free upstream package build evidence
 
 on:
-  pull_request:
-    paths:
-      - ".github/workflows/h170-free-core-build-evidence.yml"
-      - "ci/packages/h170-free-core.scm"
-      - "channels.lock.scm"
   workflow_dispatch:
 
 permissions:
@@ -13,8 +8,8 @@ permissions:
   issues: write
 
 concurrency:
-  group: h170-free-core-package-evidence-${{ github.ref }}
-  cancel-in-progress: true
+  group: h170-free-core-package-evidence-main
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -22,6 +17,15 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     steps:
+      - name: Require a manual run on main
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" || "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "::error::This expensive H170 build is manual-only and must run from main."
+            exit 1
+          fi
+
       - name: Checkout exact source
         uses: actions/checkout@v7
         with:
