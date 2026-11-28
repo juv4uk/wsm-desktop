@@ -12,6 +12,7 @@
              (gnu ci)
              (gnu services)
              (gnu services cuirass)
+             (guix gexp)
              (ci cuirass images)
              (wsm systems performance)
              (wsm packages wsm))
@@ -29,7 +30,8 @@
 ;; Cuirass API check against the exact Guix lock. This imports the custom module
 ;; from ci/cuirass/images.scm without registering a jobset or authenticating WSM.
 (define %wsm-cuirass-service-smoke
-  (service cuirass-service-type (cuirass-configuration)))
+  (service cuirass-service-type
+          (cuirass-configuration (specifications #~'())))
 
 (unless (and (procedure? arguments->systems)
              (procedure? image->job)
