@@ -108,28 +108,18 @@ var
 begin
   Result := '';
   FillChar(Buffer, SizeOf(Buffer), 0);
-  Count := fpReadLink(Path, @Buffer[0], SizeOf(Buffer) - 1);
+  { fpReadLink приймає pchar; AnsiString не конвертується неявно в FPC 3.2.2,
+    тому PChar(Path) обовʼязковий — без нього unit не компілюється. }
+  Count := fpReadLink(PChar(Path), @Buffer[0], SizeOf(Buffer) - 1);
   if Count <= 0 then
     Exit;
   Buffer[Count] := #0;
   Result := ExtractFileName(StrPas(@Buffer[0]));
 end;
 
-function NormalizeHexId(const Value: string): string;
-var
-  TextValue: string;
-  Index: Integer;
-begin
-  TextValue := LowerCase(Trim(Value));
-  if Copy(TextValue, 1, 2) = '0x' then
-    Delete(TextValue, 1, 2);
-  if Length(TextValue) <> 4 then
-    Exit('');
-  for Index := 1 to Length(TextValue) do
-    if not (TextValue[Index] in ['0'..'9', 'a'..'f']) then
-      Exit('');
-  Result := TextValue;
-end;
+{ NormalizeHexId видалено: identity зберігає сирі значення sysfs, як і
+  Python-колектор. Нормалізація потрібна лише для пошуку в pci.ids, і коли
+  такий пошук з'явиться тут, функцію треба буде повернути поруч із ним. }
 
 function CurrentTimestampUTC: string;
 var
@@ -545,6 +535,10 @@ var
   Identity, Device: TJSONObject;
   Count: Integer;
 begin
+  { ВАЖЛИВО: FindFirst віддає порядок readdir, а Python сортує
+    (sorted(root.iterdir())). Поки що це не виправлено — див. tests/
+    test_fpc_collector_parity.py, який порівнює множини, а не порядок.
+    Виправлення вимагає збирати імена в TStringList з Sorted := True. }
   Root := JoinPath(SysfsRoot, 'bus/pci/devices');
   if not DirectoryExists(Root) then
     Exit;
@@ -561,8 +555,11 @@ begin
       if Count > MaxDevices then
         Break;
       DevicePath := JoinPath(Root, EntryName);
-      Vendor := NormalizeHexId(ReadValue(JoinPath(DevicePath, 'vendor')));
-      Product := NormalizeHexId(ReadValue(JoinPath(DevicePath, 'device')));
+      { Python зберігає СИРЕ значення sysfs ("0x10de") у identity; _hex_id
+        ("10de") там використовується лише для пошуку в pci.ids. Нормалізація
+        тут зламала б паритет, тому читаємо як є. }
+      Vendor := ReadValue(JoinPath(DevicePath, 'vendor'));
+      Product := ReadValue(JoinPath(DevicePath, 'device'));
       if (Vendor = '') and (Product = '') then
         Continue;
       ClassValue := ReadValue(JoinPath(DevicePath, 'class'));
@@ -572,9 +569,9 @@ begin
       AddIfPresent(Identity, 'vendor_id', Vendor);
       AddIfPresent(Identity, 'device_id', Product);
       AddIfPresent(Identity, 'subsystem_vendor_id',
-        NormalizeHexId(ReadValue(JoinPath(DevicePath, 'subsystem_vendor'))));
+        ReadValue(JoinPath(DevicePath, 'subsystem_vendor')));
       AddIfPresent(Identity, 'subsystem_device_id',
-        NormalizeHexId(ReadValue(JoinPath(DevicePath, 'subsystem_device'))));
+        ReadValue(JoinPath(DevicePath, 'subsystem_device')));
       AddIfPresent(Identity, 'revision', ReadValue(JoinPath(DevicePath, 'revision')));
       AddIfPresent(Identity, 'class_id', ClassValue);
       AddIfPresent(Identity, 'modalias', ReadValue(JoinPath(DevicePath, 'modalias')));
@@ -627,8 +624,11 @@ begin
       if (Name = '.') or (Name = '..') then
         Continue;
       DevicePath := JoinPath(Root, Name);
-      Vendor := NormalizeHexId(ReadValue(JoinPath(DevicePath, 'idVendor')));
-      Product := NormalizeHexId(ReadValue(JoinPath(DevicePath, 'idProduct')));
+      { Так само, як для PCI: Python зберігає сире значення ("1d6b"), а не
+        нормалізоване; idVendor у sysfs уже без 0x, тому нормалізація тут
+        все одно нічого не додає. }
+      Vendor := ReadValue(JoinPath(DevicePath, 'idVendor'));
+      Product := ReadValue(JoinPath(DevicePath, 'idProduct'));
       if (Vendor = '') or (Product = '') then
         Continue;
       ClassValue := ReadValue(JoinPath(DevicePath, 'bDeviceClass'));
