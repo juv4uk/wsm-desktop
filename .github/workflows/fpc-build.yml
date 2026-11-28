@@ -84,6 +84,7 @@ jobs:
           done
           if [ "${#programs[@]}" -eq 0 ]; then
             echo "::error::Pascal sources exist but no program/library entry point was found."
+            echo "WSM_FPC_PROGRAMS=0" >> "$GITHUB_STEP_SUMMARY"
             printf '%s\n' "${pascal_sources[@]}"
             exit 1
           fi
