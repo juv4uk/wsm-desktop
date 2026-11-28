@@ -144,8 +144,8 @@ def parse_scheme_forms(text: str) -> list[object]:
         forms.append(parse_one())
 
 
-def parse_authorizations(text: str) -> list[tuple[str, str]]:
-    """Return normalized fingerprint/name entries or reject the entire file."""
+def parse_authorizations(text: str) -> list[str]:
+    """Return normalized authorized fingerprints or reject the entire file."""
     forms = parse_scheme_forms(text)
     if len(forms) != 1:
         raise ValueError(f"expected exactly one top-level form, found {len(forms)}")
@@ -173,14 +173,17 @@ def parse_authorizations(text: str) -> list[tuple[str, str]]:
     if not isinstance(entries, list) or not entries:
         raise ValueError("authorization entries must be a non-empty list")
 
-    parsed: list[tuple[str, str]] = []
+    parsed: list[str] = []
     seen: set[str] = set()
     for number, entry in enumerate(entries, 1):
         if not isinstance(entry, list) or len(entry) < 2:
-            raise ValueError(f"authorization entry {number} must begin with a fingerprint and properties")
-        raw_fingerprint, properties = entry[0], entry[1]
+            raise ValueError(
+                f"authorization entry {number} must begin with a fingerprint and key/value metadata"
+            )
+        raw_fingerprint = entry[0]
         if not isinstance(raw_fingerprint, SchemeString):
             raise ValueError(f"authorization entry {number} fingerprint must be a string")
+
         compact = "".join(raw_fingerprint.value.split()).upper()
         if PLACEHOLDER.search(raw_fingerprint.value):
             raise ValueError(f"authorization entry {number} still contains a placeholder fingerprint")
@@ -194,27 +197,21 @@ def parse_authorizations(text: str) -> list[tuple[str, str]]:
             raise ValueError(f"duplicate authorized fingerprint: {fingerprint}")
         seen.add(fingerprint)
 
-        if not isinstance(properties, list):
-            raise ValueError(f"authorization entry {number} properties must be a list")
-
-        names: list[str] = []
+        # Guix currently ignores these optional key/value pairs. Validate their
+        # shape, but do not require a name or constrain future metadata values.
         for property_form in entry[1:]:
             if (
                 not isinstance(property_form, list)
                 or len(property_form) != 2
                 or not isinstance(property_form[0], SchemeSymbol)
             ):
-                raise ValueError(f"authorization entry {number} contains malformed key/value metadata")
-            if property_form[0] == SchemeSymbol("name"):
-                if not isinstance(property_form[1], SchemeString):
-                    raise ValueError(f"authorization entry {number} name must be a string")
-                names.append(property_form[1].value.strip())
-        if len(names) != 1 or not names[0]:
-            raise ValueError(f"authorization entry {number} must have exactly one non-empty name")
-        parsed.append((fingerprint, names[0]))
+                raise ValueError(
+                    f"authorization entry {number} contains malformed key/value metadata"
+                )
+
+        parsed.append(fingerprint)
 
     return parsed
-
 
 def key_file_fingerprints(keyring_dir: Path) -> dict[str, str]:
     """Map primary fingerprints to .key file paths from the explicit keyring checkout."""
@@ -298,7 +295,7 @@ def problems(
     except (OSError, ValueError) as error:
         return [str(error)]
 
-    authorized = {fingerprint for fingerprint, _name in listed_entries}
+    authorized = set(listed_entries)
     published = set(keys)
     found: list[str] = []
 
