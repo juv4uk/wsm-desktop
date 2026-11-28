@@ -314,6 +314,24 @@ class ReleaseReadinessTests(unittest.TestCase):
             found,
         )
 
+    def test_uefi_boot_evidence_must_be_bound_to_the_published_iso(self) -> None:
+        path = self.directory / "boot-uefi.json"
+        record = json.loads(path.read_text(encoding="utf-8"))
+        record["iso_sha256"] = "0" * 64
+        write_json(path, record)
+        rewrite_checksum(self.directory, "boot-uefi.json")
+        manifest_path = self.directory / "release-manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["boot_evidence"]["uefi_sha256"] = checker.sha256_of(path)
+        write_json(manifest_path, manifest)
+        rewrite_checksum(self.directory, "release-manifest.json")
+        found = checker.problems(self.directory)
+        self.assertTrue(
+            any("uefi boot evidence iso_sha256 != release-manifest artifact sha256" in item
+                for item in found),
+            found,
+        )
+
     def test_build_manifest_artifact_filename_must_match_release_manifest(self) -> None:
         build_path = self.directory / "build-manifest.json"
         build_manifest = json.loads(build_path.read_text(encoding="utf-8"))
