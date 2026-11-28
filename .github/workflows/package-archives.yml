@@ -2,7 +2,7 @@
 name: WSM package archives
 
 # ВЛАСНИК ДАВ ДОЗВІЛ: 2026-11-28, пряма вимога власника — негайна публікація Guix-пакетів та артефактів під його залізо.
-# Owner-authorized, manually triggered pack for the WSM-owned wsm-tools package.
+# ВЛАСНИК ДАВ ДОЗВІЛ 2026-11-28: owner-authorized manual pack for WSM-owned wsm-tools.
 # This is not the upstream H170 Free substitute cache.
 on:
   workflow_dispatch:
