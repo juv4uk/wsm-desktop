@@ -1,0 +1,69 @@
+{
+  "artifact": "WSM-Desktop-0.1.0-rc6-Minimal-Live.iso",
+  "artifact_sha256": "59dad1c0f987401ab3644c6cf93445f22ff7fbfae6b47010c2611dcaa5702f99",
+  "artifact_source": "whole",
+  "collected_at": "2026-11-28T03:00:56+00:00",
+  "criteria": [
+    {
+      "detail": "sha256 59dad1c0f987401ab3644c6cf93445f22ff7fbfae6b47010c2611dcaa5702f99 matches SHA256SUMS",
+      "id": "checksum",
+      "status": "pass"
+    },
+    {
+      "detail": "manifest describes the published file",
+      "id": "manifest",
+      "status": "pass"
+    },
+    {
+      "detail": "ISO9660 descriptor present, 911370240 bytes",
+      "id": "iso-structure",
+      "status": "pass"
+    },
+    {
+      "detail": "bootable on UEFI and x86 BIOS",
+      "id": "boot-records",
+      "status": "pass"
+    },
+    {
+      "detail": "--boot was not requested",
+      "id": "boot-bios",
+      "status": "not-run"
+    },
+    {
+      "detail": "--boot was not requested",
+      "id": "boot-uefi",
+      "status": "not-run"
+    }
+  ],
+  "note": "incomplete is not a pass: a criterion that could not run proves nothing",
+  "overall": "incomplete",
+  "schema": "wsm-release-verdict/1",
+  "tool_version": "0.1.0",
+  "workflow_evidence": {
+    "provider": "github-actions",
+    "workflow_path": ".github/workflows/release-minimal-live.yml",
+    "run_id": 46095631648,
+    "run_url": "https://github.com/juv4uk/wsm-desktop/actions/runs/46095631648",
+    "source_commit": "1fa19879ec780e372cce9a6bb4c13f613d01ec9f",
+    "conclusion": "success",
+    "acceptance": {
+      "bios": {
+        "step": "BIOS boot acceptance",
+        "status": "success",
+        "live_marker": "WSM_LIVE_READY",
+        "installer_marker": "WSM_INSTALLER_OK"
+      },
+      "uefi": {
+        "step": "UEFI boot acceptance",
+        "status": "success",
+        "live_marker": "WSM_LIVE_READY",
+        "installer_marker": "WSM_INSTALLER_OK"
+      }
+    },
+    "release_assets_readback": "success",
+    "provenance_verification": "success",
+    "publish_step": "skipped",
+    "release_state": "draft",
+    "scope_note": "This external workflow evidence is kept separate from this file's local verifier criteria. The local verifier was run without --boot; its boot-bios and boot-uefi statuses therefore remain not-run and overall remains incomplete."
+  }
+}

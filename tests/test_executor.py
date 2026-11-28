@@ -22,6 +22,7 @@ import tempfile  # noqa: E402
 
 from wsm_install.admission import admit  # noqa: E402
 from wsm_install.tools import is_admissible_path, resolve  # noqa: E402
+from wsm_install.tool_map import TOOLS, EXECUTABLES, package  # noqa: E402
 from wsm_install.disk_identity import (  # noqa: E402
     DiskIdentity,
     IdentityError,
@@ -585,6 +586,14 @@ def _load_tool_closure_module():
 class ToolClosureTests(unittest.TestCase):
     """A constant is a claim; this turns it into an observation under a given root."""
 
+    def _run(self, module, argv: list[str]) -> int:
+        """Run the CLI without letting its report pollute the test output."""
+        import io
+        from contextlib import redirect_stderr, redirect_stdout
+
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            return module.main(argv)
+
     def _populate(self, root: Path, skip: str | None = None, mode: int = 0o755) -> None:
         for name, path in TRUSTED_TOOLS.items():
             if name == skip:
@@ -611,6 +620,17 @@ class ToolClosureTests(unittest.TestCase):
             self.assertEqual(problems[0][0], "sgdisk")
             self.assertIn("does not exist", problems[0][1])
 
+    def test_a_missing_tool_names_the_package_the_image_needs(self) -> None:
+        """The failure has to say which package to add to the closure, not just what is absent."""
+        from wsm_install.tool_map import package
+
+        module = _load_tool_closure_module()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._populate(root, skip="sgdisk")
+            problems = module.check(root)
+            self.assertIn(package("sgdisk"), problems[0][1])
+
     def test_a_non_executable_tool_is_named(self) -> None:
         module = _load_tool_closure_module()
         with tempfile.TemporaryDirectory() as temporary:
@@ -634,6 +654,98 @@ class ToolClosureTests(unittest.TestCase):
             self.assertEqual(module.main(["--list"]), 0)
         lines = [line for line in buffer.getvalue().splitlines() if line.strip()]
         self.assertEqual(len(lines), len(TRUSTED_TOOLS))
+
+    def test_a_guix_shaped_root_is_checked_against_its_profile(self) -> None:
+        """A Guix image has no /usr, so the FHS table must not call it complete."""
+        module = _load_tool_closure_module()
+        profile = "/run/current-system/profile/bin"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name in TRUSTED_TOOLS:
+                target = root / profile.lstrip("/") / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("#!/bin/sh\n", encoding="utf-8")
+                target.chmod(0o755)
+
+            self.assertFalse((root / "usr").exists())
+            self.assertEqual(
+                len(module.check(root)),
+                len(TRUSTED_TOOLS),
+                "FHS paths cannot exist in a tree without /usr",
+            )
+            self.assertEqual(module.check(root, prefixes=(profile,)), [])
+            self.assertEqual(self._run(module, ["--root", str(root), "--prefix", profile]), 0)
+
+    def test_prefix_mode_names_a_tool_missing_from_the_profile(self) -> None:
+        module = _load_tool_closure_module()
+        profile = "/run/current-system/profile/sbin"
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name in TRUSTED_TOOLS:
+                if name == "partprobe":
+                    continue
+                target = root / profile.lstrip("/") / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("#!/bin/sh\n", encoding="utf-8")
+                target.chmod(0o755)
+
+            problems = module.check(root, prefixes=(profile,))
+            self.assertEqual([name for name, _ in problems], ["partprobe"])
+            self.assertIn("not found in any of", problems[0][1])
+            self.assertEqual(
+                self._run(module, ["--root", str(root), "--prefix", profile]),
+                1,
+            )
+
+    def test_a_non_directory_root_is_refused_not_reported_complete(self) -> None:
+        module = _load_tool_closure_module()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "a-file"
+            root.write_text("not a tree\n", encoding="utf-8")
+            self.assertEqual(self._run(module, ["--root", str(root)]), 2)
+
+    def test_the_self_check_passes_and_says_what_it_does_not_prove(self) -> None:
+        """The CI gate must be green and must not read as an image closure proof."""
+        module = _load_tool_closure_module()
+        import io
+        from contextlib import redirect_stderr, redirect_stdout
+
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            self.assertEqual(module.main(["--self-check"]), 0)
+        self.assertIn("self-check OK", out.getvalue())
+        self.assertIn("not an image", err.getvalue())
+
+    def test_the_self_check_fails_when_a_tool_is_not_noticed(self) -> None:
+        """If the checker stops reporting a problem, the self-check must go red."""
+        module = _load_tool_closure_module()
+        import io
+        from contextlib import redirect_stderr, redirect_stdout
+
+        original = module._problem
+        module._problem = lambda name, root, path: []
+        out, err = io.StringIO(), io.StringIO()
+        try:
+            with redirect_stdout(out), redirect_stderr(err):
+                self.assertEqual(module.main(["--self-check"]), 1)
+        finally:
+            module._problem = original
+        self.assertIn("self-check failed", err.getvalue())
+
+    def test_a_host_root_is_reported_as_the_host_not_an_image(self) -> None:
+        module = _load_tool_closure_module()
+        self.assertTrue(module.describes_host_root(Path("/")))
+        with tempfile.TemporaryDirectory() as temporary:
+            self.assertFalse(module.describes_host_root(Path(temporary)))
+
+        import io
+        from contextlib import redirect_stderr, redirect_stdout
+
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            # Exit code depends on the runner's own tools; the note must not.
+            module.main(["--root", "/"])
+        self.assertIn("describes the host", err.getvalue())
 
 
 class ToolResolutionTests(unittest.TestCase):
@@ -709,6 +821,41 @@ class ProfilePathAdmissibilityTests(unittest.TestCase):
     def test_the_host_path_from_the_table_still_works(self) -> None:
         admissible, reason = admissible_executable(STEPS[0])
         self.assertTrue(admissible, reason)
+
+
+class SingleToolMapTests(unittest.TestCase):
+    """One logical tool, one path, the same answer in every consumer (#645)."""
+
+    def test_every_consumer_uses_the_same_set(self) -> None:
+        from wsm_install.agent import ALLOWED_PROGRAMS
+        from wsm_install.executor import ALLOWED_EXECUTABLES
+        from wsm_install.install_steps import TRUSTED_TOOLS
+        from wsm_install.verify import VERIFIERS
+
+        consumers = {
+            "planner": frozenset(TRUSTED_TOOLS.values()),
+            "agent": frozenset(ALLOWED_PROGRAMS),
+            "executor": frozenset(ALLOWED_EXECUTABLES),
+            "verifier": frozenset(VERIFIERS),
+        }
+        for name, actual in consumers.items():
+            with self.subTest(consumer=name):
+                self.assertEqual(actual, frozenset(EXECUTABLES), f"{name} drifted from the tool map")
+
+    def test_sgdisk_is_reachable_by_every_consumer(self) -> None:
+        from wsm_install.agent import ALLOWED_PROGRAMS
+        from wsm_install.executor import ALLOWED_EXECUTABLES
+        from wsm_install.verify import VERIFIERS
+
+        path = "/usr/sbin/sgdisk"
+        self.assertIn(path, ALLOWED_PROGRAMS)
+        self.assertIn(path, ALLOWED_EXECUTABLES)
+        self.assertIn(path, VERIFIERS)
+
+    def test_every_tool_names_the_package_that_owns_it(self) -> None:
+        for name in TOOLS:
+            with self.subTest(tool=name):
+                self.assertTrue(package(name).strip(), f"{name} has no owning package")
 
 
 if __name__ == "__main__":
