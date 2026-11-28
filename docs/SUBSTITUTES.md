@@ -1,57 +1,92 @@
-# Субститути WSM — публікацію дозволено власником 2026-11-28
+# Пакети WSM та substitute cache
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Стан: **OWNER_APPROVED / MANUAL_ONLY**
-- Workflow публікації: **увімкнений, запуск лише вручну**
-- Package/NAR export: **увімкнений; рішення щодо #367 прийняв власник, issue лишається відкритим**
-- Підписний ключ: **не створений і не збережений у CI**
-- Cuirass: **окремий build coordinator; не є автоматичним substitute server**
+- Власник дозволив публікацію власних WSM package outputs 2026-11-28.
+- Спільний явний tag namespace: `packages-*`.
+- H170 Free стартовий набір: `wsm-tools`, `linux-libre`, `mesa`.
+- GP107 NVIDIA firmware та proprietary NVIDIA 580.x до цього набору не входять.
+- Фактична збірка, NAR export, Release assets і Pages deployment мають бути підтверджені окремими Actions runs.
 
-## Що є в репозиторії
+## Два різні способи розповсюдження
 
-`scripts/narinfo_to_release_urls.py` — локальний конвертер URL у Guix narinfo. Він не створює ключі, не підписує дані, не збирає package closures і не публікує архіви.
+### Package archives
 
-`.github/workflows/substitutes.yml` та `.github/workflows/package-archives.yml` увімкнені 2026-11-28 рішенням власника. Обидва запускаються **лише вручну**, без тригерів на push чи тег; жоден із них не створює й не читає підписний ключ, крім `substitutes.yml`, який бере його з секрету і без нього падає.
+`.github/workflows/package-archives.yml` запускається через `workflow_dispatch`
+або push тега `packages-*`. Для першої цілі за замовчуванням збирається:
 
-## Рішення, яких бракує
+- `wsm-tools` — локальний WSM пакет із `wsm/packages/wsm.scm`;
+- `linux-libre` — upstream пакет із pinned офіційного Guix;
+- `mesa` — upstream пакет із pinned офіційного Guix.
 
-**1. Ліцензія та право на розповсюдження — issue #367.**
+Локальний пакет резолвиться явним Guile expression:
 
-Потрібне окреме рішення власника щодо суперечності між repository license declaration та Guix package metadata, а також щодо права розповсюджувати отримані package outputs/NARs. Поки issue #367 відкрите, не запускайте package archive workflow, не прикріплюйте NAR до Releases/Actions artifacts і не вмикайте substitute workflow.
+```sh
+guix time-machine -C channels.lock.scm -- build -L . \
+  -e '(@ (wsm packages wsm) wsm-tools)' --no-grafts
+```
 
-**2. Channel trust — issue #534 / Phase B.**
+Інші пакети резолвляться за іменем у тому самому locked Guix. Workflow експортує вибрані store paths у `.nar`, формує SHA-256 та зберігає їх як Actions artifact із 30-денним retention. За окремим `workflow_dispatch` цей archive можна прикріпити до вже створеного **draft** release. Tag-trigger створює artifact, але сам по собі не робить його Guix substitute і не підписує NAR.
 
-Потрібні owner-signed introduction/history, `.guix-authorizations`, публічний keyring та успішна перевірка звичайним `guix git authenticate` consumer. Не використовуйте `--disable-authentication`, вигаданий fingerprint або рухому гілку як production source.
+### Signed substitute cache
 
-**3. Endpoint і ключ.**
+`.github/workflows/substitutes.yml` також приймає `workflow_dispatch` або тег
+`packages-*`. Він збирає той самий H170 Free baseline набір, запускає
+`guix publish`, витягує фактичні NAR-архіви в локальний cache та публікує:
 
-Власник має зафіксувати українською в ADR:
-- точні URLs metadata та NAR assets;
-- хто генерує і зберігає private key, де він використовується, хто має доступ;
-- ротацію, відкликання та процедуру компрометації;
-- дозволений trigger (manual/tag/release) та хто його запускає;
-- retention, доступність, ліміти й процес видалення старих assets.
+- стиснені NAR як assets GitHub Release `substitutes`;
+- підписані narinfo, `nix-cache-info` і `signing-key.pub` через GitHub Pages.
 
-GitHub Releases та Pages були названі допустимими hosting families, але це не затверджує конкретний endpoint, signing key custody або право розповсюджувати WSM builds.
+Публікація працює тільки із секретом Actions `GUIX_SIGNING_KEY`. Workflow
+відмовляється продовжувати без нього; непідписаний substitute cache не
+створюється. Приватний ключ генерується й зберігається власником, ніколи не
+комітиться до репозиторію або не виводиться в лог.
 
-## Поточна схема — лише варіант для майбутнього рішення
+На машині, де встановлено Guix:
 
-Можлива архітектура після owner approval: підписані Guix narinfo як metadata + NAR archives як окремі immutable assets. Вона не повинна запускатися автоматично від push у `main`.
+```sh
+sudo guix archive --generate-key
+gh secret set GUIX_SIGNING_KEY --repo juv4uk/wsm-desktop \
+  < /etc/guix/signing-key.sec
+```
 
-Підпис Guix narinfo охоплює ідентичність store object (StorePath, NarHash, NarSize, References та Deriver, якщо присутній), а транспортний URL можна переписати лише якщо це підтверджено конкретним pinned Guix форматом і тестами. Converter має зберігати всі підписані поля байт-у-байт та відмовлятися від неоднозначних/multi-URL форматів, які він не підтримує.
+## Дві окремі довіри
 
-До окремої перевірки pinned Guix не припускайте, що compression layout, ім'я NAR asset, location `signing-key.pub` або cache warm-up збігаються з поточним upstream manual.
+1. Guix narinfo підписується cache key. Користувач має явно додати відповідний
+   публічний ключ до trust configuration свого Guix client.
+2. `guix git authenticate` перевіряє історію самого WSM channel. У WSM channel
+   поки немає owner-signed introduction, `.guix-authorizations` і keyring
+   branch. Поточні build workflows беруть WSM module з exact GitHub checkout
+   commit і використовують окремий pinned official Guix lock; вони не
+   заявляють, що WSM channel authenticated.
 
-## Що дозволено робити до рішення
+## Ліцензія та апаратні межі
 
-- статично перевіряти Scheme/Python код, YAML і тестові fixtures;
-- звіряти очікуваний формат із pinned Guix source;
-- складати release manifest без package output binaries;
-- документувати trust, ownership, provenance та acceptance gates.
+Правовласник дозволив публікацію власних WSM package outputs у WSM-owned cache.
+Guix metadata для WSM-owned `wsm-tools` та live helper packages посилається
+на фактичну ВОЛЬНІСТЬ через `file://LICENSE`, а не помилково заявляє GPL-3+.
+Це вузький дозвіл на власні outputs; він не є твердженням про OSI або GNU FSDG
+і не означає, що WSM ліцензію прийнято upstream GNU Guix.
 
-Не створюйте signing keys, не додавайте secrets, не запускайте package build/export, не створюйте GitHub Release assets, не викладайте Pages metadata і не вмикайте workflow guards до явного owner approval українською.
+Початковий набір — Free baseline для x86_64 з upstream Linux-libre/Mesa та
+WSM hardware tools. Він **ще не є перевіреним профілем GA-H170-Gaming 3** і
+не доводить успішний graphics runtime на цій машині. Профіль сумісності
+з'явиться лише після native Linux hardware report та окремих функціональних
+доказів.
+
+NVIDIA GP107 firmware і proprietary NVIDIA 580.x не включаються та не
+перерозповсюджуються цими workflow. Вони мають окремі third-party license,
+firmware provenance та runtime acceptance вимоги; власний дозвіл на WSM
+outputs на них не поширюється. Free та Compatibility boot paths не
+змішуються.
 
 ## Статус
 
-Жоден substitute cache не опублікований цією роботою. Наявність workflow чи конвертера не означає, що канал автентифіковано, package build пройшов або бінарний output дозволено розповсюджувати.
+PR #775 увімкнув archive workflow, #778 додав явний tag-trigger для нього,
+а #771 увімкнув substitute workflow. Ця гілка усуває помилки локального
+package lookup і NAR cache warm-up та синхронізує обидва workflows під один
+H170 Free baseline.
+
+До успішного exact-head CI та першого успішного Actions run жоден NAR не
+вважається зібраним або опублікованим. До read-back перевірки Release assets
+і Pages metadata не можна заявляти, що cache доступний користувачам.
