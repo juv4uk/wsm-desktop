@@ -69,12 +69,16 @@ def resolve_trusted_tool(
     consulted.
     """
     if not isinstance(name, str) or name not in TRUSTED_TOOLS:
-        raise TrustedToolResolutionError(f"tool is not allowlisted: {name!r}")
+        raise TrustedToolResolutionError(
+            f"tool is not allowlisted: {name!r}",
+            code="tool.unknown",
+        )
 
     root = Path(profile_root)
     if not root.is_absolute():
         raise TrustedToolResolutionError(
-            f"Guix system profile root must be absolute: {str(root)!r}"
+            f"Guix system profile root must be absolute: {str(root)!r}",
+            code="tool.profile-root",
         )
 
     basename = TRUSTED_TOOLS[name]
@@ -88,10 +92,15 @@ def resolve_trusted_tool(
         if executable:
             matches.append(candidate)
 
-    if len(matches) != 1:
+    if not matches:
         raise TrustedToolResolutionError(
-            f"expected exactly one executable for {name!r} under "
-            f"{str(root)!r}/bin or sbin; found {len(matches)}"
+            f"no executable for {name!r} under {str(root)!r}/bin or sbin",
+            code="tool.missing",
+        )
+    if len(matches) > 1:
+        raise TrustedToolResolutionError(
+            f"multiple executables for {name!r} under {str(root)!r}/bin and sbin",
+            code="tool.ambiguous",
         )
     return str(matches[0])
 
