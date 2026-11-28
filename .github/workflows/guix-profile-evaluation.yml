@@ -15,6 +15,7 @@ on:
       - "wsm/**/*.scm"
       - "Makefile"
       - "scripts/build_iso.sh"
+      - "scripts/check-wsm-channel-set.sh"
   workflow_dispatch:
 
 permissions:
@@ -54,8 +55,15 @@ jobs:
       - name: Evaluate pinned Guix profiles with local WSM source modules
         run: |
           set -euo pipefail
-          make check-guix-eval
-          echo "WSM_CHANNEL_AUTHENTICATION=NOT_TESTED" | tee -a "$GITHUB_STEP_SUMMARY"
+          LOG="$RUNNER_TEMP/guix-profile-evaluation.log"
+          if make check-guix-eval >"$LOG" 2>&1; then
+            cat "$LOG"
+            echo "WSM_CHANNEL_AUTHENTICATION=NOT_TESTED" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            result=$?
+            cat "$LOG"
+            exit "$result"
+          fi
 
       - name: Save Guix checkout cache
         if: success() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
@@ -69,6 +77,13 @@ jobs:
         run: |
           {
             echo "### Guix profile evaluation failed"
-            echo "The first failing command and its exact output are in the preceding step logs."
+            echo "Commit: $GITHUB_SHA"
             echo "WSM_CHANNEL_AUTHENTICATION=NOT_TESTED"
+            if [ -f "$RUNNER_TEMP/guix-profile-evaluation.log" ]; then
+              echo '```text'
+              tail -100 "$RUNNER_TEMP/guix-profile-evaluation.log"
+              echo '```'
+            else
+              echo "The evaluation log was not created."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
