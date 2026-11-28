@@ -17,6 +17,9 @@ from wsm_install.executor import (  # noqa: E402
     execute,
 )
 from wsm_install.install_steps import TRUSTED_TOOLS, Step  # noqa: E402
+import importlib.util  # noqa: E402
+import tempfile  # noqa: E402
+
 from wsm_install.admission import admit  # noqa: E402
 from wsm_install.disk_identity import (  # noqa: E402
     DiskIdentity,
@@ -568,6 +571,68 @@ class CoveredStepTests(unittest.TestCase):
         ]
         report = self._report(plan)
         self.assertEqual(report.steps[0].status, "refused")
+
+
+def _load_tool_closure_module():
+    path = ROOT / "scripts" / "check_tool_closure.py"
+    spec = importlib.util.spec_from_file_location("check_tool_closure", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class ToolClosureTests(unittest.TestCase):
+    """A constant is a claim; this turns it into an observation under a given root."""
+
+    def _populate(self, root: Path, skip: str | None = None, mode: int = 0o755) -> None:
+        for name, path in TRUSTED_TOOLS.items():
+            if name == skip:
+                continue
+            target = root / path.lstrip("/")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("#!/bin/sh\n", encoding="utf-8")
+            target.chmod(mode)
+
+    def test_a_complete_root_reports_no_problems(self) -> None:
+        module = _load_tool_closure_module()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._populate(root)
+            self.assertEqual(module.check(root), [])
+
+    def test_a_missing_tool_is_named(self) -> None:
+        module = _load_tool_closure_module()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._populate(root, skip="sgdisk")
+            problems = module.check(root)
+            self.assertEqual(len(problems), 1)
+            self.assertEqual(problems[0][0], "sgdisk")
+            self.assertIn("does not exist", problems[0][1])
+
+    def test_a_non_executable_tool_is_named(self) -> None:
+        module = _load_tool_closure_module()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._populate(root, skip="mount")
+            target = root / TRUSTED_TOOLS["mount"].lstrip("/")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("not a program\n", encoding="utf-8")
+            target.chmod(0o644)
+            problems = module.check(root)
+            self.assertEqual([name for name, _ in problems], ["mount"])
+            self.assertIn("not executable", problems[0][1])
+
+    def test_the_expected_tools_can_be_listed_without_checking_anything(self) -> None:
+        module = _load_tool_closure_module()
+        import io
+        from contextlib import redirect_stdout
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            self.assertEqual(module.main(["--list"]), 0)
+        lines = [line for line in buffer.getvalue().splitlines() if line.strip()]
+        self.assertEqual(len(lines), len(TRUSTED_TOOLS))
 
 
 if __name__ == "__main__":
