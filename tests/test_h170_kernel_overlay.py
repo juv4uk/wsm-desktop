@@ -13,6 +13,12 @@ MATRIX = ROOT / "docs" / "hardware" / "H170-FIRMWARE-MATRIX.md"
 
 
 class H170LinuxLibreOverlayTests(unittest.TestCase):
+    @staticmethod
+    def _yaml(text: str) -> dict:
+        import yaml
+
+        return yaml.load(text, Loader=yaml.BaseLoader)
+
     def test_patch_is_the_upstream_gp107_atomic_modesetting_fix(self) -> None:
         patch = PATCH.read_text(encoding="utf-8")
         self.assertIn(
@@ -59,10 +65,20 @@ class H170LinuxLibreOverlayTests(unittest.TestCase):
         workflow = (ROOT / ".github" / "workflows" / "h170-gp107-release.yml").read_text(
             encoding="utf-8"
         )
-        self.assertIn('publish/h170-gp107/**', workflow)
-        self.assertIn('fetch-depth: 0', workflow)
-        self.assertIn('GITHUB_EVENT_NAME" != "push', workflow)
-        self.assertIn('git merge-base --is-ancestor "$GITHUB_SHA" origin/main', workflow)
+        self.assertEqual(
+            self._yaml(workflow)["on"]["push"]["branches"],
+            ["main"],
+        )
+        self.assertTrue(
+            {
+                ".github/workflows/h170-gp107-release.yml",
+                "channels.lock.scm",
+                "wsm/packages/linux-libre.scm",
+                "wsm/packages/patches/linux-libre-h170-nouveau-atomic.patch",
+            }.issubset(set(self._yaml(workflow)["on"]["push"]["paths"]))
+        )
+        self.assertIn("Checkout reviewed main source commit", workflow)
+        self.assertNotIn("publish/h170-gp107/**", workflow)
         self.assertNotIn("workflow_dispatch:", workflow)
         self.assertIn('NAR_ARCHIVE_SIZE" -ge 2000000000', workflow)
         self.assertIn("PACKAGE_EXPR='(@ (wsm packages linux-libre) linux-libre-h170)'", workflow)
