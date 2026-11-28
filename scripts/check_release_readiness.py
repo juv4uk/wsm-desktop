@@ -236,7 +236,7 @@ def problems(directory: Path, metadata_only: bool = False) -> list[str]:
             sidecar = directory / "ISO-CHECKSUMS.sha256"
             if sidecar.is_file() and not sidecar.is_symlink():
                 expected_sidecar = "".join(
-                    f"{sha256_of(directory / part)}  {part}\\n" for part in parts
+                    f"{sha256_of(directory / part)}  {part}\n" for part in parts
                 )
                 try:
                     actual_sidecar = sidecar.read_text(encoding="utf-8")
