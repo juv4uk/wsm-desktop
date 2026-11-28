@@ -130,3 +130,32 @@ jobs:
 
       - uses: actions/deploy-pages@v4
         id: pages
+
+      # Кожен workflow у цьому репозиторії лишає причину збою на коміті: логи задачі
+      # потребують авторизації, а коментар читається інструментами. Пастка тут
+      # конкретна — збірка кешу падає найчастіше на відсутньому ключі підпису або на
+      # ліміті Pages, і без цього кроку обидва виглядають як «щось зламалося».
+      - name: Повідомити причину збою
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          BODY=$(mktemp)
+          {
+            echo "### Субститути каналу: публікацію не завершено"
+            echo ""
+            echo "Commit: \`$GITHUB_SHA\`"
+            echo ""
+            echo "Найчастіші причини: немає \`GUIIX_SIGNING_KEY\`, збірка пакета на"
+            echo "locked-каналах не пройшла, або кеш перевищив ліміти Pages."
+            echo ""
+            echo "#### вміст каталогу сайту"
+            echo '```'
+            ls -la ./site 2>&1 || true
+            du -sh ./site 2>&1 || true
+            echo '```'
+            df -h / || true
+          } > "$BODY"
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
+            -F body=@"$BODY" >/dev/null && echo "причину записано коментарем"
