@@ -1,0 +1,116 @@
+# SPDX-License-Identifier: LicenseRef-Volnist
+name: Публікація артефактів каналу
+
+# Публікує зібрані артефакти власних пакетів каналу без ключа підпису.
+#
+# Запуск: push у гілку, що починається з `publish/`, або вручну.
+# Навмисно НЕ на `main`: артефакт, що з'являється від кожного коміту в main, — це
+# початок неконтрольованого обігу бінарників. Гілка `publish/*` — явний намір.
+#
+# Рішення власника: docs/decisions/0010-publish-own-packages.md.
+# Чому без ключа: `guix pack` не підписує, і це єдиний шлях, який не потребує
+# ключа підпису, якого в репозиторії немає.
+
+on:
+  workflow_dispatch:
+    inputs:
+      packages:
+        description: "Пакети через пробіл (типово: wsm-tools)"
+        required: false
+        default: "wsm-tools"
+  push:
+    branches:
+      - "publish/**"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Зібрати, запакувати, опублікувати
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Встановити Guix
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y guix
+          sudo systemctl enable --now guix-daemon.service
+          guix --version
+
+      - name: Зібрати пакети із зафіксованого каналу
+        id: build
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          : > artifacts/store-paths.txt
+          for package in ${{ inputs.packages || 'wsm-tools' }}; do
+            case "$package" in
+              *[!A-Za-z0-9._+-]*) echo "refusing odd package name: $package" >&2; exit 1 ;;
+            esac
+            # `guix build` друкує шлях у stdout, але евалюація цього репозиторію
+            # додає туди ж діагностичний рядок. Беремо останній рядок і
+            # перевіряємо форму, інакше наступний крок отримає "unknown package".
+            build_output="$(guix time-machine -C channels.lock.scm -- \
+                            build -L . "$package" --no-grafts)"
+            store_path="$(printf '%s\n' "$build_output" | tail -n 1)"
+            case "$store_path" in
+              /gnu/store/*) ;;
+              *) echo "refusing non-store output for $package: $store_path" >&2; exit 1 ;;
+            esac
+            printf '%s\t%s\n' "$package" "$store_path" >> artifacts/store-paths.txt
+            echo "WSM_PACKAGE_BUILT=$package $store_path" >> "$GITHUB_STEP_SUMMARY"
+          done
+          cat artifacts/store-paths.txt
+
+      - name: Запакувати кожен пакет у tarball (без ключа)
+        run: |
+          set -euo pipefail
+          while IFS="$(printf '\t')" read -r package store_path; do
+            guix pack -f tarball -C zstd "$store_path"
+            archive="$(ls -1t *.tar.zst | head -1)"
+            mv "$archive" "artifacts/${package}.tar.zst"
+            ( cd artifacts && sha256sum "${package}.tar.zst" > "${package}.tar.zst.sha256" )
+            ls -l "artifacts/${package}.tar.zst"
+          done < artifacts/store-paths.txt
+          cat artifacts/*.sha256
+
+      - name: Зберегти як artifact прогону
+        uses: actions/upload-artifact@v4
+        with:
+          name: wsm-channel-artifacts
+          path: |
+            artifacts/*.tar.zst
+            artifacts/*.tar.zst.sha256
+            artifacts/store-paths.txt
+          if-no-files-found: error
+
+      - name: Прикріпити до чернетки релізу, якщо вона існує
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 20 \
+                  --json tagName,isDraft --jq '.[] | select(.isDraft) | .tagName' | head -1)"
+          if [ -z "$tag" ]; then
+            echo "Чернетки релізу немає — артефакти лишилися в artifacts прогону."
+            echo "### Чернетки релізу немає" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          gh release upload "$tag" --repo "$GITHUB_REPOSITORY" \
+            artifacts/*.tar.zst artifacts/*.tar.zst.sha256 --clobber
+          echo "WSM_PUBLISHED_TO_DRAFT=$tag" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Повідомити про збій
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          echo "::error::Публікацію артефактів зупинено. Дивіться крок вище."
+          echo "### Збій публікації" >> "$GITHUB_STEP_SUMMARY"
+          gh api "repos/${GITHUB_REPOSITORY}/commits/$GITHUB_SHA/comments" \
+            -f body="Публікація артефактів не вдалася: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}." \
+            >/dev/null
