@@ -131,7 +131,7 @@ begin
     Destination.Add(Name, Value.Clone);
 end;
 
-function FunctionalTestsFor(Device: TJSONObject): TJSONArray;
+procedure AppendFunctionalTests(Target: TJSONArray; Device: TJSONObject);
 var
   TestsData, ItemData, RefData: TJSONData;
   Tests, Refs: TJSONArray;
@@ -139,7 +139,8 @@ var
   I: Integer;
   Status: string;
 begin
-  Result := TJSONArray.Create;
+  { Emit objects directly into the subsystem array. Do not add a per-device
+    array as a child: the classification/2 schema requires a flat object list. }
   TestsData := Device.Find('functional_tests');
   if not (TestsData is TJSONArray) then
     Exit;
@@ -176,17 +177,8 @@ begin
       Refs := TJSONArray(RefData);
       ResultItem.Add('evidence_refs', Refs.Clone);
     end;
-    Result.Add(ResultItem);
+    Target.Add(ResultItem);
   end;
-end;
-
-procedure AppendFunctionalTests(Target, Source: TJSONArray);
-var
-  I: Integer;
-begin
-  { The schema stores one object per test, not one nested array per device. }
-  for I := 0 to Source.Count - 1 do
-    Target.Add(Source.Items[I].Clone);
 end;
 
 function DeviceEvidenceFor(Device: TJSONObject): TJSONObject;
@@ -244,7 +236,6 @@ var
   Device: TJSONObject;
   State, DeviceId: string;
   DeviceIds, Reasons, EvidenceStates, FunctionalTests, DeviceEvidence: TJSONArray;
-  PerDeviceTests: TJSONArray;
   AllGood, AnyFailed: Boolean;
   Count: Integer;
 begin
@@ -272,12 +263,7 @@ begin
     DeviceIds.Add(DeviceId);
     EvidenceStates.Add(DeviceId + '=' + State);
     Reasons.Add(DeviceId + ': ' + State);
-    PerDeviceTests := FunctionalTestsFor(Device);
-    try
-      AppendFunctionalTests(FunctionalTests, PerDeviceTests);
-    finally
-      PerDeviceTests.Free;
-    end;
+    AppendFunctionalTests(FunctionalTests, Device);
     DeviceEvidence.Add(DeviceEvidenceFor(Device));
 
     if not ((State = 'driver-bound-not-tested') or (State = 'candidate-only')) then
