@@ -44,6 +44,21 @@ class InstallerMarkerTests(unittest.TestCase):
         workflow = (ROOT / ".github" / "workflows" / "release-minimal-live.yml").read_text(encoding="utf-8")
         self.assertIn('"installer":"pass"', workflow)
 
+class SelfcheckEnvironmentTests(unittest.TestCase):
+    """A missing python3 on the daemon PATH would look like a broken installer."""
+
+    def setUp(self) -> None:
+        self.profile = (ROOT / "systems" / "live-minimal.scm").read_text(encoding="utf-8")
+
+    def test_the_selfcheck_pins_its_own_path(self) -> None:
+        self.assertIn('(setenv "PATH"', self.profile)
+        self.assertIn("/run/current-system/profile/bin", self.profile)
+
+    def test_the_path_is_set_before_the_entrypoint_runs(self) -> None:
+        self.assertLess(self.profile.index('(setenv "PATH"'),
+                        self.profile.index("/run/current-system/profile/bin/wsm-install"))
+
+
 
 if __name__ == "__main__":
     unittest.main()

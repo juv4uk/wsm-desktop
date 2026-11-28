@@ -73,6 +73,12 @@
            (requirement '(user-processes))
            (respawn? #f)
            (start #~(lambda ()
+                      ;; The wrapper runs `exec python3`, so the daemon's PATH
+                      ;; decides whether the installer can start at all. shepherd
+                      ;; does not guarantee the system profile on PATH, and a
+                      ;; missing python3 would look like a broken installer.
+                      (setenv "PATH"
+                              "/run/current-system/profile/bin:/run/current-system/bin:/usr/bin:/bin")
                       (define (announce text)
                         (catch #t
                           (lambda ()
