@@ -85,16 +85,28 @@ jobs:
           GUIX_SIGNING_PUBLIC_KEY: ${{ vars.GUIX_SIGNING_PUBLIC_KEY }}
         run: |
           set -euo pipefail
+          # Без ключа кеш усе одно корисний: офіційні пакети Guix зберігають
+          # СВІЙ підпис від ci.guix.gnu.org, і клієнт їх приймає. Наші власні
+          # пакети тоді лишаються непідписаними — клієнт їх пропустить і
+          # збере з джерел, тобто гірше, але не зламано.
+          #
+          # Тому відсутність ключа — це режим роботи, а не привід зупиняти все.
+          # Жорсткий вихід тут блокував публікацію офіційних субститутів, яким
+          # підпис не потрібен узагалі.
           if [ -z "${GUIX_SIGNING_KEY:-}" ] || [ -z "${GUIX_SIGNING_PUBLIC_KEY:-}" ]; then
             {
-              echo "::error::Missing GUIX signing key material."
-              echo "Create the key pair on the owner-controlled machine with:"
-              echo "Generate the signing-key pair locally on the owner-controlled machine; then configure its private and public files as the repository secret and variable described below."
-              echo "Then configure repository secret GUIX_SIGNING_KEY from /etc/guix/signing-key.sec"
-              echo "and repository variable GUIX_SIGNING_PUBLIC_KEY from /etc/guix/signing-key.pub."
+              echo "::warning::Немає ключа підпису — режим дзеркала без підпису."
+              echo "WSM_SUBSTITUTES_SIGNED=false"
+              echo "Офіційні субститути Guix лишаються чинними: їхній підпис від"
+              echo "ci.guix.gnu.org зберігається. Наші власні пакети в цьому прогоні"
+              echo "непідписані, і клієнт збереже їх із джерел."
+              echo "Щоб підписувати: python3 scripts/guix_sign.py keygen, далі"
+              echo "секрет GUIX_SIGNING_KEY і змінна GUIX_SIGNING_PUBLIC_KEY."
             } | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 1
+            echo "WSM_SUBSTITUTES_SIGNED=false" >> "$GITHUB_ENV"
+            exit 0
           fi
+          echo "WSM_SUBSTITUTES_SIGNED=true" >> "$GITHUB_ENV"
           sudo install -d -m 0700 /etc/guix
           printf '%s\n' "$GUIX_SIGNING_KEY" | sudo tee /etc/guix/signing-key.sec >/dev/null
           printf '%s\n' "$GUIX_SIGNING_PUBLIC_KEY" | sudo tee /etc/guix/signing-key.pub >/dev/null

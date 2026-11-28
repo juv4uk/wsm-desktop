@@ -72,7 +72,13 @@ class SubstituteWorkflowTests(unittest.TestCase):
         step = self.step("Validate owner-controlled substitute signing keys")
         self.assertIn("secrets.GUIX_SIGNING_KEY", str(step))
         self.assertIn("vars.GUIX_SIGNING_PUBLIC_KEY", str(step))
-        self.assertIn("exit 1", step["run"])
+        # A missing key no longer stops the run: official Guix substitutes keep
+        # their own signature from ci.guix.gnu.org and stay usable, so blocking
+        # the whole cache on our key wasted the run. The mode is declared
+        # instead, so nobody mistakes an unsigned cache for a signed one.
+        self.assertIn("WSM_SUBSTITUTES_SIGNED=false", step["run"])
+        self.assertIn("WSM_SUBSTITUTES_SIGNED=true", step["run"])
+        self.assertNotIn("exit 1", step["run"])
         self.assertNotIn("guix archive --generate-key", step["run"])
 
     def test_guix_publish_uses_the_explicit_key_pair_and_cache(self) -> None:
