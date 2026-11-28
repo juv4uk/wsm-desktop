@@ -6,14 +6,16 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+import wsm_install.install_steps as install_steps_module  # noqa: E402
 from wsm_install.install_steps import (  # noqa: E402
     backend_command,
     device_for,
-    plan_steps,
+    plan_steps as _plan_steps,
     render,
     TRUSTED_TOOLS,
 )
@@ -23,6 +25,19 @@ from wsm_install.partition import Disk, Layout, Refused, plan  # noqa: E402
 def tool(step) -> str:
     """Basename of the command: paths are absolute, names are what we assert on."""
     return step.command[0].rsplit("/", 1)[-1]
+
+def plan_steps(layout, filesystem="ext4", target="/mnt", hostname=None):
+    """Inject a synthetic absolute Guix-profile path; resolver behavior is tested separately."""
+    def synthetic_resolver(name: str) -> str:
+        return f"/run/current-system/profile/bin/{TRUSTED_TOOLS[name]}"
+
+    with patch.object(
+        install_steps_module,
+        "resolve_trusted_tool",
+        side_effect=synthetic_resolver,
+    ):
+        return _plan_steps(layout, filesystem, target, hostname)
+
 
 GIB = 1024 ** 3
 
@@ -73,7 +88,7 @@ class OrderingTests(unittest.TestCase):
         commands = current.commands()
         steps = plan_steps(current)[:len(commands)]
         expected = [
-            [TRUSTED_TOOLS["sgdisk"], *command[1:]]
+            [f"/run/current-system/profile/bin/{TRUSTED_TOOLS['sgdisk']}", *command[1:]]
             for command in commands
         ]
         self.assertEqual([step.command for step in steps], expected)
@@ -132,10 +147,19 @@ class PathHijackTests(unittest.TestCase):
                         f"{step.command[0]!r} would be resolved through PATH",
                     )
 
-    def test_no_command_is_a_bare_tool_name(self) -> None:
+    def test_no_command_is_a_bare_tool_name_or_fhs_path(self) -> None:
         bare = {"sgdisk", "partprobe", "udevadm", "mount", "mkdir", "mkfs.ext4", "mkfs.fat"}
         for step in plan_steps(layout()):
             self.assertNotIn(step.command[0], bare)
+            self.assertIn(
+                Path(step.command[0]).parent,
+                {
+                    Path("/run/current-system/profile/bin"),
+                    Path("/run/current-system/profile/sbin"),
+                },
+            )
+            self.assertNotIn("/usr/bin/", step.command[0])
+            self.assertNotIn("/usr/sbin/", step.command[0])
 
 
 class FilesystemChoiceTests(unittest.TestCase):
