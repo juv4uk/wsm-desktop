@@ -6,6 +6,7 @@
 - Субститути для пакетів каналу: [SUBSTITUTES.md](SUBSTITUTES.md) — статичний кеш без окремого хоста.
 - Збірка каналу всередині Guix: [CUIRASS.md](CUIRASS.md) — окремий конвеєр, який дає substitutes і ловить поломку профілю до прогону Actions.
 - Перший hardware target: [H170 firmware matrix](hardware/H170-FIRMWARE-MATRIX.md), [Free manifest](../drivers/profiles/h170-free.json), [Compatibility manifest](../drivers/profiles/h170-compatibility.json).
+- Upstream-only package roots for H170 Free: [h170-free-upstream.scm](../manifests/h170-free-upstream.scm); candidate only, no binary publication.
 - Стан документа: channel skeleton; криптографічний trust bootstrap ще не виконано.
 
 ## Призначення
@@ -40,6 +41,39 @@ Release target — одна конкретна платформа власник
 - Для GP107 не заявляти Free 3D/compute без потрібної NVIDIA FECS/GPCCS firmware; базовий display/KMS перевіряти окремо.
 - Для Intel HD 530 відокремлювати базовий i915 graphics від DMC-backed runtime power management та інших optional capabilities.
 - CPU microcode, firmware і кожна периферійна функція мають окремий evidence state.
+
+### Upstream-only H170 Free package manifest — candidate
+
+Для першої перевірки upstream-пакетів створено окремий Scheme manifest: [manifests/h170-free-upstream.scm](../manifests/h170-free-upstream.scm). Це **список пакетних roots**, а не hardware profile, operating-system declaration чи доказ роботи обладнання.
+
+Manifest використовує лише визначення офіційного Guix commit 4e5195be20d9b124df8a8bb69213412236e4668e:
+
+| Package root | Версія в pinned Guix | Навіщо входить |
+|---|---:|---|
+| linux-libre | 7.3.5 | ядро для Free candidate; stock x86-64 configuration |
+| mesa | 26.2.6 | upstream OpenGL/Vulkan stack; pinned x86-64 recipe вмикає Nouveau Vulkan backend |
+| intel-vaapi-driver | 2.4.1 | кандидат VA-API для Intel Gen graphics; firmware-backed функції не включені |
+| gptfdisk | 1.0.10 | GPT partition tools, включно з sgdisk |
+| parted | 3.7 | partition table toolchain |
+| dosfstools | 4.2 | mkfs.fat та fsck.fat |
+| e2fsprogs | 1.47.2 | ext4 tools, включно з mkfs.ext4 |
+| usbutils | 018 | пасивна інвентаризація USB |
+| alsa-utils | 1.2.16 | ALSA userspace utilities |
+
+Проверка метаданих та dry-run виконується командою:
+
+    guix time-machine -C channels.lock.scm -- build --system=x86_64-linux --manifest=manifests/h170-free-upstream.scm --dry-run
+
+Це оцінює package definitions та derivation graph; воно **не будує** пакети, не створює ISO, не виконує GPU runtime probe і не змінює фізичні диски. Те саме джерело використовується Cuirass custom job h170-free-upstream-packages, який формує дев’ять package derivation jobs. Реальний Cuirass scheduler/job run залишається NOT_RUN до owner-signed Phase B і розгортання окремого хоста.
+
+Межі цього набору:
+- Немає WSM-owned wsm-tools чи інших WSM package recipes; їхній distribution gate #367 залишається відкритим.
+- Немає NVIDIA 580.x, NVIDIA FECS/GPCCS, linux-firmware, Intel DMC/GuC/HuC або Intel microcode.
+- Хоча pinned Mesa recipe на x86-64 включає nouveau Vulkan backend, GP107 3D/compute не заявляється без окремого дозволеного firmware path; H170 GP107 runtime/display лишається not-assessed.
+- i915/Intel HD 530 basic graphics, VA-API, firmware-backed runtime power management та HDMI/audio мають окремі acceptance gates.
+- Наявність package root або успішний Guix build не створює native Linux hwcheck evidence і не дозволяє створити profiles/hardware/gigabyte/ga-h170-gaming3.
+
+Package outputs поки не експортуються в NAR, GitHub Release assets чи substitute server. Workflow package-archives лишається fail-closed до рішення #367, завершення channel trust bootstrap та окремого рішення про endpoints і підписні ключі.
 
 ### H170 Compatibility — лише явний opt-in
 
