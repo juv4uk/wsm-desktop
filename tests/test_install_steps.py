@@ -35,6 +35,7 @@ for _index, (_name, _binary) in enumerate(TRUSTED_TOOLS.items()):
     _executable = _PROFILE_ROOT / _directory / _binary
     _executable.parent.mkdir(parents=True, exist_ok=True)
     _executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    assert _executable.read_bytes() == b"#!/bin/sh\nexit 0\n"
     _executable.chmod(0o755)
 
 
