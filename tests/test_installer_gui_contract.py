@@ -70,8 +70,8 @@ class InstallerGuiContractTests(unittest.TestCase):
         self.assertIn("shell -L . -f wsm/packages/installer.scm", target)
         self.assertIn("env -u PYTHONPATH", target)
         self.assertIn("wsm-installer --smoke-test", target)
-        self.assertIn('\"$${QML_IMPORT_PATH}\"', target)
-        self.assertIn('\"$${QT_PLUGIN_PATH}\"', target)
+        self.assertIn("printenv QML_IMPORT_PATH | grep -q .", target)
+        self.assertIn("printenv QT_PLUGIN_PATH | grep -q .", target)
         self.assertIn("tests/guix/installer_navigation.py", target)
         self.assertNotIn("PYTHONPATH=. QT_QPA_PLATFORM=offscreen python3 -m wsm_installer --smoke-test", target)
 
