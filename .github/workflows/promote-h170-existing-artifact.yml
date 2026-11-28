@@ -101,13 +101,13 @@ jobs:
           H170 package workflow run $ARTIFACT_RUN. The archive was built from source
           commit $SOURCE_COMMIT and the pinned official GNU Guix channel.
 
-          - Manifest: `drivers/profiles/h170-free-packages.scm` (11 upstream roots)
-          - Locked Guix commit: `4e5195be20d9b124df8a8bb69213412236e4668e`
-          - Archive: `$ARCHIVE`
+          - Manifest: drivers/profiles/h170-free-packages.scm (11 upstream roots)
+          - Locked Guix commit: 4e5195be20d9b124df8a8bb69213412236e4668e
+          - Archive: $ARCHIVE
           - Archive SHA-256: `$ARCHIVE_SHA256`
 
-          Verify `SHA256SUMS` before use. Test the compressed archive with
-          `zstd -t $ARCHIVE`.
+          Verify SHA256SUMS before use. Test the compressed archive with
+          zstd -t $ARCHIVE.
 
           This is a package bundle, not a substitute cache. It does not include
           WSM-owned tools, Python runtime, Nonguix, proprietary NVIDIA drivers,
