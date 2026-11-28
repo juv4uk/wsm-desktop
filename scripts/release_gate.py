@@ -207,8 +207,16 @@ def check_image(iso: Path | None, boot: bool) -> dict[str, str]:
     except OSError as exc:
         return criterion("image", "fail", f"cannot hash selected ISO: {exc}")
     if published_as_parts:
-        # The verdict's digest belongs to the joined image, not to this part.
-        actual_sha256 = payload.get("artifact_sha256")
+        # A part cannot be hashed into the image digest, so this criterion
+        # cannot be decided from the part alone. It used to assign the payload
+        # digest to `actual_sha256` and then compare it with itself, which can
+        # never fail - a check that always passes is worse than no check,
+        # because it is counted as evidence.
+        return criterion(
+            "image", "not-run",
+            "published as parts: the image digest is verified by "
+            "verify_live_release.py after joining, not here",
+        )
     if payload.get("artifact_sha256") != actual_sha256:
         return criterion(
             "image",

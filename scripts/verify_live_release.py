@@ -258,9 +258,21 @@ def join_parts(parts: list[Path], destination: Path) -> Path:
     nobody performs. Streaming keeps memory flat regardless of image size.
     """
     ordered = sorted(parts)
-    names = [path.name for path in ordered]
-    if names != sorted(names):
-        raise ValueError(f"parts are not in lexical order: {names}")
+    # Sorting already happened, so comparing the names with their own sort
+    # proved nothing. What actually matters is that the sequence is contiguous:
+    # part000, part002 is a set that would concatenate into a corrupt image.
+    suffixes = []
+    for path in ordered:
+        marker = path.name.rpartition(".part")[2]
+        if not marker.isdigit():
+            raise ValueError(f"part name has no numeric suffix: {path.name}")
+        suffixes.append(int(marker))
+    expected = list(range(suffixes[0], suffixes[0] + len(suffixes)))
+    if suffixes != expected:
+        raise ValueError(f"parts are not contiguous: {[p.name for p in ordered]}")
+    widths = {len(path.name.rpartition(".part")[2]) for path in ordered}
+    if len(widths) != 1:
+        raise ValueError(f"parts mix zero-padding widths: {[p.name for p in ordered]}")
     with destination.open("wb") as sink:
         for part in ordered:
             with part.open("rb") as source:
@@ -328,17 +340,14 @@ def main(argv: list[str] | None = None) -> int:
         if not parts:
             print(f"verify-live-release: no such file: {iso}", file=sys.stderr)
             return 2
-        with tempfile.TemporaryDirectory() as temporary:
-            joined = join_parts(parts, Path(temporary) / "reassembled.iso")
-            # Copy out of the temporary directory so the checks below can use it
-            # after the context manager exits.
-            reassembled = iso.parent / "reassembled.iso"
-            reassembled.write_bytes(joined.read_bytes())
+        artifact_name = parts[0].name.split(".part")[0]
+        # Join under the real artifact name: the checksum and manifest checks
+        # key off the file name, and a scratch name made them look up a file
+        # that no producer ever wrote.
+        reassembled = iso.parent / artifact_name
+        join_parts(parts, reassembled)
         iso = reassembled
         source_kind = f"parts ({len(parts)})"
-        # The verdict must name what was published, not the scratch file the
-        # parts were joined into.
-        artifact_name = parts[0].name.split(".part")[0]
         print(f"verify-live-release: joined {len(parts)} parts", file=sys.stderr)
 
     sums_path = args.sums or iso.parent / "SHA256SUMS"
@@ -375,6 +384,8 @@ def main(argv: list[str] | None = None) -> int:
     if source_kind != "whole":
         result["artifact"] = artifact_name
     if reassembled is not None:
+        # The joined file is a verification aid, not a published asset: leaving
+        # it beside the parts would make the read-back check see an extra file.
         reassembled.unlink(missing_ok=True)
     rendered = json.dumps(
         result, ensure_ascii=False, indent=None if args.compact else 2, sort_keys=True
