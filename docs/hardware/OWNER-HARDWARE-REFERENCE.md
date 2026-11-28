@@ -89,12 +89,16 @@ channel, Linux-libre чи повний склад саме цієї H170 кон�
   розділяє runtime-proven, statically proven, interpretation та UNPROVEN.
   Вона не стверджує, що RM probes відкрили BAR0/MMIO або довели повний
   GPU command submission.
-- [NVK compute result](https://github.com/juv4uk/gp107-nvidia-re/blob/master/docs/14-nvk-vector-add-compute-result.md)
-  фіксує фізичний vector-add compute PASS на GP107. Це доводить виконання
-  конкретного Vulkan compute workload, а не daily-driver completeness.
+- [NVK compute result](https://github.com/juv4uk/gp107-nvidia-re/blob/2257ac522b99d5e752d8bfd0b27b3efed75492a0/docs/14-nvk-vector-add-compute-result.md)
+  фіксує один реальний vector-add compute run на окремому GP107 witness host.
+  Водночас [документ надійності](https://github.com/juv4uk/gp107-nvidia-re/blob/2257ac522b99d5e752d8bfd0b27b3efed75492a0/docs/18-procedural-deviation-and-benchmark-reliability.md)
+  прямо фіксує, що погоджений source/BTF preflight не був повністю завершений
+  до dispatch (**procedural deviation**). Тому це історичний device-level
+  runtime fact, а не clean acceptance, поточний benchmark baseline чи доказ
+  для H170; повторний експеримент потребує окремого owner-approved plan.
 - [Порівняння NVK/NVIDIA](https://github.com/juv4uk/gp107-nvidia-re/blob/master/docs/17-vulkan-compute-benchmark-open-vs-proprietary.md)
   має три повтори обох стеків, але було зняте до виправлень benchmark
-  harness. [Документ надійності](https://github.com/juv4uk/gp107-nvidia-re/blob/master/docs/18-procedural-deviation-and-benchmark-reliability.md)
+  harness. [Документ надійності](https://github.com/juv4uk/gp107-nvidia-re/blob/2257ac522b99d5e752d8bfd0b27b3efed75492a0/docs/18-procedural-deviation-and-benchmark-reliability.md)
   прямо позначає ці цифри як історичні, не як поточний acceptance baseline.
 - [Надійна NVIDIA baseline](https://github.com/juv4uk/gp107-nvidia-re/blob/master/docs/20-reliability-baseline-proprietary.md)
   дає median-of-three: 20,310 ns / 2.4201 GB/s для 4,096 елементів;
