@@ -49,7 +49,7 @@ sudo guix archive --authorize < signing-key.pub
 
 Цей режим дозволяє опублікувати перший перевірюваний кеш без довготривалого приватного ключа в GitHub Secrets. Він не створює сталу ідентичність substitute-сервера: кожен новий ключ треба перевірити й авторизувати окремо. Не авторизуйте ключ лише тому, що файл доступний за URL. Guix відхиляє імпорт, якщо підпис недійсний або ключ не авторизований. Джерело: [GNU Guix Reference Manual — `guix archive`](https://guix.gnu.org/manual/en/guix.html#Invoking-guix-archive).
 
-Новий незмінний cache release має назву `h170-free-cache-<workflow-run-number>`. Workflow запускається після злиття релевантних змін у `main` або вручну з `main`; довільний список пакетів через workflow input не приймається.
+Новий незмінний cache release має назву `h170-free-cache-<workflow-run-id>-attempt-<attempt>`. Workflow запускається після злиття релевантних змін у `main` або вручну з `main`; довільний список пакетів через workflow input не приймається.
 
 ## Довіра клієнта
 
