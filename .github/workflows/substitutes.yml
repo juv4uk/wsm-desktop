@@ -47,6 +47,8 @@ jobs:
           GUIX_SHA256: "aa41025489c5061543e9c48873eaa829b900b2da75d40f9648913622f5f47817"
         run: |
           set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y zstd
           TARBALL="guix-binary-${GUIX_VERSION}.x86_64-linux.tar.xz"
           DEST="${RUNNER_TEMP}/${TARBALL}"
           PROFILE="/var/guix/profiles/per-user/root/current-guix"
@@ -293,7 +295,9 @@ jobs:
 
           gh release create "$CACHE_TAG" \
             --title "WSM H170 Free substitute cache ${GITHUB_RUN_NUMBER}" \
-            --notes "Pinned H170 Free upstream-only package cache. Source commit: ${GITHUB_SHA}. Signing key is ephemeral to this run; private key is not published. NAR assets are immutable; metadata is deployed separately to Pages."
+            --notes "Pinned H170 Free upstream-only package cache. Source commit: ${GITHUB_SHA}. Signing key is ephemeral to this run; private key is not published. Assets remain private until attestation and read-back verification pass." \
+            --draft \
+            --prerelease
           gh release upload "$CACHE_TAG" "${NARS[@]}" ./site/signing-key.pub ./site/SHA256SUMS ./site/provenance.json ./site/metadata.SHA256SUMS
 
       - name: Attest the exact NAR and cache metadata
@@ -305,6 +309,37 @@ jobs:
             ./site/SHA256SUMS
             ./site/provenance.json
             ./site/metadata.SHA256SUMS
+      - name: Read back and verify the draft Release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CACHE_TAG: ${{ steps.prepare.outputs.cache_tag }}
+        run: |
+          set -euo pipefail
+          READBACK="$RUNNER_TEMP/h170-free-readback"
+          mkdir -p "$READBACK"
+          gh release download "$CACHE_TAG" --dir "$READBACK"
+          (
+            cd "$READBACK"
+            sha256sum -c SHA256SUMS
+            sha256sum -c metadata.SHA256SUMS
+            for nar in *.nar.zst; do zstd -t "$nar"; done
+          )
+          EXPECTED_STORE_PATH_COUNT="$(grep -Ec '^/gnu/store/[a-z0-9]{32}-' "$RUNNER_TEMP/h170-free-store-paths.txt")"
+          READBACK_NAR_COUNT="$(find "$READBACK" -maxdepth 1 -type f -name '*.nar.zst' | wc -l)"
+          test "$READBACK_NAR_COUNT" -eq "$EXPECTED_STORE_PATH_COUNT"
+          test "$(gh release view "$CACHE_TAG" --json isDraft --jq '.isDraft')" = "true"
+          echo "Verified $READBACK_NAR_COUNT NAR assets; Release remains Draft until this check passes." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish the verified H170 Free Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CACHE_TAG: ${{ steps.prepare.outputs.cache_tag }}
+        run: |
+          set -euo pipefail
+          RELEASE_ID="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$CACHE_TAG" --jq '.id')"
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -F draft=false >/dev/null
+          test "$(gh release view "$CACHE_TAG" --json isDraft --jq '.isDraft')" = "false"
+          echo "Published verified Release $CACHE_TAG." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Pages metadata
         uses: actions/upload-pages-artifact@v3
@@ -336,6 +371,6 @@ jobs:
             echo "## H170 Free substitute publication failed"
             echo ""
             echo "Check the first failing step above. No success is claimed."
-            echo "If a Release was created before a later Pages failure, its tag is in the workflow logs."
+            echo "A pre-publication failure leaves the cache Release in Draft; inspect the exact failed step before retrying."
             echo "A missing or mismatched signing key, pinned Guix evaluation/build failure, NAR bake failure or Pages configuration can cause this run to fail."
           } >> "$GITHUB_STEP_SUMMARY"
