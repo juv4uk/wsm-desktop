@@ -87,6 +87,13 @@ class ChannelAuthorizationsTests(unittest.TestCase):
         found = self.check_with_keyring(GOOD, [GOOD_FINGERPRINT])
         self.assertEqual(found, [])
 
+    def test_guix_optional_metadata_does_not_require_a_name(self) -> None:
+        text = (
+            '(authorizations (version 0) '
+            f'(("{GOOD_FINGERPRINT}" (owner "opaque-id") (note "optional metadata"))))'
+        )
+        self.assertEqual(checker.parse_authorizations(text), [GOOD_FINGERPRINT])
+
     def test_missing_keyring_argument_is_explicit_not_run(self) -> None:
         self.write_authorizations(GOOD)
         found = checker.problems(self.root)
