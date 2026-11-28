@@ -87,12 +87,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Every cache Release is signed with a fresh key generated on this
+          # disposable runner. No repository secret or long-lived private key
+          # is needed; the matching public key and provenance ship with the
+          # exact Release, and clients authorize that key only after verification.
           sudo install -d -m 0700 /etc/guix
           sudo guix archive --generate-key
           sudo test -s /etc/guix/signing-key.sec
           sudo test -s /etc/guix/signing-key.pub
           sudo chmod 0600 /etc/guix/signing-key.sec
           sudo chmod 0644 /etc/guix/signing-key.pub
+          echo "WSM_SUBSTITUTES_SIGNED=true" >> "$GITHUB_ENV"
           echo "A per-run signing key was generated on the ephemeral runner." >> "$GITHUB_STEP_SUMMARY"
           echo "Only signing-key.pub may leave this runner; signing-key.sec is never copied, uploaded, or logged." >> "$GITHUB_STEP_SUMMARY"
 
