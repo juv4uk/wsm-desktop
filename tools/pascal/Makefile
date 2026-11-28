@@ -16,13 +16,14 @@ ISA_TARGET := $(BUILD_DIR)/wsm-cpu-isa
 PARTITION_TARGET := $(BUILD_DIR)/wsm-partition
 PROFILE_TARGET := $(BUILD_DIR)/wsm-profile
 PREFLIGHT_TARGET := $(BUILD_DIR)/wsm-preflight
-TARGETS := $(HW_TARGET) $(CLASSIFY_TARGET) $(ISA_TARGET) $(PARTITION_TARGET) $(PROFILE_TARGET) $(PREFLIGHT_TARGET)
+INSTALL_TARGET := $(BUILD_DIR)/wsm-install
+TARGETS := $(HW_TARGET) $(CLASSIFY_TARGET) $(ISA_TARGET) $(PARTITION_TARGET) $(PROFILE_TARGET) $(PREFLIGHT_TARGET) $(INSTALL_TARGET)
 
-.PHONY: all build build-hwcheck build-classify build-isa build-partition build-profile build-preflight test test-hwcheck test-classify test-isa test-partition test-profile test-preflight install install-hwcheck install-classify install-isa install-partition install-profile install-preflight clean
+.PHONY: all build build-hwcheck build-classify build-isa build-partition build-profile build-preflight build-install test test-hwcheck test-classify test-isa test-partition test-profile test-preflight test-install install install-hwcheck install-classify install-isa install-partition install-profile install-preflight install-install clean
 
 all: build
 
-build: build-hwcheck build-classify build-isa build-partition build-profile build-preflight
+build: build-hwcheck build-classify build-isa build-partition build-profile build-preflight build-install
 
 build-isa: $(ISA_TARGET)
 
@@ -31,6 +32,10 @@ $(ISA_TARGET): $(SOURCE_DIR)/wsm_cpu_isa.pas $(SOURCE_DIR)/wsm_cpu_isa_core.pas
 	$(FPC) $(FPCFLAGS) -o"$@" "$(SOURCE_DIR)/wsm_cpu_isa.pas"
 
 build-partition: $(PARTITION_TARGET)
+
+$(PARTITION_TARGET): $(SOURCE_DIR)/wsm_partition.pas
+	mkdir -p "$(BUILD_DIR)"
+	$(FPC) $(FPCFLAGS) -o"$@" "$(SOURCE_DIR)/wsm_partition.pas"
 
 build-profile: $(PROFILE_TARGET)
 
@@ -44,9 +49,11 @@ $(PREFLIGHT_TARGET): $(SOURCE_DIR)/wsm_preflight.pas
 	mkdir -p "$(BUILD_DIR)"
 	$(FPC) $(FPCFLAGS) -o"$@" "$(SOURCE_DIR)/wsm_preflight.pas"
 
-$(PARTITION_TARGET): $(SOURCE_DIR)/wsm_partition.pas
+build-install: $(INSTALL_TARGET)
+
+$(INSTALL_TARGET): $(SOURCE_DIR)/wsm_install.pas
 	mkdir -p "$(BUILD_DIR)"
-	$(FPC) $(FPCFLAGS) -o"$@" "$(SOURCE_DIR)/wsm_partition.pas"
+	$(FPC) $(FPCFLAGS) -o"$@" "$(SOURCE_DIR)/wsm_install.pas"
 
 build-hwcheck: $(HW_TARGET)
 
@@ -60,7 +67,7 @@ $(CLASSIFY_TARGET): $(SOURCE_DIR)/wsm_classify.pas
 	mkdir -p "$(BUILD_DIR)"
 	$(FPC) $(FPCFLAGS) -o"$@" "$(SOURCE_DIR)/wsm_classify.pas"
 
-test: test-hwcheck test-classify test-isa test-partition test-profile test-preflight
+test: test-hwcheck test-classify test-isa test-partition test-profile test-preflight test-install
 
 test-hwcheck: build-hwcheck
 	"$(HW_TARGET)" --version | grep -Fx "wsm-hwcheck 0.1.0"
@@ -81,21 +88,26 @@ test-partition: build-partition
 	@set +e; "$(PARTITION_TARGET)" --disk /dev/sdz1 --size 20000000000 --firmware uefi --ack /dev/sdz1 >/dev/null 2>&1; status=$$?; set -e; test "$$status" -eq 10
 
 test-profile: build-profile
-	@tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT; \
-	 printf '%s\n' '{"schema":"wsm-profile-evidence/2","verified_functions":[{"status":"pass"}],"artifacts":[]}' > "$tmp/evidence.json"; \
-	 output="$("$(PROFILE_TARGET)" "$tmp/evidence.json")"; \
-	 printf '%s\n' "$output" | grep -F '"ok":true' >/dev/null; \
-	 printf '%s\n' "$output" | grep -F '"digest_verification":"delegated"' >/dev/null
+	@tmp="$$(mktemp -d)"; trap 'rm -rf "$$tmp"' EXIT; \
+	 printf '%s\n' '{"schema":"wsm-profile-evidence/2","verified_functions":[{"status":"pass"}],"artifacts":[]}' > "$$tmp/evidence.json"; \
+	 output="$$("$(PROFILE_TARGET)" "$$tmp/evidence.json")"; \
+	 printf '%s\n' "$$output" | grep -F '"ok":true' >/dev/null; \
+	 printf '%s\n' "$$output" | grep -F '"digest_verification":"delegated"' >/dev/null
 
 test-preflight: build-preflight
-	@tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT; \
-	 printf '%s\n' '(operating-system)' > "$tmp/desktop.scm"; \
-	 set +e; output="$("$(PREFLIGHT_TARGET)" --mount-point "$tmp" --system-file "$tmp/desktop.scm")"; status=$?; set -e; \
-	 test "$status" -eq 1 -o "$status" -eq 6; \
-	 printf '%s\n' "$output" | grep -F '"schema":"wsm-preflight/1"' >/dev/null; \
-	 printf '%s\n' "$output" | grep -F '"id":"report","status":"not-run"' >/dev/null
+	@tmp="$$(mktemp -d)"; trap 'rm -rf "$$tmp"' EXIT; \
+	 printf '%s\n' '(operating-system)' > "$$tmp/desktop.scm"; \
+	 set +e; output="$$("$(PREFLIGHT_TARGET)" --mount-point "$$tmp" --system-file "$$tmp/desktop.scm")"; status=$$?; set -e; \
+	 test "$$status" -eq 1 -o "$$status" -eq 6; \
+	 printf '%s\n' "$$output" | grep -F '"schema":"wsm-preflight/1"' >/dev/null; \
+	 printf '%s\n' "$$output" | grep -F '"id":"report","status":"not-run"' >/dev/null
 
-install: install-hwcheck install-classify install-isa install-partition install-profile install-preflight
+test-install: build-install
+	@set +e; output="$$("$(INSTALL_TARGET)" --not-a-valid-option 2>&1)"; status=$$?; set -e; \
+	 test "$$status" -eq 2; \
+	 printf '%s\n' "$$output" | grep -F 'usage: wsm-install' >/dev/null
+
+install: install-hwcheck install-classify install-isa install-partition install-profile install-preflight install-install
 
 install-hwcheck: build-hwcheck
 	mkdir -p "$(PREFIX)/bin"
@@ -120,6 +132,10 @@ install-profile: build-profile
 install-preflight: build-preflight
 	mkdir -p "$(PREFIX)/bin"
 	install -m 0755 "$(PREFLIGHT_TARGET)" "$(PREFIX)/bin/wsm-preflight"
+
+install-install: build-install
+	mkdir -p "$(PREFIX)/bin"
+	install -m 0755 "$(INSTALL_TARGET)" "$(PREFIX)/bin/wsm-install"
 
 clean:
 	rm -rf "$(BUILD_DIR)"
