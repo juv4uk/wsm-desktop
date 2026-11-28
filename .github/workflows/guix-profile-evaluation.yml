@@ -9,6 +9,8 @@ on:
       - ".guix-authorizations"
       - "channels.lock.scm"
       - "tests/guix/**"
+      - "tests/test_cuirass_specs.py"
+      - "ci/cuirass/**"
       - "docs/GUIX-CHANNEL.md"
       - "channels/**"
       - "systems/**/*.scm"
@@ -32,9 +34,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Кожен прогін `guix time-machine` інакше заново витягує checkout каналу.
-      # Ключ — сам lock, тому зміна каналу природно інвалідовує кеш, а решта
-      # прогонів його перевикористовує. Так робить Guix CI у Bitcoin Core.
+      # Each time-machine invocation otherwise downloads the channel checkout.
+      # The lock-derived cache key naturally invalidates when the lock changes.
       - name: Restore Guix checkout cache
         id: guix-checkouts
         uses: actions/cache/restore@v4
@@ -69,6 +70,6 @@ jobs:
         run: |
           {
             echo "### Guix profile evaluation failed"
-            echo "The first failing command and its exact output are in the preceding step logs."
+            echo "The first failing check and its exact output are in the preceding step logs."
             echo "WSM_CHANNEL_AUTHENTICATION=NOT_TESTED"
           } >> "$GITHUB_STEP_SUMMARY"
