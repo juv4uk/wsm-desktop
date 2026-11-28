@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""Cuirass specifications must describe the channels we actually pin."""
+"""Cuirass prototype files must match the pinned Guix API and stay inert."""
 
 from __future__ import annotations
 
@@ -56,16 +56,18 @@ class SpecsTests(unittest.TestCase):
         self.assertTrue(balanced(self.text))
 
     def test_it_is_a_single_list_form(self) -> None:
-        code = [line for line in self.text.splitlines()
-                if line.strip() and not line.strip().startswith(";")]
+        code = [
+            line for line in self.text.splitlines()
+            if line.strip() and not line.strip().startswith(";")
+        ]
         self.assertTrue(code[0].startswith("(list"))
 
-    def test_both_jobs_are_declared(self) -> None:
+    def test_both_job_targets_are_declared(self) -> None:
         self.assertIn('(name "wsm-tools")', self.text)
         self.assertIn('(name "wsm-live-minimal-image")', self.text)
+        self.assertIn("(build '(custom (ci cuirass images)))", self.text)
 
     def test_the_guix_channel_is_pinned_to_the_release_commit(self) -> None:
-        """A CI that floats is a CI that reports on a different tree."""
         lock = (ROOT / "channels.lock.scm").read_text(encoding="utf-8")
         commit = re.search(r'\(commit "([0-9a-f]{40})"\)', lock).group(1)
         self.assertEqual(self.text.count(f'"{commit}"'), 2)
@@ -74,47 +76,78 @@ class SpecsTests(unittest.TestCase):
         self.assertEqual(self.text.count("make-channel-introduction"), 2)
         self.assertIn("9edb3f66fd807b096b48283debdcddccfea34bad", self.text)
 
-    def test_the_wsm_channel_points_at_this_repository(self) -> None:
-        self.assertEqual(self.text.count("https://github.com/juv4uk/wsm-desktop"), 2)
+    def test_the_wsm_channel_is_explicitly_a_moving_unbootstrapped_input(self) -> None:
+        self.assertEqual(self.text.count('https://github.com/juv4uk/wsm-desktop'), 2)
+        self.assertIn('(branch "main")', self.text)
+        self.assertIn("not an", self.text.lower())
+        self.assertIn("do not register", self.text.lower())
+        # The WSM channel must not be given a fabricated owner introduction.
+        self.assertNotIn("(make-channel-introduction", self.text.split("(name 'wsm)", 1)[1])
 
 
 class JobModuleTests(unittest.TestCase):
     def setUp(self) -> None:
         self.text = IMAGES.read_text(encoding="utf-8")
 
+    def test_the_module_path_matches_the_scheme_name(self) -> None:
+        self.assertIn("(define-module (ci cuirass images)", self.text)
+        self.assertIn("#:use-module (gnu ci)", self.text)
+        self.assertIn("derivation->job", self.text)
+        self.assertFalse((ROOT / "wsm" / "ci").exists())
+
     def test_the_module_exports_the_entry_point(self) -> None:
         self.assertIn("#:export (cuirass-jobs))", self.text)
 
-    def test_it_builds_the_same_profile_the_release_builds(self) -> None:
+    def test_it_builds_the_release_profile(self) -> None:
         self.assertIn("systems/live-minimal.scm", self.text)
 
     def test_grafting_is_disabled(self) -> None:
-        """Grafting belongs on the user's machine, not in a build farm."""
         self.assertIn("(%graft? #f)", self.text)
-
-    def test_the_module_is_outside_the_channel_namespace(self) -> None:
-        """wsm/ is the channel API; a CI helper is not part of it."""
-        self.assertFalse((ROOT / "wsm" / "ci").exists())
-        self.assertIn("(wsm ci images)", self.text)
 
 
 class ServiceFragmentTests(unittest.TestCase):
-    def test_the_fragment_uses_substitutes(self) -> None:
-        """Without substitutes a build farm rebuilds every closure from source."""
-        text = SERVICE.read_text(encoding="utf-8")
-        self.assertIn("(use-substitutes? #t)", text)
-        self.assertIn("cuirass-service-type", text)
+    def setUp(self) -> None:
+        self.text = SERVICE.read_text(encoding="utf-8")
+
+    def test_service_module_matches_pinned_guix_source(self) -> None:
+        self.assertIn("(gnu services cuirass)", self.text)
+        self.assertNotIn("(gnu services ci)", self.text)
+
+    def test_no_nonexistent_substitute_field_is_used(self) -> None:
+        self.assertNotIn("(use-substitutes?", self.text)
+        self.assertIn("(fallback? #f)", self.text)
+
+    def test_specs_file_is_in_the_system_closure(self) -> None:
+        self.assertIn('(local-file "ci/cuirass/specs.scm"', self.text)
+        self.assertIn("(specifications #~(load #$%wsm-cuirass-specs))", self.text)
+
+    def test_admin_listener_is_local_only(self) -> None:
+        self.assertIn('(host "localhost")', self.text)
+        self.assertIn('(port 8081)', self.text)
 
 
 class DocumentationTests(unittest.TestCase):
-    def test_the_document_states_what_cuirass_cannot_prove(self) -> None:
-        text = DOC.read_text(encoding="utf-8")
-        self.assertIn("не завантажує образ", text.lower())
-        self.assertIn("не перевіряє інсталятор", text.lower())
+    def setUp(self) -> None:
+        self.text = DOC.read_text(encoding="utf-8").lower()
 
-    def test_the_document_admits_the_instance_never_ran(self) -> None:
-        text = DOC.read_text(encoding="utf-8")
-        self.assertIn("інстанс не запускався", text.lower())
+    def test_the_document_states_what_cuirass_cannot_prove(self) -> None:
+        self.assertIn("не завантажує образ", self.text)
+        self.assertIn("не перевіряє інсталятор", self.text)
+
+    def test_registration_is_blocked_until_trust_and_license_gates(self) -> None:
+        self.assertIn("не реєструвати", self.text)
+        self.assertIn("owner phase b", self.text)
+        self.assertIn("#367", self.text)
+        self.assertIn("guix git authenticate", self.text)
+
+    def test_substitute_serving_is_a_separate_future_service(self) -> None:
+        self.assertIn("guix publish", self.text)
+        self.assertIn("не налаштований", self.text)
+        self.assertNotIn("віддає результати як substitutes", self.text)
+
+    def test_instance_is_explicitly_not_run(self) -> None:
+        self.assertIn("not_run", self.text)
+        self.assertIn("не розгортався", self.text)
 
 
 if __name__ == "__main__":
