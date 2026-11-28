@@ -106,7 +106,9 @@
     (home-page "https://github.com/juv4uk/wsm-desktop")
     (synopsis "WSM live preflight tools and Plasma launcher")
     (description "Read-only hardware report, diagnostic-only Guix plan and desktop launcher.")
-    (license license:gpl3+)))
+    (license (license:license "ВОЛЬНІСТЬ"
+                               "file://LICENSE"
+                               "LicenseRef-Volnist; see docs/LICENSING.md. no OSI/FSDG claim."))))
 
 ;; Приймання образу — це маркер у послідовній консолі, а не «збірка повернула
 ;; нуль». Перевірено на опублікованому ISO: у ньому маркера не було, бо цей
