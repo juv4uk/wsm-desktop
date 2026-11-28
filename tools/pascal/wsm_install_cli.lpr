@@ -365,7 +365,7 @@ begin
   begin
     Current := Text[Index];
     if not ((Current in ['A', 'Z']) or (Current in ['a', 'z']) or
-            (Current in ['0', '9']) or (Current = '_') or (Current = '-')) then
+            (Current in ['0'..'9']) or (Current = '_') or (Current = '-')) then
       Exit(False);
   end;
 end;
@@ -386,7 +386,7 @@ begin
   for Index := Start to Start + 3 do
   begin
     Current := Text[Index];
-    if not ((Current in ['0', '9']) or (Current in ['a', 'f']) or (Current in ['A', 'F'])) then
+    if not ((Current in ['0'..'9']) or (Current in ['a', 'f']) or (Current in ['A', 'F'])) then
       Exit(False);
   end;
   Result := True;
@@ -411,7 +411,7 @@ begin
   Digits := Copy(Text, 1, 4) + Copy(Text, 6, 2) + Copy(Text, 9, 2) +
             Copy(Text, 12, 2) + Copy(Text, 15, 2) + Copy(Text, 18, 2);
   for Index := 1 to Length(Digits) do
-    if not (Digits[Index] in ['0', '9']) then
+    if not (Digits[Index] in ['0'..'9']) then
       Exit(False);
   Result := True;
 end;
@@ -426,7 +426,7 @@ begin
   if (Text[5] <> '-') or (Text[8] <> '-') then
     Exit;
   for Index := 1 to Length(Text) do
-    if (Index <> 5) and (Index <> 8) and (not (Text[Index] in ['0', '9'])) then
+    if (Index <> 5) and (Index <> 8) and (not (Text[Index] in ['0'..'9'])) then
       Exit;
   Result := True;
 end;
@@ -472,7 +472,9 @@ begin
     Version := SUPPORTED_VERSION_CURRENT;
     Exit(True);
   end;
-  WriteLn(StdErr, Format('wsm-install: unsupported hardware report schema %s; supported: %s, %s',
+  // Python formats the declared version with repr(), so a reader sees the quotes and can
+  // tell a string from a number; the refusal is compared against it byte for byte.
+  WriteLn(StdErr, Format('wsm-install: unsupported hardware report schema ''%s''; supported: %s, %s',
     [Declared, SUPPORTED_VERSION_OLD, SUPPORTED_VERSION_CURRENT]));
   Result := False;
 end;
