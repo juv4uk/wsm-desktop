@@ -15,8 +15,9 @@
 ;; wsm/ci/images.scm and find nothing.
 
 (define-module (ci cuirass images)
+  #:use-module (gnu ci)
   #:use-module (guix store)
-  #:use-module (guix derivations)
+  #:use-module (guix utils)
   #:use-module (gnu system image)
   #:use-module (gnu system)
   #:use-module (ice-9 match)
@@ -35,7 +36,7 @@
                        (string-append "wsm-live-minimal." system)))
                 ;; The profile is read from the checked-out channel, so the job
                 ;; always describes the source revision Cuirass just fetched.
-                (os   (primitive-load profile))
+                (os   (primitive-load-path profile))
                 (drv  (operating-system-image
                        os
                        #:target system)))

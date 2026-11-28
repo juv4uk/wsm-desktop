@@ -9,6 +9,8 @@
 ;; from this list is a module nobody has checked.
 ;; scripts/check_scheme_module_coverage.py enforces that rule.
 (use-modules (guix packages)
+             (gnu services cuirass)
+             (ci cuirass images)
              (wsm systems performance)
              (wsm packages wsm))
 
@@ -20,6 +22,15 @@
 ;; evaluated, and its header said so ("не зібрано й не перевірено").
 (unless (package? wsm-tools)
   (error "WSM package module did not export a package record for wsm-tools"))
+
+;; Cuirass custom jobs and the service API must load against the pinned Guix
+;; revision, not merely pass a textual Scheme check.
+(unless (procedure? cuirass-jobs)
+  (error "Cuirass custom job module did not export cuirass-jobs"))
+(unless (procedure? cuirass-configuration)
+  (error "Pinned Guix did not export the Cuirass configuration constructor"))
+(unless cuirass-service-type
+  (error "Pinned Guix did not export the Cuirass service type"))
 
 (display "WSM-SOURCE-MODULE-EVAL-OK ")
 (display (length %wsm-performance-services))

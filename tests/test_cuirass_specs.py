@@ -69,17 +69,37 @@ class JobModuleTests(unittest.TestCase):
         self.assertIn("(%graft? #f)", self.text)
 
     def test_the_module_is_outside_the_channel_namespace(self) -> None:
-        """wsm/ is the channel API; a CI helper is not part of it."""
+        """wsm/ is the public API; a CI helper must not become a channel API."""
         self.assertFalse((ROOT / "wsm" / "ci").exists())
         self.assertIn("(ci cuirass images)", self.text)
 
+    def test_the_job_imports_the_pinned_guix_api(self) -> None:
+        self.assertIn("#:use-module (gnu ci)", self.text)
+        self.assertIn("#:use-module (guix utils)", self.text)
+
+    def test_the_profile_is_resolved_from_the_channel_load_path(self) -> None:
+        self.assertIn("(primitive-load-path profile)", self.text)
+        self.assertNotIn("(primitive-load profile)", self.text)
+
 
 class ServiceFragmentTests(unittest.TestCase):
-    def test_the_fragment_uses_substitutes(self) -> None:
-        """Without substitutes a build farm rebuilds every closure from source."""
+    def test_the_fragment_uses_the_pinned_public_service_module(self) -> None:
         text = SERVICE.read_text(encoding="utf-8")
-        self.assertIn("(use-substitutes? #t)", text)
+        self.assertIn("(gnu services cuirass)", text)
+        self.assertNotIn("(gnu services ci)", text)
         self.assertIn("cuirass-service-type", text)
+
+    def test_the_fragment_uses_only_fields_in_the_pinned_configuration(self) -> None:
+        text = SERVICE.read_text(encoding="utf-8")
+        self.assertIn("(fallback? #t)", text)
+        self.assertIn("(specifications %wsm-cuirass-specs)", text)
+        self.assertNotIn("use-substitutes?", text)
+
+    def test_the_fragment_captures_an_explicit_store_source(self) -> None:
+        text = SERVICE.read_text(encoding="utf-8")
+        self.assertIn('(local-file "/etc/guix/wsm/ci/cuirass/specs.scm"', text)
+        self.assertIn("#~(load #$%wsm-cuirass-specs-source)", text)
+        self.assertNotIn("/run/current-system/profile/share/wsm/", text)
 
 
 class DocumentationTests(unittest.TestCase):
