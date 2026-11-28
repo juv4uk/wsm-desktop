@@ -230,5 +230,46 @@ class ForeignDataTests(unittest.TestCase):
         )
 
 
+class ToolPrefixTests(unittest.TestCase):
+    """The plan can bind its tools to the image's own prefixes."""
+
+    def _layout(self):
+        disk = Disk("/dev/nvme0n1", 256 * GIB, has_existing_data=True)
+        return plan(disk, "uefi", acknowledgement="/dev/nvme0n1")
+
+    def _prefixes(self, root: Path, *, skip: str | None = None) -> tuple[str, ...]:
+        bindir = root / "profile" / "bin"
+        bindir.mkdir(parents=True, exist_ok=True)
+        for name in ("sgdisk", "partprobe", "udevadm", "mkfs.ext4", "mkfs.fat", "mount", "mkdir"):
+            if name == skip:
+                continue
+            target = bindir / name
+            target.write_text("#!/bin/sh\n", encoding="utf-8")
+            target.chmod(0o755)
+        return (str(bindir),)
+
+    def test_steps_use_the_resolved_prefix(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as temporary:
+            prefixes = self._prefixes(Path(temporary))
+            steps = plan_steps(self._layout(), tool_prefixes=prefixes)
+            self.assertTrue(all(step.command[0].startswith(prefixes[0]) for step in steps))
+
+    def test_a_missing_tool_is_a_refusal_not_a_fallback(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as temporary:
+            prefixes = self._prefixes(Path(temporary), skip="sgdisk")
+            with self.assertRaises(Refused) as caught:
+                plan_steps(self._layout(), tool_prefixes=prefixes)
+            self.assertEqual(caught.exception.code, "tool.missing")
+
+    def test_without_prefixes_the_table_paths_are_used(self) -> None:
+        steps = plan_steps(self._layout())
+        self.assertTrue(all(step.command[0].startswith("/") for step in steps))
+        self.assertIn(TRUSTED_TOOLS["sgdisk"], [step.command[0] for step in steps])
+
+
 if __name__ == "__main__":
     unittest.main()
