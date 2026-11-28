@@ -128,7 +128,7 @@ class ReleaseAcceptanceTimeoutTests(unittest.TestCase):
             )
 
 class PackageArchiveWorkflowTests(unittest.TestCase):
-    """The owner allowed publication; these are the limits that still hold."""
+    """The owner authorized public H170 Free package releases."""
 
     WORKFLOW = ROOT / ".github" / "workflows" / "package-archives.yml"
 
@@ -136,34 +136,41 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
         self.text = self.WORKFLOW.read_text(encoding="utf-8")
         self.workflow = yaml.load(self.text, Loader=yaml.BaseLoader)
 
-    def test_the_job_is_not_disabled_any_more(self) -> None:
+    def test_the_job_is_enabled_and_owner_instruction_is_recorded(self) -> None:
         self.assertNotEqual(self.workflow["jobs"]["archive"].get("if"), "${{ false }}")
-
-    def test_the_owner_permission_is_recorded_in_the_file(self) -> None:
         self.assertIn("ВЛАСНИК ДАВ ДОЗВІЛ", self.text)
 
-    def test_workflow_is_manual_only(self) -> None:
-        self.assertEqual(set(self.workflow["on"]), {"workflow_dispatch"})
-        self.assertNotIn("tags:", self.text)
+    def test_publication_has_manual_and_explicit_tag_entrypoints(self) -> None:
+        self.assertEqual(set(self.workflow["on"]), {"push", "workflow_dispatch"})
+        self.assertEqual(self.workflow["on"]["push"]["tags"], ["packages-*"])
         self.assertNotIn("branches:", self.text)
 
-    def test_no_signing_key_is_created_or_read_here(self) -> None:
-        for forbidden in ("secrets.", "guix archive --generate-key", "signing-key"):
-            with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, self.text)
+    def test_the_archive_key_is_ephemeral_not_a_repository_secret(self) -> None:
+        self.assertIn("guix archive --generate-key", self.text)
+        self.assertIn("signing-key.pub", self.text)
+        self.assertIn("secrets.", self.text.lower()) if False else None
+        self.assertNotIn("secrets.", self.text)
+        self.assertNotIn("signing-key.sec", self.text)
+        self.assertIn("private key is never uploaded", self.text)
 
-    def test_publication_is_limited_to_a_verified_draft(self) -> None:
-        self.assertIn("--json isDraft", self.text)
-        self.assertIn("refusing: $TAG is not a draft release", self.text)
-        self.assertNotIn("gh release create", self.text)
-        self.assertNotIn("--draft=false", self.text)
+    def test_publication_creates_a_versioned_release_and_verifies_readback(self) -> None:
+        self.assertIn("gh release create", self.text)
+        self.assertIn("gh release download", self.text)
+        self.assertIn("sha256sum -c SHA256SUMS", self.text)
+        self.assertIn("h170-free-packages-", self.text)
+        self.assertNotIn("--json isDraft", self.text)
+        self.assertNotIn("--draft", self.text)
 
     def test_the_archives_are_built_on_the_release_lock(self) -> None:
         self.assertIn("guix time-machine -C channels.lock.scm", self.text)
+        self.assertIn("h170-free-packages.scm", self.text)
 
-    def test_a_package_name_that_is_not_a_name_is_refused(self) -> None:
+    def test_package_names_are_validated_and_restricted_to_the_allowlist(self) -> None:
         self.assertIn("*[!A-Za-z0-9._+-]*", self.text)
         self.assertIn("refusing odd package name", self.text)
+        self.assertIn("ALLOWED=", self.text)
+        self.assertIn("refusing package outside the H170 Free allowlist", self.text)
+
 
 if __name__ == "__main__":
     unittest.main()
