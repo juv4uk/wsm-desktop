@@ -53,13 +53,8 @@ class SubstituteWorkflowTests(unittest.TestCase):
         self.assertIn("--manifest=drivers/profiles/h170-free-packages.scm", build)
         self.assertIn("--dry-run", build)
         self.assertIn("--no-grafts", build)
-        self.assertIn('-lt 11', build)
-        self.assertIn("11 manifest roots", build)
-        bake = self.step("Bake signed NARs into the local substitute cache")["run"]
-        self.assertIn("EXPECTED_STORE_PATH_COUNT", bake)
-        self.assertIn('-eq "$EXPECTED_STORE_PATH_COUNT"', bake)
-        prepare = self.step("Prepare immutable Release assets and Pages metadata")["run"]
-        self.assertIn("EXPECTED_STORE_PATH_COUNT", prepare)
+        self.assertIn("-lt 11", build)
+        self.assertIn("Expected at least 11 store outputs", build)
 
     def test_the_package_manifest_excludes_owned_and_nonfree_payloads(self) -> None:
         manifest = (ROOT / "drivers" / "profiles" / "h170-free-packages.scm").read_text(encoding="utf-8")
@@ -84,12 +79,13 @@ class SubstituteWorkflowTests(unittest.TestCase):
         self.assertNotIn("vars.GUIX_SIGNING_PUBLIC_KEY", self.text)
         self.assertNotIn("signing-key.sec", self.text.split("gh release upload", 1)[-1])
         self.assertEqual(self.data["permissions"]["attestations"], "write")
-        self.assertEqual(self.data["permissions"]["artifact-metadata"], "write")
 
     def test_public_key_and_provenance_are_published_and_attested(self) -> None:
         prepare = self.step("Prepare immutable Release assets and Pages metadata")["run"]
+        self.assertIn('"${#NARS[@]}" -eq "$STORE_OUTPUT_COUNT"', prepare)
+        self.assertIn('"store_outputs"', prepare)
         self.assertIn("./site/signing-key.pub", prepare)
-        self.assertIn("./site/provenance.json", prepare)
+        self.assertIn("site/provenance.json", prepare)
         self.assertIn("./site/SHA256SUMS", prepare)
         self.assertIn("private_key_published", prepare)
         self.assertIn("ephemeral-per-run", prepare)
@@ -104,11 +100,9 @@ class SubstituteWorkflowTests(unittest.TestCase):
         self.assertIn("--public-key=/etc/guix/signing-key.pub", step)
         self.assertIn("--private-key=/etc/guix/signing-key.sec", step)
         self.assertIn("narinfo_url", step)
-        self.assertIn("sed -n 's/^URL: //p'", step)
-        self.assertIn('case "$nar_url" in', step)
-        self.assertIn("nar/*)", step)
-        self.assertIn('curl -fsS "http://127.0.0.1:3000/$nar_url"', step)
         self.assertIn("baked", step)
+        self.assertIn('NAR_COUNT" -eq "$STORE_OUTPUT_COUNT"', step)
+        self.assertIn('INFO_COUNT" -eq "$STORE_OUTPUT_COUNT"', step)
 
     def test_release_assets_and_pages_are_both_deployed(self) -> None:
         self.assertIn("gh release create", self.text)
@@ -116,9 +110,21 @@ class SubstituteWorkflowTests(unittest.TestCase):
         self.assertIn("actions/upload-pages-artifact@v3", self.text)
         self.assertIn("actions/deploy-pages@v4", self.text)
         self.assertIn("h170-free-cache-", self.text)
+        self.assertIn("GITHUB_RUN_ID", self.text)
+        self.assertIn("GITHUB_RUN_ATTEMPT", self.text)
+        self.assertIn("--prerelease", self.text)
         self.assertIn("signing-key.pub", self.text)
         self.assertIn("SHA256SUMS", self.text)
         self.assertIn("provenance.json", self.text)
+
+    def test_release_is_attested_before_upload_and_read_back_is_verified(self) -> None:
+        attest = self.text.index("Attest the exact NAR and cache metadata")
+        publish = self.text.index("Publish immutable Release assets and verify read-back")
+        self.assertLess(attest, publish)
+        step = self.step("Publish immutable Release assets and verify read-back")
+        self.assertIn('gh release download "$CACHE_TAG"', step["run"])
+        self.assertIn("sha256sum -c SHA256SUMS", step["run"])
+        self.assertIn("sha256sum -c metadata.SHA256SUMS", step["run"])
 
     def test_failure_is_reported_without_claiming_success(self) -> None:
         step = self.step("Report publication failure")
