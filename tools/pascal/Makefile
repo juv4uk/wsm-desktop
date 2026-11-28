@@ -6,14 +6,17 @@
 
 FPC ?= fpc
 FPCFLAGS ?= -Mobjfpc -Sh -O2 -vewn
-TARGET = wsm-hwcheck
+TARGETS = wsm-hwcheck wsm-classify
 
-all: $(TARGET)
+all: $(TARGETS)
 
-$(TARGET): wsm_hwcheck.pas
-	$(FPC) $(FPCFLAGS) -o$(TARGET) wsm_hwcheck.pas
+wsm-hwcheck: wsm_hwcheck.pas
+	$(FPC) $(FPCFLAGS) -owsw-hwcheck wsm_hwcheck.pas
+
+wsm-classify: wsm_classify.pas
+	$(FPC) $(FPCFLAGS) -owsw-classify wsm_classify.pas
 
 clean:
-	rm -f $(TARGET) *.o *.ppu
+	rm -f $(TARGETS) *.o *.ppu
 
 .PHONY: all clean

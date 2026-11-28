@@ -25,7 +25,7 @@
   ;; load only when Guix evaluates it.
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-13)
-  #:export (wsm-hwcheck-fpc))
+  #:export (wsm-hwcheck-fpc wsm-classify-fpc))
 
 (define-public wsm-hwcheck-fpc
   (package
@@ -53,7 +53,8 @@
             (lambda* (#:key outputs #:allow-other-keys)
               (let* ((out (assoc-ref outputs "out"))
                      (bin (string-append out "/bin")))
-                (install-file "tools/pascal/wsm-hwcheck" bin)))))))
+                (install-file "tools/pascal/wsm-hwcheck" bin)
+                (install-file "tools/pascal/wsm-classify" bin)))))))
     (synopsis "Read-only PCI hardware reader for WSM Desktop, built with FPC")
     (description
      "A native binary that reads PCI identity and driver binding from sysfs and
@@ -62,3 +63,15 @@ collector: no interpreter or Python library enters the runtime closure.  It
 reads only; it never opens a block device and needs no privileges.")
     (home-page "https://github.com/juv4uk/wsm-desktop")
     (license license:gpl3+)))
+
+(define-public wsm-classify-fpc
+  (package
+    (inherit wsm-hwcheck-fpc)
+    (name "wsm-classify-fpc")
+    (synopsis "Diagnostic hardware classification for WSM Desktop, built with FPC")
+    (description
+     "Reads a hardware report and produces the diagnostic subsystem summary.
+It is the Free Pascal counterpart of the Python classifier, and it keeps the
+same restraint: a subsystem is KNOWN only when every observed device has a
+driver binding or a candidate, a failed function test blocks that, and
+CERTIFIED is never emitted because report v1 has no coverage manifest.")))
