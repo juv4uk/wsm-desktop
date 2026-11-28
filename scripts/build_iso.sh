@@ -253,6 +253,7 @@ manifest = {
         ],
         "log": build_log.name,
         "log_sha256": digest(build_log),
+        "log_bytes": build_log.stat().st_size,
     },
 }
 
