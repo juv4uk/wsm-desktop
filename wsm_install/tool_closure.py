@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -199,47 +200,67 @@ def render(states: Sequence[ToolState]) -> list[str]:
 def parse(serial_text: str, expected: Sequence[str] | None = None) -> Verdict:
     """Read the guest's answer out of captured serial text.
 
-    `expected` defaults to the tool table, which is the whole point: the guest
-    cannot pass by reporting a shorter list than the installer needs.
+    A v1 report is complete only when every expected tool row and exactly one
+    internally consistent summary line are present. Silence or a partial summary
+    is never a pass.
     """
     names = tuple(sorted(expected if expected is not None else TOOLS))
     reported: dict[str, dict[str, str]] = {}
     problems: list[str] = []
-    summary: str | None = None
+    row_protocol_error = False
+    summary_count = 0
+    parsed_summary: tuple[str, int, int] | None = None
 
     for raw in serial_text.splitlines():
         line = raw.strip()
         if not line.startswith(LINE_PREFIX):
             continue
         if line.startswith(SUMMARY_PREFIX):
+            summary_count += 1
+            if summary_count > 1:
+                problems.append("summary line was reported more than once")
+                continue
             fields = line.split(FIELD_SEPARATOR)
-            if len(fields) == 4 and fields[1] == PROTOCOL_VERSION:
-                summary = f"{fields[2]} {fields[3]}"
-            else:
+            counts = re.fullmatch(r"(0|[1-9][0-9]*)/(0|[1-9][0-9]*)", fields[3]) if len(fields) == 4 else None
+            if (
+                len(fields) != 4
+                or fields[1] != PROTOCOL_VERSION
+                or fields[2] not in {"ok", "fail"}
+                or counts is None
+            ):
                 problems.append(f"malformed summary line: {line!r}")
+                continue
+            parsed_summary = (fields[2], int(counts.group(1)), int(counts.group(2)))
             continue
         fields = line.split(FIELD_SEPARATOR)
         if len(fields) != 5 or fields[1] != PROTOCOL_VERSION:
             problems.append(f"malformed probe line: {line!r}")
+            row_protocol_error = True
             continue
         name, path, state = fields[2], fields[3], fields[4]
         if state not in STATES:
             problems.append(f"{name}: unknown state {state!r}")
+            row_protocol_error = True
             continue
         if name in reported:
             problems.append(f"{name} was reported more than once")
+            row_protocol_error = True
             continue
         if name not in names:
             problems.append(f"{name} is not one of the expected tools")
+            row_protocol_error = True
             continue
         reported[name] = {"path": "" if path == NO_PATH else path, "state": state}
+
+    if summary_count == 0:
+        problems.append("required summary line was not reported by the guest")
+    elif parsed_summary is None:
+        problems.append("summary line was not valid")
 
     absent = tuple(name for name in names if name not in reported)
     for name in absent:
         problems.append(f"{name} was not reported by the guest")
-    # A tool the guest resolved nowhere is as missing as one it never mentioned:
-    # both mean "the installer would not find it here", and the release manifest
-    # should not have to distinguish two spellings of the same absence.
+    # A tool the guest resolved nowhere is as missing as one it never mentioned.
     unresolved = tuple(
         name for name, fields in reported.items() if fields["state"] == STATE_UNRESOLVED
     )
@@ -255,6 +276,29 @@ def parse(serial_text: str, expected: Sequence[str] | None = None) -> Verdict:
             continue
         problems.append(f"{name}: {fields['state']} at {fields['path'] or 'no path'}")
 
+    usable = sum(1 for fields in reported.values() if fields["state"] == STATE_OK)
+    expected_verdict = (
+        "ok"
+        if not row_protocol_error and not absent and usable == len(names)
+        else "fail"
+    )
+    summary_text: str | None = None
+    if parsed_summary is not None:
+        summary_verdict, summary_usable, summary_total = parsed_summary
+        summary_text = f"{summary_verdict} {summary_usable}/{summary_total}"
+        if summary_total != len(names):
+            problems.append(
+                f"summary total {summary_total} does not match expected tool count {len(names)}"
+            )
+        if summary_usable != usable:
+            problems.append(
+                f"summary usable count {summary_usable} does not match reported ok rows {usable}"
+            )
+        if summary_verdict != expected_verdict:
+            problems.append(
+                f"summary verdict {summary_verdict!r} does not match tool rows ({expected_verdict!r})"
+            )
+
     return Verdict(
         status=STATUS_PASS if not problems else STATUS_FAIL,
         expected=names,
@@ -262,7 +306,7 @@ def parse(serial_text: str, expected: Sequence[str] | None = None) -> Verdict:
         missing=missing,
         not_executable=not_executable,
         problems=tuple(problems),
-        summary=summary,
+        summary=summary_text,
         reported_lines=len(reported),
     )
 
