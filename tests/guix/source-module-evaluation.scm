@@ -9,6 +9,9 @@
 ;; from this list is a module nobody has checked.
 ;; scripts/check_scheme_module_coverage.py enforces that rule.
 (use-modules (guix packages)
+             ;; license-name експортує саме (guix licenses); без цього
+             ;; модуля оцінювання падає з «license-name: unbound variable».
+             (guix licenses)
              (wsm licenses)
              (gnu packages linux)
              (wsm systems performance)
