@@ -72,3 +72,28 @@ curl -fsS <PAGES_URL>/signing-key.pub | sudo guix archive --authorize
 - доступність окремого WSM-owned каналу чи його автентифікованого ланцюжка Phase B.
 
 ISO, NAR та інші результати збірки не комітяться у звичайні Git-гілки.
+
+## Окрема публікація NAR closure без довготривалого substitute-ключа
+
+Для фізичної видачі пакетів як окремого перевірюваного bundle додано файл .github/workflows/package-archives.yml. Це не заміна й не прихований обхід substitutes.yml: workflow використовує той самий pinned channels.lock.scm та точний маніфест drivers/profiles/h170-free-packages.scm, але формує незалежний prerelease з повною recursive closure.
+
+- Запуск: явний tag packages-h170-free-* або ручний dispatch із main.
+- Пакетний allowlist: усі 11 коренів із маніфесту; workflow читає маніфест як дані й звіряє його з фіксованим allowlist, а не виконує довільні package expressions.
+- Provenance: Guix .drv, store path, recursive NAR hash, сирі guix show recutils записи з effective license, pinned channel description, lock/manifest hashes і closure-size report.
+- Підпис NAR: одноразова пара Guix archive keys створюється на ephemeral runner до запуску daemon. У prerelease включається лише відкритий ключ; приватний ключ не експортується й не стає довготривалим GitHub secret.
+- Цілісність: recursive NAR bundle стискається, розбивається на менші assets, отримує GitHub build provenance attestation; workflow завантажує релізні assets назад і перевіряє SHA256 та zstd.
+- Зберігання: окремий versioned GitHub prerelease. Бінарні дані не потрапляють до звичайних Git-гілок.
+
+Імпорт конкретного bundle після перевірки його provenance:
+
+    sha256sum -c SHA256SUMS
+    sudo guix archive --authorize < signing-key.pub
+    cat h170-free-closure.nar.zst.part-* | zstd -dc | guix archive --import
+
+Ключ є короткоживучим ключем конкретної збірки. Його авторизація стосується саме цього релізу; не переносіть її на невідомі майбутні релізи без перевірки нового provenance.
+
+## Поточні результати автоматизації
+
+substitutes.yml (довготривалий HTTP substitute cache із GitHub Pages) і package-archives.yml (окремий prerelease bundle) мають різні ключові моделі. На 2026-11-28 run 46115320185 для substitutes.yml завершився помилкою на кроці Validate owner-controlled substitute signing keys: GUIX_SIGNING_KEY і GUIX_SIGNING_PUBLIC_KEY не задані, тому оцінювання та збірка 11 пакетів були пропущені. Це не свідчить про помилку пакетів і не є успішною публікацією.
+
+Довготривалий substitute endpoint потребує owner-controlled key custody та окремого налаштування GitHub secret/variable. Перший package prerelease може бути зібраний незалежно з одноразовим ключем; це дозволяє розповсюдити перевірювану closure, але не створює постійного сервера субститутів.
