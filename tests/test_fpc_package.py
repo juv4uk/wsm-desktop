@@ -151,6 +151,7 @@ class PackageTests(unittest.TestCase):
         self.assertIn("wsm-hwcheck-fpc", self.text)
         self.assertIn("wsm-classify-fpc", self.text)
         self.assertIn("wsm-partition-fpc", self.text)
+        self.assertIn("wsm-profile-fpc", self.text)
         self.assertIn("wsm-partition-fpc", self.text)
 
     def test_package_license_is_the_actual_owner_license(self) -> None:
@@ -179,6 +180,7 @@ class MakefileAndWorkflowTests(unittest.TestCase):
         self.assertIn("-o$(BUILD_DIR)/wsm-hwcheck", text)
         self.assertIn("-o$(BUILD_DIR)/wsm-classify", text)
         self.assertIn("-o$(BUILD_DIR)/wsm-partition", text)
+        self.assertIn("-o$(BUILD_DIR)/wsm-profile", text)
         self.assertIn("-o$(BUILD_DIR)/wsm-partition", text)
         self.assertIn("-Mobjfpc", text)
         self.assertIn("-Sh", text)
@@ -193,6 +195,7 @@ class MakefileAndWorkflowTests(unittest.TestCase):
         self.assertIn("python3 tests/test_fpc_package.py", text)
         self.assertIn("tests/test_fpc_partition.py", text)
         self.assertIn("python3 tests/test_fpc_partition.py", text)
+        self.assertIn("python3 tests/test_fpc_profile.py", text)
         self.assertIn("jsonschema[format]==4.26.0", text)
         self.assertNotIn("git ls-files '*.lpr'", text)
 
