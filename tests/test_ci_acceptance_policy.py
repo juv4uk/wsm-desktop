@@ -204,6 +204,7 @@ class StartupBenchmarkTests(unittest.TestCase):
 
 
 class FreePascalBuildTests(unittest.TestCase):
+    SCRIPT = ROOT / "scripts" / "check_pascal_sources.py"
     """A Pascal file nothing compiles is source text, not a program."""
 
     WORKFLOW = ROOT / ".github" / "workflows" / "fpc-build.yml"
@@ -215,22 +216,24 @@ class FreePascalBuildTests(unittest.TestCase):
         self.assertIn("fp-compiler-3.2.2", self.text)
         self.assertIn('test "$(fpc -iV)" = "3.2.2"', self.text)
 
-    def test_it_compiles_every_program_in_the_tree(self) -> None:
-        self.assertIn("git ls-files '*.lpr'", self.text)
-        self.assertIn("fpc -O2", self.text)
+    def test_it_compiles_all_six_programs_from_explicit_make_targets(self) -> None:
+        self.assertIn("make -C tools/pascal clean all", self.text)
+        for program in (
+            "wsm-hwcheck", "wsm-classify", "wsm-cpu-isa", "wsm-partition",
+            "wsm-profile", "wsm-preflight", "wsm-install",
+        ):
+            with self.subTest(program=program):
+                self.assertIn(f"tools/pascal/build/{program}", self.text)
+        self.assertNotIn("git ls-files '*.lpr'", self.text)
 
     def test_a_compile_error_fails_the_run(self) -> None:
-        self.assertIn("Free Pascal refused to compile", self.text)
-        self.assertIn("exit 1", self.text)
+        self.assertIn("set -euo pipefail", self.text)
+        self.assertIn("make -C tools/pascal clean all", self.text)
+        self.assertIn("test -x", self.text)
 
-    def test_it_does_not_claim_success_when_there_is_nothing_to_build(self) -> None:
-        self.assertIn("WSM_FPC_PROGRAMS=0", self.text)
-
-
-class PascalSourceContractTests(unittest.TestCase):
-    """fpc accepts a file with no licence, no mode and a mismatched name. This does not."""
-
-    SCRIPT = ROOT / "scripts" / "check_pascal_sources.py"
+    def test_workflow_reports_only_programs_that_exist_after_build(self) -> None:
+        self.assertIn("for program in wsm-hwcheck wsm-classify wsm-cpu-isa wsm-partition wsm-profile wsm-preflight wsm-install", self.text)
+        self.assertNotIn("WSM_FPC_PROGRAMS=0", self.text)
 
     def setUp(self) -> None:
         import importlib.util

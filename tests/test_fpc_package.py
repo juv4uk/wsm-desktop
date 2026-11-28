@@ -64,12 +64,56 @@ class PackageTests(unittest.TestCase):
         self.assertIn("install-file", self.text)
         self.assertIn("/bin", self.text)
 
+    def test_seven_public_packages_have_separate_reader_and_frontend_roles(self) -> None:
+        names = (
+            "wsm-hwcheck-fpc", "wsm-classify-fpc", "wsm-cpu-isa-fpc", "wsm-partition-fpc",
+            "wsm-profile-fpc", "wsm-preflight-fpc", "wsm-install-fpc",
+        )
+        self.assertEqual(self.text.count("(define-public wsm-"), 7)
+        for name in names:
+            with self.subTest(package=name):
+                self.assertIn(name, self.text)
+        self.assertEqual(self.text.count("(make-fpc-reader"), 7)
+        self.assertIn("(define (make-fpc-reader", self.text)
+        self.assertNotIn("(inherit wsm-hwcheck-fpc)", self.text)
+
+    def test_reader_compiler_is_build_only_and_installer_inputs_are_explicit(self) -> None:
+        self.assertEqual(self.text.count("(native-inputs (list fpc gnu-make))"), 2)
+        self.assertIn("(inputs (list wsm-preflight-fpc", self.text)
+        self.assertIn("wsm-partition-fpc))", self.text)
+        self.assertIn("(symlink (string-append input \"/bin/\" executable)", self.text)
+        installer = self.text.split("(define-public wsm-install-fpc", 1)[1]
+        self.assertNotIn("wsm-cpu-isa-fpc", installer)
+        self.assertNotIn("wsm-profile-fpc", installer)
+        self.assertNotIn("propagated-inputs", self.text)
+
+    def test_root_makefile_exposes_a_pinned_guix_build_target(self) -> None:
+        text = (ROOT / "Makefile").read_text(encoding="utf-8")
+        self.assertIn("build-fpc-packages:", text)
+        for name in (
+            "wsm-hwcheck-fpc", "wsm-classify-fpc", "wsm-cpu-isa-fpc", "wsm-partition-fpc",
+            "wsm-profile-fpc", "wsm-preflight-fpc", "wsm-install-fpc",
+        ):
+            self.assertIn(name, text)
+        self.assertIn("time-machine -C channels.lock.scm", text)
+
 
 class MakefileTests(unittest.TestCase):
     def test_the_makefile_passes_the_mode_flags(self) -> None:
         text = MAKE.read_text(encoding="utf-8")
         self.assertIn("-Mobjfpc", text)
         self.assertIn("-Sh", text)
+
+    def test_all_seven_targets_keep_outputs_out_of_the_source_tree(self) -> None:
+        text = MAKE.read_text(encoding="utf-8")
+        for name in (
+            "wsm-hwcheck", "wsm-classify", "wsm-cpu-isa", "wsm-partition",
+            "wsm-profile", "wsm-preflight", "wsm-install",
+        ):
+            with self.subTest(program=name):
+                self.assertIn(f"$(BUILD_DIR)/{name}", text)
+        self.assertIn("BUILD_DIR ?= build", text)
+        self.assertIn("rm -rf $(BUILD_DIR)", text)
 
 
 if __name__ == "__main__":

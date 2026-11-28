@@ -1,34 +1,48 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
 #
-# FPC is invoked with -Mobjfpc and -Sh so the unit's {$mode objfpc}{$H+}
-# directives are honoured; without -Sh the H+ (ANSI strings) is ignored and
-# the JSON builder silently truncates on the first byte above 127.
+# Native WSM utilities. Each target builds one executable under BUILD_DIR.
+# The tools only read their evidence inputs; the partition planner emits data.
 
 FPC ?= fpc
+PREFIX ?= /usr/local
+BUILD_DIR ?= build
 FPCFLAGS ?= -Mobjfpc -Sh -O2 -vewn
-TARGETS = wsm-hwcheck wsm-classify wsm-partition wsm-profile wsm-preflight wsm-install
+TARGETS = wsm-hwcheck wsm-classify wsm-cpu-isa wsm-partition wsm-profile wsm-preflight wsm-install
+
+.PHONY: all clean $(TARGETS)
 
 all: $(TARGETS)
 
-wsm-hwcheck: wsm_hwcheck.pas
-	$(FPC) $(FPCFLAGS) -owsw-hwcheck wsm_hwcheck.pas
+$(BUILD_DIR):
+	mkdir -p "$(BUILD_DIR)"
 
-wsm-classify: wsm_classify.pas
-	$(FPC) $(FPCFLAGS) -owsw-classify wsm_classify.pas
+wsm-hwcheck: $(BUILD_DIR)/wsm-hwcheck
+$(BUILD_DIR)/wsm-hwcheck: wsm_hwcheck.pas | $(BUILD_DIR)
+	$(FPC) $(FPCFLAGS) -FE"$(BUILD_DIR)" -FU"$(BUILD_DIR)" -o"$(BUILD_DIR)/wsm-hwcheck" wsm_hwcheck.pas
 
-wsm-partition: wsm_partition.pas
-	$(FPC) $(FPCFLAGS) -owsw-partition wsm_partition.pas
+wsm-classify: $(BUILD_DIR)/wsm-classify
+$(BUILD_DIR)/wsm-classify: wsm_classify.pas | $(BUILD_DIR)
+	$(FPC) $(FPCFLAGS) -FE"$(BUILD_DIR)" -FU"$(BUILD_DIR)" -o"$(BUILD_DIR)/wsm-classify" wsm_classify.pas
 
-wsm-profile: wsm_profile.pas
-	$(FPC) $(FPCFLAGS) -owsw-profile wsm_profile.pas
+wsm-cpu-isa: $(BUILD_DIR)/wsm-cpu-isa
+$(BUILD_DIR)/wsm-cpu-isa: wsm_cpu_isa.pas wsm_cpu_isa_core.pas | $(BUILD_DIR)
+	$(FPC) $(FPCFLAGS) -FE"$(BUILD_DIR)" -FU"$(BUILD_DIR)" -Fu. -o"$(BUILD_DIR)/wsm-cpu-isa" wsm_cpu_isa.pas
 
-wsm-preflight: wsm_preflight.pas
-	$(FPC) $(FPCFLAGS) -owsw-preflight wsm_preflight.pas
+wsm-partition: $(BUILD_DIR)/wsm-partition
+$(BUILD_DIR)/wsm-partition: wsm_partition.pas | $(BUILD_DIR)
+	$(FPC) $(FPCFLAGS) -FE"$(BUILD_DIR)" -FU"$(BUILD_DIR)" -o"$(BUILD_DIR)/wsm-partition" wsm_partition.pas
 
-wsm-install: wsm_install.pas
-	$(FPC) $(FPCFLAGS) -owsw-install wsm_install.pas
+wsm-profile: $(BUILD_DIR)/wsm-profile
+$(BUILD_DIR)/wsm-profile: wsm_profile.pas | $(BUILD_DIR)
+	$(FPC) $(FPCFLAGS) -FE"$(BUILD_DIR)" -FU"$(BUILD_DIR)" -o"$(BUILD_DIR)/wsm-profile" wsm_profile.pas
+
+wsm-preflight: $(BUILD_DIR)/wsm-preflight
+$(BUILD_DIR)/wsm-preflight: wsm_preflight.pas | $(BUILD_DIR)
+	$(FPC) $(FPCFLAGS) -FE"$(BUILD_DIR)" -FU"$(BUILD_DIR)" -o"$(BUILD_DIR)/wsm-preflight" wsm_preflight.pas
+
+wsm-install: $(BUILD_DIR)/wsm-install
+$(BUILD_DIR)/wsm-install: wsm_install.pas | $(BUILD_DIR)
+	$(FPC) $(FPCFLAGS) -FE"$(BUILD_DIR)" -FU"$(BUILD_DIR)" -o"$(BUILD_DIR)/wsm-install" wsm_install.pas
 
 clean:
-	rm -f $(TARGETS) *.o *.ppu
-
-.PHONY: all clean
+	rm -rf "$(BUILD_DIR)" *.o *.ppu
