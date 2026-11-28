@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT))
 
 from wsm_install.executor import ExecutorError, execute  # noqa: E402
 from wsm_install.install_steps import TRUSTED_TOOLS, Step  # noqa: E402
+from wsm_install.plan import PlanDigestError, plan_digest, step_digest  # noqa: E402
 from wsm_install.verify import VERIFIERS, verify_step  # noqa: E402
 
 STEPS = [
@@ -194,6 +195,58 @@ class VerifierContractTests(unittest.TestCase):
                     executable, VERIFIERS,
                     f"{name} is allowlisted for execution but has no postcondition",
                 )
+
+
+class PlanDigestTests(unittest.TestCase):
+    """A digest that consent and journals can quote, and that notices any change."""
+
+    def test_digest_is_stable_and_hex(self) -> None:
+        first = plan_digest("/dev/nvme0n1", STEPS)
+        second = plan_digest("/dev/nvme0n1", STEPS)
+        self.assertEqual(first, second)
+        self.assertRegex(first, r"^[0-9a-f]{64}$")
+
+    def test_a_single_argument_change_changes_the_digest(self) -> None:
+        altered = list(STEPS)
+        altered[1] = Step(["/usr/sbin/mkfs.ext4", "-F", "/dev/nvme0n1p3"], "format root", destructive=True)
+        self.assertNotEqual(plan_digest("/dev/nvme0n1", STEPS), plan_digest("/dev/nvme0n1", altered))
+
+    def test_the_destructive_flag_is_part_of_the_digest(self) -> None:
+        soft = [Step(["/usr/bin/mount", "/dev/nvme0n1p2", "/mnt"], "mount root")]
+        hard = [Step(["/usr/bin/mount", "/dev/nvme0n1p2", "/mnt"], "mount root", destructive=True)]
+        self.assertNotEqual(plan_digest("/dev/nvme0n1", soft), plan_digest("/dev/nvme0n1", hard))
+
+    def test_the_disk_is_part_of_the_digest(self) -> None:
+        self.assertNotEqual(
+            plan_digest("/dev/nvme0n1", STEPS), plan_digest("/dev/nvme1n1", STEPS)
+        )
+
+    def test_step_order_is_part_of_the_digest(self) -> None:
+        self.assertNotEqual(
+            plan_digest("/dev/nvme0n1", STEPS), plan_digest("/dev/nvme0n1", list(reversed(STEPS)))
+        )
+
+    def test_an_empty_plan_is_refused(self) -> None:
+        with self.assertRaises(PlanDigestError) as caught:
+            plan_digest("/dev/nvme0n1", [])
+        self.assertEqual(caught.exception.code, "plan.empty")
+
+    def test_a_non_step_is_refused(self) -> None:
+        with self.assertRaises(PlanDigestError) as caught:
+            plan_digest("/dev/nvme0n1", ["/usr/bin/true"])
+        self.assertEqual(caught.exception.code, "plan.step-type")
+
+    def test_step_digest_binds_position_and_disk(self) -> None:
+        step = STEPS[1]
+        self.assertEqual(
+            step_digest("/dev/nvme0n1", step, 2), step_digest("/dev/nvme0n1", step, 2)
+        )
+        self.assertNotEqual(
+            step_digest("/dev/nvme0n1", step, 2), step_digest("/dev/nvme0n1", step, 3)
+        )
+        self.assertNotEqual(
+            step_digest("/dev/nvme0n1", step, 2), step_digest("/dev/nvme1n1", step, 2)
+        )
 
 
 if __name__ == "__main__":
