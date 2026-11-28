@@ -87,18 +87,16 @@ jobs:
           cat > "$RUNNER_TEMP/superseded-notes.md" <<EOF
           # SUPERSEDED — do not use this WSM tools package
 
-          This release is retained for provenance only and has been superseded by
-          [WSM tools 0.1.0-rc6 — Verified public pre-release](https://github.com/$GITHUB_REPOSITORY/releases/tag/wsm-tools-0.1.0-rc6-0a9865b0bdb4-run-46117970977).
+          This historical WSM-owned package is retained for provenance only.
+          It is withdrawn and remains Draft-only. The later WSM tools 0.1.0-rc6
+          pack is also withdrawn and Draft-only; there is no owner-approved
+          replacement package available for installation or redistribution.
 
           The package source commit $EXPECTED_OLD_SOURCE declared GPL-3+ metadata
-          while the repository's own LICENSE and SPDX headers identify the custom
-          LicenseRef-Volnist license. That mismatch makes the package metadata
-          unsuitable for distribution. Do not install or redistribute the assets
-          from this superseded release.
-
-          The replacement has LicenseRef-Volnist metadata, includes the license
-          text in the runtime pack, and has a successful build, attestation,
-          SHA-256 readback and archive-content verification.
+          while the repository's own LICENSE and SPDX headers identify the
+          custom LicenseRef-Volnist license. That mismatch made the package
+          metadata unsuitable for distribution. Do not install or redistribute
+          these assets.
           EOF
           cat >> "$RUNNER_TEMP/superseded-notes.md" <<'EOF'
 
