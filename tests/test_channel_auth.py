@@ -57,9 +57,8 @@ class InspectTests(unittest.TestCase):
         self.assertIn("authenticated: unknown by design", result.stdout)
 
     def test_install_script_does_not_depend_on_savannah(self) -> None:
-        """The official installer is served by cgit, which refuses bots."""
+        """The binary-tarball bootstrap avoids the flaky Savannah cgit route."""
         script = (ROOT / "scripts" / "install-guix.sh").read_text(encoding="utf-8")
-        # Mentions in comments explain the history; only executable lines count.
         code = [
             line for line in script.splitlines()
             if line.strip() and not line.strip().startswith("#")
@@ -67,6 +66,30 @@ class InspectTests(unittest.TestCase):
         self.assertFalse([line for line in code if "guix-install.sh" in line])
         self.assertIn("ftp.gnu.org", script)
         self.assertIn("guix-daemon", script)
+
+    def test_binary_tarball_signature_is_verified_before_extract(self) -> None:
+        script = (ROOT / "scripts" / "install-guix.sh").read_text(encoding="utf-8")
+        self.assertIn('wget -q -O "$WORKDIR/$TARBALL.sig" "$URL.sig"', script)
+        self.assertIn("--verify", script)
+        self.assertIn("A28BF40C3E551372662D14F741AAE7DCCA3D8351", script)
+        self.assertIn("https://codeberg.org/efraim.gpg", script)
+        self.assertLess(script.index("--verify"), script.index("tar --warning=no-timestamp -xf"))
+
+    def test_installer_refuses_existing_guix_store_and_profile(self) -> None:
+        script = (ROOT / "scripts" / "install-guix.sh").read_text(encoding="utf-8")
+        self.assertIn("[ -e /gnu ] || [ -e /var/guix ]", script)
+        self.assertNotIn('sudo mv "$WORKDIR/gnu/"* /gnu/ 2>/dev/null || true', script)
+        self.assertNotIn('sudo mv "$WORKDIR/var/guix/"* /var/guix/ 2>/dev/null || true', script)
+
+    def test_chroot_is_not_disabled_unless_explicitly_requested(self) -> None:
+        script = (ROOT / "scripts" / "install-guix.sh").read_text(encoding="utf-8")
+        self.assertIn("GUIX_ALLOW_UNSANDBOXED_BUILDS", script)
+        self.assertIn("DAEMON_ARGS+=(--disable-chroot)", script)
+        self.assertIn("disposable runner", script)
+
+    def test_custom_prefix_creates_bin_directory(self) -> None:
+        script = (ROOT / "scripts" / "install-guix.sh").read_text(encoding="utf-8")
+        self.assertIn('as_root mkdir -p "$GUIX_PREFIX/bin"', script)
 
 
 if __name__ == "__main__":
