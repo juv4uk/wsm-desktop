@@ -43,9 +43,13 @@ def all_jobs_disabled(workflow: Path) -> bool:
 
 
 def inline_failure_reporter(workflow: Path) -> bool:
+    """Accept either an inline comment or a readable GitHub step summary."""
     return any(
         "failure()" in str(step.get("if", ""))
-        and REPORTS.search(str(step.get("run", "")))
+        and (
+            REPORTS.search(str(step.get("run", "")))
+            or "$GITHUB_STEP_SUMMARY" in str(step.get("run", ""))
+        )
         for step in steps_of(workflow)
     )
 
