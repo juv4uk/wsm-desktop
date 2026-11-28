@@ -53,4 +53,19 @@ guix shell cuirass -- cuirass web --database="dbname=cuirass host=/var/run/postg
 
 Конфігурація написана й перевірена структурно (тести в `tests/test_cuirass_specs.py`). **Інстанс не запускався**: у середовищі розробки немає ні Guix, ні PostgreSQL.
 
+## Що було виправлено після звірки з посібником
+
+Перша редакція цих файлів була написана «на віру» і містила чотири помилки, які виявила звірка з офіційними джерелами:
+
+| Було | Стало |
+| --- | --- |
+| `(wsm ci images)` — модуль не резолвився, файл лежить у `ci/` | `(ci cuirass images)` — namespace збігається з шляхом |
+| `(operating-system-image os #:target system)` — такої процедури немає | `(system-image image)` у монадичному store, без `#:target` |
+| `(assq-ref arguments 'system)` — Cuirass передає `systems`, список | `(assq-ref arguments 'systems)` |
+| `(gnu services ci)` — там Laminar і Forgejo | `(gnu services cuirass)` |
+
+Плюс `use-substitutes?` — не поле `cuirass-configuration`, і `load` з `/run/current-system` не працює в пісочниці збірки, тому специфікації вбудовані як gexp.
+
+Це і є причина, чому файли такого роду не можна писати без джерела: кожна з чотирьох помилок дала б збій лише в момент запуску, на машині, де Guix є, — тобто не в того, хто писав.
+
 Це чесний стан: файли описують, як запустити, а не стверджують, що запущено.
