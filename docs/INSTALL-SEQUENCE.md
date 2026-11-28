@@ -23,6 +23,26 @@ mount /dev/nvme0n1p1 /mnt/boot/efi
 guix system init systems/desktop.scm /mnt
 ```
 
+## Guix executable closure
+
+Кожен інсталяційний крок отримує абсолютний executable path лише з
+`/run/current-system/profile/bin` або `/run/current-system/profile/sbin`.
+Planner використовує закритий basename allowlist; він не шукає команди через
+успадкований `PATH`, не підставляє Debian/FHS `/usr/bin` або `/usr/sbin` і
+не переходить до user profile чи host fallback. Відсутній, не-executable або
+дубльований запис у `bin/` та `sbin/` означає fail-closed відмову.
+
+Обидва Free live-профілі явно включають `gptfdisk`, `parted` і
+`dosfstools`: відповідно для `sgdisk`, `partprobe` та FAT formatter.
+Locked Guix check окремо будує ці пакети з `channels.lock.scm`. Наявність
+утиліти в пакеті сама по собі не доводить, що вона є у поточному booted
+system profile: resolver перевіряє фактичний профіль під час побудови
+діагностичного плану.
+
+Це лише генерація argv для preview. `executor.execute(..., dry_run=True)`
+показує кроки як `not-run`; жодна команда не запускається, а APPLY лишається
+вимкненим.
+
 ## Три помилки, які цей порядок виключає
 
 **Форматування застарілого вузла.** Ядро не завжди помічає нові розділи. Без
