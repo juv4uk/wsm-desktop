@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
 #
-# Build both native WSM tools with Free Pascal. FPC and its FCL units are
+# Build native WSM tools with Free Pascal. FPC and its FCL units are
 # build-time inputs only; installed binaries do not invoke Python.
 
 FPC ?= fpc
