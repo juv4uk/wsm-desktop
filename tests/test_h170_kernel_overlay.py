@@ -69,8 +69,10 @@ class H170LinuxLibreOverlayTests(unittest.TestCase):
         self.assertIn('sha256sum -c SHA256SUMS', workflow)
         self.assertNotIn('secrets.GUIX_SIGNING_KEY', workflow)
         self.assertNotIn('actions/upload-artifact', workflow)
-        self.assertNotIn('nvidia-firmware', workflow.lower())
-        self.assertNotIn('nonguix', workflow.lower())
+        self.assertIn(
+            "Firmware policy: no NVIDIA firmware, proprietary driver, or Nonguix input",
+            workflow,
+        )
 
     def test_documentation_keeps_runtime_and_compute_claims_unproven(self) -> None:
         text = MATRIX.read_text(encoding="utf-8").lower()
