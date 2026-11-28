@@ -56,7 +56,7 @@ def build(directory: Path, installer_executed: bool = True) -> None:
         json.dumps(
             evidence_document(channel_command, channels_path.read_bytes(), b"", 0),
             sort_keys=True,
-        ) + "\\n",
+        ) + "\n",
         encoding="utf-8",
     )
 
