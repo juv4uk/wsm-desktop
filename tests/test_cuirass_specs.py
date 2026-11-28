@@ -89,6 +89,11 @@ class CuirassTests(unittest.TestCase):
         self.assertIn("(port 8081)", text)
         self.assertNotIn("use-substitutes?", text)
 
+    def test_guix_workflow_runs_for_cuirass_source_changes(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "guix-profile-evaluation.yml")
+        text = workflow.read_text(encoding="utf-8")
+        self.assertIn('"ci/cuirass/**/*.scm"', text)
+
     def test_document_preserves_acceptance_and_publication_boundaries(self) -> None:
         text = DOC.read_text(encoding="utf-8").lower()
         self.assertIn("not_registerable", text)
