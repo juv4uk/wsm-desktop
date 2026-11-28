@@ -56,7 +56,7 @@ class SubstituteWorkflowTests(unittest.TestCase):
 
     def test_guix_fetch_uses_the_project_mirror_without_disabling_authentication(self) -> None:
         step = self.step("Use the GNU Guix project's authenticated Codeberg mirror")
-        self.assertEqual(step["uses"], None)
+        self.assertIsNone(step.get("uses"))
         self.assertIn("https://codeberg.org/guix/guix.git", step["run"])
         self.assertIn("git.guix.gnu.org/guix.git", step["run"])
         self.assertIn("channels.lock.scm", self.text)
