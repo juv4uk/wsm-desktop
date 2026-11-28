@@ -244,6 +244,48 @@ bootloader, EFI variables, диски, governor або power controls. Порі�
 однакових умов. Джерела: [GNU Shepherd Manual](https://shepherding.services/manual/shepherd.pdf)
 та [systemd-analyze upstream documentation](https://www.freedesktop.org/software/systemd/man/latest/systemd-analyze.html).
 
+## GPU-докази GP107: посилання, а не копія
+
+Канонічний фізичний GPU-harness і його сирі артефакти живуть у
+[juv4uk/gp107-nvidia-re](https://github.com/juv4uk/gp107-nvidia-re); тут їх не
+дублюємо. Цей розділ лише фіксує, що саме з тих доказів WSM має право цитувати,
+і з якими межами.
+
+**Джерело:** `gp107-nvidia-re@62a1296` (28.11.2026), документи `docs/20`–`docs/22`.
+
+| Поле | Значення |
+| --- | --- |
+| GPU | `0000:01:00.0`, `10de:1c82` — GP107, GeForce GTX 1050 Ti |
+| Драйвер / ICD | NVIDIA `580.196.11`, `driverID=4`, `/usr/share/vulkan/icd.d/nvidia_icd.json` |
+| Пам'ять | `HOST_VISIBLE\|HOST_COHERENT`, heap=1 |
+| Повтори | 3 успішні, кожен зі своїм manifest (`MANIFEST-OK files=11`) |
+| Boot | пропрієтарний за замовчуванням; відкритий boot не використовувався |
+
+Опубліковані числа (медіана трьох повторів): 4096 елементів — 20 310 ns /
+2,4201 GB/s; 1 Mi — 1 267 551 ns / 9,9269 GB/s; 8 Mi — 10 616 000 ns /
+9,4822 GB/s. Найкращий виміряний `local_size` — 128 для 1 Mi і 32 для 8 Mi;
+на малих workloads помітний overhead подання. Для `DEVICE_LOCAL` compute
+умовний traffic сягає ~90 GB/s, але повний ланцюг staging→compute→readback на
+32 Mi коштує ~52,39 ms проти ~42,58 ms для `HOST_VISIBLE`, тобто дві копії
+з'їдають виграш.
+
+**Чого ці числа не доводять — і що з ними не можна робити:**
+
+- це **не** сертифікація плати H170, не стан Guix/Linux-libre і не доказ
+  працездатності NVK;
+- це **не** фізична пропускна здатність VRAM або PCIe: «умовний GB/s»
+  рахується з розміру буфера й часу, а не з лічильників пам'яті;
+- порівняння NVK ↔ NVIDIA лишається **незавершеним**: для нього потрібен
+  окремо схвалений власником reboot у відкритий boot і проходження gate
+  [gp107 #18](https://github.com/juv4uk/gp107-nvidia-re/issues/18); доти статус
+  NVK — `NOT_RUN`;
+- зіставляти можна лише однакові workloads, версії harness, класи пам'яті,
+  розміри, кількість повторів і теплові умови; інакше це не порівняння.
+
+Виміряний факт, похідна інтерпретація й неперевірена причинність тут розділені
+навмисно: перше — числа вище, друге — «дві копії з'їдають виграш staging»,
+третє — будь-яке пояснення, чому саме так.
+
 ## Як це міряти далі
 
 Задача [#151](https://github.com/juv4uk/wsm-desktop/issues/151) лишається відкритою: потрібен baseline boot, service startup і типовий workload, знятий на реальному залізі, з однаковими умовами. Доти будь-яке твердження про швидкість — не твердження.
