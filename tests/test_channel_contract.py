@@ -25,12 +25,12 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from check_channel_auth import main as channel_auth_main  # noqa: E402
 from check_scheme_module_coverage import mask_scheme_non_code  # noqa: E402
 
-DEFINE_MODULE = re.compile(r"\\(define-module\\s+\\(([^)]+)\\)")
+DEFINE_MODULE = re.compile(r"\(define-module\s+\(([^)]+)\)")
 NONFREE_MODULE = re.compile(
-    r"\\((?:nonguix|nongnu|linux-nonfree)(?:\\s|\\))|\\bnvidia-driver\\b",
+    r"\((?:nonguix|nongnu|linux-nonfree)(?:\s|\))|\bnvidia-driver\b",
     re.IGNORECASE,
 )
-INTRODUCTION_FORM = re.compile(r"\\(introduction\\b")
+INTRODUCTION_FORM = re.compile(r"\(introduction\b")
 
 
 def modules_under(root: Path) -> dict[Path, list[str]]:
@@ -118,9 +118,9 @@ class ChannelContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / "fake.scm").write_text(
-                '; (define-module (wsm fake line))\\n'
-                '#| (define-module (wsm fake block)) |#\\n'
-                '(display "(define-module (wsm fake string))")\\n',
+                '; (define-module (wsm fake line))\n'
+                '#| (define-module (wsm fake block)) |#\n'
+                '(display "(define-module (wsm fake string))")\n',
                 encoding="utf-8",
             )
             self.assertEqual(modules_under(root), {})
@@ -130,14 +130,14 @@ class ChannelContractTests(unittest.TestCase):
             root = Path(temporary)
             fake = root / "fake.scm"
             fake.write_text(
-                '; (use-modules (nonguix packages nvidia))\\n'
-                '#| (use-modules (nongnu packages linux)) |#\\n'
-                '(display "(nvidia-driver)")\\n',
+                '; (use-modules (nonguix packages nvidia))\n'
+                '#| (use-modules (nongnu packages linux)) |#\n'
+                '(display "(nvidia-driver)")\n',
                 encoding="utf-8",
             )
             self.assertEqual(nonfree_module_imports(root), {})
             fake.write_text(
-                '(use-modules (nonguix packages nvidia))\\n',
+                '(use-modules (nonguix packages nvidia))\n',
                 encoding="utf-8",
             )
             self.assertEqual(len(nonfree_module_imports(root)), 1)
@@ -145,8 +145,8 @@ class ChannelContractTests(unittest.TestCase):
     def test_duplicate_module_declarations_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            (root / "one.scm").write_text("(define-module (wsm duplicate))\\n")
-            (root / "two.scm").write_text("(define-module (wsm duplicate))\\n")
+            (root / "one.scm").write_text("(define-module (wsm duplicate))\n")
+            (root / "two.scm").write_text("(define-module (wsm duplicate))\n")
             with self.assertRaisesRegex(ValueError, "duplicate Scheme module"):
                 modules_under(root)
 
