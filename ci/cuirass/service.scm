@@ -19,7 +19,8 @@
 
 (use-modules (gnu services cuirass)
              (gnu services)
-             (guix channels))
+             (guix channels)
+             (guix gexp))
 
 (define %wsm-guix-channel
   (channel
@@ -41,11 +42,6 @@
 
 (define %wsm-cuirass-specs
   #~(list (specification
-           (name 'wsm-channel)
-           (priority 1)
-           (build '(channels wsm))
-           (channels (list #$%wsm-guix-channel #$%wsm-channel)))
-          (specification
            (name 'wsm-live-minimal-image)
            (priority 1)
            (build '(custom (ci cuirass images)))
