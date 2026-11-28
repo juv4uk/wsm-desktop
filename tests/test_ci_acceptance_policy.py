@@ -216,8 +216,9 @@ class FreePascalBuildTests(unittest.TestCase):
         self.assertIn('test "$(fpc -iV)" = "3.2.2"', self.text)
 
     def test_it_compiles_every_program_in_the_tree(self) -> None:
-        self.assertIn("git ls-files '*.lpr'", self.text)
-        self.assertIn("fpc -O2", self.text)
+        self.assertIn("git ls-files '*.lpr' '*.pas' '*.pp'", self.text)
+        self.assertIn("programs=()", self.text)
+        self.assertIn("fpc -B -O2", self.text)
 
     def test_a_compile_error_fails_the_run(self) -> None:
         self.assertIn("Free Pascal refused to compile", self.text)
