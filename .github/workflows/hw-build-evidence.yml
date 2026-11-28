@@ -4,24 +4,20 @@ name: WSM H170 Free package build evidence
 # Builds the fixed upstream-only manifest in an ephemeral runner.
 # It does not export NARs, upload artifacts, publish a release or start a substitute server.
 
+# Intentionally manual: this four-hour lane must not be cancelled by every PR update.
 on:
-  pull_request:
-    paths:
-      - ".github/workflows/hw-build-evidence.yml"
-      - "drivers/profiles/h170-free-packages.scm"
-      - "channels.lock.scm"
-      - "tests/test_h170_free_package_manifest.py"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: h170-free-package-evidence-${{ github.ref }}
-  cancel-in-progress: true
+  group: h170-free-package-evidence-main
+  cancel-in-progress: false
 
 jobs:
   build:
+    if: ${{ github.ref == 'refs/heads/main' }}
     name: Evaluate and build H170 Free package candidates
     runs-on: ubuntu-24.04
     timeout-minutes: 240
@@ -36,6 +32,11 @@ jobs:
           sudo apt-get install -y guix
           sudo systemctl enable --now guix-daemon.service
           guix --version | tee -a "$GITHUB_STEP_SUMMARY"
+          {
+            echo ""
+            echo "### Pinned Guix channel provenance"
+          } >> "$GITHUB_STEP_SUMMARY"
+          guix time-machine -C channels.lock.scm -- describe | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Check the fixed package manifest
         run: python3 tests/test_h170_free_package_manifest.py
@@ -78,7 +79,7 @@ jobs:
           for store_path in "${STORE_PATHS[@]}"; do
             test -e "$store_path"
             output_name="${store_path##*/}"
-            nar_sha256="$(guix hash --recursive --format=hex "$store_path")"
+            nar_sha256="$(guix time-machine -C channels.lock.scm -- hash --recursive --format=hex "$store_path")"
             echo "| `$output_name` | `$nar_sha256` |" >> "$GITHUB_STEP_SUMMARY"
           done
           {
