@@ -66,7 +66,7 @@ Kirigami.ApplicationWindow {
                     Item { Layout.fillHeight: true }
                 }
 
-                ScrollView {
+                Controls.ScrollView {
                     clip: true
                     ColumnLayout {
                         width: stages.width
@@ -128,7 +128,7 @@ Kirigami.ApplicationWindow {
                     }
                 }
 
-                ScrollView {
+                Controls.ScrollView {
                     clip: true
                     ColumnLayout {
                         width: stages.width
@@ -183,7 +183,7 @@ Kirigami.ApplicationWindow {
                     }
                 }
 
-                ScrollView {
+                Controls.ScrollView {
                     clip: true
                     ColumnLayout {
                         width: stages.width
