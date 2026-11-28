@@ -265,23 +265,32 @@ begin
     AddSchemaError(Location, Format('%s is not of type ''array''', [Repr(Value)]));
 end;
 
+{ An absent member is not a type error: JSON Schema says a property that is not present
+  is valid, and requiredness is enforced separately by RequireMembers. Checking an
+  optional member as if it were present made every report without `notes` invalid. }
 function ValueIsString(Value: TWsmJson; const Location: string): Boolean;
 begin
-  Result := (Value <> nil) and Value.IsString;
+  if Value = nil then
+    Exit(True);
+  Result := Value.IsString;
   if not Result then
     AddSchemaError(Location, Format('%s is not of type ''string''', [Repr(Value)]));
 end;
 
 function ValueIsBoolean(Value: TWsmJson; const Location: string): Boolean;
 begin
-  Result := (Value <> nil) and Value.IsBoolean;
+  if Value = nil then
+    Exit(True);
+  Result := Value.IsBoolean;
   if not Result then
     AddSchemaError(Location, Format('%s is not of type ''boolean''', [Repr(Value)]));
 end;
 
 function ValueIsInteger(Value: TWsmJson; const Location: string): Boolean;
 begin
-  Result := (Value <> nil) and Value.IsNumber and Value.IsIntegerNumber;
+  if Value = nil then
+    Exit(True);
+  Result := Value.IsNumber and Value.IsIntegerNumber;
   if not Result then
     AddSchemaError(Location, Format('%s is not of type ''integer''', [Repr(Value)]));
 end;
@@ -452,13 +461,18 @@ end;
 function SelectVersion(Report: TWsmJson; out Version: string): Boolean;
 var
   Declared: string;
+  DeclaredIsString: Boolean;
 begin
   Version := '';
   Declared := 'None';
+  DeclaredIsString := False;
   if (Report <> nil) and Report.IsObject and Report.HasMember('schema_version') then
   begin
     if Report.Member('schema_version').IsString then
-      Declared := Report.Member('schema_version').AsText
+    begin
+      Declared := Report.Member('schema_version').AsText;
+      DeclaredIsString := True;
+    end
     else
       Declared := Report.Member('schema_version').PythonRepr;
   end;
@@ -472,10 +486,15 @@ begin
     Version := SUPPORTED_VERSION_CURRENT;
     Exit(True);
   end;
-  // Python formats the declared version with repr(), so a reader sees the quotes and can
-  // tell a string from a number; the refusal is compared against it byte for byte.
-  WriteLn(StdErr, Format('wsm-install: unsupported hardware report schema ''%s''; supported: %s, %s',
-    [Declared, SUPPORTED_VERSION_OLD, SUPPORTED_VERSION_CURRENT]));
+  // Python formats the declared version with repr(): a string comes out quoted, and an
+  // absent one comes out as None without quotes. The refusal is compared byte for byte,
+  // so both spellings matter.
+  if DeclaredIsString then
+    WriteLn(StdErr, Format('wsm-install: unsupported hardware report schema ''%s''; supported: %s, %s',
+      [Declared, SUPPORTED_VERSION_OLD, SUPPORTED_VERSION_CURRENT]))
+  else
+    WriteLn(StdErr, Format('wsm-install: unsupported hardware report schema None; supported: %s, %s',
+      [SUPPORTED_VERSION_OLD, SUPPORTED_VERSION_CURRENT]));
   Result := False;
 end;
 
