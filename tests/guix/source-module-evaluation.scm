@@ -35,6 +35,16 @@
              (eq? (package-license wsm-tools) wsm-license))
   (error "WSM Guix license metadata does not preserve LicenseRef-Volnist"))
 
+;; The native Pascal packages are independent from the suspended WSM Python
+;; package. FPC is a build-time input and both package records keep WSM license.
+(unless (and (package? wsm-hwcheck-fpc)
+             (package? wsm-classify-fpc)
+             (eq? (package-license wsm-hwcheck-fpc) wsm-license)
+             (eq? (package-license wsm-classify-fpc) wsm-license)
+             (not (member 'fpc (package-propagated-inputs wsm-hwcheck-fpc)))
+             (not (member 'fpc (package-propagated-inputs wsm-classify-fpc))))
+  (error "Native FPC package records must preserve WSM license and build-only compiler"))
+
 ;; Evaluate the ordinary live profile as well as the standalone channel module.
 (primitive-load "systems/live-iso.scm")
 (unless (and (package? wsm-live-tools)

@@ -80,3 +80,56 @@ jobs:
             echo "The first failing command and its exact output are in the preceding step logs."
             echo "WSM_CHANNEL_AUTHENTICATION=NOT_TESTED"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  build-native-fpc-packages:
+    name: Build both native FPC Guix packages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Use the GNU Guix project's authenticated Codeberg mirror
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --global url."https://codeberg.org/guix/guix.git".insteadOf "https://git.guix.gnu.org/guix.git"
+          echo "The channel lock and authenticated introduction remain unchanged." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Restore Guix checkout cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/guix/checkouts
+          key: guix-checkouts-${{ hashFiles('channels.lock.scm', 'channels/*.scm') }}
+          restore-keys: guix-checkouts-
+
+      - name: Install Guix
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y guix
+          sudo systemctl enable --now guix-daemon.service
+          guix --version
+
+      - name: Build the native FPC packages from the pinned lock
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/wsm-fpc-guix"
+          guix time-machine -C channels.lock.scm -- build -L . --no-grafts --keep-going \
+            wsm-hwcheck-fpc wsm-classify-fpc \
+            | tee "$RUNNER_TEMP/wsm-fpc-guix/store-paths.txt"
+          mapfile -t outputs < <(grep -E '^/gnu/store/[a-z0-9]{32}-' "$RUNNER_TEMP/wsm-fpc-guix/store-paths.txt")
+          test "${#outputs[@]}" -eq 2
+          {
+            echo "### Native FPC Guix package builds"
+            echo
+            printf '%s\\n' "${outputs[@]}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Summarize native package build failure
+        if: failure()
+        run: |
+          {
+            echo "### Native FPC Guix package build failed"
+            echo "The pinned Guix command and its exact diagnostic are in the preceding step."
+            echo "No binary package archive was published."
+          } >> "$GITHUB_STEP_SUMMARY"
