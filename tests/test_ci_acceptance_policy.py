@@ -223,6 +223,10 @@ class FreePascalBuildTests(unittest.TestCase):
         self.assertIn("tests/test_fpc_classify_runtime.py", self.text)
         self.assertIn("test -x build/fpc/wsm_partition", self.text)
         self.assertIn("tests/test_fpc_partition_runtime.py", self.text)
+        self.assertIn("test -x build/fpc/wsm_profile", self.text)
+        self.assertIn("test -x build/fpc/wsm_preflight", self.text)
+        self.assertIn("tests/test_fpc_profile_runtime.py", self.text)
+        self.assertIn("tests/test_fpc_preflight_runtime.py", self.text)
 
     def test_a_compile_error_fails_the_run(self) -> None:
         self.assertIn("Free Pascal refused to compile", self.text)
