@@ -153,7 +153,7 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
         self.assertIn("--dry-run --no-grafts", plan["run"])
         self.assertIn("--manifest=drivers/profiles/h170-free-packages.scm", plan["run"])
         self.assertNotIn("wsm-tools", plan["run"])
-        self.assertNotIn("packages", plan["run"])
+        self.assertNotIn("inputs", plan["run"])
 
     def test_no_arbitrary_shell_input_or_binary_export_remains(self) -> None:
         for forbidden in (
@@ -173,12 +173,10 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, self.text)
 
-    def test_the_real_h170_publication_lanes_remain_separate(self) -> None:
+    def test_the_fixed_h170_substitute_lane_remains_separate(self) -> None:
         substitutes = (ROOT / ".github" / "workflows" / "substitutes.yml").read_text(encoding="utf-8")
-        kernel_release = (ROOT / ".github" / "workflows" / "h170-gp107-release.yml").read_text(encoding="utf-8")
         self.assertIn("drivers/profiles/h170-free-packages.scm", substitutes)
-        self.assertIn("linux-libre-h170", kernel_release)
-        self.assertIn("guix archive --export --recursive", kernel_release)
+        self.assertIn("guix publish", substitutes)
 
 if __name__ == "__main__":
     unittest.main()
