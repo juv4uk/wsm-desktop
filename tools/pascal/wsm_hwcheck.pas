@@ -173,7 +173,7 @@ begin
   Result.Add('discovery_status', 'discovered');
 
   Identity := TJSONObject.Create;
-  Identity.Add('local_path', 'bus/pci/devices/' + Name);
+  Identity.Add('local_path', '/bus/pci/devices/' + Name);
   AddOptionalFile(Identity, 'vendor_id', DevicePath + '/vendor');
   AddOptionalFile(Identity, 'device_id', DevicePath + '/device');
   AddOptionalFile(Identity, 'subsystem_vendor_id', DevicePath + '/subsystem_vendor');
