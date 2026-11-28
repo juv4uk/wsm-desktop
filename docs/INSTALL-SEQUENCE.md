@@ -23,6 +23,27 @@ mount /dev/nvme0n1p1 /mnt/boot/efi
 guix system init systems/desktop.scm /mnt
 ```
 
+## Контракт Guix executable closure
+
+Планувальник ідентифікує утиліти закритим allowlist і на фактичній Guix System
+резолвить кожну лише за точним шляхом у
+`/run/current-system/profile/bin` або `/run/current-system/profile/sbin`.
+Він не використовує успадкований `PATH`, FHS `/usr/bin`/`/usr/sbin`, user
+profile чи host fallback. Відсутній, неоднозначний або невиконуваний executable
+дає типізовану fail-closed відмову.
+
+Обидва Free live-профілі явно включають `gptfdisk`, `parted` і `dosfstools`;
+locked Guix check будує саме ці пакети з `channels.lock.scm`. На звичайному
+non-Guix розробницькому host planner може показати лише логічні basename names
+як дані preview. Це не виконувані шляхи: privileged agent приймає лише точні
+Guix system-profile paths і відхиляє bare names та старі FHS aliases.
+
+Блок команд вище — пояснювальна форма argv, а не готовий shell script. Реальний
+planner також включає явні GPT partition-table кроки перед `partprobe`; кожен
+такий крок позначено destructive. Shared executor лише показує `not-run` для
+кожного кроку. Команди не запускаються, диск не відкривається для запису, а
+`APPLY` залишається вимкненим у CLI, Calamares і privileged agent.
+
 ## Три помилки, які цей порядок виключає
 
 **Форматування застарілого вузла.** Ядро не завжди помічає нові розділи. Без

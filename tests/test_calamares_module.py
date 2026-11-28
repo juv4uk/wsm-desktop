@@ -143,6 +143,21 @@ class PreviewOutcomeTests(unittest.TestCase):
             **extra,
         }
 
+    def test_missing_profile_tool_returns_controlled_refusal(self) -> None:
+        from unittest.mock import patch
+        from wsm_install.install_steps import TrustedToolResolutionError
+
+        install_fake_libcalamares(self.values(wsmDryRun=True))
+        error = TrustedToolResolutionError(
+            "sgdisk is missing from the active Guix system profile",
+            code="tool.missing",
+        )
+        with patch("wsm_install.install_steps.plan_steps", side_effect=error):
+            result = load_module().run()
+        self.assertIsNotNone(result)
+        self.assertEqual(result[0], "WSM installer tools are unavailable")
+        self.assertIn("tool.missing", result[1])
+
     def test_explicit_preview_returns_non_success_not_none(self) -> None:
         from unittest.mock import patch
 
