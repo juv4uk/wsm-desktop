@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""The legacy archive lane is a read-only fixed H170 Free package-plan check."""
+"""The WSM-owned package lane builds only the manual, keyless wsm-tools pack."""
 
 from __future__ import annotations
 
@@ -17,43 +17,60 @@ class PackageArchivesWorkflowTests(unittest.TestCase):
         self.text = WORKFLOW.read_text(encoding="utf-8")
         self.data = yaml.safe_load(self.text)
         self.events = self.data[True]
-        self.job = self.data["jobs"]["plan"]
+        self.job = self.data["jobs"]["archive"]
         self.steps = self.job["steps"]
 
-    def test_manual_main_only_and_read_only_permissions(self) -> None:
+    def step(self, needle: str) -> dict:
+        for step in self.steps:
+            if needle in (step.get("name") or ""):
+                return step
+        raise AssertionError(f"no workflow step matching {needle!r}")
+
+    def test_manual_main_only_with_scoped_write_permission(self) -> None:
         self.assertEqual(set(self.events), {"workflow_dispatch"})
-        self.assertEqual(self.data["permissions"], {"contents": "read"})
+        self.assertEqual(self.data["permissions"]["contents"], "write")
+        self.assertEqual(self.data["permissions"]["attestations"], "write")
+        self.assertEqual(self.data["permissions"]["id-token"], "write")
+        self.assertEqual(self.data["permissions"]["artifact-metadata"], "write")
         self.assertEqual(self.job["if"], "${{ github.ref == 'refs/heads/main' }}")
 
-    def test_only_the_fixed_h170_manifest_is_evaluated(self) -> None:
-        plan = next(step for step in self.steps if step.get("name") == "Evaluate the fixed H170 Free package plan")
-        self.assertIn("guix time-machine -C channels.lock.scm", plan["run"])
-        self.assertIn("--dry-run --no-grafts", plan["run"])
-        self.assertIn("--manifest=drivers/profiles/h170-free-packages.scm", plan["run"])
-        self.assertNotIn("wsm-tools", plan["run"])
+    def test_only_the_wsm_owned_package_is_built_from_the_locked_source(self) -> None:
+        build = self.step("Evaluate and build the WSM package pack")["run"]
+        self.assertIn("guix time-machine -C channels.lock.scm", build)
+        self.assertIn("--expression=", build)
+        self.assertIn("(wsm packages wsm)", build)
+        self.assertIn("wsm-tools", build)
+        self.assertIn("--format=tarball", build)
+        self.assertIn("--no-grafts", build)
+        self.assertNotIn("inputs.packages", self.text)
+        self.assertNotIn("github.event.inputs.packages", self.text)
 
-    def test_no_package_input_or_binary_publication_path_exists(self) -> None:
-        forbidden = (
-            "inputs:",
-            "github.event.inputs",
-            "packages-*",
-            "actions/upload-artifact",
-            "gh release",
-            "guix archive --export",
-            "guix publish",
-            "contents: write",
-            "pages: write",
-            "GH_TOKEN",
-            "${{ inputs.",
-        )
-        for marker in forbidden:
+    def test_pack_artifact_has_checksums_and_provenance(self) -> None:
+        artifact = self.step("Keep the package as a workflow artifact")
+        self.assertIn("actions/upload-artifact@v7", artifact["uses"])
+        self.assertEqual(int(artifact["with"]["retention-days"]), 30)
+        build = self.step("Evaluate and build the WSM package pack")["run"]
+        self.assertIn("SHA256SUMS", build)
+        self.assertIn("PROVENANCE.txt", build)
+        self.assertIn("guix-channels.txt", build)
+
+    def test_optional_release_attachment_requires_an_existing_draft(self) -> None:
+        attach = self.step("Attach the pack to an explicitly named existing Draft Release")
+        self.assertIn("inputs.attach_to_draft != ''", attach["if"])
+        self.assertIn("--json isDraft", attach["run"])
+        self.assertIn('!= "true"', attach["run"])
+        self.assertNotIn("gh release create", self.text)
+
+    def test_no_tag_trigger_or_private_signing_key(self) -> None:
+        self.assertEqual(set(self.events), {"workflow_dispatch"})
+        for marker in ("push:", "packages-*", "signing-key", "guix archive --generate-key", "secrets."):
             with self.subTest(marker=marker):
                 self.assertNotIn(marker, self.text)
 
-    def test_failure_report_is_read_only(self) -> None:
-        step = next(step for step in self.steps if step.get("name") == "Summarize package-plan failure")
+    def test_failure_report_does_not_claim_a_publication(self) -> None:
+        step = self.step("Report package build or publication failure")
         self.assertIn("failure()", str(step.get("if")))
-        self.assertIn("$GITHUB_STEP_SUMMARY", step["run"])
+        self.assertIn("No successful package publication is claimed", step["run"])
 
 
 if __name__ == "__main__":

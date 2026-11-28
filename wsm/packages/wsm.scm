@@ -2,8 +2,9 @@
 ;;
 ;; WSM Desktop — пакетне визначення власних інструментів для Guix.
 ;;
-;; СТАТУС: не зібрано й не перевірено (у середовищі написання немає Guix).
-;; Перед використанням: guix build -f wsm/packages/wsm.scm
+;; RC6: 0.1.0-rc6 зібрано, runtime contents і checksum/read-back перевірено
+;; workflow run 46117970977; public pre-release доступний у GitHub Releases.
+;; Guix channel import/authentication лишається окремим Phase B gate.
 ;;
 ;; Пакет ставить модулі wsm_hwcheck і wsm_install у site-packages разом зі
 ;; схемою звіту. Це необхідно, бо wsm_install/cli.py шукає схему відносно
@@ -58,13 +59,16 @@
                                           #$(version-major+minor
                                              (package-version python))
                                           "/site-packages"))
-                     (bin (string-append out "/bin")))
+                     (bin (string-append out "/bin"))
+                     (doc (string-append out "/share/doc/wsm-tools")))
                 (copy-recursively "wsm_hwcheck"
                                   (string-append site "/wsm_hwcheck"))
                 (copy-recursively "wsm_install"
                                   (string-append site "/wsm_install"))
                 (copy-recursively "schemas"
                                   (string-append site "/schemas"))
+                (mkdir-p doc)
+                (copy-file "LICENSE" (string-append doc "/LICENSE"))
                 (mkdir-p bin)
                 (copy-file "scripts/wsm-hwcheck.sh"
                            (string-append bin "/wsm-hwcheck"))
@@ -84,4 +88,6 @@ against a versioned schema, and drafts a diagnostic-only installation plan for
 the GNU Guix backend.  Nothing in this package writes to a block device, invokes
 a system backend, or requires root.")
     (home-page "https://github.com/juv4uk/wsm-desktop")
-    (license gpl3+)))
+    (license (license "ВОЛЬНІСТЬ"
+                      "file://LICENSE"
+                      "LicenseRef-Volnist; see docs/LICENSING.md. source license only; no OSI/FSDG claim."))))

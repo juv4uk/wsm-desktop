@@ -9,6 +9,7 @@
 ;; from this list is a module nobody has checked.
 ;; scripts/check_scheme_module_coverage.py enforces that rule.
 (use-modules (guix packages)
+             (guix licenses)
              (gnu packages linux)
              (wsm systems performance)
              (wsm packages wsm)
@@ -18,10 +19,16 @@
              (pair? %wsm-performance-services))
   (error "WSM performance module exported no service definitions"))
 
-;; The channel's own package module: until it is loaded here it was never
-;; evaluated, and its header said so ("не зібрано й не перевірено").
+;; WSM-owned package: the effective package metadata must match the repository
+;; license text. This does not assert OSI/FSDG approval or upstream Guix acceptance.
 (unless (package? wsm-tools)
   (error "WSM package module did not export a package record for wsm-tools"))
+
+(let ((license (package-license wsm-tools)))
+  (unless (and (license? license)
+               (string=? (license-name license) "ВОЛЬНІСТЬ")
+               (string=? (license-uri license) "file://LICENSE"))
+    (error "wsm-tools license metadata does not match LicenseRef-Volnist")))
 
 ;; H170 Free overlay: preserve upstream kernel metadata and append exactly one patch.
 (unless (and (package? linux-libre-h170)
@@ -39,8 +46,12 @@
 
 (display "WSM-SOURCE-MODULE-EVAL-OK ")
 (display (length %wsm-performance-services))
-(display " services, channel package: ")
+(display " services, WSM package: ")
 (display (package-name wsm-tools))
 (display " ")
 (display (package-version wsm-tools))
+(display "; H170 kernel: ")
+(display (package-name linux-libre-h170))
+(display " ")
+(display (package-version linux-libre-h170))
 (newline)
