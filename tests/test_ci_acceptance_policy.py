@@ -226,5 +226,67 @@ class FreePascalBuildTests(unittest.TestCase):
     def test_it_does_not_claim_success_when_there_is_nothing_to_build(self) -> None:
         self.assertIn("WSM_FPC_PROGRAMS=0", self.text)
 
+
+class PascalSourceContractTests(unittest.TestCase):
+    """fpc accepts a file with no licence, no mode and a mismatched name. This does not."""
+
+    SCRIPT = ROOT / "scripts" / "check_pascal_sources.py"
+
+    def setUp(self) -> None:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("check_pascal_sources", self.SCRIPT)
+        self.module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(self.module)
+
+    def write(self, name: str, text: str) -> "object":
+        import tempfile
+        from pathlib import Path as _Path
+
+        directory = tempfile.mkdtemp()
+        path = _Path(directory) / name
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def test_a_conforming_unit_passes(self) -> None:
+        path = self.write(
+            "demo.pas",
+            "// SPDX-License-Identifier: LicenseRef-Volnist\n"
+            "unit demo;\n{$mode objfpc}\ninterface\nimplementation\nend.\n",
+        )
+        self.assertEqual(self.module.check(path), [])
+
+    def test_a_missing_licence_line_is_named(self) -> None:
+        path = self.write("demo.pas", "unit demo;\n{$mode objfpc}\nend.\n")
+        self.assertTrue(any("LicenseRef-Volnist" in p for p in self.module.check(path)))
+
+    def test_a_missing_mode_directive_is_named(self) -> None:
+        path = self.write(
+            "demo.pas",
+            "// SPDX-License-Identifier: LicenseRef-Volnist\nunit demo;\nend.\n",
+        )
+        self.assertTrue(any("{$mode" in p for p in self.module.check(path)))
+
+    def test_a_unit_named_after_another_file_is_named(self) -> None:
+        path = self.write(
+            "demo.pas",
+            "// SPDX-License-Identifier: LicenseRef-Volnist\n"
+            "unit other;\n{$mode objfpc}\nend.\n",
+        )
+        self.assertTrue(any("declares 'other'" in p for p in self.module.check(path)))
+
+    def test_a_debug_block_on_stdout_is_named(self) -> None:
+        path = self.write(
+            "demo.pas",
+            "// SPDX-License-Identifier: LicenseRef-Volnist\n"
+            "unit demo;\n{$mode objfpc}\n{$ifdef DEBUG}writeln('x');{$endif}\nend.\n",
+        )
+        self.assertTrue(any("DEBUG" in p for p in self.module.check(path)))
+
+    def test_an_empty_tree_is_not_a_failure(self) -> None:
+        """The check runs before any Pascal exists; it must not block the tree."""
+        self.assertIn("no Pascal sources yet", self.SCRIPT.read_text(encoding="utf-8"))
+
 if __name__ == "__main__":
     unittest.main()
