@@ -116,13 +116,20 @@ scrubber path. Це лише source/manifest evidence: не встановлен
 Linux source із фактичним `nouveau.ko` окремого witness host також не
 підтверджено.
 
-`WHENCE` відсилає до `LICENCE.nvidia`, яка ставить умови на redistribution
-(OSI-approved OS license, незмінені binaries та супровідна копія ліцензії).
-Це не є clearance для WSM: #367 щодо `LicenseRef-Volnist` ще відкрите.
-Тому WSM Free не включає ці blobs; Compatibility не отримує їх автоматично
-і потребує окремої правової перевірки, повної symlink/manifest closure та
-окремого package/runtime acceptance. Жодних firmware blobs до репозиторію
-або release assets не додавати.
+`WHENCE` відсилає до `LICENCE.nvidia`. Її §2.1.2 дозволяє копіювання та
+розповсюдження firmware binaries лише для використання на операційних системах,
+які розповсюджуються під OSI-approved open-source license; додатково binaries
+мають залишатися незміненими, а копія ліцензії — супроводжувати їх.
+WSM `LicenseRef-Volnist` прямо не є OSI-визнаною (`docs/LICENSING.md`). Тому
+поточного запису «Compatibility — opt-in» недостатньо, щоб стверджувати, що
+умову §2.1.2 виконано. Консервативна release policy: **не включати та не
+перерозповсюджувати NVIDIA firmware у WSM Free або Compatibility channel/ISO**
+і не додавати автоматичне завантаження, доки власник/юрист письмово не підтвердить
+правову підставу для конкретного способу дистрибуції. Це не юридичний висновок
+про будь-яке особисте користування firmware поза WSM distribution.
+
+Повні firmware blobs, похідні від них файли та proprietary payloads до
+репозиторію, channel чи release assets не додавати.
 
 
 ## 4. Відомі невільні залежності та ліцензійні межі
