@@ -120,9 +120,10 @@ Linux source із фактичним `nouveau.ko` окремого witness host 
 розповсюдження firmware binaries лише для використання на операційних системах,
 які розповсюджуються під OSI-approved open-source license; binaries мають бути
 незміненими, а копія ліцензії — супроводжувати їх. WSM `LicenseRef-Volnist`
-прямо не є OSI-визнаною (`docs/LICENSING.md`), а issue #367 щодо власної
-ліцензійної класифікації лишається відкритим. Тому статус Compatibility
-`opt-in` не можна вважати достатнім доказом виконання §2.1.2.
+прямо не є OSI-визнаною (`docs/LICENSING.md`); Guix metadata лише точно
+відображає авторську ліцензію і не перетворює її на OSI-approved license.
+Тому статус Compatibility `opt-in` не можна вважати достатнім доказом
+виконання §2.1.2.
 
 Консервативна WSM release policy: **не включати та не перерозповсюджувати
 NVIDIA firmware через WSM Free або Compatibility channel/ISO**, не додавати
