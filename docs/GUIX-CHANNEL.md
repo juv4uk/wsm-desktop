@@ -179,6 +179,13 @@ added here». Це **опис вмісту файлу, а не рішення в
 Доки на ці три питання немає відповіді, будь-який workflow для substitutes буде
 передчасним.
 
+## Публікація
+
+Що означає «опублікувати пакети» в Guix (канал ≠ бінарний кеш ≠ автентифікація),
+що зараз цьому заважає, і як виглядає публікація під H170 —
+[PUBLISHING.md](PUBLISHING.md). Перевірки: `make check-publication
+check-publish-script`.
+
 ## Що перевіряє CI до trust bootstrap
 
 До появи owner-signed introduction CI може перевіряти Scheme API/evaluation сумісність WSM source tree з pinned Guix. Поточний smoke-test використовує `-L .`, тому module lookup іде з checkout репозиторію. Його успіх позначається тільки як `WSM-SOURCE-MODULE-EVAL-OK`; це **не** channel import і не authentication.
