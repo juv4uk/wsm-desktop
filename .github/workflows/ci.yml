@@ -24,7 +24,12 @@ jobs:
         run: python -m pip install --quiet 'jsonschema[format]==4.26.0' pyyaml
 
       - name: Run unit and policy tests
-        run: python -m unittest discover -s tests -p 'test_*.py' -v
+        run: |
+          set -uo pipefail
+          LOG="$RUNNER_TEMP/unit-policy-tests.log"
+          python -m unittest discover -s tests -p 'test_*.py' -v 2>&1 | tee "$LOG"
+          result=${PIPESTATUS[0]}
+          exit "$result"
 
       - name: Check documentation
         run: python scripts/check_docs.py
@@ -78,18 +83,22 @@ jobs:
       # лише «Process completed with exit code 1» і витрачає прогін на вгадування.
       - name: Повідомити причину збою
         if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -uo pipefail
-          BODY=$(mktemp)
           {
             echo "### fast checks: перевірки не пройшли"
             echo ""
             echo "Commit: \`$GITHUB_SHA\`"
+            echo "Run: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
             echo ""
             echo "Локально те саме відтворюється командою \`make check\`."
-            echo "Нижче — хвіст виводу останніх кроків."
-          } > "$BODY"
-          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
-            -F body=@"$BODY" >/dev/null && echo "причину записано коментарем"
+            if [ -f "$RUNNER_TEMP/unit-policy-tests.log" ]; then
+              echo ""
+              echo "Останні 100 рядків unit/policy tests:"
+              echo "----- unit/policy test log -----"
+              tail -n 100 "$RUNNER_TEMP/unit-policy-tests.log"
+              echo "----- end test log -----"
+            else
+              echo "Див. журнал попереднього невдалого кроку в цьому run."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
