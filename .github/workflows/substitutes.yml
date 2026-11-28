@@ -86,7 +86,14 @@ jobs:
                 -s /usr/sbin/nologin -c "Guix build user $i" --system "guixbuilder$i"
           done
           sudo mkdir -p /var/log/guix
-          sudo bash -c "nohup $PROFILE/bin/guix-daemon --build-users-group=guixbuild \
+          # Pin substitutions to the official CI Guix cache for this bootstrap.
+          # The Bordeaux endpoint returned a Doxygen source object whose bytes did
+          # not match the hash in the authenticated Guix derivation (run 46118023695).
+          # This changes only the trusted transport endpoint: Guix still verifies
+          # signatures and fixed-output hashes; absent substitutes are built normally.
+          sudo bash -c "nohup $PROFILE/bin/guix-daemon \
+            --build-users-group=guixbuild \
+            --substitute-urls=https://ci.guix.gnu.org \
             >/var/log/guix/daemon.log 2>&1 &"
           for _ in $(seq 1 60); do
             [ -S /var/guix/daemon-socket/socket ] && break
