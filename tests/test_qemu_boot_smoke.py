@@ -304,19 +304,20 @@ class QemuBootSmokeTests(unittest.TestCase):
             "import os, time\n"
             "os.write(1, b'init[1]: segf')\n"
             "time.sleep(0.05)\n"
-            "os.write(1, b'ault at 3fff00\nWSM_LIVE_READY\n' + b'X' * 200000)\n"
+            "os.write(1, b'ault at 3fff00\nWSM_LIVE_READY\n' + b'X' * 2048)\n"
         )
         result = run_bounded_process(
             [sys.executable, "-c", child],
             timeout_seconds=5,
             marker="WSM_LIVE_READY",
-            max_stdout_bytes=1024,
-            max_stderr_bytes=512,
+            max_stdout_bytes=64,
+            max_stderr_bytes=32,
             read_chunk_bytes=3,
         )
         self.assertTrue(result.marker_seen)
         self.assertEqual(result.failure_markers_seen, ("segfault",))
         self.assertTrue(result.stdout_truncated)
+        self.assertLessEqual(len(result.stdout_tail), 64)
         self.assertNotIn(b"segfault", result.stdout_tail)
 
     def test_bounded_capture_kills_noisy_child_after_timeout(self) -> None:
