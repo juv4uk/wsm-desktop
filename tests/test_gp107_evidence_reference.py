@@ -60,7 +60,7 @@ class Gp107EvidenceReferenceTests(unittest.TestCase):
         self.assertIn("memory dependencies", self.section)
         self.assertIn("CODE-UPDATED, PHYSICAL-RERUN-PENDING", self.section)
         self.assertIn("docs/22-device-local-transfer-and-compute-phases.md", self.section)
-        self.assertIn("не результат WSM", self.section)
+        self.assertIn("не** результат WSM", self.section)
 
     def test_it_points_at_the_canonical_issue(self) -> None:
         self.assertIn("gp107-nvidia-re/issues/18", self.section)
