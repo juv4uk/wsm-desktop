@@ -269,15 +269,18 @@ class CiFailureVisibilityTests(unittest.TestCase):
             "these workflows fail without leaving a readable cause: " + ", ".join(missing),
         )
 
-    def test_no_distribution_workflow_is_left_disabled(self) -> None:
-        # Both distribution workflows left the disabled set on 2026-11-28, when the
-        # owner approved publication. Neither may quietly go back to `if: false`:
-        # a disabled workflow reports nothing and publishes nothing, so it would look
-        # safe while silently dropping the capability the owner asked for.
-        for name in ("substitutes.yml", "package-archives.yml"):
-            workflow = WORKFLOWS / name
-            with self.subTest(workflow=name):
-                self.assertFalse(all_jobs_disabled(workflow))
+    def test_only_substitutes_is_disabled_by_the_accepted_adr(self) -> None:
+        substitutes = WORKFLOWS / "substitutes.yml"
+        archives = WORKFLOWS / "package-archives.yml"
+        self.assertTrue(all_jobs_disabled(substitutes))
+        self.assertFalse(all_jobs_disabled(archives))
+        self.assertTrue(inline_failure_reporter(archives))
+
+    def test_substitutes_workflow_does_not_silently_run(self) -> None:
+        workflow = document_of(WORKFLOWS / "substitutes.yml")
+        self.assertEqual(set(workflow["on"]), {"workflow_dispatch"})
+        self.assertEqual(str(workflow["jobs"]["publish"].get("if")), "false")
+
 
     def test_scan_finds_all_three_trusted_workflow_files(self) -> None:
         self.assertTrue(CI.is_file())

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import unittest
 
 import yaml
@@ -128,55 +129,95 @@ class ReleaseAcceptanceTimeoutTests(unittest.TestCase):
             )
 
 class PackageArchiveWorkflowTests(unittest.TestCase):
-    """Legacy archive entry is read-only; binary publication uses scoped H170 lanes."""
+    """The first distribution lane follows the accepted ADR 0010 boundaries."""
 
     WORKFLOW = ROOT / ".github" / "workflows" / "package-archives.yml"
 
     def setUp(self) -> None:
         self.text = self.WORKFLOW.read_text(encoding="utf-8")
         self.workflow = yaml.load(self.text, Loader=yaml.BaseLoader)
+        self.job = self.workflow["jobs"]["archive"]
+        self.steps = self.job["steps"]
 
-    def test_the_fixed_plan_job_is_enabled_on_main(self) -> None:
-        job = self.workflow["jobs"]["plan"]
-        self.assertNotEqual(job.get("if"), "${{ false }}")
-        self.assertEqual(job["if"], "${{ github.ref == 'refs/heads/main' }}")
+    def step(self, name: str) -> dict:
+        for item in self.steps:
+            if name in item.get("name", ""):
+                return item
+        raise AssertionError(f"workflow step not found: {name}")
 
-    def test_workflow_is_manual_only_and_read_only(self) -> None:
+    def test_publication_is_manual_only(self) -> None:
         self.assertEqual(set(self.workflow["on"]), {"workflow_dispatch"})
-        self.assertEqual(self.workflow["permissions"], {"contents": "read"})
-        self.assertNotIn("ВЛАСНИК ДАВ ДОЗВІЛ", self.text)
+        self.assertNotIn("push:", self.text)
+        self.assertNotIn("schedule:", self.text)
+        self.assertEqual(self.job["if"], "github.ref == 'refs/heads/main'")
 
-    def test_only_the_fixed_h170_free_manifest_is_evaluated(self) -> None:
-        steps = self.workflow["jobs"]["plan"]["steps"]
-        plan = next(step for step in steps if step.get("name") == "Evaluate the fixed H170 Free package plan")
-        self.assertIn("guix time-machine -C channels.lock.scm", plan["run"])
-        self.assertIn("--dry-run --no-grafts", plan["run"])
-        self.assertIn("--manifest=drivers/profiles/h170-free-packages.scm", plan["run"])
-        self.assertNotIn("wsm-tools", plan["run"])
-        self.assertNotIn("inputs", plan["run"])
-
-    def test_no_arbitrary_shell_input_or_binary_export_remains(self) -> None:
+    def test_only_the_owner_package_is_packed(self) -> None:
+        build = self.step("Зібрати власний пакет")["run"]
+        self.assertIn("wsm-tools", build)
+        self.assertIn("pack --format=tarball", build)
+        self.assertIn("(begin (use-modules (wsm packages wsm)) wsm-tools)", build)
+        self.assertIn("--symlink=/opt/wsm/bin=bin", build)
+        self.assertIn("-L .", build)
         for forbidden in (
-            "inputs:",
-            "github.event.inputs",
-            "${{ inputs.",
-            "packages-*",
-            "*[!A-Za-z0-9._+-]*",
-            "actions/upload-artifact",
-            "guix archive --export",
-            "gh release",
-            "guix publish",
-            "GH_TOKEN",
-            "contents: write",
-            "pages: write",
+            "linux-libre",
+            "mesa",
+            "nonguix",
+            "nvda-580",
+            "linux-firmware",
+            "wsm-live-tools",
         ):
             with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, self.text)
+                self.assertNotIn(forbidden, build)
 
-    def test_the_fixed_h170_substitute_lane_remains_separate(self) -> None:
-        substitutes = (ROOT / ".github" / "workflows" / "substitutes.yml").read_text(encoding="utf-8")
-        self.assertIn("drivers/profiles/h170-free-packages.scm", substitutes)
-        self.assertIn("guix publish", substitutes)
+    def test_package_selection_is_not_user_controlled_shell_input(self) -> None:
+        self.assertNotIn("inputs.packages", self.text)
+        self.assertNotIn("github.event.inputs", self.text)
+        self.assertNotIn("for package in $" + "{{", self.text)
+        self.assertNotIn("PACKAGES=", self.text)
+
+    def test_guix_pack_uses_the_locked_channel_and_no_signing_key(self) -> None:
+        build = self.step("Зібрати власний пакет")["run"]
+        self.assertIn("guix time-machine -C channels.lock.scm", build)
+        self.assertNotIn("guix archive", self.text)
+        self.assertNotIn("signing-key", self.text)
+        self.assertNotIn("GUIX_SIGNING_KEY", self.text)
+        self.assertNotIn("secrets.", self.text)
+
+    def test_release_is_created_as_draft_only_and_never_published(self) -> None:
+        release = self.step("Створити чернетку релізу")["run"]
+        self.assertIn("gh release create", release)
+        self.assertIn("--draft", release)
+        self.assertIn('test "$IS_DRAFT" = "true"', release)
+        self.assertNotIn("--draft=false", self.text)
+        self.assertNotIn("gh release edit", self.text)
+        self.assertNotIn("--prerelease", self.text)
+
+    def test_pack_contains_the_three_owned_commands(self) -> None:
+        verify = self.step("Перевірити команди в pack")["run"]
+        for command in ("wsm-hwcheck", "wsm-install", "wsm-install-live"):
+            with self.subTest(command=command):
+                self.assertIn(command, verify)
+
+    def test_archive_and_provenance_are_verified_after_upload(self) -> None:
+        release = self.step("Створити чернетку релізу")["run"]
+        self.assertIn("gh release download", release)
+        self.assertIn("sha256sum -c SHA256SUMS", release)
+        self.assertIn("tar -tzf wsm-tools-pack.tar.gz", release)
+        self.assertIn("PROVENANCE.txt", self.text)
+        self.assertIn("CHANNEL-INPUTS.sha256", self.text)
+        self.assertIn('cp LICENSE "$OUT/LICENSE"', self.text)
+        self.assertIn('"$OUT/LICENSE"', release)
+
+    def test_failure_is_reported_without_claiming_success(self) -> None:
+        failures = [
+            item for item in self.steps
+            if item.get("if") == "failure()"
+            and "commits/$GITHUB_SHA/comments" in item.get("run", "")
+        ]
+        self.assertEqual(len(failures), 1)
+
+
+
 
 if __name__ == "__main__":
     unittest.main()
