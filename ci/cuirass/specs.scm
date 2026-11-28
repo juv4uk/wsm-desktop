@@ -16,7 +16,7 @@
 ;;   cuirass register --specifications=ci/cuirass/specs.scm \
 ;;                    --database="dbname=cuirass host=/var/run/postgresql"
 ;;
-;; The file is a plain list of specifications, as `cuirass register` expects;
+;; The file is a plain list of specifications, as `cuirass register' expects;
 ;; the same list is used by the service definition in service.scm.
 
 (list
@@ -48,7 +48,7 @@
  (specification
   (name "wsm-live-minimal-image")
   (priority 1)
-  (build '(custom (wsm ci images)))
+  (build '(custom (ci cuirass images)))
   (channels
    (list (channel
           (name 'guix)
