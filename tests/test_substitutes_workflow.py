@@ -30,10 +30,25 @@ class SubstituteWorkflowTests(unittest.TestCase):
     def test_it_runs_on_manual_dispatch(self) -> None:
         self.assertIn("workflow_dispatch", self.data[True])
 
-    def test_it_has_the_permissions_pages_needs(self) -> None:
-        permissions = self.data["permissions"]
-        for key in ("contents", "pages", "id-token"):
-            self.assertEqual(permissions[key], "write" if key != "id-token" else "write")
+    def test_it_never_runs_automatically_on_push(self) -> None:
+        self.assertNotIn("push", self.data[True])
+
+    def test_publication_is_double_gated_by_owner(self) -> None:
+        dispatch = self.data[True]["workflow_dispatch"]
+        publish_input = dispatch["inputs"]["publish"]
+        self.assertIs(publish_input["required"], True)
+        self.assertIs(publish_input["default"], False)
+        publish = self.data["jobs"]["publish"]
+        self.assertEqual(
+            publish["if"],
+            "${{ inputs.publish == true && vars.WSM_SUBSTITUTES_PUBLISH_APPROVED == 'true' }}",
+        )
+        self.assertIn("WSM_SUBSTITUTES_PUBLISH_APPROVED", self.data["jobs"]["publication-gate"]["if"])
+
+    def test_write_permissions_exist_only_inside_the_approved_publish_job(self) -> None:
+        self.assertEqual(self.data["permissions"]["contents"], "read")
+        permissions = self.data["jobs"]["publish"]["permissions"]
+        self.assertEqual(permissions, {"contents": "write", "pages": "write", "id-token": "write"})
 
     def test_the_key_comes_from_a_secret_and_is_checked(self) -> None:
         step = self.step("ключ")

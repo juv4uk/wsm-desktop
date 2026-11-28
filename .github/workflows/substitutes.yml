@@ -18,26 +18,37 @@ on:
         description: "Пакети каналу через пробіл"
         required: false
         default: "wsm-tools"
-  push:
-    branches: [main]
-    paths:
-      - "wsm/packages/**"
-      - "scripts/narinfo_to_release_urls.py"
-      - ".github/workflows/substitutes.yml"
+      publish:
+        description: "Підтвердити owner-approved публікацію після ADR та license review"
+        required: true
+        type: boolean
+        default: false
 
 permissions:
-  contents: write
-  pages: write
-  id-token: write
+  contents: read
 
 concurrency:
   group: substitutes
   cancel-in-progress: false
 
 jobs:
+  publication-gate:
+    name: Перевірити owner approval
+    runs-on: ubuntu-24.04
+    if: ${{ inputs.publish != true || vars.WSM_SUBSTITUTES_PUBLISH_APPROVED != 'true' }}
+    steps:
+      - name: Публікацію не дозволено
+        run: |
+          echo "::notice::Публікація вимкнена. Потрібні ручний publish=true та owner-controlled WSM_SUBSTITUTES_PUBLISH_APPROVED=true."
+
   publish:
     name: Зібрати, підписати, опублікувати
+    if: ${{ inputs.publish == true && vars.WSM_SUBSTITUTES_PUBLISH_APPROVED == 'true' }}
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
