@@ -161,6 +161,23 @@ git log --format="%G? %GK" -40 origin/main
 
 Після introduction кожен commit у каналі має бути підписаний авторизованим ключем. Не використовувати непідписані GitHub-generated merge commits у захищеній історії; узгодити signed fast-forward/rebase workflow та правила GitHub перед вмиканням channel release. Не використовувати `--disable-authentication` для acceptance.
 
+## Відкрите питання: substitute-сервер
+
+У `channels.lock.scm` стоїть рядок «no substitute server and no signing key are
+added here». Це **опис вмісту файлу, а не рішення власника**: жодного
+підтвердженого рішення про substitute-сервер у репозиторії немає, і жоден ADR його
+не фіксує (ADR 0004 згадує substitutes лише як критерій UX).
+
+Питання **відкрите**, і вирішує його власник, а не агент:
+
+1. чи потрібен власний substitute-сервер узагалі (GitHub Pages / Releases / R2);
+2. хто володіє приватним ключем підпису і де він зберігається;
+3. чи вкладається розмір closure `wsm-tools` у ліміти хостингу — його **ніколи не
+   вимірювали**, бо пакет жодного разу не збирався.
+
+Доки на ці три питання немає відповіді, будь-який workflow для substitutes буде
+передчасним.
+
 ## Що перевіряє CI до trust bootstrap
 
 До появи owner-signed introduction CI може перевіряти Scheme API/evaluation сумісність WSM source tree з pinned Guix. Поточний smoke-test використовує `-L .`, тому module lookup іде з checkout репозиторію. Його успіх позначається тільки як `WSM-SOURCE-MODULE-EVAL-OK`; це **не** channel import і не authentication.
