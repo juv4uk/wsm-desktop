@@ -42,6 +42,13 @@ class SubstituteWorkflowTests(unittest.TestCase):
             "scripts/narinfo_to_release_urls.py",
         }.issubset(paths))
 
+    def test_pinned_guix_checkout_cache_uses_the_lock_files(self) -> None:
+        step = self.step("Restore or save the pinned Guix checkout cache")
+        self.assertEqual(step["uses"], "actions/cache@v4")
+        self.assertEqual(step["with"]["path"], "~/.cache/guix/checkouts")
+        self.assertIn("hashFiles('channels.lock.scm', 'channels/*.scm')", step["with"]["key"])
+        self.assertEqual(step["with"]["restore-keys"], "guix-checkouts-")
+
     def test_no_arbitrary_package_shell_input_exists(self) -> None:
         self.assertNotIn("inputs:", self.text)
         self.assertNotIn("github.event.inputs", self.text)
