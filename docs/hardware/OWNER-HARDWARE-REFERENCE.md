@@ -188,3 +188,23 @@ PR [#54](https://github.com/juv4uk/gp107-nvidia-re/pull/54) закрив product
 - GP107 [docs/20–21](https://github.com/juv4uk/gp107-nvidia-re/tree/62a129608b57ca3d6cde1ca6d9beda0ba03130c5/docs) залишаються NVIDIA R580-only HOST_VISIBLE/HOST_COHERENT baseline та матрицею 108 точок на зовнішньому host, не NVK A/B і не H170 performance baseline. [docs/22](https://github.com/juv4uk/gp107-nvidia-re/blob/62a129608b57ca3d6cde1ca6d9beda0ba03130c5/docs/22-device-local-transfer-and-compute-phases.md) має оновлений code із memory dependencies та `memoryTypeBits`, але build, synchronization validation і фізичний rerun ще не прийняті; історичні DEVICE_LOCAL цифри — **EXPLORATORY / NOT ACCEPTED**.
 - Для WSM це лише зовнішня GP107 software/source evidence. Вона не підвищує H170 `runtime_binding`, firmware presence, KMS/display, functional validation, package resolution або Free/Compatibility profile verdicts. Потрібен native Linux `wsm-hwcheck` report на самій GA-H170-Gaming 3 та точна звірка встановленого kernel/module/firmware closure.
 
+## Read-only PE-інвентар на Free Pascal (2026-11-28)
+
+Зріз: `main@b7c6be06239dc4567cfb954e9c6882278458170a`. Обрано найпростіший безпечно перевірюваний шматок Windows-інвентарю: **структура PE-файлу**, а не disassembler і не реверс vendor-коду. Інструмент [wsm_pe_exports](../../tools/fpc-pe/README.md) на FPC 3.2.4 читає заголовки PE/COFF і таблицю експорту, не завантажуючи й не викликаючи жодної функції з образу.
+
+Pinned witness — невідео складова H170 (USB/xHCI companion driver):
+
+| Поле | Значення |
+| --- | --- |
+| Файл | `C:\Windows\System32\DriverStore\FileRepository\usbxhci.inf_amd64_2e6c4275823ecc2c\UsbXhciCompanion.dll` |
+| Розмір | 195136 bytes |
+| SHA-256 | `70a60534cb902130f236b2da68ac599e6c9f326d4bad1d4d05fe5507d6e09f1c` |
+| REA export evidence | `ev_2420b259df471db8c1e70585e1af3268dd8db3a8a6c85aec2b99575a729deafa` (coverage: complete, 2/2) |
+| REA summary view | `ev_823c628e81d43dd6fdd75c694fead1f81b567693361d4429bf95bc8a4e97f214` |
+
+**Statically proven:** PE32+ (`amd64`), export directory RVA `141408` / size `120`, ordinal base `1`, два name-записи — `FxDriverEntryUm` (ordinal 1, RVA `0x1be20`) і `__ImagePolicyMetadata` (ordinal 2, RVA `0x27080`). FPC-читач і REA дають той самий набір ordinal/name/RVA; parity покритий synthetic PE-фікстурами в `tests/test_fpc_pe_exports.py` (імена, ordinal gaps, forwarder, відсутній export directory, fail-closed на пошкоджених образах).
+
+**UNPROVEN / NOT RUN:** поведінка цих функцій, завантаження DLL у процес, USB-пристрій і Linux driver binding на H170, наявність еквівалентного драйвера в Guix closure. Це структурний інвентар, а не сертифікація обладнання.
+
+Межі: жодного vendor-коду, дампу чи бінарного файлу до репозиторію не додано; не виконувалося GPU enumeration, CUDA/NVML, RM/UVM/D3DKMT ioctl, MMIO, firmware, reboot чи driver switch. Новий інструмент не перетинається з відкритими FPC-PR на `wsm_hwcheck`/класифікатор (#831/#836/#838/#840) і не змінює release/channel стан.
+
