@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from typing import Callable, Sequence
 
 from wsm_install.install_steps import TRUSTED_TOOLS, Step
+from wsm_install.tools import is_admissible_path
 from wsm_install.partition import DEVICE_PATH
 
 
@@ -115,6 +116,7 @@ def _validate_preview(disk: str, steps: Sequence[Step]) -> None:
 
 
 ALLOWED_EXECUTABLES = frozenset(TRUSTED_TOOLS.values())
+ALLOWED_BASENAMES = frozenset(path.rsplit("/", 1)[-1] for path in ALLOWED_EXECUTABLES)
 
 
 def admissible_executable(step: Step) -> tuple[bool, str]:
@@ -124,13 +126,25 @@ def admissible_executable(step: Step) -> tuple[bool, str]:
     planner. A bare name means a PATH lookup, which is the hijack class Omarchy
     #8172 documents; an absolute path outside the pinned tool table means a tool
     that no closure proof covers.
+
+    Two shapes are admitted: the exact FHS path from TRUSTED_TOOLS (what the host
+    preview generates today), and the same tool resolved into an image profile
+    (`/run/current-system/profile/bin/mount`), because a Guix live image has no
+    /usr. The second shape is not a relaxation — the basename must still be a
+    trusted tool and the parent directory must be one of the declared prefixes
+    verbatim, so `/tmp/mount` and `/usr/bin/sh` stay refused.
     """
     executable = step.command[0] if step.command else ""
     if not executable.startswith("/"):
         return False, f"{executable!r} is not an absolute path; a PATH lookup is not allowed"
-    if executable not in ALLOWED_EXECUTABLES:
+    if executable in ALLOWED_EXECUTABLES:
+        return True, ""
+    admitted, why = is_admissible_path(executable)
+    if admitted:
+        return True, ""
+    if executable.rsplit("/", 1)[-1] not in ALLOWED_BASENAMES:
         return False, f"{executable!r} is not in the pinned tool allowlist"
-    return True, ""
+    return False, f"{executable!r} is not admitted: {why}"
 
 
 def execute(

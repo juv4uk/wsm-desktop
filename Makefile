@@ -268,5 +268,6 @@ check-tests:
 check-gp107-reference:
 	$(PYTHON) tests/test_gp107_evidence_reference.py
 
+
 check-release-docs:
 	$(PYTHON) tests/test_release_documents_agree.py

@@ -17,7 +17,11 @@ from wsm_install.executor import (  # noqa: E402
     execute,
 )
 from wsm_install.install_steps import TRUSTED_TOOLS, Step  # noqa: E402
+import importlib.util  # noqa: E402
+import tempfile  # noqa: E402
+
 from wsm_install.admission import admit  # noqa: E402
+from wsm_install.tools import is_admissible_path, resolve  # noqa: E402
 from wsm_install.disk_identity import (  # noqa: E402
     DiskIdentity,
     IdentityError,
@@ -521,6 +525,190 @@ class AdmissionChainTests(unittest.TestCase):
         report = self._report()
         self.assertTrue(all(len(step.step_digest) == 64 for step in report.steps))
         self.assertEqual(len({step.step_digest for step in report.steps}), len(report.steps))
+
+
+class CoveredStepTests(unittest.TestCase):
+    """A stateless step is covered by a later, verified step that reads the device."""
+
+    def _report(self, steps):
+        return admit(
+            steps,
+            "/dev/nvme0n1",
+            expected_identity=capture(FakeDiskObserver(), "/dev/nvme0n1"),
+            disk_observer=FakeDiskObserver(),
+            observer=FakeObserver(),
+            consent_for=lambda index, step, digest: True,
+        )
+
+    def test_partprobe_is_covered_by_the_step_that_formats_the_partition(self) -> None:
+        plan = [
+            Step(["/usr/sbin/partprobe", "/dev/nvme0n1"], "re-read the table"),
+            Step(["/usr/sbin/mkfs.ext4", "-F", "/dev/nvme0n1p2"], "format root", destructive=True),
+        ]
+        report = self._report(plan)
+        self.assertEqual(report.status, "admitted", report.reason)
+        self.assertEqual(report.steps[0].status, "admitted-covered")
+        self.assertIn("covered by step 2", report.steps[0].reason)
+
+    def test_udevadm_is_covered_by_the_step_that_mounts_the_node(self) -> None:
+        plan = [
+            Step(["/usr/bin/udevadm", "settle"], "wait for nodes"),
+            Step(["/usr/bin/mount", "/dev/nvme0n1p2", "/mnt"], "mount root"),
+        ]
+        report = self._report(plan)
+        self.assertEqual(report.status, "admitted", report.reason)
+        self.assertEqual(report.steps[0].status, "admitted-covered")
+
+    def test_a_stateless_step_with_no_consumer_stays_refused(self) -> None:
+        plan = [Step(["/usr/sbin/partprobe", "/dev/nvme0n1"], "re-read the table")]
+        report = self._report(plan)
+        self.assertEqual(report.status, "refused")
+        self.assertEqual(report.steps[0].status, "refused")
+
+    def test_a_consumer_of_another_disk_does_not_cover(self) -> None:
+        plan = [
+            Step(["/usr/sbin/partprobe", "/dev/nvme0n1"], "re-read the table"),
+            Step(["/usr/bin/mount", "/dev/nvme1n1p2", "/mnt"], "mount elsewhere"),
+        ]
+        report = self._report(plan)
+        self.assertEqual(report.steps[0].status, "refused")
+
+
+def _load_tool_closure_module():
+    path = ROOT / "scripts" / "check_tool_closure.py"
+    spec = importlib.util.spec_from_file_location("check_tool_closure", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class ToolClosureTests(unittest.TestCase):
+    """A constant is a claim; this turns it into an observation under a given root."""
+
+    def _populate(self, root: Path, skip: str | None = None, mode: int = 0o755) -> None:
+        for name, path in TRUSTED_TOOLS.items():
+            if name == skip:
+                continue
+            target = root / path.lstrip("/")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("#!/bin/sh\n", encoding="utf-8")
+            target.chmod(mode)
+
+    def test_a_complete_root_reports_no_problems(self) -> None:
+        module = _load_tool_closure_module()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._populate(root)
+            self.assertEqual(module.check(root), [])
+
+    def test_a_missing_tool_is_named(self) -> None:
+        module = _load_tool_closure_module()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._populate(root, skip="sgdisk")
+            problems = module.check(root)
+            self.assertEqual(len(problems), 1)
+            self.assertEqual(problems[0][0], "sgdisk")
+            self.assertIn("does not exist", problems[0][1])
+
+    def test_a_non_executable_tool_is_named(self) -> None:
+        module = _load_tool_closure_module()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._populate(root, skip="mount")
+            target = root / TRUSTED_TOOLS["mount"].lstrip("/")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("not a program\n", encoding="utf-8")
+            target.chmod(0o644)
+            problems = module.check(root)
+            self.assertEqual([name for name, _ in problems], ["mount"])
+            self.assertIn("not executable", problems[0][1])
+
+    def test_the_expected_tools_can_be_listed_without_checking_anything(self) -> None:
+        module = _load_tool_closure_module()
+        import io
+        from contextlib import redirect_stdout
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            self.assertEqual(module.main(["--list"]), 0)
+        lines = [line for line in buffer.getvalue().splitlines() if line.strip()]
+        self.assertEqual(len(lines), len(TRUSTED_TOOLS))
+
+
+class ToolResolutionTests(unittest.TestCase):
+    """Tools resolve against explicit prefixes, never against PATH."""
+
+    def test_the_first_prefix_that_has_the_tool_wins(self) -> None:
+        found = resolve(
+            "sgdisk",
+            prefixes=("/run/current-system/profile/sbin", "/usr/sbin"),
+            exists=lambda path: path.endswith("sgdisk"),
+        )
+        self.assertEqual(found, "/run/current-system/profile/sbin/sgdisk")
+
+    def test_a_missing_tool_resolves_to_none(self) -> None:
+        self.assertIsNone(resolve("sgdisk", prefixes=("/usr/sbin",), exists=lambda _: False))
+
+    def test_a_bare_name_is_required(self) -> None:
+        for bad in ("", "sgdisk ", "/usr/sbin/sgdisk", "sbin/sgdisk"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                resolve(bad, prefixes=("/usr/sbin",), exists=lambda _: True)
+
+    def test_an_untrusted_name_is_refused(self) -> None:
+        with self.assertRaises(ValueError):
+            resolve("sh", prefixes=("/usr/bin",), exists=lambda _: True)
+
+    def test_a_path_in_an_allowed_prefix_is_admissible(self) -> None:
+        ok, reason = is_admissible_path("/run/current-system/profile/bin/mount")
+        self.assertTrue(ok, reason)
+
+    def test_a_trusted_basename_outside_the_prefixes_is_not_admissible(self) -> None:
+        ok, reason = is_admissible_path("/tmp/mount")
+        self.assertFalse(ok)
+        self.assertIn("prefix", reason)
+
+    def test_an_untrusted_basename_in_an_allowed_prefix_is_not_admissible(self) -> None:
+        ok, reason = is_admissible_path("/usr/bin/sh")
+        self.assertFalse(ok)
+        self.assertIn("not a trusted tool", reason)
+
+    def test_traversal_out_of_a_prefix_is_not_admissible(self) -> None:
+        ok, reason = is_admissible_path("/usr/sbin/../tmp/sgdisk")
+        self.assertFalse(ok)
+        self.assertIn("prefix", reason)
+
+
+class ProfilePathAdmissibilityTests(unittest.TestCase):
+    """A Guix image has no /usr, so the same tool must be admissible from a profile."""
+
+    def test_a_profile_resolved_tool_is_admissible(self) -> None:
+        admissible, reason = admissible_executable(
+            Step(["/run/current-system/profile/sbin/sgdisk", "-p", "/dev/nvme0n1"], "partition")
+        )
+        self.assertTrue(admissible, reason)
+
+    def test_a_tool_in_a_random_directory_is_still_refused(self) -> None:
+        admissible, reason = admissible_executable(Step(["/tmp/sgdisk", "-p", "/dev/nvme0n1"], "partition"))
+        self.assertFalse(admissible)
+        self.assertIn("not admitted", reason)
+
+    def test_a_traversal_that_lands_back_in_a_prefix_is_refused(self) -> None:
+        admissible, reason = admissible_executable(
+            Step(["/usr/sbin/../tmp/sgdisk", "-p", "/dev/nvme0n1"], "partition")
+        )
+        self.assertFalse(admissible)
+
+    def test_an_untrusted_basename_in_a_profile_is_refused(self) -> None:
+        admissible, reason = admissible_executable(
+            Step(["/run/current-system/profile/bin/sh", "-c", "true"], "shell")
+        )
+        self.assertFalse(admissible)
+        self.assertIn("allowlist", reason)
+
+    def test_the_host_path_from_the_table_still_works(self) -> None:
+        admissible, reason = admissible_executable(STEPS[0])
+        self.assertTrue(admissible, reason)
 
 
 if __name__ == "__main__":
