@@ -204,7 +204,6 @@ end;
 
 var
   Text: TStringList;
-  Parser: TJSONParser;
   ParsedData: TJSONData;
   Root: TJSONObject;
   Devices: TJSONArray;
@@ -244,11 +243,9 @@ begin
       end;
     end;
 
-    Parser := nil;
     try
       try
-        Parser := TJSONParser.Create(Text.Text);
-        ParsedData := Parser.Parse;
+        ParsedData := GetJSON(Text.Text, True);
         if not (ParsedData is TJSONObject) then
         begin
           WriteLn(StdErr, 'wsm-classify: report is not a JSON object');
@@ -293,7 +290,6 @@ begin
     finally
       Root.Free;
       ParsedData.Free;
-      Parser.Free;
     end;
   finally
     Text.Free;
