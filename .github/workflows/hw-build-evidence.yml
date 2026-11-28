@@ -53,14 +53,21 @@ jobs:
           guix --version
 
       - name: Build each package on the release lock
+        env:
+          PACKAGES: ${{ inputs.packages }}
         run: |
           set -euo pipefail
+          read -r -a packages <<< "$PACKAGES"
+          if [ "${#packages[@]}" -eq 0 ]; then
+            echo "package list is empty" >&2
+            exit 1
+          fi
           {
             echo "| package | store path | nar size (bytes) |"
             echo "| --- | --- | --- |"
           } >> "$GITHUB_STEP_SUMMARY"
           failures=0
-          for package in ${{ inputs.packages }}; do
+          for package in "${packages[@]}"; do
             case "$package" in
               *[!A-Za-z0-9._+-]*) echo "refusing odd package name: $package" >&2; exit 1 ;;
             esac
@@ -71,32 +78,25 @@ jobs:
               failures=$((failures + 1))
               continue
             fi
-            # The nar size is the number that decides whether an archive could ever fit
-            # in a release asset or a substitute cache; recording it now means the
-            # decision later is arithmetic instead of guesswork.
+            # Serialize the NAR to an in-process pipe and count bytes. The stream is
+            # discarded by wc; it is never written to disk, retained, uploaded or published.
             size="$(guix time-machine -C channels.lock.scm -- \
                       archive --export "$store_path" 2>/dev/null | wc -c)"
             echo "| $package | \`$store_path\` | $size |" >> "$GITHUB_STEP_SUMMARY"
           done
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Exported: none. This run publishes nothing." >> "$GITHUB_STEP_SUMMARY"
+          echo "NAR stream counted and discarded. No archive file or artifact was retained or published." >> "$GITHUB_STEP_SUMMARY"
           [ "$failures" -eq 0 ] || { echo "$failures package(s) failed to build" >&2; exit 1; }
 
-      - name: Повідомити причину збою
+      - name: Пояснити причину збою в summary
         if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          set -uo pipefail
-          BODY=$(mktemp)
           {
             echo "### WSM hardware build evidence: збірка не завершилась"
             echo ""
-            echo "Commit: \`$GITHUB_SHA\`"
+            echo "Commit: `$GITHUB_SHA`"
             echo ""
             echo "Один або кілька пакетів набору не збираються на locked-каналах."
-            echo "Це не публікація: жодного архіву не експортовано."
+            echo "Жодного NAR-файлу або завантажуваного артефакту не створено."
             df -h / || true
-          } > "$BODY"
-          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
-            -F body=@"$BODY" >/dev/null && echo "причину записано коментарем"
+          } >> "$GITHUB_STEP_SUMMARY"
