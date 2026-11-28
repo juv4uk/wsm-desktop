@@ -149,8 +149,12 @@ class CiFailureVisibilityTests(unittest.TestCase):
             ".head_sha",
             ".workflow_id",
             ".path == $path",
-            ".event ==",
-            ".conclusion ==",
+            ".event //",
+            ".conclusion //",
+            "RUN_EVENT",
+            "RUN_CONCLUSION",
+            '== "pull_request"',
+            '== "failure"',
             "git check-ref-format",
         ):
             self.assertIn(required, script)
@@ -169,7 +173,7 @@ class CiFailureVisibilityTests(unittest.TestCase):
             ".head.repo.full_name == $repo",
             ".head.ref == $branch",
             ".head.sha == $sha",
-            "gh api --paginate",
+            "gh api --method GET --paginate",
             '-f head="$REPOSITORY_OWNER:$RUN_HEAD_BRANCH"',
             "-f base=main",
             "MATCHED_PR_NUMBERS",

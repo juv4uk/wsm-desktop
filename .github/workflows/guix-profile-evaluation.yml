@@ -4,7 +4,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/guix-profile-evaluation.yml"
-      - ".github/workflows/guix-profile-failure-reporter.yml"
+      - ".github/workflows/trusted-ci-failure-reporter.yml"
       - ".guix-channel"
       - ".guix-authorizations"
       - "channels.lock.scm"

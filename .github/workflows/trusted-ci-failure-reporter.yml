@@ -160,7 +160,7 @@ jobs:
           # require one exact open PR whose head SHA still equals the run SHA.
           if [[ "${#MATCHED_PR_NUMBERS[@]}" -eq 0 ]]; then
             PULLS_JSON="$(
-              gh api --paginate "repos/$REPOSITORY/pulls" \
+              gh api --method GET --paginate "repos/$REPOSITORY/pulls" \
                 -f state=all \
                 -f head="$REPOSITORY_OWNER:$RUN_HEAD_BRANCH" \
                 -f base=main \
