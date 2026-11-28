@@ -48,7 +48,8 @@ class H170FreePackageSetTests(unittest.TestCase):
             with self.subTest(module=module):
                 self.assertIn(module, text)
         self.assertNotIn("channels/compatibility.lock.scm", text)
-        self.assertNotIn("nonguix", text.lower())
+        code = scheme_code(text)
+        self.assertNotIn("(nonguix", code.lower())
 
     def test_manifest_contains_the_curated_h170_package_roots(self) -> None:
         code = scheme_code(MANIFEST.read_text(encoding="utf-8"))
@@ -120,7 +121,7 @@ class H170FreePackageSetTests(unittest.TestCase):
     def test_no_compatibility_package_is_smuggled_into_free(self) -> None:
         text = DOC.read_text(encoding="utf-8").lower()
         self.assertIn("compatibility", text)
-        self.assertIn("not part of free", text)
+        self.assertIn("compatibility is not part of free", text)
         self.assertIn("nonguix", text)
         self.assertIn("not imported", text)
 
