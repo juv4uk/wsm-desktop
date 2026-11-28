@@ -8,8 +8,10 @@
 ;; where source modules are evaluated by Guix for real, so a module missing
 ;; from this list is a module nobody has checked.
 ;; scripts/check_scheme_module_coverage.py enforces that rule.
-(use-modules (guix packages)
+(use-modules (guix licenses)
+             (guix packages)
              (gnu packages linux)
+             (wsm licenses)
              (wsm systems performance)
              (wsm packages wsm)
              (wsm packages linux-libre))
@@ -22,6 +24,15 @@
 ;; evaluated, and its header said so ("не зібрано й не перевірено").
 (unless (package? wsm-tools)
   (error "WSM package module did not export a package record for wsm-tools"))
+
+;; Check the exact owner-supplied license metadata, without substituting a category.
+(unless (and (license? wsm-license)
+             (string=? (license-name wsm-license) "ВОЛЬНІСТЬ")
+             (string=? (license-uri wsm-license) "file://LICENSE")
+             (string=? (license-comment wsm-license)
+                       "LicenseRef-Volnist; власна ліцензія WSM Desktop.")
+             (eq? (package-license wsm-tools) wsm-license))
+  (error "WSM Guix license metadata does not preserve LicenseRef-Volnist"))
 
 ;; H170 Free overlay: preserve upstream kernel metadata and append exactly one patch.
 (unless (and (package? linux-libre-h170)
