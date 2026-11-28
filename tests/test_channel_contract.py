@@ -1,44 +1,89 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""The repository must be loadable as a Guix channel, and say honestly how far it is.
+"""Source-tree contract for WSM's future authenticated Guix channel.
 
-Issue #534 makes this repository the authoritative place for WSM's Guix
-integration: a channel that exports our own package and system modules under the
-`(wsm ...)` namespace. Three things can silently break that, and none of them
-breaks a build today:
-
-* a module outside the `(wsm ...)` namespace — it exists, but no channel user can
-  reach it by the documented name;
-* a Free module that pulls a nonfree dependency — the Free channel would start
-  carrying Compatibility content without anyone deciding that;
-* a claim of authentication before there is a signed introduction — the most
-  expensive kind of wrong, because it is a claim about trust.
-
-The channel file itself is upstream's for now: `channels/free.scm` returns
-`%default-channels`. Turning it into a WSM channel needs an introduction signed
-by the owner's key, which this repository may not generate or store.
+This is not Guix authentication or a proof of the effective Free dependency
+closure. The repository keeps source checks conservative and reports
+authentication as unknown until a normal consumer verifies the signed chain.
 """
 
 from __future__ import annotations
 
+import contextlib
+import io
 import re
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WSM = ROOT / "wsm"
 CHANNELS = ROOT / "channels"
+sys.path.insert(0, str(ROOT / "scripts"))
 
-DEFINE_MODULE = re.compile(r"\(define-module\s+\(([^)]+)\)")
-NONFREE = re.compile(r"nonguix|nongnu|linux\s+nvidia|nvidia-driver", re.IGNORECASE)
+from check_channel_auth import main as channel_auth_main  # noqa: E402
+from check_scheme_module_coverage import mask_scheme_non_code  # noqa: E402
+
+DEFINE_MODULE = re.compile(r"\\(define-module\\s+\\(([^)]+)\\)")
+NONFREE_MODULE = re.compile(
+    r"\\((?:nonguix|nongnu|linux-nonfree)(?:\\s|\\))|\\bnvidia-driver\\b",
+    re.IGNORECASE,
+)
 
 
-def modules_under(root: Path) -> dict[Path, str]:
-    found: dict[Path, str] = {}
+def scheme_forms(code: str, operator: str) -> list[str]:
+    """Return balanced forms named by operator from already-masked Scheme code."""
+    marker = re.compile(rf"\\({re.escape(operator)}(?=\\s|\\))")
+    forms: list[str] = []
+    for match in marker.finditer(code):
+        depth = 0
+        for index in range(match.start(), len(code)):
+            if code[index] == "(":
+                depth += 1
+            elif code[index] == ")":
+                depth -= 1
+                if depth == 0:
+                    forms.append(code[match.start():index + 1])
+                    break
+    return forms
+
+
+def introductions_missing_fingerprint(source: str) -> list[str]:
+    """List each individual introduction form that omits its own fingerprint."""
+    code = mask_scheme_non_code(source)
+    missing: list[str] = []
+    for index, form in enumerate(scheme_forms(code, "introduction")):
+        if not re.search(r"\\(\\s*openpgp-fingerprint\\b", form):
+            missing.append(f"introduction[{index}]")
+    return missing
+
+
+def modules_under(root: Path) -> dict[Path, list[str]]:
+    """Return module names, masking comments/strings and rejecting duplicates."""
+    found: dict[Path, list[str]] = {}
+    owners: dict[tuple[str, ...], Path] = {}
     for path in sorted(root.rglob("*.scm")):
-        match = DEFINE_MODULE.search(path.read_text(encoding="utf-8"))
-        if match:
-            found[path] = match.group(1).split()
+        code = mask_scheme_non_code(path.read_text(encoding="utf-8"))
+        match = DEFINE_MODULE.search(code)
+        if match is None:
+            continue
+        name = tuple(match.group(1).split())
+        previous = owners.get(name)
+        if previous is not None:
+            raise ValueError(f"duplicate Scheme module {name!r}: {previous} and {path}")
+        owners[name] = path
+        found[path] = list(name)
     return found
+
+
+def nonfree_module_imports(root: Path) -> dict[str, str]:
+    """Find known nonfree module identifiers in executable Scheme source."""
+    offenders: dict[str, str] = {}
+    for path in sorted(root.rglob("*.scm")):
+        code = mask_scheme_non_code(path.read_text(encoding="utf-8"))
+        if NONFREE_MODULE.search(code):
+            offenders[path.relative_to(root).as_posix()] = NONFREE_MODULE.pattern
+    return offenders
 
 
 class ChannelContractTests(unittest.TestCase):
@@ -50,33 +95,47 @@ class ChannelContractTests(unittest.TestCase):
         }
         self.assertEqual(outside, {}, f"modules outside the (wsm ...) namespace: {outside}")
 
-    def test_the_free_channel_does_not_carry_nonfree_modules(self) -> None:
-        offenders = {
-            path.relative_to(ROOT).as_posix(): NONFREE.pattern
-            for path in sorted(WSM.rglob("*.scm"))
-            if NONFREE.search(path.read_text(encoding="utf-8"))
-        }
+    def test_wsm_source_tree_has_no_known_nonfree_module_imports(self) -> None:
+        """A conservative source policy, not a proof of the effective Free closure."""
+        offenders = nonfree_module_imports(WSM)
         self.assertEqual(
             offenders,
             {},
-            "nonfree references in Free channel modules: " + ", ".join(offenders),
+            "known nonfree module imports in WSM Scheme source: " + ", ".join(offenders),
         )
 
-    def test_the_channel_file_does_not_claim_authentication(self) -> None:
-        """A channel without a signed introduction is not authenticated.
-
-        `channels/free.scm` currently returns upstream `%default-channels`; that
-        is honest. What must not appear is an `introduction` with a signing key
-        that nobody verified on a real commit.
-        """
+    def test_each_declared_introduction_names_its_own_fingerprint(self) -> None:
+        missing: dict[str, list[str]] = {}
         for path in sorted(CHANNELS.glob("*.scm")):
-            text = path.read_text(encoding="utf-8")
-            if "introduction" in text:
-                self.assertIn(
-                    "openpgp-fingerprint",
-                    text,
-                    f"{path.name}: an introduction must name the signing fingerprint",
-                )
+            absent = introductions_missing_fingerprint(path.read_text(encoding="utf-8"))
+            if absent:
+                missing[path.relative_to(ROOT).as_posix()] = absent
+        self.assertEqual(
+            missing,
+            {},
+            f"introduction forms missing their own openpgp-fingerprint: {missing}",
+        )
+
+    def test_two_introductions_do_not_share_one_fingerprint_match(self) -> None:
+        source = '''
+        (channel (introduction
+          (make-channel-introduction "first"
+            (openpgp-fingerprint "FIRST"))))
+        (channel (introduction
+          (make-channel-introduction "second")))
+        '''
+        self.assertEqual(
+            introductions_missing_fingerprint(source),
+            ["introduction[1]"],
+        )
+
+    def test_authentication_reporter_keeps_authentication_unknown(self) -> None:
+        """Only a consumer-side guix git authenticate decides the signed chain."""
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            result = channel_auth_main([str(ROOT)])
+        self.assertEqual(result, 0)
+        self.assertIn("authenticated: unknown by design", output.getvalue())
 
     def test_the_channel_documentation_states_the_trust_model(self) -> None:
         text = (CHANNELS / "README.md").read_text(encoding="utf-8")
@@ -84,9 +143,42 @@ class ChannelContractTests(unittest.TestCase):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, text.lower())
 
-    def test_the_scan_finds_the_modules(self) -> None:
-        """If the parser stops matching, the tests above would pass vacuously."""
+    def test_the_scan_finds_real_modules(self) -> None:
+        """If lexical masking breaks, tests must not pass vacuously."""
         self.assertGreaterEqual(len(modules_under(WSM)), 2)
+
+    def test_comments_and_strings_cannot_fake_a_module_declaration(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "fake.scm").write_text(
+                '; (define-module (wsm fake line))\\n'
+                '#| (define-module (wsm fake block)) |#\\n'
+                '(display "(define-module (wsm fake string))")\\n',
+                encoding="utf-8",
+            )
+            self.assertEqual(modules_under(root), {})
+
+    def test_comments_and_strings_cannot_fake_a_nonfree_import(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fake = root / "fake.scm"
+            fake.write_text(
+                '; (use-modules (nonguix packages nvidia))\\n'
+                '#| (use-modules (nongnu packages linux)) |#\\n'
+                '(display "(nvidia-driver)")\\n',
+                encoding="utf-8",
+            )
+            self.assertEqual(nonfree_module_imports(root), {})
+            fake.write_text("(use-modules (nonguix packages nvidia))\\n", encoding="utf-8")
+            self.assertEqual(len(nonfree_module_imports(root)), 1)
+
+    def test_duplicate_module_declarations_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "one.scm").write_text("(define-module (wsm duplicate))\\n")
+            (root / "two.scm").write_text("(define-module (wsm duplicate))\\n")
+            with self.assertRaisesRegex(ValueError, "duplicate Scheme module"):
+                modules_under(root)
 
 
 if __name__ == "__main__":
