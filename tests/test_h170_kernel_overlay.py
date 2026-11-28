@@ -16,7 +16,7 @@ MATRIX = ROOT / "docs" / "hardware" / "H170-FIRMWARE-MATRIX.md"
 class H170LinuxLibreOverlayTests(unittest.TestCase):
     def test_patch_hunk_line_counts_match_the_unified_diff(self) -> None:
         patch = PATCH.read_text(encoding="utf-8").splitlines()
-        hunk_re = re.compile(r"^@@ -(?:[0-9]+)(?:,([0-9]+))? \\+(?:[0-9]+)(?:,([0-9]+))? @@")
+        hunk_re = re.compile(r"^@@ -(?:[0-9]+)(?:,([0-9]+))? \+(?:[0-9]+)(?:,([0-9]+))? @@")
         hunks = [index for index, line in enumerate(patch) if hunk_re.match(line)]
         self.assertTrue(hunks, "the upstream patch must contain unified-diff hunks")
         for position, start in enumerate(hunks):
@@ -37,7 +37,7 @@ class H170LinuxLibreOverlayTests(unittest.TestCase):
                     old_count += 1
                 elif line.startswith("+"):
                     new_count += 1
-                elif line.startswith("\\\\"):
+                elif line.startswith("\\"):
                     continue
                 else:
                     break
