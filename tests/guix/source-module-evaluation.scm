@@ -34,6 +34,12 @@
              (eq? (package-license wsm-tools) wsm-license))
   (error "WSM Guix license metadata does not preserve LicenseRef-Volnist"))
 
+;; Evaluate the ordinary live profile as well as the standalone channel module.
+(primitive-load "systems/live-iso.scm")
+(unless (and (package? wsm-live-tools)
+             (eq? (package-license wsm-live-tools) wsm-license))
+  (error "Live ISO package does not preserve LicenseRef-Volnist"))
+
 ;; H170 Free overlay: preserve upstream kernel metadata and append exactly one patch.
 (unless (and (package? linux-libre-h170)
              (string=? (package-name linux-libre-h170) "linux-libre-h170")
