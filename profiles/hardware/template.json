@@ -6,7 +6,7 @@
     "slug": "gigabyte/ga-h170-gaming3"
   },
   "report_id": "замінити на report_id зі звіту wsm-hwcheck",
-  "report_schema_version": "1.0.0",
+  "report_schema_version": "1.1.0",
   "isa_level": "unknown",
   "verified_on": "2026-11-26",
   "verified_by": "автори проєкту",

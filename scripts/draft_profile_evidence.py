@@ -21,6 +21,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from wsm_install import report_schema  # noqa: E402
+
 SCHEMA = "wsm-profile-evidence/2"
 REPORT_ARTIFACT = "artifacts/wsm-hwcheck-report.json"
 
@@ -234,11 +236,14 @@ def missing_format_checkers(schema: Any, checker: Any) -> list[str]:
 
 def validate_hardware_report(report: Any) -> list[str]:
     """Validate source report schema and privacy assertions before copying raw bytes."""
+    declared = report.get("schema_version") if isinstance(report, dict) else None
     try:
-        schema = json.loads(
-            (ROOT / "schemas" / "hardware-report.schema.json").read_text(encoding="utf-8")
-        )
+        # A report is validated against the schema for the version it declares,
+        # so a 1.0.0 report keeps validating after 1.1.0 became current.
+        schema = report_schema.load_schema(declared)
         jsonschema.Draft202012Validator.check_schema(schema)
+    except report_schema.UnsupportedSchemaVersion as exc:
+        return [str(exc)]
     except (OSError, UnicodeError, json.JSONDecodeError, jsonschema.SchemaError) as exc:
         return [f"cannot load hardware report schema: {exc}"]
 

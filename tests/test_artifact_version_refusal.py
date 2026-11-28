@@ -123,13 +123,17 @@ class HardwareReportVersionTests(unittest.TestCase):
         return path
 
     def test_current_version_is_accepted(self) -> None:
+        criterion = preflight_env.check_report(self.report("1.1.0"))
+        self.assertEqual(criterion["status"], "pass")
+
+    def test_frozen_version_stays_accepted(self) -> None:
         criterion = preflight_env.check_report(self.report("1.0.0"))
         self.assertEqual(criterion["status"], "pass")
 
-    def test_next_version_is_refused_by_name(self) -> None:
-        criterion = preflight_env.check_report(self.report("1.1.0"))
+    def test_unsupported_version_is_refused_by_name(self) -> None:
+        criterion = preflight_env.check_report(self.report("1.2.0"))
         self.assertEqual(criterion["status"], "fail")
-        self.assertIn("1.1.0", criterion["detail"])
+        self.assertIn("1.2.0", criterion["detail"])
 
 
 class ReleaseInfoVersionTests(unittest.TestCase):

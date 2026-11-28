@@ -4,7 +4,7 @@
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Status: **prototype v0.2.0** — read-only evidence collector, not a hardware certification, compatibility score, or end-to-end function test.
+- Status: **prototype v0.3.0** — read-only evidence collector, not a hardware certification, compatibility score, or end-to-end function test.
 - Critical path: **yes** — the installer consumes this report before it writes to a disk.
 
 ## Run
@@ -19,6 +19,31 @@ The output file is written only when the user explicitly provides --output. With
 The inventory collector reads Linux sysfs under /sys and procfs under /proc (or test roots supplied through hidden test-only CLI options). Runtime diagnostics additionally read the local /lib/modules/<kernel-release>/modules.alias, modules.dep and modules.builtin indexes, plus the current-boot kernel log through journalctl or dmesg.
 
 The inventory layer reads local sysfs/procfs. Optional runtime diagnostics may invoke fixed, read-only journalctl or dmesg commands for current-boot kernel messages. The collector does not load or unload modules, install packages, access the network, update firmware, write target disks, alter UEFI variables, or change bootloader state.
+
+## Machine-specific facts (v0.3)
+
+v0.2 collected PCI identity and driver binding, but not everything that decides whether a specific machine can be certified. A single run on the owner's machine is expensive: it means rebooting into Linux. v0.3 therefore adds the facts that are readable from sysfs/procfs alone:
+
+| Fact | Report field | Source |
+| --- | --- | --- |
+| UEFI versus legacy BIOS boot | `environment.boot_mode` + `environment.boot_mode_evidence` | presence of `/sys/firmware/efi`; absence on x86 with DMI is `bios`, without DMI it stays `unknown` |
+| BIOS version, date and release | `environment.platform.bios_version`, `bios_date`, `bios_release` | `/sys/class/dmi/id/*`; the date is normalised from `MM/DD/YYYY`, and an unparseable one is not written at all |
+| CPU microcode and stepping | `devices[].cpu.microcode`, `stepping`, `family`, `model_number` | `/proc/cpuinfo`, falling back to `/sys/devices/system/cpu/cpu0/microcode/version` |
+| GPU PCI identity and driver binding | `devices[].identity` + `devices[].driver` | `/sys/bus/pci/devices/<bdf>/vendor`, `device`, `driver`; a missing symlink is `none-known`, not `unknown` |
+| Boot VGA, DRM nodes and PCIe link width | `devices[].gpu` | `boot_vga`, `drm/card*`, `current_link_speed`, `current_link_width` |
+| NIC model | `devices[].identity.model` and `manufacturer` | the local `pci.ids` file as an offline database; without it the names stay unknown |
+| NIC interfaces | `devices[].network` | `/sys/class/net/*`, only those whose `device` link resolves to this PCI function |
+| Storage topology | `devices[].storage` | `/sys/block/<dev>/size`, `queue/*`, `removable`, `ro`, partitions, bus from the sysfs ancestors |
+
+The rule does not change: every fact is either observed or listed in the object's `unavailable` array. No default value, no "probably SATA", no MAC address and no serial number.
+
+### What v0.3 deliberately does not collect
+
+- The partition table (GPT/MBR), filesystem types and bootloader entries — those need block-device reads or external tools, and the collector promises not to touch disks.
+- CPU flags and the ISA level — that is the separate `wsm-cpu-isa/1` contract (`python3 -m wsm_hwcheck.isa`), not a report field.
+- MAC addresses, serial numbers, UUIDs, WWNs — forbidden by the strict-local privacy profile.
+- EDID decoding and connector-to-GPU links — that is #18.
+- Runtime firmware blobs, except where the kernel itself reported them.
 
 ## Inventory layer (v0.1)
 
