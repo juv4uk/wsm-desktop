@@ -1,0 +1,11 @@
+H170 Free package archive request
+Date: 2026-11-28
+Source commit: 7f34e74f57b18e4c8076a300ed725d73b69744fc
+Guix lock: channels.lock.scm
+Manifest: drivers/profiles/h170-free-packages.scm
+Package roots: ten fixed upstream Free packages
+Publication target: versioned GitHub Release assets
+Signing: ephemeral per-run Guix archive key; public key and provenance attached
+Verification: SHA256SUMS verified before and after Release download
+
+This file is a workflow trigger marker only. No NAR, source archive, image, or other build output is stored in the Git branch.
