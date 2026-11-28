@@ -49,6 +49,11 @@
            (name 'wsm-live-minimal-image)
            (priority 1)
            (build '(custom (ci cuirass images)))
+           (channels (list #$%wsm-guix-channel #$%wsm-channel)))
+          (specification
+           (name 'h170-free-upstream-packages)
+           (priority 1)
+           (build '(custom (ci cuirass h170-free-packages)))
            (channels (list #$%wsm-guix-channel #$%wsm-channel)))))
 
 (define wsm-cuirass-service
