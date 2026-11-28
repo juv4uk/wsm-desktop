@@ -58,6 +58,43 @@
                       #t))
            (stop #~(const #t))))))
 
+;; Маркер інсталятора. Готовність системи й робочий інсталятор — різні факти:
+;; образ може завантажитись і показати WSM_LIVE_READY, не маючи в closure ні
+;; wsm-install, ні його залежностей. Саме так сталось із попереднім носієм, де
+;; трьох frontend-ів просто не було.
+;;
+;; Служба запускає entrypoint і друкує WSM_INSTALLER_OK лише після успішного
+;; імпорту. Це не доказ, що TUI малюється: для цього потрібен термінал. Це
+;; доказ, що образ містить інсталятор і що він стартує.
+(define wsm-installer-selfcheck
+  (simple-service 'wsm-installer-selfcheck shepherd-root-service-type
+    (list (shepherd-service
+           (documentation "Run the installer entrypoint once and report the result on the console.")
+           (provision '(wsm-installer-selfcheck))
+           (requirement '(user-processes))
+           (respawn? #f)
+           (start #~(lambda ()
+                      (define (announce text)
+                        (catch #t
+                          (lambda ()
+                            (call-with-output-file "/dev/console"
+                              (lambda (port)
+                                (display text port)
+                                (newline port)
+                                (force-output port))))
+                          (lambda _ #f)))
+                      (catch #t
+                        (lambda ()
+                          (let ((status
+                                 (system* "/run/current-system/profile/bin/wsm-install"
+                                          "--help")))
+                            (announce (if (zero? status)
+                                          "WSM_INSTALLER_OK"
+                                          "WSM_INSTALLER_FAIL:exit"))))
+                        (lambda _ (announce "WSM_INSTALLER_FAIL:missing")))
+                      #t))
+           (stop #~(const #t))))))
+
 (operating-system
   (host-name "wsm-live-minimal")
   (timezone "Europe/Kyiv")
@@ -95,6 +132,7 @@
   (services
    (modify-services
     (append (list
+             wsm-installer-selfcheck
              wsm-live-ready-marker
              (service network-manager-service-type)
              (service wpa-supplicant-service-type))
