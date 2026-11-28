@@ -1,22 +1,19 @@
 ;; SPDX-License-Identifier: LicenseRef-Volnist
 ;;
-;; Run Cuirass on your own machine, with the WSM specifications.
+;; Service fragment for a machine that hosts the WSM Cuirass instance.
 ;;
-;; This is a fragment, not a full operating-system declaration: paste the
-;; `services' entry into the system that should host the build farm. It is
-;; written as a fragment on purpose - a complete system definition would become
-;; a second source of truth for how WSM machines are configured.
+;; Add wsm-tools to the host system packages. Its install phase places the
+;; specification at /run/current-system/profile/share/wsm/ci/cuirass/specs.scm.
+;; The Cuirass job module itself is resolved from the authenticated WSM channel
+;; checkout; normal channel authentication must remain enabled.
 ;;
-;; What you get: a web interface on port 8081, a PostgreSQL-backed job history,
-;; and substitutes for anything the jobs build. What you do not get: QEMU boot
-;; acceptance. That stays in the release workflow.
+;; This fragment does not configure guix publish and does not expose build
+;; products as public substitutes. It also does not provide QEMU acceptance.
 
 (use-modules (gnu services ci)
-             (gnu services)
-             (guix channels))
+             (gnu services))
 
 (define %wsm-cuirass-specs
-  ;; Loaded from the file so the CLI and the service cannot drift apart.
   #~(load "/run/current-system/profile/share/wsm/ci/cuirass/specs.scm"))
 
 (define wsm-cuirass-service
@@ -24,8 +21,8 @@
            (cuirass-configuration
             (host "localhost")
             (port 8081)
-            ;; Substitutes make a build farm useful; without them every job
-            ;; rebuilds its whole closure from source.
+            ;; Consume permitted substitutes for dependencies where available.
+            ;; This does not publish WSM's own build results.
             (use-substitutes? #t)
             (fallback? #t)
             (specifications %wsm-cuirass-specs))))
