@@ -11,8 +11,9 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 CI = WORKFLOWS / "ci.yml"
 GUIX_EVALUATOR = WORKFLOWS / "guix-profile-evaluation.yml"
+H170_CORE_PACKAGE_BUILD = WORKFLOWS / "h170-free-core-build-evidence.yml"
 TRUSTED_REPORTER = WORKFLOWS / "trusted-ci-failure-reporter.yml"
-TRUSTED_WORKFLOWS = {CI, GUIX_EVALUATOR}
+TRUSTED_WORKFLOWS = {CI, GUIX_EVALUATOR, H170_CORE_PACKAGE_BUILD}
 REPORTS = re.compile(r"gh api .*commits/\$GITHUB_SHA/comments|gh pr comment|gh issue comment")
 
 
@@ -269,11 +270,12 @@ class CiFailureVisibilityTests(unittest.TestCase):
                 self.assertTrue(all_jobs_disabled(workflow))
 
 
-    def test_scan_finds_all_three_trusted_workflow_files(self) -> None:
+    def test_scan_finds_all_four_failure_visibility_workflow_files(self) -> None:
         self.assertTrue(CI.is_file())
         self.assertTrue(GUIX_EVALUATOR.is_file())
+        self.assertTrue(H170_CORE_PACKAGE_BUILD.is_file())
         self.assertTrue(TRUSTED_REPORTER.is_file())
-        self.assertGreaterEqual(len(list(WORKFLOWS.glob("*.yml"))), 3)
+        self.assertGreaterEqual(len(list(WORKFLOWS.glob("*.yml"))), 4)
 
 
 if __name__ == "__main__":
