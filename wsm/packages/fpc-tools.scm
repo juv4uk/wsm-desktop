@@ -95,7 +95,7 @@ zero because the current report has no complete coverage manifest.")
     (home-page "https://github.com/juv4uk/wsm-desktop")
     (synopsis "Conservative x86-64 ISA evidence from all logical processors")
     (description
-     "Reads the Linux procfs CPU flags exposed for every logical processor and
+     "Reads the Linux procfs CPU flags exposed for all logical processors and
 reports the common x86-64 psABI levels. It refuses incomplete processor-block
 evidence, intersects flags instead of trusting CPU 0, and distinguishes
 observed kernel flags from silicon inventory or performance claims. The
