@@ -1,13 +1,16 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
 # ВЛАСНИК ДАВ ДОЗВІЛ 2026-11-28: почати публікацію Guix-пакетів під H170.
 # Не повертати процесний approval gate для upstream Free packages; запуск явний
-# (ручний dispatch або тег packages-*), а власні WSM-пакети та nonfree firmware виключені.
+# (ручний dispatch, тег packages-* або гілка publish/h170-free/**); власні WSM-пакети
+# та nonfree firmware виключені.
 # Only the fixed upstream H170 Free allowlist is publishable here; WSM-owned tools and
 # proprietary and nonfree firmware payloads are excluded. Each run creates an ephemeral signing key.
 name: WSM H170 Free package archives
 
 on:
   push:
+    branches:
+      - "publish/h170-free/**"
     tags:
       - "packages-*"
   workflow_dispatch:
@@ -136,6 +139,8 @@ jobs:
           cat > "$OUT/RELEASE-NOTES.md" <<EOF
           # WSM H170 Free package roots
 
+          **Pre-release:** pinned upstream package roots for the H170 Free candidate; not a hardware certification.
+
           Built against official Guix lock 4e5195be20d9b124df8a8bb69213412236e4668e.
 
           This release contains signed NAR archives for the fixed H170 Free upstream package set, checksums, provenance, the package manifest, and the ephemeral public archive key.
@@ -159,7 +164,7 @@ jobs:
             "$OUT"/h170-free-packages.scm "$OUT"/store-paths.txt \
             "$OUT"/provenance.txt "$OUT"/SHA256SUMS "$OUT"/RELEASE-NOTES.md \
             --title "WSM H170 Free packages ($SHORT_SHA)" \
-            --notes-file "$OUT/RELEASE-NOTES.md" --target "$GITHUB_SHA"
+            --notes-file "$OUT/RELEASE-NOTES.md" --target "$GITHUB_SHA" --prerelease
           mkdir -p "$RUNNER_TEMP/h170-free-readback"
           gh release download "$TAG" --dir "$RUNNER_TEMP/h170-free-readback"
           (
