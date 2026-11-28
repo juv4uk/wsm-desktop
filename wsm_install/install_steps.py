@@ -28,26 +28,91 @@ btrfs and xfs remain future capabilities, not options in the current preview.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
+from pathlib import Path
+import stat
 from typing import Any
 
 from wsm_install.partition import Layout, Refused
 
-# Absolute paths for every tool a privileged step runs.
+# Resolve binaries from the immutable Guix system profile, never PATH or FHS.
 #
-# This is a direct lesson from Omarchy 4.0.0: their privileged DNS helper ran
-# with an inherited PATH, and a user-writable directory earlier in PATH could
-# supply a file named like a standard utility that then executed as root
-# (fix #8172). The same shape applies here - these steps are meant to be run as
-# root - so no step may rely on PATH lookup at all.
+# Guix System does not promise Debian-style /usr/bin or /usr/sbin paths. The
+# current-system profile is the authoritative union of packages in the booted
+# OS declaration. A basename is allow-listed, then exactly one executable
+# entry must exist in its bin/ or sbin/ directory.
+SYSTEM_PROFILE_ROOT = Path("/run/current-system/profile")
 TRUSTED_TOOLS = {
-    "sgdisk": "/usr/sbin/sgdisk",
-    "partprobe": "/usr/sbin/partprobe",
-    "udevadm": "/usr/bin/udevadm",
-    "mkfs.ext4": "/usr/sbin/mkfs.ext4",
-    "mkfs.fat": "/usr/sbin/mkfs.fat",
-    "mount": "/usr/bin/mount",
-    "mkdir": "/usr/bin/mkdir",
+    "sgdisk": "sgdisk",
+    "partprobe": "partprobe",
+    "udevadm": "udevadm",
+    "mkfs.ext4": "mkfs.ext4",
+    "mkfs.fat": "mkfs.fat",
+    "mount": "mount",
+    "mkdir": "mkdir",
 }
+
+
+class TrustedToolResolutionError(Refused):
+    """A Guix system-profile executable is missing, ambiguous or unsafe."""
+
+
+def resolve_trusted_tool(
+    tool: str,
+    *,
+    profile_root: str | Path = SYSTEM_PROFILE_ROOT,
+) -> str:
+    """Resolve one allow-listed tool only inside the Guix system profile.
+
+    Missing, broken, non-regular, non-executable or duplicate entries fail
+    closed; no inherited PATH, FHS path, user profile or host fallback is used.
+    """
+    executable = TRUSTED_TOOLS.get(tool)
+    if executable is None:
+        raise TrustedToolResolutionError(
+            "tool.unknown",
+            f"{tool!r} is not in the trusted Guix tool allowlist",
+        )
+
+    root = Path(profile_root)
+    matches: list[Path] = []
+    for directory in ("bin", "sbin"):
+        candidate = root / directory / executable
+        try:
+            candidate.lstat()
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            raise TrustedToolResolutionError(
+                "tool.inspect-failed",
+                f"cannot inspect {candidate}: {exc}",
+            ) from exc
+
+        try:
+            metadata = candidate.stat()
+        except OSError as exc:
+            raise TrustedToolResolutionError(
+                "tool.invalid-entry",
+                f"{candidate} does not resolve to a regular executable: {exc}",
+            ) from exc
+        if not stat.S_ISREG(metadata.st_mode) or not os.access(candidate, os.X_OK):
+            raise TrustedToolResolutionError(
+                "tool.not-executable",
+                f"{candidate} is not a regular executable file",
+            )
+        matches.append(candidate)
+
+    if not matches:
+        raise TrustedToolResolutionError(
+            "tool.missing",
+            f"{executable!r} is absent from {root}/bin and {root}/sbin",
+        )
+    if len(matches) != 1:
+        raise TrustedToolResolutionError(
+            "tool.ambiguous",
+            f"{executable!r} exists in both {root}/bin and {root}/sbin",
+        )
+    return str(matches[0])
 
 ROOT_FILESYSTEM = "ext4"
 FILESYSTEMS = {
@@ -141,7 +206,7 @@ def plan_steps(
             )
         partition_table_steps.append(
             Step(
-                [TRUSTED_TOOLS["sgdisk"], *command[1:]],
+                [resolve_trusted_tool("sgdisk"), *command[1:]],
                 purpose,
                 destructive=True,
             )
@@ -149,15 +214,15 @@ def plan_steps(
 
     steps: list[Step] = partition_table_steps + [
         Step(
-            [TRUSTED_TOOLS["partprobe"], layout.disk],
+            [resolve_trusted_tool("partprobe"), layout.disk],
             "re-read the partition table; the kernel does not always notice new partitions",
         ),
         Step(
-            [TRUSTED_TOOLS["udevadm"], "settle"],
+            [resolve_trusted_tool("udevadm"), "settle"],
             "wait for device nodes to appear before touching them",
         ),
         Step(
-            [TRUSTED_TOOLS[FILESYSTEMS[filesystem]["mkfs"]],
+            [resolve_trusted_tool(FILESYSTEMS[filesystem]["mkfs"]),
              *FILESYSTEMS[filesystem]["args"], root_device],
             f"create {filesystem} on the root partition",
             destructive=True,
@@ -168,26 +233,26 @@ def plan_steps(
         esp_device = device_for(layout.disk, esp["number"])
         steps.append(
             Step(
-                [TRUSTED_TOOLS["mkfs.fat"], "-F", "32", esp_device],
+                [resolve_trusted_tool("mkfs.fat"), "-F", "32", esp_device],
                 "format the EFI system partition as FAT32; UEFI firmware reads nothing else",
                 destructive=True,
             )
         )
 
     steps.append(
-        Step([TRUSTED_TOOLS["mount"], root_device, target], f"mount the root filesystem at {target}")
+        Step([resolve_trusted_tool("mount"), root_device, target], f"mount the root filesystem at {target}")
     )
 
     if esp is not None:
         steps.append(
             Step(
-                [TRUSTED_TOOLS["mkdir"], "-p", f"{target}/boot/efi"],
+                [resolve_trusted_tool("mkdir"), "-p", f"{target}/boot/efi"],
                 "create the ESP mount point inside the target",
             )
         )
         steps.append(
             Step(
-                [TRUSTED_TOOLS["mount"], device_for(layout.disk, esp["number"]),
+                [resolve_trusted_tool("mount"), device_for(layout.disk, esp["number"]),
                  f"{target}/boot/efi"],
                 "mount the ESP inside the target tree; outside it the bootloader lands on the live system",
             )
