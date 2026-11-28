@@ -19,9 +19,10 @@ FPCFLAGS ?= -O2 -Sh -vw
 
 # Every program in this directory is built from its own source file; the units are
 # pulled in by the compiler as they are referenced.
-PROGRAMS = plan-digest
+PROGRAMS = plan-digest schema-vectors
 
-SOURCES = wsm_sha256.pas plan_digest.pas wsmcpufacts.pas
+SOURCES = wsm_sha256.pas plan_digest.pas wsmcpufacts.pas \
+          wsmschema.pas wsmschema_vectors.pas
 
 .PHONY: all check install clean
 
@@ -30,11 +31,16 @@ all: $(PROGRAMS)
 plan-digest: plan_digest.pas wsm_sha256.pas
 	$(FPC) $(FPCFLAGS) -o$@ $<
 
+# The schema slice carries 36 vectors captured from the Python validator.
+schema-vectors: wsmschema_vectors.pas wsmschema.pas
+	$(FPC) $(FPCFLAGS) -o$@ $<
+
 # Each program carries its own vectors and exits non-zero when one differs, so
 # `check` is the same run as `all` - which is the point: the first compile on a
 # machine with FPC is also the verification.
 check: $(PROGRAMS)
 	./plan-digest
+	./schema-vectors
 
 install: $(PROGRAMS)
 	install -d $(DESTDIR)$(PREFIX)/bin
