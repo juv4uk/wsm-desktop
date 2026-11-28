@@ -28,6 +28,9 @@
              (guix gexp)
              ((guix licenses) #:prefix license:)
              (guix packages)
+             ;; Власна ліцензія ВОЛЬНІСТЬ як обʼєкт Guix: #367, варіант (a).
+             ;; Без цього модуля пакет знову оголосив би gpl3+, яким не є.
+             (wsm licenses)
              (srfi srfi-1))
 (use-service-modules base desktop sddm networking xorg)
 
@@ -106,7 +109,7 @@
     (home-page "https://github.com/juv4uk/wsm-desktop")
     (synopsis "WSM live preflight tools and Plasma launcher")
     (description "Read-only hardware report, diagnostic-only Guix plan and desktop launcher.")
-    (license license:gpl3+)))
+    (license license-ref-volnist)))
 
 ;; Приймання образу — це маркер у послідовній консолі, а не «збірка повернула
 ;; нуль». Перевірено на опублікованому ISO: у ньому маркера не було, бо цей

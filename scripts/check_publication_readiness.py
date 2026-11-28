@@ -100,7 +100,12 @@ def problems(root: Path) -> list[str]:
         if definition == PACKAGE_FILE or not (root / definition).is_file():
             continue
         other_licence = declared_licence((root / definition).read_text(encoding="utf-8"))
-        if other_licence and not other_licence.startswith("license:volnist"):
+        # Власний запис <license> теж правильний: він називає ту саму ліцензію,
+        # що й заголовки файлів. Метадані мусять не суперечити, а не збігатися
+        # рядком із маркером SPDX.
+        if other_licence and other_licence not in (
+            "license:volnist", "license-ref-volnist", REPO_LICENCE_MARKER
+        ):
             found.append(
                 f"{definition} declares ({other_licence}) while the repository is under "
                 f"{REPO_LICENCE_MARKER} — the same #367 mismatch as {PACKAGE_FILE}"
