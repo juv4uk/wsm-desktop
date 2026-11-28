@@ -89,6 +89,8 @@ class H170LinuxLibreOverlayTests(unittest.TestCase):
         )
         self.assertIn('publish/h170-gp107/**', workflow)
         self.assertIn('channels.lock.scm', workflow)
+        self.assertIn('STORE_PATH="$(guix time-machine -C channels.lock.scm -- build -L "$GITHUB_WORKSPACE" --no-grafts', workflow)
+        self.assertIn('NAR_SHA256="$(guix hash --recursive --format=hex "$STORE_PATH")"', workflow)
         self.assertIn('linux-libre-h170', workflow)
         self.assertIn('guix archive --generate-key', workflow)
         self.assertIn('guix archive --export', workflow)
