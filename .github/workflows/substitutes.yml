@@ -223,7 +223,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          CACHE_TAG="h170-free-cache-${GITHUB_RUN_NUMBER}"
+          CACHE_TAG="h170-free-cache-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}"
           echo "cache_tag=$CACHE_TAG" >> "$GITHUB_OUTPUT"
           mkdir -p site
           BASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${CACHE_TAG}"
