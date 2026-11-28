@@ -1,38 +1,34 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""Check the channel authorizations *before* the owner signs an introduction.
+"""Check channel authorizations before the owner signs an introduction.
 
-`docs/GUIX-CHANNEL.md` requires the trust bootstrap to be done by the owner with
-their own key: `.guix-authorizations` plus a signed introduction commit. Both are
-expensive to redo — every attempt means a new signed commit — so a typo in the
-fingerprint or a leftover placeholder should be caught before signing, not by
-`guix git authenticate` afterwards.
-
-This checker never claims authentication. It only answers: if the owner adds
-these files today, are they internally consistent?
-
-Three states:
-
-* no `.guix-authorizations` — the channel is not bootstrapped. That is the
-  current, honest state; the check passes and says so.
-* the file exists but is inconsistent — fail with the specific reason.
-* the file exists and is consistent — pass, while still saying that
-  authentication itself is proven only by `guix git authenticate` on a real
-  signed history.
+This is a local consistency preflight, not channel authentication. It parses
+only actual version-0 authorization entries; fingerprints in comments or
+unrelated strings are never considered authorized keys.
 """
 
 from __future__ import annotations
 
 import argparse
 import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
-PLACEHOLDER = re.compile(r"FULL OPENPGP FINGERPRINT|YOUR FINGERPRINT|FPR", re.IGNORECASE)
-FINGERPRINT = re.compile(r"\b([0-9A-F]{4}(?:\s+[0-9A-F]{4}){9})\b")
-AUTHORIZATIONS = re.compile(
-    r"\(\s*authorizations\s*\(\s*version\s+(\d+)\s*\)(.*)\)\s*$",
-    re.DOTALL,
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.check_channels import (  # noqa: E402
+    ParseError as SchemeParseError,
+    SchemeString,
+    SchemeSymbol,
+    parse as parse_scheme,
+    tokenize as tokenize_scheme,
 )
+
+PLACEHOLDER = re.compile(r"FULL OPENPGP FINGERPRINT|YOUR FINGERPRINT|FPR", re.IGNORECASE)
+FINGERPRINT_HEX = re.compile(r"^[0-9A-F]{40}$")
 
 
 def read(path: Path) -> str:
@@ -40,74 +36,144 @@ def read(path: Path) -> str:
 
 
 def fingerprints_in_authorizations(text: str) -> list[str]:
-    """Every fingerprint listed as an authorized key, in file order."""
-    return [match.group(1) for match in FINGERPRINT.finditer(text)]
+    """Return keys only from the first string of actual authorization entries.
+
+    Guix format:
+      (authorizations (version 0)
+        (("FULL FINGERPRINT" (name "owner")) ...))
+    """
+    form = parse_scheme(tokenize_scheme(text))
+    if (
+        not isinstance(form, list)
+        or len(form) != 3
+        or not isinstance(form[0], SchemeSymbol)
+        or form[0] != "authorizations"
+    ):
+        raise SchemeParseError("expected one authorizations form with three elements")
+
+    version = form[1]
+    if (
+        not isinstance(version, list)
+        or len(version) != 2
+        or not isinstance(version[0], SchemeSymbol)
+        or version[0] != "version"
+        or not isinstance(version[1], SchemeSymbol)
+        or version[1] != "0"
+    ):
+        raise SchemeParseError("expected (version 0)")
+
+    entries = form[2]
+    if not isinstance(entries, list):
+        raise SchemeParseError("authorization entries must be a list")
+
+    fingerprints: list[str] = []
+    seen: set[str] = set()
+    for index, entry in enumerate(entries, start=1):
+        if not isinstance(entry, list) or not entry:
+            raise SchemeParseError(f"authorization entry {index} must be a non-empty list")
+
+        key = entry[0]
+        if not isinstance(key, SchemeString):
+            raise SchemeParseError(f"authorization entry {index} fingerprint must be a string")
+
+        raw = str(key)
+        if PLACEHOLDER.search(raw):
+            raise SchemeParseError(f"authorization entry {index} still contains a placeholder")
+
+        compact = re.sub(r"\s+", "", raw).upper()
+        if not FINGERPRINT_HEX.fullmatch(compact):
+            raise SchemeParseError(
+                f"authorization entry {index} is not a full 40-hex fingerprint"
+            )
+
+        spaced = " ".join(compact[offset : offset + 4] for offset in range(0, 40, 4))
+        if spaced in seen:
+            raise SchemeParseError(f"authorization entry {index} duplicates fingerprint {spaced}")
+        seen.add(spaced)
+        fingerprints.append(spaced)
+
+        for metadata in entry[1:]:
+            if (
+                not isinstance(metadata, list)
+                or len(metadata) != 2
+                or not isinstance(metadata[0], SchemeSymbol)
+            ):
+                raise SchemeParseError(
+                    f"authorization entry {index} has malformed optional metadata"
+                )
+
+    return fingerprints
+
+
+def public_key_files(root: Path) -> list[Path]:
+    """Find public keyring files without following symlinks."""
+    return sorted(root.rglob("*.key"))
 
 
 def key_file_fingerprints(root: Path) -> dict[str, str]:
-    """Fingerprint printed by each public key file, when gpg is available.
-
-    The export is a text armour block; the fingerprint is not inside it, so we
-    ask gpg. Without gpg we return an empty map and the caller says so rather
-    than guessing from bytes.
-    """
-    import shutil
-    import subprocess
-
-    if shutil.which("gpg") is None:
+    """Verify each public .key file with GnuPG; missing tools and invalid files fail closed."""
+    files = public_key_files(root)
+    if not files:
         return {}
+    if shutil.which("gpg") is None:
+        raise RuntimeError("gpg is unavailable; public .key files cannot be verified")
+
     found: dict[str, str] = {}
-    for key_file in sorted(root.rglob("*.key")):
+    for key_file in files:
+        if key_file.is_symlink() or not key_file.is_file():
+            raise RuntimeError(f"{key_file.name} is not a regular public-key file")
+
         completed = subprocess.run(
             ["gpg", "--show-keys", "--with-colons", str(key_file)],
             capture_output=True,
             text=True,
             check=False,
         )
+        if completed.returncode != 0:
+            raise RuntimeError(f"gpg --show-keys failed for {key_file.name}")
+
+        fingerprints: list[str] = []
         for line in completed.stdout.splitlines():
             if line.startswith("fpr:"):
-                found[key_file.name] = line.split(":")[9]
-                break
+                fields = line.split(":")
+                if len(fields) > 9 and FINGERPRINT_HEX.fullmatch(fields[9].upper()):
+                    fingerprints.append(fields[9].upper())
+        if not fingerprints:
+            raise RuntimeError(f"gpg found no valid full fingerprint in {key_file.name}")
+
+        found[key_file.name] = fingerprints[0]
+
     return found
 
 
 def problems(root: Path, require_bootstrapped: bool = False) -> list[str]:
-    """Reasons the authorizations are not ready to sign. Empty list means ready."""
+    """Return reasons the authorization files are not locally consistent."""
     authorizations = root / ".guix-authorizations"
-    found: list[str] = []
-
     if not authorizations.is_file():
         if require_bootstrapped:
-            found.append(
+            return [
                 ".guix-authorizations is absent: the channel is not bootstrapped "
                 "(see docs/GUIX-CHANNEL.md, bootstrap step 2)"
-            )
-        return found
+            ]
+        return []
 
-    text = read(authorizations)
-    if PLACEHOLDER.search(text):
-        found.append(
-            ".guix-authorizations still contains a placeholder fingerprint; "
-            "replace it with the owner's full fingerprint before signing"
-        )
+    try:
+        listed = fingerprints_in_authorizations(read(authorizations))
+    except (OSError, SchemeParseError) as exc:
+        return [f".guix-authorizations is invalid: {exc}"]
 
-    match = AUTHORIZATIONS.search(text.strip())
-    if match is None:
-        found.append(
-            ".guix-authorizations is not the Guix shape: "
-            "(authorizations (version 0) ((\"FINGERPRINT\" (name \"...\"))))"
-        )
-    elif match.group(1) != "0":
-        found.append(f".guix-authorizations uses version {match.group(1)}, expected 0")
-
-    listed = fingerprints_in_authorizations(text)
+    found: list[str] = []
     if not listed:
         found.append(".guix-authorizations lists no full OpenPGP fingerprint")
 
-    keys = key_file_fingerprints(root)
+    try:
+        keys = key_file_fingerprints(root)
+    except (OSError, RuntimeError) as exc:
+        return found + [f"public-key verification cannot be completed: {exc}"]
+
     for name, fingerprint in keys.items():
-        spaced = " ".join(fingerprint[i : i + 4] for i in range(0, len(fingerprint), 4))
-        if listed and spaced not in listed:
+        spaced = " ".join(fingerprint[i : i + 4] for i in range(0, 40, 4))
+        if spaced not in listed:
             found.append(
                 f"{name} holds key {spaced} which is not listed in .guix-authorizations"
             )
@@ -136,13 +202,24 @@ def main(argv: list[str] | None = None) -> int:
     if not (root / ".guix-authorizations").is_file():
         print(
             "channel-authorizations: not bootstrapped yet — no authorizations to check. "
-            "Authentication is proven only by `guix git authenticate` on a signed history."
+            "Authentication is proven only by the Guix authentication command "
+            "on a signed history."
+        )
+        return 0
+
+    if not public_key_files(root):
+        print(
+            "channel-authorizations: authorization form is valid; "
+            "KEY_FILE_CHECK=NOT_RUN (no public .key files in this checkout). "
+            "This is not authentication; the Guix authentication command on a "
+            "signed history is required."
         )
         return 0
 
     print(
-        "channel-authorizations: locally consistent. This is not authentication: "
-        "only `guix git authenticate` on the signed introduction commit proves that."
+        "channel-authorizations: local authorization and public-key files are consistent. "
+        "This is not authentication; the Guix authentication command on the signed "
+        "introduction history is still required."
     )
     return 0
 
