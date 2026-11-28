@@ -15,7 +15,8 @@
              (wsm systems performance)
              (wsm packages wsm)
              (wsm packages linux-libre)
-             (wsm packages fpc-tools))
+             (wsm packages fpc-tools)
+             (wsm packages wsm-hwcheck-fpc-slice))
 
 (unless (and (list? %wsm-performance-services)
              (pair? %wsm-performance-services))
@@ -41,6 +42,14 @@
              (eq? (package-license wsm-live-tools) wsm-license))
   (error "Live ISO package does not preserve LicenseRef-Volnist"))
 
+;; The Free Pascal slice: a package record must exist, and it must stay
+;; additive - it may not take over the licence or the Python collector.
+(unless (and (package? wsm-hwcheck-fpc-slice)
+             (string=? (package-name wsm-hwcheck-fpc-slice)
+                       "wsm-hwcheck-fpc-slice")
+             (eq? (package-license wsm-hwcheck-fpc-slice) wsm-license))
+  (error "FPC hwcheck slice module did not export a package record"))
+
 ;; H170 Free overlay: preserve upstream kernel metadata and append exactly one patch.
 (unless (and (package? linux-libre-h170)
              (string=? (package-name linux-libre-h170) "linux-libre-h170")
@@ -61,4 +70,6 @@
 (display (package-name wsm-tools))
 (display " ")
 (display (package-version wsm-tools))
+(display ", fpc slice: ")
+(display (package-name wsm-hwcheck-fpc-slice))
 (newline)

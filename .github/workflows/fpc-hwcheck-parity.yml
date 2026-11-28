@@ -1,0 +1,150 @@
+# SPDX-License-Identifier: LicenseRef-Volnist
+name: FPC hwcheck parity
+
+# tools/pascal/wsm_hwcheck_slice.lpr is the first vertical slice of the Python
+# collector: boot mode, the GPU record, and the BIOS release/date. It is a
+# separate package from (wsm packages fpc-tools) on purpose - see the header
+# of wsm/packages/wsm-hwcheck-fpc-slice.scm.
+#
+# Nothing in this workflow is a claim about hardware. It builds the package with
+# Guix and feeds the Pascal binary and `python -m wsm_hwcheck` the *same*
+# synthetic sysfs trees, then compares the three groups field by field
+# (scripts/check_fpc_parity.py). Agreement there proves the two algorithms
+# match on those trees; it does not prove either reads a real /sys correctly.
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/fpc-hwcheck-parity.yml"
+      - "tools/pascal/wsm_hwcheck_slice.lpr"
+      - "wsm/packages/wsm-hwcheck-fpc-slice.scm"
+      - "scripts/check_fpc_parity.py"
+      - "tests/test_fpc_parity.py"
+      - "wsm_hwcheck/**"
+      - "schemas/hardware-report.schema.json"
+      - "channels.lock.scm"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fpc-hwcheck-parity-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  parity:
+    name: Build the FPC collector with Guix and compare it with the Python collector
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Use the GNU Guix project's authenticated Codeberg mirror
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Transport-only rewrite: keep channels.lock.scm commit and introduction.
+          git config --global url."https://codeberg.org/guix/guix.git".insteadOf "https://git.guix.gnu.org/guix.git"
+          echo "Using the canonical GNU Guix Codeberg repository; lock and authentication are unchanged." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Restore Guix checkout cache
+        id: guix-checkouts
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/guix/checkouts
+          key: guix-checkouts-${{ hashFiles('channels.lock.scm', 'channels/*.scm') }}
+          restore-keys: guix-checkouts-
+
+      - name: Install Guix
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y guix
+          sudo systemctl enable --now guix-daemon.service
+          guix --version
+
+      - name: Install the parity harness dependency
+        # --schema validates both reports, so a document that is not a hardware
+        # report cannot pass the comparison by being empty in the three groups.
+        run: python -m pip install --quiet 'jsonschema[format]==4.26.0'
+
+      - name: Build the FPC package from the pinned channels
+        run: |
+          set -euo pipefail
+          guix time-machine -C channels.lock.scm -- build -L . \
+            -f wsm/packages/wsm-hwcheck-fpc-slice.scm \
+            | tee "$RUNNER_TEMP/fpc-store-path.txt"
+
+      - name: Report the compiler the package was built with
+        run: |
+          set -euo pipefail
+          BIN="$(tail -n 1 "$RUNNER_TEMP/fpc-store-path.txt")/bin/wsm-hwcheck-slice"
+          test -x "$BIN" || { echo "::error::the package installed no wsm-hwcheck-slice"; exit 1; }
+          "$BIN" --version | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "WSM_FPC_BUILT=true" >> "$GITHUB_ENV"
+
+      - name: Materialise the synthetic sysfs fixtures
+        run: python scripts/check_fpc_parity.py --emit-fixtures "$RUNNER_TEMP/fixtures"
+
+      - name: Compare the three fact groups on every fixture
+        run: |
+          set -euo pipefail
+          BIN="$(tail -n 1 "$RUNNER_TEMP/fpc-store-path.txt")/bin/wsm-hwcheck-slice"
+          for fixture in uefi bios empty; do
+            SYSFS="$RUNNER_TEMP/fixtures/$fixture/sys"
+            PROC="$RUNNER_TEMP/fixtures/$fixture/proc"
+            # --no-runtime-diagnostics: module-alias enrichment rewrites the
+            # device's driver object (it can add "candidate" and "notes") from
+            # the *running* kernel's modules.alias. That is a fourth fact group,
+            # not part of this slice, and it differs between runners. Turning it
+            # off is what makes this comparison deterministic.
+            python -m wsm_hwcheck \
+              --sysfs-root "$SYSFS" --proc-root "$PROC" \
+              --no-runtime-diagnostics \
+              --output "$RUNNER_TEMP/python-$fixture.json"
+            "$BIN" \
+              --sysfs-root "$SYSFS" --proc-root "$PROC" \
+              --output "$RUNNER_TEMP/pascal-$fixture.json"
+            python scripts/check_fpc_parity.py \
+              "$RUNNER_TEMP/python-$fixture.json" \
+              "$RUNNER_TEMP/pascal-$fixture.json" \
+              --schema schemas/hardware-report.schema.json \
+              | tee -a "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Keep both reports as evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fpc-hwcheck-parity-reports
+          path: |
+            ${{ runner.temp }}/python-*.json
+            ${{ runner.temp }}/pascal-*.json
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Save Guix checkout cache
+        if: success() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/guix/checkouts
+          key: ${{ steps.guix-checkouts.outputs.cache-primary-key }}
+
+      - name: Summarize FPC parity failure
+        if: failure()
+        run: |
+          {
+            echo "### FPC hwcheck parity failed"
+            echo "The first failing command and its exact output are in the preceding step logs."
+            echo "A failed build step means the package definition or the compile phase is wrong."
+            echo "Note that the pinned Guix rejects #:phases on trivial-build-system, and that"
+            echo "\`guix build -f FILE' uses the file's last expression - a bare"
+            echo "\`define-public' returns #<unspecified>. Both were hit here."
+            echo "A failed compare step means the two collectors disagree; the diff names the"
+            echo "group, the field and both values."
+            echo "Reproduce the comparison locally with:"
+            echo '  python scripts/check_fpc_parity.py --emit-fixtures /tmp/fx'
+            echo '  python -m wsm_hwcheck --sysfs-root /tmp/fx/uefi/sys --proc-root /tmp/fx/uefi/proc --no-runtime-diagnostics --output /tmp/py.json'
+            echo '  python scripts/check_fpc_parity.py /tmp/py.json /tmp/pascal.json'
+          } >> "$GITHUB_STEP_SUMMARY"
