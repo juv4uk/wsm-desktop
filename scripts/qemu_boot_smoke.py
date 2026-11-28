@@ -9,6 +9,7 @@ guest-side invocation channel.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -227,6 +228,15 @@ def run_bounded_process(
         for stream in streams:
             if stream is not None and not stream.closed:
                 stream.close()
+
+
+def sha256_of(path: Path) -> str:
+    """Hash the image in chunks; a 1 GiB ISO must not be read into memory."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def parse_disk_size_mib(value: str) -> int:
@@ -462,6 +472,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(json.dumps({
                 "mode": "dry-run",
                 "iso": str(iso),
+            # Without this the boot evidence is not bound to any particular
+            # image: two different builds would produce equally "confirmed"
+            # JSON files.
+            "iso_sha256": sha256_of(iso),
+                "iso_sha256": sha256_of(iso),
                 "firmware": args.firmware,
                 "temporary_directory": str(work),
                 "qcow2_path": str(qcow2),

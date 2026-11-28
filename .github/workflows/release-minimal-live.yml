@@ -186,6 +186,14 @@ jobs:
           for name, evidence in (("bios", bios), ("uefi", uefi)):
               if evidence.get("guest_installer_execution") is not True:
                   raise SystemExit(f"{name}: installer did not run in the guest")
+          # Bind the evidence to the bytes it came from. Without this the two
+          # JSON files confirm "some image booted", which is not the same claim.
+          iso_sha = artifact["sha256"]
+          for name, evidence in (("bios", bios), ("uefi", uefi)):
+              if evidence.get("iso_sha256") != iso_sha:
+                  raise SystemExit(
+                      f"{name}: boot evidence was produced from a different image"
+                  )
           source=build.get("source",{})
           manifest={"schema":"wsm-live-release/1",
             "release":{"tag":tag,"source_commit":commit,"profile":"systems/live-minimal.scm",
