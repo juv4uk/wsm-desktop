@@ -123,7 +123,7 @@ check-guix-eval:
 # This exercises the package phases and verifies that FPC remains build-only;
 # unlike the system --dry-run checks above, this creates real store outputs.
 check-fpc-guix-build:
-	$(GUIX) time-machine -C channels.lock.scm -- build -L . wsm-hwcheck-fpc wsm-classify-fpc wsm-cpu-isa-fpc wsm-partition-fpc
+	$(GUIX) time-machine -C channels.lock.scm -- build -L . wsm-hwcheck-fpc wsm-classify-fpc wsm-cpu-isa-fpc wsm-partition-fpc wsm-partition-fpc
 
 # Compatibility is opt-in and always uses its own authenticated Guix + Nonguix lock.
 # This target resolves the lock and evaluates the full system graph without building it.
