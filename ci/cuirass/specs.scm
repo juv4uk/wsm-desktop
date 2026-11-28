@@ -2,22 +2,23 @@
 ;;
 ;; Cuirass specifications for WSM Desktop.
 ;;
-;; Cuirass is GNU Guix's own continuous integration server. Its value here is
-;; not "another CI": it builds *inside Guix*, on top of the exact channel lock
-;; the release uses, and its results become substitutes. GitHub Actions builds
-;; the image and boots it in QEMU; Cuirass proves the derivations actually build
-;; from the pinned channels and warms the store for everyone else.
+;; Cuirass is GNU Guix's native build coordinator. This file is an inert
+;; prototype only: do not register it until the WSM channel has owner-controlled
+;; authentication and the package allowlist/licensing gate in issue #367 is
+;; resolved. Cuirass schedules derivation builds through guix-daemon; it does
+;; not itself serve substitutes.
 ;;
 ;; What it does NOT do: boot the image. Cuirass has no QEMU acceptance step, so
 ;; a green Cuirass job says "the closure builds", never "the medium boots".
 ;; docs/CUIRASS.md keeps that boundary explicit.
 ;;
-;; Register with:
-;;   cuirass register --specifications=ci/cuirass/specs.scm \
-;;                    --database="dbname=cuirass host=/var/run/postgresql"
+;; Do NOT run cuirass register yet. The WSM channel is not authenticated:
+;; .guix-authorizations, owner-signed introduction and public keyring bootstrap
+;; are still absent. The package allowlist also awaits issue #367.
 ;;
-;; The file is a plain list of specifications, as `cuirass register` expects;
-;; the same list is used by the service definition in service.scm.
+;; After owner Phase B and explicit package/license acceptance, register only
+;; with authenticated channel inputs. The file is a plain list of specs; the
+;; service fragment loads this file from the repository with local-file.
 
 (list
  ;; The channel's own tool package: the smallest job that fails if the pinned
@@ -40,6 +41,8 @@
          (channel
           (name 'wsm)
           (url "https://github.com/juv4uk/wsm-desktop")
+          ;; Deliberately tracks main for future CI polling. This is not an
+          ;; authenticated/pinned release input until owner Phase B is complete.
           (branch "main")))))
 
  ;; The live image derivation. Cuirass builds the same expression the release
