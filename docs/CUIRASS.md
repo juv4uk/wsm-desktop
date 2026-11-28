@@ -54,6 +54,8 @@ guix shell cuirass -- cuirass web \
 
 ## Межі доказів
 
+- **Не завантажує образ.** Сам факт успішного Cuirass build не означає, що ISO стартує в BIOS/UEFI.
+- **Не перевіряє інсталятор.** Cuirass не запускає інтерактивний або автоматизований інсталятор у QEMU.
 - **Не доводить boot.** Зелений Cuirass job означає, що derivation будується, а не те, що ISO стартує в BIOS/UEFI.
 - **Не доводить інсталяцію.** Cuirass не запускає інтерактивний або автоматизований інсталятор у QEMU.
 - **Не доводить WSM channel authentication.** Для цього потрібен окремий owner-signed bootstrap і перевірка exact release lock.
