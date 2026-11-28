@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""Check that release claims are backed by the complete shipped evidence bundle.
+"""Fail-closed validation of a complete WSM Minimal Live release bundle.
 
-The default mode is a release-readiness check: every SHA256SUMS entry must exist
-and match, and the artifact named by release-manifest.json must be present.
-Metadata-only inspection is explicitly inconclusive and never returns READY.
+The checker runs after the workflow has finalized the manifest and SHA256SUMS,
+including the whole-ISO or multipart publication representation. An empty
+problem list means the shipped evidence supports the release claims.
 """
 
 from __future__ import annotations
@@ -13,10 +13,17 @@ import hashlib
 import json
 import re
 import sys
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 SUM_LINE = re.compile(r"^([0-9a-fA-F]{64})  (.+)$")
-REQUIRED = ("SHA256SUMS", "release-manifest.json", "boot-bios.json", "boot-uefi.json")
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
+REQUIRED = (
+    "SHA256SUMS",
+    "build-manifest.json",
+    "release-manifest.json",
+    "boot-bios.json",
+    "boot-uefi.json",
+)
 
 
 def sha256_of(path: Path) -> str:
@@ -27,19 +34,27 @@ def sha256_of(path: Path) -> str:
     return digest.hexdigest()
 
 
+def combined_sha256(paths: list[Path]) -> tuple[str, int]:
+    digest = hashlib.sha256()
+    size = 0
+    for path in paths:
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+                size += len(chunk)
+    return digest.hexdigest(), size
+
+
 def safe_asset_name(name: object) -> bool:
-    if not isinstance(name, str) or not name or "\\" in name:
-        return False
-    candidate = PurePosixPath(name)
+    """Release assets are flat filenames; nested paths and traversal are refused."""
     return (
-        not candidate.is_absolute()
-        and bool(candidate.parts)
-        and all(part not in ("", ".", "..") for part in candidate.parts)
+        isinstance(name, str)
+        and bool(name)
+        and name not in {".", ".."}
+        and "/" not in name
+        and "\\" not in name
+        and not any(ord(character) < 32 or ord(character) == 127 for character in name)
     )
-
-
-def asset_path(directory: Path, name: str) -> Path:
-    return directory.joinpath(*PurePosixPath(name).parts)
 
 
 def parse_sums(path: Path) -> dict[str, str]:
@@ -52,7 +67,7 @@ def parse_sums(path: Path) -> dict[str, str]:
             raise ValueError(f"malformed SHA256SUMS line {line_number}")
         name = match.group(2)
         if not safe_asset_name(name):
-            raise ValueError(f"unsafe asset path on SHA256SUMS line {line_number}: {name!r}")
+            raise ValueError(f"unsafe asset name on SHA256SUMS line {line_number}: {name!r}")
         if name == "SHA256SUMS":
             raise ValueError("SHA256SUMS cannot checksum itself")
         if name in sums:
@@ -68,8 +83,8 @@ def read_json_object(path: Path) -> dict[str, object]:
     return value
 
 
-def problems(directory: Path, require_iso: bool = True) -> list[str]:
-    """Every reason this bundle is not ready; empty means all checks passed."""
+def problems(directory: Path, metadata_only: bool = False) -> list[str]:
+    """Return every reason the final release bundle is not ready."""
     found: list[str] = []
     for name in REQUIRED:
         path = directory / name
@@ -87,14 +102,15 @@ def problems(directory: Path, require_iso: bool = True) -> list[str]:
     if not sums:
         return ["SHA256SUMS lists no files"]
 
-    for name in ("release-manifest.json", "boot-bios.json", "boot-uefi.json"):
+    for name in REQUIRED[1:]:
         if name not in sums:
             found.append(f"{name} is not listed in SHA256SUMS")
 
     try:
         manifest = read_json_object(directory / "release-manifest.json")
+        build_manifest = read_json_object(directory / "build-manifest.json")
     except (OSError, UnicodeError, ValueError) as error:
-        return [f"invalid release-manifest.json: {error}"]
+        return [f"invalid release metadata: {error}"]
 
     artifact = manifest.get("artifact")
     acceptance = manifest.get("acceptance")
@@ -105,48 +121,128 @@ def problems(directory: Path, require_iso: bool = True) -> list[str]:
     if not isinstance(acceptance, dict):
         found.append("manifest acceptance section is missing or invalid")
         acceptance = {}
-    if evidence is None:
-        evidence = {}
     if not isinstance(evidence, dict):
-        found.append("manifest boot_evidence section is invalid")
+        found.append("manifest boot_evidence section is missing or invalid")
         evidence = {}
 
     filename = artifact.get("filename")
+    artifact_sha = artifact.get("sha256")
+    artifact_bytes = artifact.get("bytes")
+    published_as = artifact.get("published_as", "whole")
     if not safe_asset_name(filename):
         found.append("manifest names no safe artifact filename")
         filename = None
-    elif filename not in sums:
-        found.append(f"{filename} is not listed in SHA256SUMS")
-    elif artifact.get("sha256") != sums[filename]:
-        found.append(
-            f"manifest artifact hash {artifact.get('sha256')} != SHA256SUMS {sums[filename]}"
-        )
+    if not isinstance(artifact_sha, str) or SHA256.fullmatch(artifact_sha) is None:
+        found.append("manifest artifact sha256 is missing or malformed")
+        artifact_sha = None
+    if not isinstance(artifact_bytes, int) or isinstance(artifact_bytes, bool) or artifact_bytes <= 0:
+        found.append("manifest artifact bytes is missing or invalid")
+        artifact_bytes = None
 
+    parts: list[str] = []
+    if published_as == "whole":
+        if filename is not None:
+            if filename not in sums:
+                found.append(f"{filename} is not listed in SHA256SUMS")
+            elif artifact_sha is not None and sums[filename] != artifact_sha:
+                found.append(
+                    f"manifest artifact hash {artifact_sha} != SHA256SUMS {sums[filename]}"
+                )
+    elif published_as == "parts":
+        raw_parts = artifact.get("parts")
+        count = artifact.get("parts_count")
+        if not isinstance(raw_parts, list) or not raw_parts:
+            found.append("multipart artifact has no parts list")
+        else:
+            for index, part in enumerate(raw_parts):
+                if not safe_asset_name(part):
+                    found.append(f"multipart artifact has unsafe part name at index {index}")
+                elif part in parts:
+                    found.append(f"multipart artifact repeats part {part}")
+                else:
+                    parts.append(part)
+            if parts != sorted(parts):
+                found.append("multipart artifact parts are not in lexical concatenation order")
+        if not isinstance(count, int) or isinstance(count, bool) or count != len(parts):
+            found.append("multipart artifact parts_count does not match its parts list")
+        if filename is not None and filename in sums:
+            found.append("original ISO filename is listed even though artifact is published as parts")
+        for part in parts:
+            if part not in sums:
+                found.append(f"multipart part {part} is not listed in SHA256SUMS")
+    else:
+        found.append(f"unsupported artifact published_as value: {published_as!r}")
+
+    # Every published asset in SHA256SUMS must exist as a regular, non-symlink
+    # file and match its own digest. The sole exception is explicit metadata-only
+    # inspection of the missing whole ISO; it is never release-ready.
     for name, expected in sums.items():
-        path = asset_path(directory, name)
+        path = directory / name
         if path.is_symlink():
             found.append(f"{name} must not be a symlink")
             continue
         if not path.is_file():
-            if require_iso or name != filename:
-                found.append(f"{name} is listed in SHA256SUMS but is absent")
+            if metadata_only and published_as == "whole" and name == filename:
+                continue
+            found.append(f"{name} is listed in SHA256SUMS but is absent")
             continue
         actual = sha256_of(path)
         if actual != expected:
             found.append(f"{name} does not match its recorded hash")
 
-    if filename is not None and require_iso:
-        path = asset_path(directory, filename)
-        if not path.is_file():
+    if published_as == "whole" and filename is not None:
+        path = directory / filename
+        if path.is_symlink():
+            found.append(f"{filename} must not be a symlink")
+        elif path.is_file():
+            actual_size = path.stat().st_size
+            if artifact_bytes is not None and actual_size != artifact_bytes:
+                found.append(
+                    f"manifest artifact bytes {artifact_bytes} != actual bytes {actual_size}"
+                )
+            if artifact_sha is not None and sha256_of(path) != artifact_sha:
+                found.append("manifest artifact sha256 does not match the ISO")
+        elif not metadata_only:
             found.append(f"{filename} is absent but required")
+
+    if published_as == "parts" and parts and all((directory / part).is_file() for part in parts):
+        if any((directory / part).is_symlink() for part in parts):
+            found.append("multipart artifact contains a symlink")
+        else:
+            actual_sha, actual_size = combined_sha256([directory / part for part in parts])
+            if artifact_sha is not None and actual_sha != artifact_sha:
+                found.append("concatenated artifact parts do not match manifest artifact sha256")
+            if artifact_bytes is not None and actual_size != artifact_bytes:
+                found.append(
+                    f"manifest artifact bytes {artifact_bytes} != concatenated part bytes {actual_size}"
+                )
+
+    expected_build_sha = manifest.get("build_manifest_sha256")
+    if not isinstance(expected_build_sha, str) or SHA256.fullmatch(expected_build_sha) is None:
+        found.append("manifest build_manifest_sha256 is missing or malformed")
+    elif sums.get("build-manifest.json") != expected_build_sha:
+        found.append("manifest build_manifest_sha256 != SHA256SUMS build-manifest.json")
 
     for key, name in (("bios_sha256", "boot-bios.json"), ("uefi_sha256", "boot-uefi.json")):
         recorded = evidence.get(key)
-        if recorded and sums.get(name) and recorded != sums[name]:
-            found.append(f"manifest {key} != SHA256SUMS entry for {name}")
+        if not isinstance(recorded, str) or SHA256.fullmatch(recorded) is None:
+            found.append(f"manifest boot_evidence.{key} is missing or malformed")
+        elif sums.get(name) != recorded:
+            found.append(f"manifest boot_evidence.{key} != SHA256SUMS entry for {name}")
+
+    for key in ("bios", "uefi", "installer"):
+        if acceptance.get(key) != "pass":
+            found.append(f"manifest acceptance.{key} is not pass")
 
     marker = acceptance.get("marker")
     installer_marker = acceptance.get("installer_marker")
+    if not isinstance(marker, str) or not marker.strip():
+        found.append("manifest acceptance.marker is missing")
+        marker = None
+    if not isinstance(installer_marker, str) or not installer_marker.strip():
+        found.append("manifest acceptance.installer_marker is missing")
+        installer_marker = None
+
     for platform, name in (("bios", "boot-bios.json"), ("uefi", "boot-uefi.json")):
         try:
             record = read_json_object(directory / name)
@@ -155,52 +251,38 @@ def problems(directory: Path, require_iso: bool = True) -> list[str]:
             continue
         tail = record.get("serial_output_tail")
         tail = tail if isinstance(tail, str) else ""
+        if record.get("boot_confirmed") is not True:
+            found.append(f"{name} has boot_confirmed false")
+        if record.get("guest_installer_execution") is not True:
+            found.append(f"{name} has guest_installer_execution false")
+        if marker is not None and marker not in tail:
+            found.append(f"{name} never showed {marker}")
+        if installer_marker is not None and installer_marker not in tail:
+            found.append(f"{name} never showed {installer_marker}")
 
-        if acceptance.get(platform) == "pass":
-            if record.get("boot_confirmed") is not True:
-                found.append(f"acceptance.{platform}=pass but {name} has boot_confirmed false")
-            if not isinstance(marker, str) or not marker.strip():
-                found.append(f"acceptance.{platform}=pass but manifest marker is missing")
-            elif marker not in tail:
-                found.append(f"acceptance.{platform}=pass but {name} never showed {marker}")
-
-        if acceptance.get("installer") == "pass":
-            if record.get("guest_installer_execution") is not True:
-                found.append(
-                    f"acceptance.installer=pass but {name} has guest_installer_execution false"
-                )
-            if not isinstance(installer_marker, str) or not installer_marker.strip():
-                found.append("acceptance.installer=pass but manifest installer_marker is missing")
-            elif installer_marker not in tail:
-                found.append(
-                    f"acceptance.installer=pass but {name} never showed {installer_marker}"
-                )
-
+    if metadata_only and not found:
+        # Inspection is deliberately never a release approval.
+        found.append("metadata-only inspection cannot establish release readiness")
     return found
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Check a downloaded release bundle against its shipped evidence."
+        description="Check a finalized WSM Minimal Live release bundle before upload."
     )
-    parser.add_argument("directory", help="directory with the release assets")
+    parser.add_argument("directory", help="directory with finalized release assets")
     parser.add_argument(
         "--metadata-only",
         action="store_true",
-        help="allow a missing ISO for inspection only; the result is never release-ready",
+        help="inspect metadata while the whole ISO is absent; this never returns READY",
     )
     arguments = parser.parse_args(argv)
 
-    found = problems(Path(arguments.directory), require_iso=not arguments.metadata_only)
+    found = problems(Path(arguments.directory), metadata_only=arguments.metadata_only)
     if found:
         print("\n".join(f"release-readiness: {item}" for item in found), file=sys.stderr)
         return 1
-    if arguments.metadata_only:
-        print(
-            "release-readiness: metadata checks passed; ISO not required or accepted (NOT_READY)"
-        )
-        return 2
-    print("release-readiness: manifest claims are backed by the complete shipped evidence")
+    print("release-readiness: complete evidence bundle verified")
     return 0
 
 
