@@ -145,22 +145,57 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
         self.assertIn("H170 Free", self.text)
         self.assertIn("upstream", self.text)
 
-    def test_only_the_h170_free_tag_or_manual_main_can_start_publication(self) -> None:
+    def test_main_publisher_merge_tag_or_manual_dispatch_can_start_publication(self) -> None:
         events = self.workflow["on"]
         self.assertEqual(set(events), {"push", "workflow_dispatch"})
+        self.assertEqual(events["push"]["branches"], ["main"])
         self.assertEqual(events["push"]["tags"], ["packages-h170-free-*"])
+        self.assertEqual(
+            events["push"]["paths"],
+            [
+                ".github/workflows/package-archives.yml",
+                "channels.lock.scm",
+                "drivers/profiles/h170-free-packages.scm",
+            ],
+        )
         gate = str(self.job.get("if", ""))
         self.assertIn("refs/heads/main", gate)
         self.assertIn("refs/tags/packages-h170-free-", gate)
+        self.assertIn('EVENT_NAME" = "push"', self.text)
+        self.assertIn('REF" = "refs/heads/main"', self.text)
         self.assertIn("git merge-base --is-ancestor", self.text)
         self.assertIn("cancel-in-progress: false", self.text)
 
     def test_the_package_roots_come_from_the_fixed_h170_manifest(self) -> None:
+        manifest_path = ROOT / "drivers" / "profiles" / "h170-free-packages.scm"
+        manifest = manifest_path.read_text(encoding="utf-8")
+        packages = [
+            line.strip()[1:-1]
+            for line in manifest.splitlines()
+            if line.strip().startswith('"') and line.strip().endswith('"')
+        ]
+        expected = [
+            "linux-libre",
+            "mesa",
+            "vulkan-loader",
+            "vulkan-tools",
+            "pciutils",
+            "usbutils",
+            "alsa-utils",
+            "ethtool",
+            "nvme-cli",
+            "smartmontools",
+            "lm-sensors",
+        ]
+        self.assertEqual(packages, expected)
         self.assertIn("drivers/profiles/h170-free-packages.scm", self.text)
         self.assertIn("expected = (", self.text)
         self.assertIn('test "${#PACKAGES[@]}" -eq 11', self.text)
         self.assertIn('test "${#STORE_PATHS[@]}" -eq 11', self.text)
         self.assertIn('mapfile -t PACKAGES < "$OUT/packages.txt"', self.text)
+        for package in expected:
+            with self.subTest(package=package):
+                self.assertIn(f'"{package}"', self.text)
         for forbidden in (
             "wsm-tools",
             "wsm-live-tools",
@@ -169,7 +204,7 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
             "nvda-580",
         ):
             with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, self.text)
+                self.assertNotIn(forbidden, packages)
 
     def test_no_untrusted_package_input_reaches_the_shell(self) -> None:
         self.assertNotIn("inputs.packages", self.text)
