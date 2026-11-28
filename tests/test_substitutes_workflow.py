@@ -86,6 +86,9 @@ class SubstituteWorkflowTests(unittest.TestCase):
         self.assertEqual(self.data["permissions"]["attestations"], "write")
         self.assertEqual(self.data["permissions"]["artifact-metadata"], "write")
 
+    def test_latest_cache_run_supersedes_stale_work_and_retries_get_unique_tags(self) -> None:
+        self.assertIn("cancel-in-progress: true", self.text)
+        self.assertIn('CACHE_TAG="h170-free-cache-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}"', self.text)
     def test_public_key_and_provenance_are_published_and_attested(self) -> None:
         prepare = self.step("Prepare immutable Release assets and Pages metadata")["run"]
         self.assertIn("./site/signing-key.pub", prepare)
