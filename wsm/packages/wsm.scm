@@ -2,6 +2,9 @@
 ;;
 ;; WSM Desktop — пакетне визначення власних інструментів для Guix.
 ;;
+;; Перший H170 Free набір складається з цього WSM-owned пакета та upstream
+;; linux-libre і mesa, які workflows резолвлять окремо з channels.lock.scm.
+;;
 ;; СТАТУС: не зібрано й не перевірено (у середовищі написання немає Guix).
 ;; Evaluation/build на pinned official Guix lock:
 ;; guix time-machine -C channels.lock.scm -- build -L . \
