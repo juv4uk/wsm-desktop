@@ -66,8 +66,12 @@ class JobModuleTests(unittest.TestCase):
 
     def test_it_imports_the_pinned_guix_job_helpers(self) -> None:
         self.assertIn("#:use-module (gnu ci)", self.text)
+        self.assertIn("#:use-module (gnu image)", self.text)
         self.assertIn("#:use-module (guix packages)", self.text)
         self.assertIn("#:use-module (srfi srfi-1)", self.text)
+        self.assertIn("(image->job store", self.text)
+        self.assertIn("(inherit iso9660-image)", self.text)
+        self.assertNotIn("operating-system-image", self.text)
 
     def test_grafting_is_disabled(self) -> None:
         """Grafting belongs on the user's machine, not in a build farm."""
