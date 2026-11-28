@@ -28,8 +28,7 @@
   ;; load only when Guix evaluates it.
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-13)
-  #:export (wsm-hwcheck-fpc wsm-classify-fpc wsm-partition-fpc wsm-profile-fpc
-            wsm-install-fpc))
+  #:export (wsm-hwcheck-fpc wsm-classify-fpc wsm-partition-fpc wsm-profile-fpc))
 
 (define-public wsm-hwcheck-fpc
   (package
@@ -102,54 +101,3 @@ invocations are emitted as data for a caller that holds the consent chain.")))
 schema version, path safety, at least one passing function, duplicate paths and
 artifact presence.  Digest verification is deliberately delegated and the
 output says so, so no caller mistakes this for a full check.")))
-
-(define-public wsm-install-fpc
-  (package
-    (name "wsm-install-fpc")
-    (version "0.1.0")
-    (source (local-file "../.." "wsm-desktop-source-install-fpc"
-                        #:recursive? #t
-                        #:select? (lambda (path _stat)
-                                    (not (any (lambda (skip)
-                                                (string-contains path skip))
-                                              '("/.git" "/__pycache__" "/build"))))))
-    (build-system gnu-build-system)
-    (arguments
-     (list
-      ;; The repository's tests need the repository (tests/, scripts/); they run
-      ;; in CI, not in the package build.
-      #:tests? #f
-      #:make-flags
-      #~(list (string-append "FPC=" #$(file-append fpc "/bin/fpc")))
-      #:phases
-      #~(modify-phases %standard-phases
-          (delete 'configure)
-          (replace 'build
-            (lambda* (#:key make-flags #:allow-other-keys)
-              ;; Only this target: the neighbouring hwcheck/classify programs
-              ;; have their own package and must not be built twice.
-              (apply invoke "make" "-f" "tools/pascal/Makefile"
-                     "wsm-install-fpc" make-flags)))
-          (replace 'install
-            (lambda* (#:key outputs #:allow-other-keys)
-              (let* ((out (assoc-ref outputs "out"))
-                     (bin (string-append out "/bin")))
-                (install-file "tools/pascal/wsm-install-fpc" bin)
-                ;; install-file does not promise the executable bit.
-                (chmod (string-append bin "/wsm-install-fpc") #o555)))))))
-    ;; gnu-build-system already provides make and the rest of the standard
-    ;; inputs; fpc is the only addition.
-    (native-inputs (list fpc))
-    (synopsis "Read-only WSM installer front end, compiled with FPC")
-    (description
-     "Validates a WSM hardware report and reports whether the installer may
-proceed, with the exit codes of the Python front end (0 accepted, 2 refused,
-3 blocked on unresolved critical evidence).  The binary parses its own JSON,
-selects the report schema version the document declares, and implements the
-structural preflight rules that do not need a JSON Schema validator.  It does
-not build the draft plan document, and every rule it does not implement is
-listed in its source.  It never opens a block device, never spawns a process and
-never requires root, so no interpreter, no site-packages and no schema library
-enter the runtime closure.")
-    (home-page "https://github.com/juv4uk/wsm-desktop")
-    (license wsm-license)))

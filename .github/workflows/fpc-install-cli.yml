@@ -72,10 +72,8 @@ jobs:
       - name: Build the Free Pascal front end
         run: |
           set -euo pipefail
-          # The installer is a package in the shared FPC module, so the build goes
-          # through that module rather than a file of its own.
           guix build -L . \
-            -e '(begin (use-modules (wsm packages fpc-tools)) wsm-install-fpc)' \
+            -e '(begin (use-modules (wsm packages wsm-install-fpc)) wsm-install-fpc)' \
             > /tmp/fpc-store-path.txt
           cat /tmp/fpc-store-path.txt
           printf 'FPC_STORE_PATH=%s\n' "$(tail -n1 /tmp/fpc-store-path.txt)" >> "$GITHUB_ENV"
