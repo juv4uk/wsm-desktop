@@ -1,0 +1,222 @@
+name: Trusted CI failure reporter
+
+# This workflow is evaluated from the default branch for workflow_run events.
+# It never checks out the triggering PR or consumes PR-controlled artifacts.
+on:
+  workflow_run:
+    workflows: ["CI", "Guix profile evaluation"]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: trusted-failure-report-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  report-failure:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      pull-requests: read
+      issues: write
+    steps:
+      - name: Validate trusted run metadata and report exactly one matching PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          SERVER_URL: ${{ github.server_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          [[ "$RUN_ID" =~ ^[1-9][0-9]*$ ]] || {
+            echo "::error::Invalid workflow run ID"
+            exit 1
+          }
+          [[ "$REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || {
+            echo "::error::Invalid repository"
+            exit 1
+          }
+          REPOSITORY_OWNER="${REPOSITORY%%/*}"
+
+          # Obtain authoritative run metadata from GitHub. Never trust shell
+          # fragments, artifacts, commit messages, or files from the PR.
+          RUN_JSON="$(gh api "repos/$REPOSITORY/actions/runs/$RUN_ID")"
+          RUN_WORKFLOW_ID="$(jq -r '.workflow_id // 0' <<< "$RUN_JSON")"
+          RUN_NAME="$(jq -r '.name // ""' <<< "$RUN_JSON")"
+          RUN_PATH="$(jq -r '.path // ""' <<< "$RUN_JSON")"
+          RUN_EVENT="$(jq -r '.event // ""' <<< "$RUN_JSON")"
+          RUN_CONCLUSION="$(jq -r '.conclusion // ""' <<< "$RUN_JSON")"
+          RUN_SHA="$(jq -r '.head_sha // ""' <<< "$RUN_JSON")"
+          RUN_HEAD_REPOSITORY="$(jq -r '.head_repository.full_name // ""' <<< "$RUN_JSON")"
+          RUN_HEAD_BRANCH="$(jq -r '.head_branch // ""' <<< "$RUN_JSON")"
+          RUN_REPOSITORY="$(jq -r '.repository.full_name // ""' <<< "$RUN_JSON")"
+
+          [[ "$RUN_REPOSITORY" == "$REPOSITORY" ]] || {
+            echo "::warning::Run belongs to a different repository; no comment posted"
+            exit 0
+          }
+          [[ "$RUN_EVENT" == "pull_request" && "$RUN_CONCLUSION" == "failure" ]] || {
+            echo "::notice::Run is not a failed pull_request run; no comment posted"
+            exit 0
+          }
+          # This reporter intentionally skips fork PRs. They require a separate
+          # trust and disclosure policy, not a guessed repository association.
+          [[ "$RUN_HEAD_REPOSITORY" == "$REPOSITORY" ]] || {
+            echo "Fork or deleted head repository; no comment posted"
+            exit 0
+          }
+          [[ "$RUN_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error::Invalid source commit SHA"
+            exit 1
+          }
+          [[ "$RUN_HEAD_BRANCH" =~ ^[A-Za-z0-9._/-]+$ ]] || {
+            echo "::error::Invalid source branch name"
+            exit 1
+          }
+          git check-ref-format --branch "$RUN_HEAD_BRANCH" >/dev/null || {
+            echo "::error::Invalid Git branch ref"
+            exit 1
+          }
+
+          # Allow only the two known workflows, with their exact canonical path,
+          # name and active identity resolved independently from GitHub.
+          case "$RUN_PATH" in
+            .github/workflows/ci.yml)
+              EXPECTED_NAME="CI"
+              ;;
+            .github/workflows/guix-profile-evaluation.yml)
+              EXPECTED_NAME="Guix profile evaluation"
+              ;;
+            *)
+              echo "::warning::Unrecognized workflow path; no comment posted"
+              exit 0
+              ;;
+          esac
+          [[ "$RUN_NAME" == "$EXPECTED_NAME" ]] || {
+            echo "::warning::Workflow name/path mismatch; no comment posted"
+            exit 0
+          }
+          WORKFLOW_JSON="$(gh api "repos/$REPOSITORY/actions/workflows/$RUN_WORKFLOW_ID")"
+          jq -e \
+            --arg name "$EXPECTED_NAME" \
+            --arg path "$RUN_PATH" \
+            --argjson workflow_id "$RUN_WORKFLOW_ID" '
+              .id == $workflow_id and
+              .name == $name and
+              .path == $path and
+              .state == "active"
+            ' <<< "$WORKFLOW_JSON" >/dev/null
+
+          # Re-fetch each workflow_run.pull_requests association. It is only a
+          # candidate list; every PR must be live, open, same-repo, on main and
+          # still point to the exact SHA/branch that failed.
+          is_exact_open_main_pr() {
+            local number="$1"
+            local pr_json
+            pr_json="$(gh api "repos/$REPOSITORY/pulls/$number")"
+            jq -e \
+              --arg repo "$REPOSITORY" \
+              --arg sha "$RUN_SHA" \
+              --arg branch "$RUN_HEAD_BRANCH" '
+                .state == "open" and
+                .base.ref == "main" and
+                .base.repo.full_name == $repo and
+                .head.repo.full_name == $repo and
+                .head.ref == $branch and
+                .head.sha == $sha
+              ' <<< "$pr_json" >/dev/null
+          }
+
+          mapfile -t ASSOCIATED_PR_NUMBERS < <(
+            jq -r '
+              [
+                .pull_requests[]?
+                | .number
+                | select(type == "number" and . > 0)
+              ]
+              | unique
+              | .[]
+            ' <<< "$RUN_JSON"
+          )
+
+          MATCHED_PR_NUMBERS=()
+          for number in "${ASSOCIATED_PR_NUMBERS[@]}"; do
+            [[ "$number" =~ ^[1-9][0-9]*$ ]] || continue
+            if is_exact_open_main_pr "$number"; then
+              MATCHED_PR_NUMBERS+=("$number")
+            fi
+          done
+
+          # GitHub may omit workflow_run.pull_requests. Query by the validated
+          # same-repository branch using separate encoded API fields, then
+          # require one exact open PR whose head SHA still equals the run SHA.
+          if [[ "${#MATCHED_PR_NUMBERS[@]}" -eq 0 ]]; then
+            PULLS_JSON="$(
+              gh api --paginate "repos/$REPOSITORY/pulls" \
+                -f state=all \
+                -f head="$REPOSITORY_OWNER:$RUN_HEAD_BRANCH" \
+                -f base=main \
+                -F per_page=100 | jq -s 'add'
+            )"
+            mapfile -t FALLBACK_PR_NUMBERS < <(
+              jq -r \
+                --arg repo "$REPOSITORY" \
+                --arg sha "$RUN_SHA" \
+                --arg branch "$RUN_HEAD_BRANCH" '
+                  [
+                    .[]
+                    | select(
+                        .state == "open" and
+                        .base.ref == "main" and
+                        .base.repo.full_name == $repo and
+                        .head.repo.full_name == $repo and
+                        .head.ref == $branch and
+                        .head.sha == $sha
+                      )
+                    | .number
+                  ]
+                  | unique
+                  | .[]
+                ' <<< "$PULLS_JSON"
+            )
+            MATCHED_PR_NUMBERS=("${FALLBACK_PR_NUMBERS[@]}")
+          fi
+
+          if [[ "${#MATCHED_PR_NUMBERS[@]}" -ne 1 ]]; then
+            echo "Expected exactly one open same-repository PR with the failed head SHA and base main; found ${#MATCHED_PR_NUMBERS[@]}. No comment posted."
+            exit 0
+          fi
+
+          PR_NUMBER="${MATCHED_PR_NUMBERS[0]}"
+          [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || {
+            echo "::error::Invalid validated PR number"
+            exit 1
+          }
+          # Final live revalidation immediately before the write.
+          if ! is_exact_open_main_pr "$PR_NUMBER"; then
+            echo "PR changed after lookup; no comment posted"
+            exit 0
+          fi
+
+          BODY="$(printf '%s\n' \
+            "### $EXPECTED_NAME failed" \
+            "" \
+            "Commit: $RUN_SHA" \
+            "Branch: $RUN_HEAD_BRANCH" \
+            "Workflow run: $SERVER_URL/$REPOSITORY/actions/runs/$RUN_ID" \
+            "" \
+            "Inspect the first failing command in the workflow logs." \
+            "WSM_CHANNEL_AUTHENTICATION=NOT_TESTED")"
+
+          gh api --method POST \
+            "repos/$REPOSITORY/issues/$PR_NUMBER/comments" \
+            -f body="$BODY" >/dev/null
+          echo "Reported exact failed run $RUN_ID to PR #$PR_NUMBER."
