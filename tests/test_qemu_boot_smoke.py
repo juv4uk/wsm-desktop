@@ -366,8 +366,9 @@ def closure_lines(states: dict[str, str] | None = None, profile: str = PROFILE) 
     lines = []
     for name in sorted(TOOLS):
         state = chosen.get(name, STATE_OK)
+        path = "-" if state == STATE_UNRESOLVED else f"{profile}/{name}"
         lines.append(
-            "|".join((LINE_PREFIX, PROTOCOL_VERSION, name, f"{profile}/{name}", state))
+            "|".join((LINE_PREFIX, PROTOCOL_VERSION, name, path, state))
         )
     usable = sum(1 for name in TOOLS if chosen.get(name, STATE_OK) == STATE_OK)
     verdict = "ok" if usable == len(TOOLS) else "fail"
