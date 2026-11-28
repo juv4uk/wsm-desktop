@@ -64,6 +64,11 @@ class JobModuleTests(unittest.TestCase):
     def test_it_builds_the_same_profile_the_release_builds(self) -> None:
         self.assertIn("systems/live-minimal.scm", self.text)
 
+    def test_it_imports_the_pinned_guix_job_helpers(self) -> None:
+        self.assertIn("#:use-module (gnu ci)", self.text)
+        self.assertIn("#:use-module (guix packages)", self.text)
+        self.assertIn("#:use-module (srfi srfi-1)", self.text)
+
     def test_grafting_is_disabled(self) -> None:
         """Grafting belongs on the user's machine, not in a build farm."""
         self.assertIn("(%graft? #f)", self.text)
@@ -75,10 +80,12 @@ class JobModuleTests(unittest.TestCase):
 
 
 class ServiceFragmentTests(unittest.TestCase):
-    def test_the_fragment_uses_substitutes(self) -> None:
-        """Without substitutes a build farm rebuilds every closure from source."""
+    def test_the_fragment_matches_the_pinned_cuirass_api(self) -> None:
         text = SERVICE.read_text(encoding="utf-8")
-        self.assertIn("(use-substitutes? #t)", text)
+        self.assertIn("(gnu services cuirass)", text)
+        self.assertNotIn("(gnu services ci)", text)
+        self.assertNotIn("(use-substitutes? #t)", text)
+        self.assertIn('(local-file "specs.scm"', text)
         self.assertIn("cuirass-service-type", text)
 
 
@@ -87,6 +94,9 @@ class DocumentationTests(unittest.TestCase):
         text = DOC.read_text(encoding="utf-8")
         self.assertIn("не завантажує образ", text.lower())
         self.assertIn("не перевіряє інсталятор", text.lower())
+        self.assertIn("--port=8081", text)
+        self.assertIn("--listen=localhost", text)
+        self.assertIn("не публікує", text.lower())
 
     def test_the_document_admits_the_instance_never_ran(self) -> None:
         text = DOC.read_text(encoding="utf-8")
