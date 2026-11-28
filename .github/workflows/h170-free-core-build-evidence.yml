@@ -1,0 +1,141 @@
+name: H170 Free upstream package build evidence
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/h170-free-core-build-evidence.yml"
+      - "ci/packages/h170-free-core.scm"
+      - "channels.lock.scm"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: h170-free-core-package-evidence-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Resolve and build the fixed H170 Free upstream roots
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Install Guix
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y guix
+          sudo systemctl enable --now guix-daemon.service
+          guix --version | tee "$RUNNER_TEMP/guix-version.txt"
+
+      - name: Verify the official Guix lock
+        run: |
+          set -euo pipefail
+          expected="4e5195be20d9b124df8a8bb69213412236e4668e"
+          guix time-machine -C channels.lock.scm -- describe -f channels \
+            | tee "$RUNNER_TEMP/resolved-channels.scm"
+          grep -F "$expected" "$RUNNER_TEMP/resolved-channels.scm"
+          {
+            echo "## H170 Free upstream package build evidence"
+            echo
+            echo "- Source commit: `$GITHUB_SHA`"
+            echo "- Guix commit: `$expected` (official channel only)"
+            echo "- Lock SHA-256: `$(sha256sum channels.lock.scm | cut -d' ' -f1)`"
+            echo "- Manifest: `ci/packages/h170-free-core.scm`"
+            echo "- Scope: `linux-libre`, `mesa`"
+            echo "- Distribution: **NOT_PUBLISHED** — no NAR export, upload, Release, Pages or substitute endpoint"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Evaluate the fixed package manifest
+        run: |
+          set -euo pipefail
+          guix time-machine -C channels.lock.scm -- build \
+            --dry-run --no-grafts \
+            --manifest=ci/packages/h170-free-core.scm
+
+      - name: Realize the fixed package roots in the ephemeral store
+        shell: bash
+        run: |
+          set -euo pipefail
+          paths_file="$RUNNER_TEMP/h170-free-store-paths.txt"
+          build_log="$RUNNER_TEMP/h170-free-build.log"
+          : > "$paths_file"
+          : > "$build_log"
+
+          if ! guix time-machine -C channels.lock.scm -- build \
+              --no-grafts --keep-going \
+              --manifest=ci/packages/h170-free-core.scm \
+              >"$paths_file" 2>"$build_log"; then
+            {
+              echo
+              echo "### Build failed"
+              echo
+              echo 'No NAR was exported or uploaded. Relevant build log follows.'
+              echo '---'
+              tail -n 160 "$build_log"
+              echo '---'
+            } >> "$GITHUB_STEP_SUMMARY"
+            tail -n 160 "$build_log" >&2
+            exit 1
+          fi
+
+          mapfile -t store_paths < <(grep -E '^/gnu/store/[a-z0-9]{32}-' "$paths_file")
+          if [ "${#store_paths[@]}" -ne 2 ]; then
+            echo "Expected exactly two manifest roots; received ${#store_paths[@]}." >&2
+            cat "$paths_file" >&2
+            exit 1
+          fi
+
+          {
+            echo
+            echo "### Realized store roots"
+            echo
+            echo "| Package root | Store path | Root bytes |"
+            echo "| --- | --- | ---: |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          for store_path in "${store_paths[@]}"; do
+            case "$store_path" in
+              /gnu/store/*) ;;
+              *) echo "Unexpected store path: $store_path" >&2; exit 1 ;;
+            esac
+            test -e "$store_path"
+            root_name="${store_path##*/}"
+            root_bytes="$(du -sb "$store_path" | cut -f1)"
+            printf '| `%s` | `%s` | %s |\n' "$root_name" "$store_path" "$root_bytes" \
+              >> "$GITHUB_STEP_SUMMARY"
+            {
+              echo
+              echo "#### Recursive closure report: $root_name"
+              echo
+              echo '---'
+              guix time-machine -C channels.lock.scm -- size --sort=closure "$store_path"
+              echo '---'
+            } >> "$GITHUB_STEP_SUMMARY"
+          done
+
+          {
+            echo
+            echo "Result: both fixed manifest roots were realized by the Guix store (built locally or obtained from the configured official substitutes)."
+            echo "The runner store is ephemeral; no package binary, NAR, checksum bundle or release asset was exported."
+            echo
+            echo "**Not proven:** H170 boot, driver binding, firmware load, Intel media acceleration, GP107 KMS/3D/compute, or physical hardware functionality."
+            echo "The locked Linux-libre 7.3.5 Nouveau/GP107 atomic-init risk remains tracked separately in #514."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Summarize failure without exporting artifacts
+        if: failure()
+        run: |
+          {
+            echo
+            echo "### H170 Free package evidence: NOT_PUBLISHED"
+            echo
+            echo "Commit: `$GITHUB_SHA`"
+            echo "Evaluation/build did not complete. No NAR export, Actions artifact, Release asset, Pages deployment or substitute was created."
+          } >> "$GITHUB_STEP_SUMMARY"
