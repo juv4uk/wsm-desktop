@@ -44,26 +44,34 @@ jobs:
           )
 
           cat > "$RUNNER_TEMP/verified-notes.md" <<EOF
-          # WSM tools 0.1.0-rc6 — Guix package
+          WITHDRAWN — WSM tools 0.1.0-rc6
 
-          **Public pre-release — verified package artifact.**
+          **Draft / not owner-approved for installation or redistribution.**
+
+          This WSM-owned package was made public without an owner-approved decision
+          for its Python implementation. The Python code in wsm_install/ and
+          wsm_hwcheck/ was introduced by agent commits; ADR 0009 is only proposed,
+          not accepted by the owner. The effective Guix license decision remains
+          open in issue #367. This release is retained as provenance only.
 
           - Source commit: $EXPECTED_SOURCE
           - Guix channel: pinned GNU Guix commit 4e5195be20d9b124df8a8bb69213412236e4668e
           - Archive SHA-256: c4df62eecb221bbfaac1acadfde24e431a6e0ab848b59acdc8d734f4a4400c10
-          - License identifier: LicenseRef-Volnist
+          - License identifier in the package: LicenseRef-Volnist
           - The runtime pack contains LICENSE and LicenseRef-Volnist.txt.
-          - Attestation, workflow artifact retention, release readback and SHA-256 verification succeeded in workflow run 46117970977.
+          - Build, attestation and SHA-256 read-back evidence: workflow run 46117970977.
 
-          This is a self-contained WSM tools pack, not a substitute cache. It includes
-          wsm-hwcheck, wsm-install and wsm-install-live. It does not include the
-          upstream H170 kernel/Mesa closure, Nonguix, proprietary NVIDIA drivers or
-          NVIDIA firmware, and does not certify physical H170/GP107 runtime behavior.
-          No OSI or GNU FSDG classification is claimed.
+          Do not install, redistribute or use this WSM-owned package as a production
+          component. It is not part of the H170 Free upstream manifest. The upstream
+          H170 package publication is independent and continues without this package.
           EOF
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" \
             --title "WSM tools 0.1.0-rc6 — Verified public pre-release" \
-            --notes-file "$RUNNER_TEMP/verified-notes.md"
+            --notes-file "$RUNNER_TEMP/verified-notes.md" \
+            --draft
+          test "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')" = "true"
+          body="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body)"
+          printf '%s' "$body" | grep -F "WITHDRAWN"
 
       - name: Mark the earlier mismatched WSM tools release as superseded
         env:
@@ -92,12 +100,63 @@ jobs:
           text in the runtime pack, and has a successful build, attestation,
           SHA-256 readback and archive-content verification.
           EOF
+          cat >> "$RUNNER_TEMP/superseded-notes.md" <<'EOF'
+
+          This historical WSM-owned package is retained as Draft only. It is not
+          approved for installation, redistribution or production use.
+          EOF
           gh release edit "$OLD_TAG" --repo "$GITHUB_REPOSITORY" \
-            --title "SUPERSEDED — WSM tools package with incorrect license metadata" \
-            --notes-file "$RUNNER_TEMP/superseded-notes.md"
+            --title "WITHDRAWN — superseded WSM tools package (Draft only)" \
+            --notes-file "$RUNNER_TEMP/superseded-notes.md" \
+            --draft
+          test "$(gh release view "$OLD_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')" = "true"
 
           old_body="$(gh release view "$OLD_TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body)"
           printf '%s' "$old_body" | grep -F "SUPERSEDED"
           new_body="$(gh release view wsm-tools-0.1.0-rc6-0a9865b0bdb4-run-46117970977 --repo "$GITHUB_REPOSITORY" --json body --jq .body)"
-          printf '%s' "$new_body" | grep -F "LicenseRef-Volnist"
-          echo "Both release descriptions updated and read back successfully." >> "$GITHUB_STEP_SUMMARY"
+          printf '%s' "$new_body" | grep -F "WITHDRAWN"
+          echo "The first package and superseded releases are now Draft-only." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Withdraw the second public WSM Python RC6 pack
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="wsm-tools-0.1.0-rc6-b9fbead9ef8f-run-46118912229"
+          EXPECTED_SOURCE="b9fbead9ef8f5dd54bb96a442e3fec6fff6bcf0c"
+          actual_target="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json targetCommitish --jq .targetCommitish)"
+          test "$actual_target" = "$EXPECTED_SOURCE"
+
+          cat > "$RUNNER_TEMP/withdrawn-rc6-second-notes.md" <<EOF
+          # WITHDRAWN — WSM tools 0.1.0-rc6 (Draft only)
+
+          This WSM-owned Python package was published without an owner-approved
+          language/architecture decision. ADR 0009 remains proposed, not accepted.
+          The effective license decision remains open in issue #367.
+
+          The release is retained as provenance only. Do not install, redistribute
+          or use it as a production component. WSM-owned tools are excluded from
+          the H170 Free upstream package manifest.
+          - Source commit: $EXPECTED_SOURCE
+          - Original build/attestation/read-back run: 46118912229
+          EOF
+
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --title "WITHDRAWN — WSM tools 0.1.0-rc6 (Draft only)" \
+            --notes-file "$RUNNER_TEMP/withdrawn-rc6-second-notes.md" \
+            --draft
+          test "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')" = "true"
+          body="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body)"
+          printf '%s' "$body" | grep -F "WITHDRAWN"
+          echo "Second public WSM Python RC6 pack returned to Draft." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Summarize WSM package withdrawal failure
+        if: failure()
+        shell: bash
+        run: |
+          {
+            echo "## WSM package withdrawal failed"
+            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "Do not claim the affected WSM-owned release is withdrawn until read-back confirms Draft."
+          } >> "$GITHUB_STEP_SUMMARY"
