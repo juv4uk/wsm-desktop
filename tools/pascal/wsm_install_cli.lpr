@@ -527,9 +527,9 @@ begin
                   'functional-test', 'manual-review', 'user-reported']);
   CheckEnum(Item.Member('kind'), ChildPath(Location, 'kind'), Kinds);
   CheckDateTime(Item.Member('observed_at'), ChildPath(Location, 'observed_at'));
-  if ValueIsString(Item.Member('source'), ChildPath(Location, 'source')) then
+  if Item.HasMember('source') and ValueIsString(Item.Member('source'), ChildPath(Location, 'source')) then
     CheckStringField(Item.Member('source'), ChildPath(Location, 'source'), 1, 0);
-  if ValueIsString(Item.Member('summary'), ChildPath(Location, 'summary')) then
+  if Item.HasMember('summary') and ValueIsString(Item.Member('summary'), ChildPath(Location, 'summary')) then
     CheckStringField(Item.Member('summary'), ChildPath(Location, 'summary'), 1, 0);
   ValueIsString(Item.Member('reference'), ChildPath(Location, 'reference'));
   ValueIsString(Item.Member('source_url'), ChildPath(Location, 'source_url'));
@@ -549,7 +549,7 @@ begin
   Required := Names(['capability', 'status']);
   CheckAdditionalProperties(Item, Location, Allowed);
   RequireMembers(Item, Location, Required);
-  if ValueIsString(Item.Member('capability'), ChildPath(Location, 'capability')) then
+  if Item.HasMember('capability') and ValueIsString(Item.Member('capability'), ChildPath(Location, 'capability')) then
     CheckStringField(Item.Member('capability'), ChildPath(Location, 'capability'), 1, 0);
   Statuses := Names(['passed', 'failed', 'partial', 'not-run', 'unsupported', 'unknown']);
   CheckEnum(Item.Member('status'), ChildPath(Location, 'status'), Statuses);
@@ -575,7 +575,7 @@ begin
   RequireMembers(Item, Location, Required);
   ValueIsBoolean(Item.Member('available'), ChildPath(Location, 'available'));
   ValueIsInteger(Item.Member('exit_code'), ChildPath(Location, 'exit_code'));
-  if ValueIsString(Item.Member('name'), ChildPath(Location, 'name')) then
+  if Item.HasMember('name') and ValueIsString(Item.Member('name'), ChildPath(Location, 'name')) then
     CheckStringField(Item.Member('name'), ChildPath(Location, 'name'), 1, 0);
   ValueIsString(Item.Member('notes'), ChildPath(Location, 'notes'));
   Scopes := Names(['unprivileged-read-only', 'privileged-read-only', 'offline-database']);
@@ -692,7 +692,7 @@ begin
           ItemPath(ChildPath(Location, 'criticality'), Index), Criticalities);
     end;
 
-  if ValueIsString(Device.Member('device_id'), ChildPath(Location, 'device_id')) then
+  if Device.HasMember('device_id') and ValueIsString(Device.Member('device_id'), ChildPath(Location, 'device_id')) then
     CheckStringField(Device.Member('device_id'), ChildPath(Location, 'device_id'), 1, 0);
 
   Discoveries := Names(['discovered', 'not-detected', 'unknown']);
@@ -778,7 +778,7 @@ begin
   CheckAdditionalProperties(Environment, Location, Allowed);
   RequireMembers(Environment, Location, Required);
 
-  if ValueIsString(Environment.Member('architecture'), ChildPath(Location, 'architecture')) then
+  if Environment.HasMember('architecture') and ValueIsString(Environment.Member('architecture'), ChildPath(Location, 'architecture')) then
     CheckStringField(Environment.Member('architecture'),
       ChildPath(Location, 'architecture'), 1, 0);
 
@@ -786,12 +786,12 @@ begin
   CheckEnum(Environment.Member('boot_mode'), ChildPath(Location, 'boot_mode'), BootModes);
 
   if Version = SUPPORTED_VERSION_CURRENT then
-    if ValueIsString(Environment.Member('boot_mode_evidence'),
+    if Environment.HasMember('boot_mode_evidence') and ValueIsString(Environment.Member('boot_mode_evidence'),
       ChildPath(Location, 'boot_mode_evidence')) then
       CheckStringField(Environment.Member('boot_mode_evidence'),
         ChildPath(Location, 'boot_mode_evidence'), 1, 0);
 
-  if ValueIsString(Environment.Member('kernel_release'),
+  if Environment.HasMember('kernel_release') and ValueIsString(Environment.Member('kernel_release'),
     ChildPath(Location, 'kernel_release')) then
     CheckStringField(Environment.Member('kernel_release'),
       ChildPath(Location, 'kernel_release'), 1, 0);
@@ -908,7 +908,7 @@ begin
   if Report.HasMember('privacy') then
     CheckPrivacy(Report.Member('privacy'), ChildPath('$', 'privacy'));
 
-  if ValueIsString(Report.Member('report_id'), ChildPath('$', 'report_id')) then
+  if Report.HasMember('report_id') and ValueIsString(Report.Member('report_id'), ChildPath('$', 'report_id')) then
   begin
     CheckStringField(Report.Member('report_id'), ChildPath('$', 'report_id'), 16, 80);
     CheckPattern(Report.Member('report_id'), ChildPath('$', 'report_id'),
