@@ -1,28 +1,15 @@
 ;; SPDX-License-Identifier: LicenseRef-Volnist
 ;;
-;; The FPC edition of the hardware reader.
-;;
-;; Why a second implementation exists: the Python package propagated the full
-;; interpreter, and the published pack carried three separate Python builds
-;; (~226 MB of a 399 MB store). A Free Pascal binary is a single native
-;; executable: no interpreter, no site-packages, no schema library in the
-;; runtime closure.
-;;
-;; The two implementations are not interchangeable, and the split is deliberate:
-;; this one reads PCI identity only. JSON schema validation stays in CI, where
-;; Python already exists — putting a validator in the shipped binary would
-;; reintroduce exactly the dependency this package removes.
+;; Native Free Pascal hardware evidence collector and conservative classifier.
+;; FPC and its FCL units are build-only inputs; the installed executables do
+;; not depend on a Python interpreter or invoke Python at runtime.
 
 (define-module (wsm packages fpc-tools)
   #:use-module (guix packages)
   #:use-module (guix gexp)
-  #:use-module (guix download)
   #:use-module (guix build-system gnu)
   #:use-module (gnu packages pascal)
-  #:use-module (guix licenses)
-  ;; `any' comes from SRFI-1 and `string-contains' from SRFI-13; the source
-  ;; select? predicate uses both, and without the imports the module fails to
-  ;; load only when Guix evaluates it.
+  #:use-module (wsm licenses)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-13)
   #:export (wsm-hwcheck-fpc wsm-classify-fpc))
@@ -31,16 +18,17 @@
   (package
     (name "wsm-hwcheck-fpc")
     (version "0.1.0")
-    (source (local-file "../.." "wsm-desktop-source-fpc"
-                        #:recursive? #t
-                        #:select? (lambda (path _stat)
-                                    (not (any (lambda (skip)
-                                                (string-contains path skip))
-                                              '("/.git" "/__pycache__" "/build"))))))
+    (source
+     (local-file "../.." "wsm-desktop-source-fpc"
+                 #:recursive? #t
+                 #:select? (lambda (path _stat)
+                             (not (any (lambda (skip)
+                                         (string-contains path skip))
+                                       '("/.git" "/__pycache__" "/build"))))))
     (build-system gnu-build-system)
     (arguments
      (list
-      #:tests? #f
+      #:tests? #t
       #:make-flags
       #~(list (string-append "FPC=" #$(file-append fpc "/bin/fpc")))
       #:phases
@@ -48,30 +36,35 @@
           (delete 'configure)
           (replace 'build
             (lambda* (#:key make-flags #:allow-other-keys)
-              (apply invoke "make" "-f" "tools/pascal/Makefile" "all" make-flags)))
+              (apply invoke "make" "-f" "tools/pascal/Makefile" "build" make-flags)))
+          (replace 'check
+            (lambda* (#:key make-flags #:allow-other-keys)
+              (apply invoke "make" "-f" "tools/pascal/Makefile" "test" make-flags)))
           (replace 'install
-            (lambda* (#:key outputs #:allow-other-keys)
-              (let* ((out (assoc-ref outputs "out"))
-                     (bin (string-append out "/bin")))
-                (install-file "tools/pascal/wsm-hwcheck" bin)
-                (install-file "tools/pascal/wsm-classify" bin)))))))
-    (synopsis "Read-only PCI hardware reader for WSM Desktop, built with FPC")
-    (description
-     "A native binary that reads PCI identity and driver binding from sysfs and
-writes a JSON report. It is the Free Pascal counterpart of the Python
-collector: no interpreter or Python library enters the runtime closure.  It
-reads only; it never opens a block device and needs no privileges.")
+            (lambda* (#:key outputs make-flags #:allow-other-keys)
+              (apply invoke "make" "-f" "tools/pascal/Makefile" "install"
+                     (string-append "PREFIX=" (assoc-ref outputs "out"))
+                     make-flags)))))
+    (native-inputs (list fpc))
     (home-page "https://github.com/juv4uk/wsm-desktop")
-    (license license:gpl3+)))
+    (synopsis "Native Free Pascal hardware evidence tools for WSM Desktop")
+    (description
+     "Builds a read-only hardware evidence collector and a conservative
+subsystem classifier using Free Pascal. The collector reads local sysfs and
+procfs, preserves unknown facts, and emits the versioned WSM hardware report.
+The classifier never promotes inventory to certification. FPC is used only
+at build time; neither executable requires Python or performs network,
+firmware, module-loading, or target-device write operations.")
+    (supported-systems '("x86_64-linux"))
+    (license wsm-license)))
 
 (define-public wsm-classify-fpc
   (package
     (inherit wsm-hwcheck-fpc)
     (name "wsm-classify-fpc")
-    (synopsis "Diagnostic hardware classification for WSM Desktop, built with FPC")
+    (synopsis "Conservative native Free Pascal hardware evidence classifier")
     (description
-     "Reads a hardware report and produces the diagnostic subsystem summary.
-It is the Free Pascal counterpart of the Python classifier, and it keeps the
-same restraint: a subsystem is KNOWN only when every observed device has a
-driver binding or a candidate, a failed function test blocks that, and
-CERTIFIED is never emitted because report v1 has no coverage manifest.")))
+     "Reads a WSM hardware evidence report and emits conservative subsystem
+evidence states. A subsystem is KNOWN only when every observed device has a
+bound driver or a candidate and no functional test failed. CERTIFIED remains
+zero because the current report has no complete coverage manifest.")))
