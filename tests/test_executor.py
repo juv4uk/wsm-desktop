@@ -1016,9 +1016,14 @@ class RealSysfsObserverTests(unittest.TestCase):
         for entry in sorted(SYSFS.iterdir()):
             if (entry / "partition").is_file():
                 continue
+            # Class/block entries also expose holders, bdi, queue, power,
+            # and integrity directories. Only a child with the kernel's
+            # partition attribute is a real partition node.
             children = tuple(
                 child.name for child in entry.iterdir()
-                if child.is_dir() and child.name != entry.name
+                if child.is_dir()
+                and child.name != entry.name
+                and (child / "partition").is_file()
             )
             if not children:
                 continue
