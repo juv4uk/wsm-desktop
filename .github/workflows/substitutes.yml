@@ -173,16 +173,29 @@ jobs:
             hash="${store_path##*/}"
             hash="${hash%%-*}"
             narinfo_url="http://127.0.0.1:3000/${hash}.narinfo"
+            info_file="$(mktemp)"
             baked=0
             for _ in $(seq 1 180); do
-              if curl -fsS "$narinfo_url" -o /dev/null; then
-                baked=1
-                break
+              if curl -fsS "$narinfo_url" -o "$info_file"; then
+                nar_url="$(sed -n 's/^URL: //p' "$info_file" | head -n 1)"
+                case "$nar_url" in
+                  nar/*) ;;
+                  *)
+                    echo "::error::narinfo for $store_path has no supported NAR URL: $nar_url"
+                    cat "$info_file" >&2
+                    exit 1
+                    ;;
+                esac
+                if curl -fsS "http://127.0.0.1:3000/$nar_url" -o /dev/null; then
+                  baked=1
+                  break
+                fi
               fi
               sleep 5
             done
+            rm -f "$info_file"
             if [ "$baked" -ne 1 ]; then
-              echo "::error::NAR cache baking timed out for $store_path"
+              echo "::error::NAR archive baking timed out for $store_path"
               tail -n 100 "$RUNNER_TEMP/guix-publish.log" >&2 || true
               exit 1
             fi
