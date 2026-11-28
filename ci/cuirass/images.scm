@@ -1,51 +1,44 @@
 ;; SPDX-License-Identifier: LicenseRef-Volnist
 ;;
-;; A Cuirass job module: the live image, built by Guix, on the pinned channels.
+;; Cuirass custom job for the WSM minimal live ISO.
 ;;
-;; Cuirass calls `cuirass-jobs' with the store and the specification arguments.
-;; The image expression is the same one the release workflow builds, so this is
-;; a second, independent path to the same derivation: if the workflow is green
-;; and Cuirass is red, one of them is lying about the same bytes.
+;; The module name follows this file's channel-relative path:
+;; ci/cuirass/images.scm -> (ci cuirass images).
+;; Keep this helper outside the public (wsm ...) channel namespace.
 ;;
-;; This module lives under ci/ rather than wsm/ on purpose: wsm/ is the public
-;; channel namespace, and every module there must be loadable by the channel's
-;; evaluation test. A CI helper is not part of the channel's API. Because of that,
-;; its module name must match this path — a channel with no `directory` resolves
-;; (wsm X) to <checkout>/wsm/X.scm, so a `(wsm ci images)` name here would look for
-;; wsm/ci/images.scm and find nothing.
+;; Use the public Cuirass image API from the exact Guix revision in
+;; channels.lock.scm. image->job owns the store-monad/lowering details and
+;; disables grafting for the build farm.
 
 (define-module (ci cuirass images)
-  #:use-module (guix store)
-  #:use-module (guix derivations)
-  #:use-module (gnu system image)
-  #:use-module (gnu system)
-  #:use-module (ice-9 match)
+  #:use-module ((gnu ci) #:select (arguments->systems image->job))
+  #:use-module ((gnu system image) #:select (image-with-os iso9660-image))
+  #:use-module (ice-9 ftw)
+  #:use-module (srfi srfi-1)
   #:export (cuirass-jobs))
 
-(define (arguments->system arguments)
-  "Return the system named in ARGUMENTS, defaulting to x86_64-linux."
-  (match (assq-ref arguments 'system)
-    (#f "x86_64-linux")
-    (system system)))
+(define %wsm-image-system "x86_64-linux")
 
-(define* (image-jobs store systems #:key (profile "systems/live-minimal.scm"))
-  "One job per system: build the live image expression."
-  (map (lambda (system)
-         (let* ((name (string->symbol
-                       (string-append "wsm-live-minimal." system)))
-                ;; The profile is read from the checked-out channel, so the job
-                ;; always describes the source revision Cuirass just fetched.
-                (os   (primitive-load profile))
-                (drv  (operating-system-image
-                       os
-                       #:target system)))
-           (derivation->job name drv)))
-       systems))
+(define (live-minimal-operating-system)
+  "Load the live profile from the WSM channel checkout on the Guile load path."
+  (let ((profile (search-path %load-path "systems/live-minimal.scm")))
+    (unless profile
+      (error "cannot find WSM live profile in the channel load path"
+             "systems/live-minimal.scm"))
+    (primitive-load profile)))
 
 (define (cuirass-jobs store arguments)
-  "Register Cuirass jobs for the WSM live image."
-  (define systems
-    (list (arguments->system arguments)))
-  ;; Grafting belongs on the user's machine, not in a build farm.
-  (parameterize ((%graft? #f))
-    (image-jobs store systems)))
+  "Register the WSM minimal live ISO job for supported requested systems."
+  (let* ((systems (filter (lambda (system)
+                            (string=? system %wsm-image-system))
+                          (arguments->systems arguments)))
+         (image (image-with-os iso9660-image
+                               (live-minimal-operating-system))))
+    (unless (pair? systems)
+      (error "Cuirass request does not include the WSM image system"
+             %wsm-image-system))
+    (map (lambda (system)
+           (image->job store image
+                       #:name "wsm-live-minimal-image"
+                       #:system system))
+         systems)))
