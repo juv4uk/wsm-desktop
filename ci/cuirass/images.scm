@@ -16,10 +16,12 @@
 
 (define-module (ci cuirass images)
   #:use-module (guix store)
-  #:use-module (guix derivations)
+  #:use-module (guix packages)
+  #:use-module (gnu ci)
   #:use-module (gnu system image)
   #:use-module (gnu system)
   #:use-module (ice-9 match)
+  #:use-module (srfi srfi-1)
   #:export (cuirass-jobs))
 
 (define (arguments->system arguments)
