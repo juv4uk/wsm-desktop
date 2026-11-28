@@ -53,6 +53,25 @@ class H170LinuxLibreOverlayTests(unittest.TestCase):
         self.assertNotIn("guix publish", workflow)
         self.assertNotIn("actions/upload-artifact", workflow)
 
+    def test_release_workflow_is_pinned_to_the_h170_kernel_and_provides_source(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "h170-gp107-release.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('publish/h170-gp107/**', workflow)
+        self.assertIn('channels.lock.scm', workflow)
+        self.assertIn('linux-libre-h170', workflow)
+        self.assertIn('guix archive --generate-key', workflow)
+        self.assertIn('guix archive --export', workflow)
+        self.assertIn('linux-libre-h170-source.tar.xz', workflow)
+        self.assertIn('signing-key.pub', workflow)
+        self.assertIn('gh release create', workflow)
+        self.assertIn('gh release download', workflow)
+        self.assertIn('sha256sum -c SHA256SUMS', workflow)
+        self.assertNotIn('secrets.GUIX_SIGNING_KEY', workflow)
+        self.assertNotIn('actions/upload-artifact', workflow)
+        self.assertNotIn('nvidia-firmware', workflow.lower())
+        self.assertNotIn('nonguix', workflow.lower())
+
     def test_documentation_keeps_runtime_and_compute_claims_unproven(self) -> None:
         text = MATRIX.read_text(encoding="utf-8").lower()
         self.assertIn("linux-libre-h170", text)
