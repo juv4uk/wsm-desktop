@@ -448,5 +448,35 @@ class TagPatternTests(unittest.TestCase):
 
 
 
+class PackageLicenceMetadataTests(unittest.TestCase):
+    """The README settles the licence; a package may not declare a different one."""
+
+    PACKAGE = ROOT / "wsm" / "packages" / "wsm.scm"
+
+    def test_the_package_does_not_claim_a_licence_the_readme_excludes(self) -> None:
+        package = self.PACKAGE.read_text(encoding="utf-8")
+        code = "\n".join(line.split(";", 1)[0] for line in package.splitlines())
+        self.assertNotIn("gpl3+", code)
+        self.assertNotIn("gpl2+", code)
+
+    def test_the_package_names_volnist_as_the_readme_does(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("поширюється під ліцензією **ВОЛЬНІСТЬ**", readme)
+        package = self.PACKAGE.read_text(encoding="utf-8")
+        self.assertIn("ВОЛЬНІСТЬ", package)
+        self.assertIn("LicenseRef-Volnist", package)
+
+    def test_the_declaration_is_a_guix_licence_record(self) -> None:
+        """A string in a comment is not metadata; the field must hold a licence."""
+        package = self.PACKAGE.read_text(encoding="utf-8")
+        self.assertIn("(license (license:non-copyleft", package)
+
+    def test_the_uri_resolves_to_the_repository_licence(self) -> None:
+        package = self.PACKAGE.read_text(encoding="utf-8")
+        self.assertIn("blob/main/LICENSE", package)
+        self.assertTrue((ROOT / "LICENSE").is_file())
+        self.assertTrue((ROOT / "LICENSES" / "LicenseRef-Volnist.txt").is_file())
+
+
 if __name__ == "__main__":
     unittest.main()

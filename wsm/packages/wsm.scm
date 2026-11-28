@@ -90,4 +90,16 @@ against a versioned schema, and drafts a diagnostic-only installation plan for
 the GNU Guix backend.  Nothing in this package writes to a block device, invokes
 a system backend, or requires root.")
     (home-page "https://github.com/juv4uk/wsm-desktop")
-    (license gpl3+)))
+    ;; README.md: «Уся робота, створена для WSM Desktop у цьому репозиторії (код,
+    ;; конфігурації, тести й документація), поширюється під ліцензією ВОЛЬНІСТЬ»;
+    ;; docs/LICENSING.md names the machine-readable id: LicenseRef-Volnist. Declaring
+    ;; gpl3+ here asserted a licence the project does not use, and a published package
+    ;; carried that contradiction in its metadata.
+    ;;
+    ;; Guix has no built-in record for a licence that is not OSI-approved, so it is
+    ;; declared as one — name, URI and comment a reader can follow — instead of being
+    ;; approximated by the closest well-known licence.
+    (license (license:non-copyleft
+              "https://github.com/juv4uk/wsm-desktop/blob/main/LICENSE"
+              #:name "ВОЛЬНІСТЬ"
+              #:comment "LicenseRef-Volnist. Free use, study, modification and creation, on the condition of respecting the freedom of others. Not OSI-approved, by the author's deliberate choice; see docs/LICENSING.md."))))
