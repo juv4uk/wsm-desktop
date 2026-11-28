@@ -10,7 +10,8 @@
 ;; у drivers/profiles/h170-free.json.
 ;;
 ;; linux-libre 7.3.5 залишається лише кандидатом: відомий GP107 Nouveau
-;; atomic-init fix відсутній у цьому pin (#514). Успішна збірка не означає,
+;; atomic-init fix ed7fb901fce31588bd12ab95adc36ebcb51bc8ea відсутній у pin (#514).
+;; Успішна збірка не означає,
 ;; що GTX 1050 Ti працює на H170.
 
 (use-modules (guix profiles))
