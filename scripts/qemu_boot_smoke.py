@@ -472,10 +472,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(json.dumps({
                 "mode": "dry-run",
                 "iso": str(iso),
-            # Without this the boot evidence is not bound to any particular
-            # image: two different builds would produce equally "confirmed"
-            # JSON files.
-            "iso_sha256": sha256_of(iso),
                 "iso_sha256": sha256_of(iso),
                 "firmware": args.firmware,
                 "temporary_directory": str(work),
@@ -533,6 +529,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = {
             "mode": "qemu-boot-smoke",
             "iso": str(iso),
+            "iso_sha256": sha256_of(iso),
             "boot_confirmed": marker_seen,
             "boot_marker_configured": bool(args.boot_marker),
             "qemu_timed_out": captured.timed_out,
