@@ -82,7 +82,7 @@ class AllowlistTests(unittest.TestCase):
 
 class PlanTests(unittest.TestCase):
     def test_good_plan_is_accepted(self) -> None:
-        steps = validate_plan(plan(GOOD, ["/usr/bin/mount", "/dev/nvme0n1p2", "/mnt"]))
+        steps = validate_plan(plan(GOOD, [str(TRUSTED_PROFILE_ROOT / "bin" / "mount"), "/dev/nvme0n1p2", "/mnt"]))
         self.assertEqual(len(steps), 2)
         self.assertTrue(steps[0].destructive)
 
