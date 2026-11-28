@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""Cuirass specifications must describe the channels we actually pin."""
+"""Cuirass specifications must describe the channels we actually use."""
 
 from __future__ import annotations
 
@@ -24,11 +24,6 @@ class SpecsTests(unittest.TestCase):
         self.text = SPECS.read_text(encoding="utf-8")
 
     def test_the_file_is_balanced(self) -> None:
-        # One implementation of "is this Scheme balanced" lives in
-        # scripts/check_scheme_syntax.py, which the fast checks already run over
-        # every .scm in the tree. A local copy drifted from it once: this helper
-        # counted the paren in a character literal like #\( and reported a
-        # balanced file as broken.
         checker.scan(SPECS, self.text)
 
     def test_it_is_a_single_list_form(self) -> None:
@@ -41,7 +36,6 @@ class SpecsTests(unittest.TestCase):
         self.assertIn('(name "wsm-live-minimal-image")', self.text)
 
     def test_the_guix_channel_is_pinned_to_the_release_commit(self) -> None:
-        """A CI that floats is a CI that reports on a different tree."""
         lock = (ROOT / "channels.lock.scm").read_text(encoding="utf-8")
         commit = re.search(r'\(commit "([0-9a-f]{40})"\)', lock).group(1)
         self.assertEqual(self.text.count(f'"{commit}"'), 2)
@@ -50,8 +44,9 @@ class SpecsTests(unittest.TestCase):
         self.assertEqual(self.text.count("make-channel-introduction"), 2)
         self.assertIn("9edb3f66fd807b096b48283debdcddccfea34bad", self.text)
 
-    def test_the_wsm_channel_points_at_this_repository(self) -> None:
-        self.assertEqual(self.text.count("https://github.com/juv4uk/wsm-desktop"), 2)
+    def test_the_wsm_input_is_declared_as_a_tracking_branch(self) -> None:
+        self.assertEqual(self.text.count('(branch "main")'), 2)
+        self.assertIn("not an immutable release input", self.text.lower())
 
 
 class JobModuleTests(unittest.TestCase):
@@ -64,22 +59,45 @@ class JobModuleTests(unittest.TestCase):
     def test_it_builds_the_same_profile_the_release_builds(self) -> None:
         self.assertIn("systems/live-minimal.scm", self.text)
 
-    def test_grafting_is_disabled(self) -> None:
-        """Grafting belongs on the user's machine, not in a build farm."""
-        self.assertIn("(%graft? #f)", self.text)
+    def test_it_uses_the_image_helper_from_the_pinned_guix(self) -> None:
+        self.assertIn("(gnu ci)", self.text)
+        self.assertIn("(gnu image)", self.text)
+        self.assertIn("(gnu system image)", self.text)
+        self.assertIn("(image->job store", self.text)
+        self.assertIn("(inherit iso9660-image)", self.text)
+        self.assertIn("(operating-system os)", self.text)
+        self.assertNotIn("operating-system-image", self.text)
+
+    def test_it_resolves_the_profile_from_the_channel_load_path(self) -> None:
+        self.assertIn("(search-path %load-path relative-path)", self.text)
+        self.assertIn("(primitive-load (channel-file profile))", self.text)
 
     def test_the_module_is_outside_the_channel_namespace(self) -> None:
-        """wsm/ is the channel API; a CI helper is not part of it."""
         self.assertFalse((ROOT / "wsm" / "ci").exists())
         self.assertIn("(ci cuirass images)", self.text)
 
 
 class ServiceFragmentTests(unittest.TestCase):
-    def test_the_fragment_uses_substitutes(self) -> None:
-        """Without substitutes a build farm rebuilds every closure from source."""
-        text = SERVICE.read_text(encoding="utf-8")
-        self.assertIn("(use-substitutes? #t)", text)
-        self.assertIn("cuirass-service-type", text)
+    def setUp(self) -> None:
+        self.text = SERVICE.read_text(encoding="utf-8")
+
+    def test_it_imports_the_actual_guix_cuirass_service_module(self) -> None:
+        self.assertIn("(gnu services cuirass)", self.text)
+        self.assertNotIn("(gnu services ci)", self.text)
+
+    def test_it_loads_specs_from_the_service_source_tree(self) -> None:
+        self.assertIn("(dirname (current-filename))", self.text)
+        self.assertIn('(local-file %wsm-cuirass-specs-path "wsm-cuirass-specs.scm")', self.text)
+        self.assertIn("#~(load #$%wsm-cuirass-specs-file)", self.text)
+        self.assertNotIn("/run/current-system/profile/share/wsm/ci/cuirass/specs.scm", self.text)
+
+    def test_it_does_not_use_an_unknown_substitutes_field(self) -> None:
+        self.assertNotIn("use-substitutes?", self.text)
+        self.assertIn("(fallback? #t)", self.text)
+
+    def test_service_is_loopback_only_and_does_not_claim_to_publish(self) -> None:
+        self.assertIn('(host "localhost")', self.text)
+        self.assertIn("does not publish its build results as substitutes", self.text.lower())
 
 
 class DocumentationTests(unittest.TestCase):
@@ -92,15 +110,15 @@ class DocumentationTests(unittest.TestCase):
         text = DOC.read_text(encoding="utf-8")
         self.assertIn("інстанс не запускався", text.lower())
 
+    def test_it_does_not_claim_local_cuirass_publishes_substitutes(self) -> None:
+        text = DOC.read_text(encoding="utf-8").lower()
+        self.assertIn("не публікує substitutes", text)
+        self.assertIn("guix publish", text)
+        self.assertIn("phase b", text)
+
 
 class JobModulePathTests(unittest.TestCase):
-    """A custom job's module name must match its path under the channel root.
-
-    A channel declared without `directory` resolves `(name sub module)` to
-    <checkout>/<name>/sub/module.scm. A job module that declares a name its path
-    cannot produce fails at load time, not at build time — and a spec that only
-    checked for the string would not notice.
-    """
+    """A custom job's module name must match its path under the channel root."""
 
     def test_the_module_name_matches_the_file_path(self) -> None:
         module = ROOT / "ci" / "cuirass" / "images.scm"
@@ -115,8 +133,8 @@ class JobModulePathTests(unittest.TestCase):
         self.assertEqual(declared, expected)
 
     def test_the_specification_asks_for_the_name_the_file_declares(self) -> None:
-        spec = (ROOT / "ci" / "cuirass" / "specs.scm").read_text(encoding="utf-8")
-        module = (ROOT / "ci" / "cuirass" / "images.scm").read_text(encoding="utf-8")
+        spec = SPECS.read_text(encoding="utf-8")
+        module = IMAGES.read_text(encoding="utf-8")
         for line in module.splitlines():
             if line.startswith("(define-module "):
                 declared = line.split("(define-module ", 1)[1].strip()
