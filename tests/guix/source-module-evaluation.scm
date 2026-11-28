@@ -10,6 +10,7 @@
 ;; scripts/check_scheme_module_coverage.py enforces that rule.
 (use-modules (guix packages)
              (gnu ci)
+             (gnu services)
              (gnu services cuirass)
              (ci cuirass images)
              (wsm systems performance)
@@ -27,10 +28,14 @@
 
 ;; Cuirass API check against the exact Guix lock. This imports the custom module
 ;; from ci/cuirass/images.scm without registering a jobset or authenticating WSM.
+(define %wsm-cuirass-service-smoke
+  (service cuirass-service-type (cuirass-configuration)))
+
 (unless (and (procedure? arguments->systems)
              (procedure? image->job)
              (procedure? cuirass-jobs)
-             (procedure? cuirass-service-type))
+             (cuirass-configuration? (cuirass-configuration))
+             %wsm-cuirass-service-smoke)
   (error "Pinned Guix Cuirass API or WSM image-job module is unavailable"))
 
 (display "WSM-CUIRASS-API-EVAL-OK")
