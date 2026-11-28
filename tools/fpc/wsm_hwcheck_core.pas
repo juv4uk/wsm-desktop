@@ -155,9 +155,12 @@ begin
       RandomBytes[Index] := Random(256);
   end;
 
+  { Python: 'wsm-' + secrets.token_hex(12) — 12 байтів, тобто 24 символи, і
+    в нижньому регістрі. IntToHex дає верхній, тому LowerCase обовʼязковий:
+    інакше report_id відрізняється від Python уже на першому символі. }
   Result := 'wsm-';
-  for Index := Low(RandomBytes) to High(RandomBytes) do
-    Result := Result + IntToHex(RandomBytes[Index], 2);
+  for Index := Low(RandomBytes) to 11 do
+    Result := Result + LowerCase(IntToHex(RandomBytes[Index], 2));
 end;
 
 function ArchitectureName: string;
@@ -470,7 +473,7 @@ begin
   AddIfPresent(Identity, 'model', Model);
   AddIfPresent(Identity, 'manufacturer', Manufacturer);
   Result := NewBaseDevice('cpu-0', 'cpu', 'cpu',
-    'procfs:/cpuinfo', 'CPU identity fields were read from procfs.',
+    'procfs:/cpuinfo', 'CPU model information was read from procfs.',
     ObservedAt, nil);
   if Identity.Count > 0 then
     Result.Add('identity', Identity)
@@ -640,7 +643,7 @@ begin
 
       Device := NewBaseDevice('pci-' + EntryName, Category, 'pci',
         'sysfs:/bus/pci/devices/' + EntryName,
-        'PCI identity and driver binding were read from sysfs.',
+        'PCI function and its kernel driver binding were read from sysfs.',
         ObservedAt, NewDriverFacts(DevicePath));
       Device.Add('identity', Identity);
 
@@ -707,8 +710,8 @@ begin
 
       Device := NewBaseDevice('usb-' + Name, USBCategory(ClassValue), 'usb',
         'sysfs:/bus/usb/devices/' + Name,
-        'USB device identity was read from sysfs; composite interfaces are not enumerated in this revision.',
-        ObservedAt, NewDriverFacts(DevicePath));
+        'USB parent identity was read; interface-level class and driver binding are not collected.',
+        ObservedAt, nil);
       Device.Add('identity', Identity);
       Devices.Add(Device);
     until FindNext(Search) <> 0;
@@ -787,7 +790,8 @@ begin
       AddIfPresent(Identity, 'manufacturer', Vendor);
       Device := NewBaseDevice('block-' + Name, 'storage-device', Bus,
         'sysfs:/block/' + Name,
-        'Block storage identity and topology were read from sysfs; partition tables and filesystems are not read.',
+        'Block storage identity, driver binding and topology were read from sysfs; ' +
+        'partition tables and filesystems are not read.',
         ObservedAt, NewDriverFacts(DevicePath));
       Device.Add('identity', Identity);
 
@@ -981,7 +985,17 @@ begin
   Privacy.Add('profile', 'strict-local');
   Privacy.Add('network_upload_performed', False);
   Privacy.Add('sensitive_identifiers_included', False);
+  { Python перелічує рівно ті сім редагувань, які справді застосовує
+    (collector.py, redactions_applied). Порожній масив тут означав би інше
+    твердження — «нічого не вирізано», а не «перелік не заповнено». }
   Redactions := TJSONArray.Create;
+  Redactions.Add('serial-number');
+  Redactions.Add('mac-address');
+  Redactions.Add('uuid');
+  Redactions.Add('hostname');
+  Redactions.Add('username');
+  Redactions.Add('ip-address');
+  Redactions.Add('storage-wwn');
   Privacy.Add('redactions_applied', Redactions);
   Privacy.Add('network_requests_performed', False);
 
