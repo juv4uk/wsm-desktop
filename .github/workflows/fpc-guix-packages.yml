@@ -1,0 +1,99 @@
+# SPDX-License-Identifier: LicenseRef-Volnist
+name: Native FPC Guix packages
+
+# Evaluate and build WSM-owned Pascal packages using the exact official Guix
+# lock. No substitutes, release assets, or Git-branch binaries are published.
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/fpc-guix-packages.yml"
+      - "channels.lock.scm"
+      - "Makefile"
+      - "tests/guix/source-module-evaluation.scm"
+      - "wsm/packages/fpc-tools.scm"
+      - "wsm/licenses.scm"
+      - "tools/pascal/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fpc-guix-packages-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  evaluate-and-build:
+    name: Evaluate and build all native WSM FPC packages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v7
+
+      - name: Use the GNU Guix project's authenticated Codeberg mirror
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Transport only; channels.lock.scm and its introduction remain exact.
+          git config --global url."https://codeberg.org/guix/guix.git".insteadOf "https://git.guix.gnu.org/guix.git"
+          echo "Guix transport uses the canonical Codeberg mirror; lock identity is unchanged." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Guix build host
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y guix
+          sudo systemctl enable --now guix-daemon.service
+          guix --version
+
+      - name: Evaluate WSM package modules against the locked Guix
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 45m guix time-machine -C channels.lock.scm -- \
+            repl -L . tests/guix/source-module-evaluation.scm
+          echo "WSM package records evaluated against the pinned official Guix source." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build the three native FPC packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/wsm-fpc-package-build"
+          mkdir -p "$OUT"
+          timeout 120m guix time-machine -C channels.lock.scm -- \
+            build -L . --no-grafts --keep-going \
+            wsm-hwcheck-fpc wsm-classify-fpc wsm-cpu-isa-fpc \
+            | tee "$OUT/store-paths.txt"
+
+          mapfile -t outputs < <(grep -E '^/gnu/store/[a-z0-9]{32}-' "$OUT/store-paths.txt")
+          test "${#outputs[@]}" -eq 3
+          test -x "${outputs[0]}/bin/wsm-hwcheck"
+          test -x "${outputs[1]}/bin/wsm-classify"
+          test -x "${outputs[2]}/bin/wsm-cpu-isa"
+
+          "${outputs[0]}/bin/wsm-hwcheck" --version
+          "${outputs[1]}/bin/wsm-classify" --version
+          "${outputs[2]}/bin/wsm-cpu-isa" --version
+
+          {
+            echo "## Native FPC Guix package build"
+            echo
+            echo "| Package | Store output |"
+            echo "| --- | --- |"
+            echo "| wsm-hwcheck-fpc | `${outputs[0]}` |"
+            echo "| wsm-classify-fpc | `${outputs[1]}` |"
+            echo "| wsm-cpu-isa-fpc | `${outputs[2]}` |"
+            echo
+            echo "The compiler is a native build input; no Python runtime is propagated."
+            echo "No Release, substitute cache, or Git-branch binary was published."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Summarize package build failure
+        if: failure()
+        run: |
+          {
+            echo "## Native FPC Guix package build failed"
+            echo "No package output is being reported as verified."
+            echo "Inspect the exact failed Guix command and compiler diagnostic above."
+          } >> "$GITHUB_STEP_SUMMARY"
