@@ -383,12 +383,11 @@ def problems(
     published = set(keys)
     found: list[str] = []
 
+    # Guix requires every historically authorized key to remain available.
+    # Additional valid public keys may be staged before an owner-signed
+    # authorization change; their mere presence does not authorize them.
     for fingerprint in sorted(authorized - published):
-        found.append(f"authorized fingerprint {fingerprint} has no public .key export in the keyring")
-    for fingerprint in sorted(published - authorized):
-        found.append(
-            f"keyring file {keys[fingerprint]} exports unauthorized fingerprint {fingerprint}"
-        )
+        found.append(f"historically authorized fingerprint {fingerprint} has no public .key export in the keyring")
 
     return found
 
@@ -404,7 +403,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("root", nargs="?", default=".", help="repository root")
     parser.add_argument(
         "--keyring-dir",
-        type=Path,
+        type=lambda value: Path(value) if value else None,
         help="path to a local checkout of the channel keyring branch",
     )
     parser.add_argument(
