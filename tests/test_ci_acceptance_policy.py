@@ -204,6 +204,7 @@ class StartupBenchmarkTests(unittest.TestCase):
 
 
 class FreePascalBuildTests(unittest.TestCase):
+    SCRIPT = ROOT / "scripts" / "check_pascal_sources.py"
     """A Pascal file nothing compiles is source text, not a program."""
 
     WORKFLOW = ROOT / ".github" / "workflows" / "fpc-build.yml"
