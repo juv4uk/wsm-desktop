@@ -140,7 +140,7 @@ def plan_steps(
     target: str = "/mnt",
     hostname: str | None = None,
     *,
-    profile_root: Path | str = TRUSTED_PROFILE_ROOT,
+    profile_root: Path | str | None = None,
 ) -> list[Step]:
     """Build the ordered step list for a layout, or refuse."""
     # A Layout can be passed between modules or reconstructed by another caller.
@@ -157,12 +157,20 @@ def plan_steps(
             f"target must be an absolute mount point below /, got {target!r}",
         )
 
-    # Resolve the complete privileged tool allowlist before returning any plan.
-    # Missing or ambiguous executables must prevent a misleading install preview.
-    resolved_tools = {
-        name: resolve_trusted_tool(name, profile_root=profile_root)
-        for name in TRUSTED_TOOLS
-    }
+    # A non-Guix development host may still generate a data-only preview. In
+    # that case commands remain logical allowlisted basenames and are never
+    # executed (the shared executor is preview-only). On an actual Guix System
+    # the profile exists, so every tool must resolve uniquely before a plan is
+    # emitted. A caller that supplies profile_root explicitly always requests
+    # strict resolution, which keeps tests and future APPLY preflight fail-closed.
+    if profile_root is None and not TRUSTED_PROFILE_ROOT.is_dir():
+        resolved_tools = dict(TRUSTED_TOOLS)
+    else:
+        active_profile = TRUSTED_PROFILE_ROOT if profile_root is None else profile_root
+        resolved_tools = {
+            name: resolve_trusted_tool(name, profile_root=active_profile)
+            for name in TRUSTED_TOOLS
+        }
 
     root = _partition_by_role(layout, "root")
     esp = None
