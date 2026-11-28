@@ -50,6 +50,18 @@ class ChannelSetTests(unittest.TestCase):
                 depth -= 1
         self.assertEqual(depth, 0)
 
+    def test_floating_guix_channel_has_a_real_branch(self) -> None:
+        """branch #f is valid only when paired with an exact commit pin."""
+        guix_part = self.text[:self.text.index("(name 'wsm)")]
+        self.assertIn('(branch "master")', guix_part)
+        self.assertNotIn("(branch #f)", guix_part)
+
+    def test_wsm_channel_tracks_main_without_claiming_an_introduction(self) -> None:
+        wsm_part = self.text[self.text.index("(name 'wsm)"):]
+        self.assertIn('(branch "main")', wsm_part)
+        self.assertNotIn("make-channel-introduction", wsm_part)
+
+
 
 if __name__ == "__main__":
     unittest.main()
