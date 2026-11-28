@@ -9,6 +9,10 @@
 ;; from this list is a module nobody has checked.
 ;; scripts/check_scheme_module_coverage.py enforces that rule.
 (use-modules (guix packages)
+             (guix store)
+             (gnu services)
+             (srfi srfi-1)
+             (ci cuirass images)
              (wsm systems performance)
              (wsm packages wsm))
 
@@ -27,4 +31,29 @@
 (display (package-name wsm-tools))
 (display " ")
 (display (package-version wsm-tools))
+(newline)
+
+;; Invoke the actual Cuirass custom entry point with the argument shape Cuirass
+;; passes (plural 'systems). This lowers the ISO image derivation through Guix's
+;; image->job helper and checks the resulting job record without building it.
+(define cuirass-image-jobs
+  (cuirass-jobs (open-connection) '((systems . ("x86_64-linux")))))
+(unless (and (list? cuirass-image-jobs)
+             (= (length cuirass-image-jobs) 1))
+  (error "Cuirass image job did not honor the requested systems list"))
+(let ((job (car cuirass-image-jobs)))
+  (unless (string=? (assq-ref job #:job-name)
+                    "wsm-live-minimal.x86_64-linux")
+    (error "Cuirass image job has an unexpected name"))
+  (unless (and (string? (assq-ref job #:derivation))
+               (string=? (assq-ref job #:system) "x86_64-linux")
+               (eq? (assq-ref job #:job-type) 'image))
+    (error "Cuirass image job did not return an image derivation record")))
+
+;; Load the actual service fragment against the same pinned Guix API.
+(primitive-load "ci/cuirass/service.scm")
+(unless (service? wsm-cuirass-service)
+  (error "Cuirass service fragment did not define a Guix service"))
+
+(display "WSM-CUIRASS-IMAGE-JOB-EVAL-OK")
 (newline)
