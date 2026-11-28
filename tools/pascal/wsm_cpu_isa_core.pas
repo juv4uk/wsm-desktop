@@ -6,7 +6,7 @@ unit wsm_cpu_isa_core;
 interface
 
 uses
-  fpjson;
+  SysUtils, fpjson;
 
 const
   WSM_CPU_ISA_VERSION = '0.1.2';
@@ -142,6 +142,7 @@ var
   Fields: TStringList;
   Index, TokenIndex, ProcessorBlocks, MissingFlags, FirstProcessorIndex: Integer;
   FlagText, Normalized: string;
+  HasCommonFlagSet: Boolean;
 begin
   ProcessorCount := 0;
   Content := TStringList.Create;
@@ -307,9 +308,9 @@ function BuildEvidence(const CpuInfoPath, Architecture: string): TJSONObject;
 var
   CommonFlags, ProcessorFields: TStringList;
   ProcessorCount, Index: Integer;
-  FlagsJson, Warnings, Limits: TJSONArray;
+  Warnings, Limits: TJSONArray;
   Levels, Evidence: TJSONObject;
-  Highest, Vendor, ModelName, Source: string;
+  Highest, Vendor, ModelName: string;
 begin
   if not IsX86_64(Architecture) then
     raise EIsaError.Create('isa.not-x86',
@@ -329,6 +330,9 @@ begin
       ModelName := 'unknown';
 
     Levels := BuildLevels(CommonFlags, Highest);
+    Evidence := nil;
+    Warnings := nil;
+    Limits := nil;
     try
       Warnings := TJSONArray.Create;
       if CommonFlags.IndexOf('osxsave') < 0 then
@@ -372,6 +376,8 @@ begin
     finally
       Levels.Free;
       Evidence.Free;
+      Warnings.Free;
+      Limits.Free;
     end;
   finally
     ProcessorFields.Free;
