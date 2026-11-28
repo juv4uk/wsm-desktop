@@ -78,6 +78,7 @@ class InstallModeTests(unittest.TestCase):
             backend="guix",
             write_plan=None,
             quiet=True,
+            admission=False,
         )
         layout = object()
         with (
