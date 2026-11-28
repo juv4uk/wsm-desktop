@@ -1,153 +1,140 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
 name: WSM package archives
-
-# Builds the channel's packages on the locked channels and either keeps the result as a
-# workflow artifact or attaches it to a DRAFT release.
-#
-# ВЛАСНИК ДАВ ДОЗВІЛ 2026-11-28 («починай публікувати гуікс пакети під моє залiзо»).
-# Попередня версія цього файлу була заглушкою з `if: false`, що чекала саме цього
-# рішення. Дозвіл знімає блок, але не скасовує три речі, які роблять публікацію
-# осмисленою:
-#
-#   * запуск ЛИШЕ вручну — жодних тригерів на тег чи гілку: архів, що з'являється
-#     без запиту людини, це початок обігу непідписаних бінарників;
-#   * вантажимо ЛИШЕ в чернетку: опублікований реліз уже роздається, і додати в
-#     нього бінарник «після факту» — рішення, якого ніхто не ухвалював;
-#   * жодного підписного ключа тут: підпис і substitute-сервер — окремий workflow
-#     (substitutes.yml), бо custody ключа не робиться мовчки в архівному job.
-#
-# `packages` — це те, що робить workflow корисним для конкретної машини: плата
-# власника потребує не лише інсталятора, а й ядра, firmware та відкритого стеку для
-# GP107, і один запуск має дати цей набір, а не п'ять окремих.
-
+# ADR 0010: лише власний пакет, ручний запуск, чернетка релізу, без ключа.
 on:
-  # A tag in this namespace is a deliberate act by a person with push access: it names
-  # what is being published and when. It exists because the integration that prepares
-  # these changes cannot call `workflow_dispatch` (no actions:write), and a publication
-  # path that only one account can start is a blocker, not a safeguard.
-  push:
-    tags:
-      - "packages-*"
   workflow_dispatch:
-    inputs:
-      packages:
-        description: "Package variables to archive, space separated (default: wsm-tools)"
-        type: string
-        default: "wsm-tools"
-      attach_to_draft:
-        description: "Existing DRAFT release tag to attach the archives to (empty: artifact only)"
-        type: string
-        default: ""
-
 permissions:
   contents: write
-
 concurrency:
   group: wsm-package-archives
-  cancel-in-progress: true
-
+  cancel-in-progress: false
 jobs:
   archive:
-    name: Build and archive the requested package set
+    if: github.ref == 'refs/heads/main'
+    name: Зібрати та запакувати wsm-tools
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 240
     steps:
-      - name: Checkout exact source
+      - name: Отримати точний коміт
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-
-      - name: Install Guix
+      - name: Встановити Guix
         run: |
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y guix
           sudo systemctl enable --now guix-daemon.service
           guix --version
-
-      - name: Build the requested packages on the release lock
+      - name: Зібрати власний пакет і його залежності через guix pack
         run: |
           set -euo pipefail
-          mkdir -p archives
-          : > archives/store-paths.txt
-          for package in ${{ inputs.packages || 'wsm-tools' }}; do
-            case "$package" in
-              *[!A-Za-z0-9._+-]*) echo "refusing odd package name: $package" >&2; exit 1 ;;
-            esac
-            store_path="$(guix time-machine -C channels.lock.scm -- \
-                            build -L . "$package" --no-grafts)"
-            printf '%s\t%s\n' "$package" "$store_path" >> archives/store-paths.txt
-            echo "WSM_PACKAGE_BUILT=$package $store_path" >> "$GITHUB_STEP_SUMMARY"
-          done
-          cat archives/store-paths.txt
+          OUT="$GITHUB_WORKSPACE/archives"
+          mkdir -p "$OUT"
+          cp channels.lock.scm "$OUT/channels.lock.scm"
+          cp wsm/packages/wsm.scm "$OUT/wsm-package-definition.scm"
+          guix time-machine -C channels.lock.scm -- describe > "$OUT/guix-channel-description.txt"
+          ( cd "$OUT" && sha256sum channels.lock.scm wsm-package-definition.scm > CHANNEL-INPUTS.sha256 )
 
-      - name: Export each closure as a nar
-        run: |
-          set -euo pipefail
-          while IFS="$(printf '\t')" read -r package store_path; do
-            guix archive --export "$store_path" > "archives/$package.nar"
-            ( cd archives && sha256sum "$package.nar" > "$package.nar.sha256" )
-            ls -l "archives/$package.nar"
-          done < archives/store-paths.txt
-          cat archives/*.sha256
-
-      - name: Keep the archives as a workflow artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: wsm-package-nars
-          path: |
-            archives/*.nar
-            archives/*.nar.sha256
-            archives/store-paths.txt
-          retention-days: 30
-
-      - name: Attach the archives to a draft release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REQUESTED: ${{ inputs.attach_to_draft }}
-        run: |
-          set -euo pipefail
-          # A tag push carries no inputs, so the target is resolved here: the newest
-          # draft release. That is what makes one pushed tag enough to put the archives
-          # in front of a person — the alternative was a second manual step nobody
-          # remembers, which is how an archive ends up in a run nobody looks at.
-          TAG="${REQUESTED:-}"
-          if [ -z "$TAG" ]; then
-            TAG="$(gh release list --limit 30 --json tagName,isDraft \
-                     --jq '[.[] | select(.isDraft)][0].tagName // ""')"
-          fi
-          if [ -z "$TAG" ]; then
-            echo "no draft release to attach to; the archives stay in the run artifact" >&2
-            echo "WSM_PACKAGE_ATTACHED_TO=none" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          is_draft="$(gh release view "$TAG" --json isDraft --jq '.isDraft')"
-          if [ "$is_draft" != "true" ]; then
-            echo "refusing: $TAG is not a draft release" >&2
+          PACK_LOG="$OUT/guix-pack.stdout"
+          PACK_ERR="$OUT/guix-pack.stderr"
+          guix time-machine -C channels.lock.scm -- \
+            pack --format=tarball --no-grafts -L . wsm-tools \
+            > "$PACK_LOG" 2> "$PACK_ERR"
+          PACK_PATH="$(grep -E '^/gnu/store/[^[:space:]]+-pack\.tar\.gz$' "$PACK_LOG" | tail -n 1)"
+          if [ -z "$PACK_PATH" ] || [ ! -f "$PACK_PATH" ]; then
+            echo "Не вдалося визначити створений guix pack tarball." >&2
+            cat "$PACK_LOG" "$PACK_ERR" >&2
             exit 1
           fi
-          gh release upload "$TAG" archives/*.nar archives/*.nar.sha256 --clobber
-          echo "WSM_PACKAGE_ATTACHED_TO=$TAG" | tee -a "$GITHUB_STEP_SUMMARY"
 
+          cp "$PACK_PATH" "$OUT/wsm-tools-pack.tar.gz"
+          tar -tzf "$OUT/wsm-tools-pack.tar.gz" >/dev/null
+          {
+            echo "Пакет: wsm-tools"
+            echo "Тип: власний пакет каналу WSM"
+            echo "Формат: guix pack tarball з runtime dependencies"
+            echo "Вихідний коміт: $GITHUB_SHA"
+            echo "Репозиторій: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
+            echo "Guix: pinned channels.lock.scm"
+            echo "Package definition: wsm/packages/wsm.scm"
+            echo "Pack store path: $PACK_PATH"
+            echo "Підписний ключ і substitute-сервер: не використовуються"
+            echo ""
+            cat "$OUT/guix-channel-description.txt"
+          } > "$OUT/PROVENANCE.txt"
+          (
+            cd "$OUT"
+            sha256sum wsm-tools-pack.tar.gz channels.lock.scm \
+              wsm-package-definition.scm CHANNEL-INPUTS.sha256 \
+              guix-channel-description.txt PROVENANCE.txt > SHA256SUMS
+          )
+          cat > "$OUT/RELEASE-NOTES.md" <<'EOF'
+          # WSM Guix package — draft
+
+          This draft contains the WSM-owned wsm-tools package packed with its runtime
+          dependencies by the pinned GNU Guix channel lock. It is not a substitute
+          cache and does not contain third-party kernel, Mesa, Nonguix, or firmware
+          packages. The release remains a draft and is not publicly published.
+          See PROVENANCE.txt and SHA256SUMS before using the archive.
+          EOF
+          {
+            echo "## Артефакт wsm-tools"
+            echo "Створено Guix pack tarball; реліз буде створено як Draft."
+            echo "Пакетний набір: лише wsm-tools."
+            cat "$OUT/PROVENANCE.txt"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Створити чернетку релізу й перевірити завантажені файли
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          OUT="$GITHUB_WORKSPACE/archives"
+          RELEASE_TAG="wsm-tools-draft-${GITHUB_RUN_NUMBER}"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Відмовляюся перезаписувати наявний реліз $RELEASE_TAG" >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" \
+            "$OUT/wsm-tools-pack.tar.gz" \
+            "$OUT/channels.lock.scm" \
+            "$OUT/wsm-package-definition.scm" \
+            "$OUT/CHANNEL-INPUTS.sha256" \
+            "$OUT/guix-channel-description.txt" \
+            "$OUT/PROVENANCE.txt" \
+            "$OUT/SHA256SUMS" \
+            --title "WSM wsm-tools (draft ${GITHUB_RUN_NUMBER})" \
+            --notes-file "$OUT/RELEASE-NOTES.md" \
+            --draft \
+            --target "$SHA"
+          IS_DRAFT="$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')"
+          test "$IS_DRAFT" = "true"
+          READBACK="$RUNNER_TEMP/wsm-tools-readback"
+          mkdir -p "$READBACK"
+          gh release download "$RELEASE_TAG" --dir "$READBACK"
+          (
+            cd "$READBACK"
+            sha256sum -c SHA256SUMS
+            tar -tzf wsm-tools-pack.tar.gz >/dev/null
+          )
+          echo "Чернетку $RELEASE_TAG створено й перевірено. Вона залишається Draft." \
+            | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Повідомити причину збою
         if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -uo pipefail
-          BODY=$(mktemp)
+          BODY="$(mktemp)"
           {
             echo "### WSM package archives: збірку не завершено"
             echo ""
-            echo "Commit: \`$GITHUB_SHA\`"
+            echo "Commit: $GITHUB_SHA"
             echo ""
-            echo "Найчастіші причини: пакет не збирається на locked-каналах, або тег не є чернеткою."
-            echo ""
-            echo "#### архіви"
-            echo '```'
-            ls -la archives 2>&1 || true
-            echo '```'
+            echo "Реліз не оголошується успішним. Перевір перший помилковий крок workflow."
+            ls -lah archives 2>&1 || true
             df -h / || true
           } > "$BODY"
           gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
-            -F body=@"$BODY" >/dev/null && echo "причину записано коментарем"
+            -F body=@"$BODY" >/dev/null || true
