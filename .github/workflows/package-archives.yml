@@ -69,7 +69,7 @@ jobs:
           mkdir -p "$OUT"
           cp channels.lock.scm "$OUT/channels.lock.scm"
           guix time-machine -C channels.lock.scm -- describe > "$OUT/guix-channel-description.txt"
-          sha256sum "$OUT/channels.lock.scm" > "$OUT/channels.lock.sha256"
+          ( cd "$OUT" && sha256sum channels.lock.scm > channels.lock.sha256 )
 
           PACKAGES=(linux-libre mesa)
           STORE_PATHS=()
