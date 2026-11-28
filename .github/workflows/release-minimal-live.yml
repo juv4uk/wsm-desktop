@@ -282,6 +282,11 @@ jobs:
           PY
           ls -la "$release_dist"
 
+      - name: Перевірити повний evidence bundle перед завантаженням
+        run: |
+          set -euo pipefail
+          python scripts/check_release_readiness.py "$release_dist"
+
       - name: Створити чернетку релізу та завантажити assets
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
