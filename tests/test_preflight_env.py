@@ -28,17 +28,48 @@ def which_factory(present: set[str]):
     return lambda name: f"/usr/bin/{name}" if name in present else None
 
 
+def build_profile(root: Path, *, omit: str | None = None, duplicate: str | None = None) -> Path:
+    from wsm_install.install_steps import TRUSTED_TOOLS
+
+    for index, (name, binary) in enumerate(TRUSTED_TOOLS.items()):
+        if name == omit:
+            continue
+        directory = "bin" if index % 2 == 0 else "sbin"
+        executable = root / directory / binary
+        executable.parent.mkdir(parents=True, exist_ok=True)
+        executable.write_text("#!/bin/sh\\nexit 0\\n", encoding="utf-8")
+        executable.chmod(0o755)
+        if name == duplicate:
+            other = root / ("sbin" if directory == "bin" else "bin") / binary
+            other.parent.mkdir(parents=True, exist_ok=True)
+            other.write_text("#!/bin/sh\\nexit 0\\n", encoding="utf-8")
+            other.chmod(0o755)
+    return root
+
+
 class ToolTests(unittest.TestCase):
     def test_missing_tool_fails_and_names_it(self) -> None:
-        result = check_tools(which_factory(set()))
+        from wsm_install.install_steps import TRUSTED_TOOLS
+
+        with tempfile.TemporaryDirectory() as temporary:
+            profile = build_profile(Path(temporary), omit="mkfs.ext4")
+            result = check_tools(profile)
         self.assertEqual(result["status"], "fail")
         self.assertIn("mkfs.ext4", result["detail"])
 
     def test_all_present_passes(self) -> None:
-        from wsm_install.agent import ALLOWED_PROGRAMS
-
-        result = check_tools(which_factory(set(ALLOWED_PROGRAMS)))
+        with tempfile.TemporaryDirectory() as temporary:
+            profile = build_profile(Path(temporary))
+            result = check_tools(profile)
         self.assertEqual(result["status"], "pass")
+        self.assertIn("7 allowlisted tools resolve uniquely", result["detail"])
+
+    def test_duplicate_profile_entries_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            profile = build_profile(Path(temporary), duplicate="mount")
+            result = check_tools(profile)
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("mount", result["detail"])
 
     def test_guix_missing_is_a_failure_not_a_warning(self) -> None:
         """Without guix the disk gets written and the system never built."""
