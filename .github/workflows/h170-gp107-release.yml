@@ -225,7 +225,8 @@ jobs:
         with:
           subject-path: ${{ runner.temp }}/h170-release/*
 
-      - name: Publish the versioned GitHub Release
+      - name: Create and verify the draft GitHub Release
+        id: release
         env:
           GH_TOKEN: ${{ github.token }}
           STORE_PATH: ${{ steps.build.outputs.STORE_PATH }}
@@ -256,14 +257,25 @@ jobs:
             "$OUT/RELEASE-NOTES.md" \\
             --title "H170 Free Linux-libre $PACKAGE_VERSION ($SHORT_SHA)" \\
             --notes-file "$OUT/RELEASE-NOTES.md" \\
-            --target "$GITHUB_SHA"
+            --target "$GITHUB_SHA" \\
+            --draft
+          echo "TAG=$TAG" >> "$GITHUB_OUTPUT"
           mkdir -p "$RUNNER_TEMP/h170-readback"
           gh release download "$TAG" --dir "$RUNNER_TEMP/h170-readback"
           (
             cd "$RUNNER_TEMP/h170-readback"
             sha256sum -c SHA256SUMS
           )
-          echo "Published release: $TAG" >> "$GITHUB_STEP_SUMMARY"
+          echo "Verified draft release: $TAG" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish the verified H170 GP107 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.TAG }}
+        run: |
+          set -euo pipefail
+          gh release edit "$TAG" --draft=false
+          echo "Published verified release: $TAG" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Summarize publication failure
         if: failure()
