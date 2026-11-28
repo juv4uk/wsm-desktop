@@ -13,7 +13,7 @@
 
 (define-module (ci cuirass images)
   #:use-module (guix store)
-  #:use-module (guix derivations)
+  #:use-module (gnu ci)
   #:use-module (gnu system image)
   #:use-module (gnu system)
   #:use-module (ice-9 match)
