@@ -109,45 +109,36 @@ begin
   BootEvidence := 'Neither sysfs:/firmware/efi nor an x86 DMI identity is available, so the boot mode is not determined.';
 end;
 
+procedure AddDmiFact(Target: TJSONObject; const FieldName, Path: string);
+var
+  Value, Normalized: string;
+begin
+  Value := ReadTrimmed(Path);
+  Normalized := LowerCase(Value);
+  if (Value <> '') and
+     (Normalized <> 'to be filled by o.e.m.') and
+     (Normalized <> 'to be filled by oem') and
+     (Normalized <> 'default string') then
+    Target.Add(FieldName, Value);
+end;
+
 function ReadPlatformFacts: TJSONObject;
 var
   DmiRoot: string;
-  Value: string;
 begin
   Result := TJSONObject.Create;
   DmiRoot := SysRoot + '/class/dmi/id';
 
-  Value := ReadTrimmed(DmiRoot + '/sys_vendor');
-  if (Value <> '') and (LowerCase(Value) <> 'to be filled by o.e.m.') then
-    Result.Add('system_vendor', Value);
-
-  Value := ReadTrimmed(DmiRoot + '/product_name');
-  if (Value <> '') and (LowerCase(Value) <> 'default string') then
-    Result.Add('product_name', Value);
-
-  Value := ReadTrimmed(DmiRoot + '/board_vendor');
-  if Value <> '' then
-    Result.Add('board_vendor', Value);
-
-  Value := ReadTrimmed(DmiRoot + '/board_name');
-  if Value <> '' then
-    Result.Add('board_name', Value);
-
-  Value := ReadTrimmed(DmiRoot + '/board_version');
-  if Value <> '' then
-    Result.Add('board_version', Value);
-
-  Value := ReadTrimmed(DmiRoot + '/bios_vendor');
-  if Value <> '' then
-    Result.Add('bios_vendor', Value);
-
-  Value := ReadTrimmed(DmiRoot + '/bios_version');
-  if Value <> '' then
-    Result.Add('bios_version', Value);
-
-  Value := ReadTrimmed(DmiRoot + '/bios_release');
-  if Value <> '' then
-    Result.Add('bios_release', Value);
+  { Match the Python reference: vendor placeholder values are filtered for
+    every DMI field, not just the fields we usually see on one machine. }
+  AddDmiFact(Result, 'system_vendor', DmiRoot + '/sys_vendor');
+  AddDmiFact(Result, 'product_name', DmiRoot + '/product_name');
+  AddDmiFact(Result, 'board_vendor', DmiRoot + '/board_vendor');
+  AddDmiFact(Result, 'board_name', DmiRoot + '/board_name');
+  AddDmiFact(Result, 'board_version', DmiRoot + '/board_version');
+  AddDmiFact(Result, 'bios_vendor', DmiRoot + '/bios_vendor');
+  AddDmiFact(Result, 'bios_version', DmiRoot + '/bios_version');
+  AddDmiFact(Result, 'bios_release', DmiRoot + '/bios_release');
 end;
 
 function VirtualizationKind(const Platform: TJSONObject): string;
@@ -362,7 +353,7 @@ begin
 
   Result := TJSONObject.Create;
   Result.Add('schema_version', SchemaVersion);
-  Result.Add('report_id', 'wsm-' + IntToStr(Epoch) + '-' + IntToStr(GetTickCount64 mod 1000000));
+  Result.Add('report_id', 'wsm-' + IntToStr(Epoch) + '-' + IntToStr(Int64(GetTickCount64 mod 1000000)));
   Result.Add('collected_at', ObservedAt);
 
   Environment := TJSONObject.Create;
