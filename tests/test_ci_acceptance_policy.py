@@ -157,5 +157,64 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
         self.assertIn("#367", self.text)
         self.assertIn("розповсюдження", self.text.lower())
 
+
+class HardwareBuildEvidenceTests(unittest.TestCase):
+    """The H170 evidence workflow builds a fixed upstream set without distribution."""
+
+    WORKFLOW = ROOT / ".github" / "workflows" / "hw-build-evidence.yml"
+
+    def text(self) -> str:
+        return self.WORKFLOW.read_text(encoding="utf-8")
+
+    def test_it_uses_the_locked_h170_manifest_not_user_supplied_shell_input(self) -> None:
+        text = self.text()
+        self.assertIn("channels.lock.scm", text)
+        self.assertIn("drivers/profiles/h170-free-packages.scm", text)
+        self.assertNotIn("inputs.packages", text)
+        self.assertNotIn("PACKAGES:", text)
+
+    def test_it_is_manual_only_and_guarded_to_main(self) -> None:
+        text = self.text()
+        workflow = yaml.load(text, Loader=yaml.BaseLoader)
+        self.assertEqual(set(workflow["on"]), {"workflow_dispatch"})
+        self.assertEqual(
+            workflow["jobs"]["build"]["if"],
+            "${{ github.ref == 'refs/heads/main' }}",
+        )
+        self.assertEqual(workflow["concurrency"]["cancel-in-progress"], "false")
+        self.assertNotIn("pull_request:", text)
+        self.assertNotIn("schedule:", text)
+        self.assertNotIn("push:", text)
+
+    def test_it_never_exports_or_uploads_binary_artifacts(self) -> None:
+        text = self.text()
+        for forbidden in (
+            "guix archive --export",
+            "actions/upload-artifact",
+            "gh release upload",
+            "actions/deploy-pages",
+            "guix publish",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, text)
+
+    def test_it_records_nar_hashes_and_closure_sizes(self) -> None:
+        text = self.text()
+        self.assertIn(
+            "guix time-machine -C channels.lock.scm -- hash --recursive --format=hex",
+            text,
+        )
+        self.assertIn("guix time-machine -C channels.lock.scm -- describe", text)
+        self.assertIn("guix time-machine -C channels.lock.scm -- size", text)
+
+    def test_it_fails_when_the_expected_package_outputs_are_missing(self) -> None:
+        text = self.text()
+        self.assertIn("-ne 11", text)
+        self.assertIn("Expected 11 package outputs", text)
+        self.assertIn("exit 1", text)
+
+    def test_it_states_that_nothing_was_published(self) -> None:
+        self.assertIn("NOT_PUBLISHED", self.text())
+
 if __name__ == "__main__":
     unittest.main()

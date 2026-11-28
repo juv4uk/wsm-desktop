@@ -14,13 +14,13 @@ Cuirass — це власний CI GNU Guix. Він не замінює GitHub A
 | Образ збирається з зафіксованих каналів | **обидва** — і Cuirass, і workflow |
 | Образ завантажується в BIOS і UEFI | **тільки** workflow (QEMU) |
 | Інсталятор у носії запускається | **тільки** workflow |
-| Заміни доступні іншим | **тільки** Cuirass |
+| Публікація build outputs як substitutes | **окремий substitute/publisher deployment**, не ця конфігурація |
 
-Третій рядок — причина існування Cuirass. Він збирає **всередині Guix** і віддає результати як substitutes, тобто наступна збірка не переробляє той самий closure з нуля.
+Cuirass збирає derivations **всередині Guix** і зберігає build results у build farm. Він сам по собі не робить їх доступними іншим машинам як substitutes: для цього потрібен окремо налаштований remote server/worker або substitute publisher, довірені signing keys і клієнтська конфігурація.
 
 ## Дві незалежні дороги до тих самих байтів
 
-`ci/cuirass/images.scm` будує `operating-system-image` з `systems/live-minimal.scm` — те саме, що будує `scripts/build_iso.sh`.
+`ci/cuirass/images.scm` завантажує `systems/live-minimal.scm` і через pinned Guix image API створює ISO derivation для того самого системного профілю, який використовує `scripts/build_iso.sh`.
 
 Це навмисна надлишковість: якщо workflow зелений, а Cuirass червоний (або навпаки), одна з двох доріг бреше про ті самі байти. Розбіжність видно одразу, а не через місяць.
 
@@ -69,3 +69,13 @@ guix shell cuirass -- cuirass web --database="dbname=cuirass host=/var/run/postg
 Це і є причина, чому файли такого роду не можна писати без джерела: кожна з чотирьох помилок дала б збій лише в момент запуску, на машині, де Guix є, — тобто не в того, хто писав.
 
 Це чесний стан: файли описують, як запустити, а не стверджують, що запущено.
+
+## H170 Free package build job
+
+The Cuirass specifications include `h170-free-upstream-packages`. The custom module `ci/cuirass/h170-free-packages.scm` reads the fixed upstream-only manifest `drivers/profiles/h170-free-packages.scm` and creates one Cuirass package derivation job per root for `x86_64-linux`.
+
+The package set is defined and versioned by the pinned official Guix channel. The job resolves derivation metadata; actual package builds are handled by the separate ephemeral GitHub Actions workflow `hw-build-evidence.yml`, which records output NAR hashes and closure sizes in the job summary but does not export or upload NARs. The Cuirass jobset deliberately has no broad `(build '(channels wsm))` job: it only contains the separately named live-image job and the fixed H170 Free allowlist, avoiding implicit evaluation of all WSM-owned packages while #367 remains open.
+
+Neither green derivation evaluation nor a successful ephemeral package build proves GPU driver binding, firmware loading, KMS/3D/compute, ISO boot or native H170 function. The locked Linux-libre 7.3.5 candidate has a documented GP107 Nouveau atomic-init gap; that limitation remains explicit until separately reviewed and resolved.
+
+Do not register the jobset against WSM `main` until owner-controlled Phase B channel authentication has completed. Cuirass service/job execution remains **NOT_RUN**; no PostgreSQL/Cuirass instance is currently deployed. The job does not configure `guix publish`, signing keys, substitutes or release uploads. Those remain governed by #367, #762 and the owner-approved publication decision.

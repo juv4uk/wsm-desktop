@@ -3,10 +3,12 @@
 ;; Cuirass specifications for WSM Desktop.
 ;;
 ;; Cuirass is GNU Guix's own continuous integration server. Its value here is
-;; not "another CI": it builds *inside Guix*, on top of the exact channel lock
-;; the release uses, and its results become substitutes. GitHub Actions builds
-;; the image and boots it in QEMU; Cuirass proves the derivations actually build
-;; from the pinned channels and warms the store for everyone else.
+;; not "another CI": it schedules and records derivation builds on a Guix host
+;; using the pinned official Guix channel. It does not expose build outputs as
+;; substitutes by itself. Sharing them with other machines requires a separately
+;; operated publisher/remote server, signing-key custody and client trust; none
+;; of those are configured by this jobset. GitHub Actions independently builds
+;; the H170 allowlist in an ephemeral runner and performs QEMU acceptance.
 ;;
 ;; What it does NOT do: boot the image. Cuirass has no QEMU acceptance step, so
 ;; a green Cuirass job says "the closure builds", never "the medium boots".
@@ -39,14 +41,6 @@
    (branch "main")))
 
 (list
- ;; Every package the channel provides. This is the canonical Cuirass job and
- ;; it subsumes the single-package case: today the channel ships one package,
- ;; and when it ships three this job still covers them without an edit.
- (specification
-  (name 'wsm-channel)
-  (priority 1)
-  (build '(channels wsm))
-  (channels (list %wsm-guix-channel %wsm-channel)))
 
  ;; The live image derivation. Cuirass builds the same expression the release
  ;; workflow builds, so a broken profile shows up here within one poll interval
@@ -55,4 +49,12 @@
   (name 'wsm-live-minimal-image)
   (priority 1)
   (build '(custom (ci cuirass images)))
+  (channels (list %wsm-guix-channel %wsm-channel)))
+
+ ;; Build the fixed upstream-only H170 Free package set. The custom job resolves
+ ;; one package derivation per manifest root; it does not publish NARs.
+ (specification
+  (name 'h170-free-upstream-packages)
+  (priority 1)
+  (build '(custom (ci cuirass h170-free-packages)))
   (channels (list %wsm-guix-channel %wsm-channel))))

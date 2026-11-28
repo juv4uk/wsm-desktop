@@ -1,0 +1,109 @@
+# SPDX-License-Identifier: LicenseRef-Volnist
+name: WSM H170 Free package build evidence
+
+# Builds the fixed upstream-only manifest in an ephemeral runner.
+# It does not export NARs, upload artifacts, publish a release or start a substitute server.
+
+# Intentionally manual: this four-hour lane must not be cancelled by every PR update.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: h170-free-package-evidence-main
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    name: Evaluate and build H170 Free package candidates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v7
+
+      - name: Install Guix
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y guix
+          sudo systemctl enable --now guix-daemon.service
+          guix --version | tee -a "$GITHUB_STEP_SUMMARY"
+          {
+            echo ""
+            echo "### Pinned Guix channel provenance"
+          } >> "$GITHUB_STEP_SUMMARY"
+          guix time-machine -C channels.lock.scm -- describe | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Check the fixed package manifest
+        run: python3 tests/test_h170_free_package_manifest.py
+
+      - name: Evaluate pinned package derivations
+        run: |
+          set -euo pipefail
+          guix time-machine -C channels.lock.scm -- \
+            build --dry-run --no-grafts \
+            --manifest=drivers/profiles/h170-free-packages.scm
+
+      - name: Build the H170 Free candidate closure
+        run: |
+          set -euo pipefail
+          PATHS_FILE="$RUNNER_TEMP/h170-free-store-paths.txt"
+          LOG_FILE="$RUNNER_TEMP/h170-free-build.log"
+          if ! guix time-machine -C channels.lock.scm -- \
+              build --no-grafts --keep-going \
+              --manifest=drivers/profiles/h170-free-packages.scm \
+              >"$PATHS_FILE" 2>"$LOG_FILE"; then
+            tail -n 160 "$LOG_FILE" >&2 || true
+            echo "H170 Free package build failed; no NAR was exported." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          mapfile -t STORE_PATHS < <(grep -E '^/gnu/store/[a-z0-9]{32}-' "$PATHS_FILE")
+          if [ "${#STORE_PATHS[@]}" -ne 11 ]; then
+            echo "Expected 11 package outputs, got ${#STORE_PATHS[@]}" >&2
+            cat "$PATHS_FILE" >&2
+            exit 1
+          fi
+          {
+            echo "## H170 Free package build evidence"
+            echo ""
+            echo "Input lock: channels.lock.scm (official Guix only)."
+            echo "Manifest: drivers/profiles/h170-free-packages.scm."
+            echo ""
+            echo "| package output | NAR SHA-256 |"
+            echo "| --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for store_path in "${STORE_PATHS[@]}"; do
+            test -e "$store_path"
+            output_name="${store_path##*/}"
+            nar_sha256="$(guix time-machine -C channels.lock.scm -- hash --recursive --format=hex "$store_path")"
+            echo "| `$output_name` | `$nar_sha256` |" >> "$GITHUB_STEP_SUMMARY"
+          done
+          {
+            echo ""
+            echo "### Store and closure sizes"
+            echo "The following pinned-Guix report records each output's self size and dependency closure size."
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+          guix time-machine -C channels.lock.scm -- size "${STORE_PATHS[@]}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**NOT_PUBLISHED:** no NAR export, Actions artifact, Release asset, Pages deployment, signing key or substitute endpoint was created." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Limit:** package build/closure evidence is not driver binding, firmware loading, GPU acceleration, boot or H170 physical acceptance. The pinned Linux-libre 7.3.5 GP107 atomic-init gap remains open (#514)." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Пояснити причину збою в summary
+        if: failure()
+        run: |
+          {
+            echo "### H170 Free package build evidence: збірка не завершилась"
+            echo ""
+            echo "Commit: `$GITHUB_SHA`"
+            echo ""
+            echo "Pinned package evaluation або збірка завершилася помилкою."
+            echo "Дивіться попередній крок для конкретної Guix помилки."
+            echo "Жодного NAR-файлу чи завантажуваного артефакту не створено."
+            echo "NOT_PUBLISHED: цей workflow лише формує ефемерний build evidence."
+          } >> "$GITHUB_STEP_SUMMARY"
