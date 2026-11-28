@@ -2,19 +2,29 @@ program wsmplandigest;
 
 { SPDX-License-Identifier: LicenseRef-Volnist }
 
-{ Canonical plan digest, first slice of the FPC port.
+{ Canonical plan digest - first slice of the FPC port.
 
-  This reproduces wsm_install/plan_digest.py byte for byte:
-  the digest is SHA-256 over JSON with sorted keys, no spaces and UTF-8 output.
+  Reproduces wsm_install/plan_digest.py: SHA-256 over JSON with sorted keys, no
+  spaces, UTF-8.
 
-  Not compiled here: this environment has no FPC. The three vectors below are the
-  acceptance test - the program checks itself and exits non-zero if any digest
-  differs, so the first run on a machine with FPC is also the verification. }
+  Two facts forced the shape of this file, both established from the toolchain
+  rather than guessed:
+
+  * FPC 3.2.2, the version Guix packages, ships NO sha256 unit - the hash package
+    has only md5/sha1/crc/ntlm/uuid/hmac/unixcrypt, and the sha256 unit landed in
+    trunk after that release. Hence the hand-written wsm_sha256 unit.
+  * fpjson cannot produce this document: TJSONObject has no Sort and iterates in
+    insertion order, and its escape routine writes control characters with
+    UPPERCASE hex (\u001F) where Python writes \u001f. Either difference is a
+    different digest. Hence the hand-written serializer below.
+
+  Not compiled here: this environment has no FPC. The three vectors are the
+  acceptance test - the program checks itself and exits 1 if any digest differs. }
 
 {$mode objfpc}{$H+}
 
 uses
-  SysUtils, sha256, fpjson, jsonparser;
+  SysUtils, wsm_sha256;
 
 const
   SCHEMA = 'wsm-install-plan/1';
@@ -26,11 +36,9 @@ type
     Purpose: string;
   end;
 
-{ Python's json.dumps(..., sort_keys=True, separators=(",", ":")) puts keys in
-  this order for the two documents we produce, because they are ASCII and sort
-  bytewise. Written by hand rather than via fpjson: fpjson does not sort keys and
-  emits spaces, and a canonical form that differs by one space is a different
-  digest. }
+{ Python's json.dumps escapes exactly these, and lower-case hex for the rest of
+  the control range. The Cyrillic case is why this matters: those bytes must pass
+  through raw, not as \uXXXX. }
 function JsonEscape(const S: string): string;
 var
   I: Integer;
@@ -73,7 +81,7 @@ begin
             ',"purpose":"' + JsonEscape(Step.Purpose) + '"}';
 end;
 
-{ Keys sort as: disk, schema, steps - which is the order Python emits. }
+{ Keys sort as disk, schema, steps - the order Python emits. }
 function CanonicalPlan(const Disk: string; const Steps: array of TPlanStep): string;
 var
   I: Integer;
@@ -90,16 +98,8 @@ begin
 end;
 
 function PlanDigest(const Canonical: string): string;
-var
-  Digest: TSHA256Digest;
-  Raw: RawByteString;
-  I: Integer;
 begin
-  Raw := RawByteString(Canonical);
-  Digest := SHA256Buffer(Raw[1], Length(Raw));
-  Result := '';
-  for I := 0 to High(Digest) do
-    Result := Result + LowerCase(IntToHex(Digest[I], 2));
+  Result := string(SHA256Hexa(RawByteString(Canonical)));
 end;
 
 function Check(const Name, Canonical, Expected: string): Boolean;
@@ -142,8 +142,8 @@ begin
     'eb541c6c28b7ba4d9f6c3557c71e01dec72ba87dbec969b6a7c3c6436b1915a9') then
     Inc(Failures);
 
-  { Vector 3: Cyrillic purpose - proves the UTF-8 path, which is where a
-    naive ByteString port silently produces a different digest. }
+  { Vector 3: Cyrillic purpose - proves the UTF-8 path, which is where a naive
+    ByteString port silently produces a different digest. }
   SetLength(Steps[0].Argv, 3);
   Steps[0].Argv[0] := 'sgdisk';
   Steps[0].Argv[1] := '--zap-all';
