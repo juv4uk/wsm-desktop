@@ -143,6 +143,26 @@ class PreviewOutcomeTests(unittest.TestCase):
             **extra,
         }
 
+    def test_missing_guix_tool_is_reported_as_controlled_failure(self) -> None:
+        from unittest.mock import patch
+
+        from wsm_install.install_steps import TrustedToolResolutionError
+
+        install_fake_libcalamares(self.values(wsmDryRun=True))
+        with (
+            patch("wsm_install.install_steps.TRUSTED_PROFILE_ROOT", self.directory),
+            patch(
+                "wsm_install.install_steps.resolve_trusted_tool",
+                side_effect=TrustedToolResolutionError("sgdisk not found"),
+            ),
+        ):
+            result = load_module().run()
+
+        self.assertIsNotNone(result)
+        self.assertIn("tools are unavailable", result[0].lower())
+        self.assertIn("install.tool-unavailable", result[1])
+        self.assertIn("sgdisk not found", result[1])
+
     def test_explicit_preview_returns_non_success_not_none(self) -> None:
         from unittest.mock import patch
 
