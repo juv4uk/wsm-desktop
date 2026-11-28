@@ -34,6 +34,11 @@ jobs:
         # the known set without waiting twenty minutes for Guix.
         run: python scripts/check_scheme_imports.py
 
+      - name: Check Scheme syntax
+        # A missing parenthesis otherwise surfaces in the twenty-minute Guix
+        # evaluation, pointing at the end of the file instead of the mistake.
+        run: python scripts/check_scheme_syntax.py
+
       - name: Check Scheme module coverage
         # The Guix evaluation test is the only place source modules are really
         # loaded. A module missing from it is evaluated by nobody, and the
