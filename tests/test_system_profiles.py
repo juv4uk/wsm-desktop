@@ -8,6 +8,7 @@ shell contract of the image builder using a fake Guix executable.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -719,6 +720,114 @@ exit 8
         self.assertIn("exit 127", text)
         self.assertIn("time-machine -C", text)
         self.assertIn("--image-type=iso9660", text)
+
+
+# The installer map is the source of truth for tool/package ownership.
+TOOL_MAP = ROOT / "wsm_install" / "tool_map.py"
+LIVE_IMAGES = ("live.scm", "live-minimal.scm")
+BASE_PACKAGE_PROVIDERS = {
+    "coreutils": "%base-packages-utils",
+    "e2fsprogs": "%base-packages-utils",
+    "eudev": "%base-packages-linux",
+    "util-linux": "%base-packages-linux",
+}
+
+
+def _load_module(module_name: str, path: Path):
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    if spec is None or spec.loader is None:
+        raise AssertionError(f"cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_SCHEME_MASKER = _load_module(
+    "wsm_scheme_module_coverage",
+    ROOT / "scripts" / "check_scheme_module_coverage.py",
+).mask_scheme_non_code
+
+
+def tools_from_map() -> dict[str, str]:
+    """Logical tool -> owning Guix package, read from the real canonical map."""
+    module = _load_module("wsm_tool_map_for_profiles", TOOL_MAP)
+    return {name: entry["package"] for name, entry in module.TOOLS.items()}
+
+
+def mentions(package: str, text: str) -> bool:
+    """Match a whole Scheme symbol, not a package-name prefix."""
+    return re.search(rf"(?<![\w-]){re.escape(package)}(?![\w-])", text) is not None
+
+
+def commented_provider(package: str, provider: str, text: str) -> bool:
+    """A base-package dependency must be documented on the same comment line."""
+    return any(
+        line.lstrip().startswith(";")
+        and provider in line
+        and mentions(package, line)
+        for line in text.splitlines()
+    )
+
+
+def closure_gaps(tools: dict[str, str], source: str, label: str) -> list[str]:
+    """Tools whose owner package is absent from a live definition."""
+    code = _SCHEME_MASKER(source)
+    gaps: list[str] = []
+    for tool, package in sorted(tools.items()):
+        if mentions(package, code):
+            continue
+        provider = BASE_PACKAGE_PROVIDERS.get(package)
+        if provider and commented_provider(package, provider, source):
+            continue
+        gaps.append(f"{tool}: package {package} is not installed by {label}")
+    return gaps
+
+
+class TrustedToolClosureTests(unittest.TestCase):
+    """Both supported live systems must declare the packages that own tool_map entries."""
+
+    def test_every_tool_package_is_declared_by_both_live_images(self) -> None:
+        tools = tools_from_map()
+        self.assertTrue(tools, "wsm_install/tool_map.py listed no tools")
+        for image in LIVE_IMAGES:
+            with self.subTest(image=image):
+                self.assertEqual(closure_gaps(tools, profile(image), f"systems/{image}"), [])
+
+    def test_the_real_tool_map_is_the_source_of_the_check(self) -> None:
+        tools = dict(tools_from_map())
+        tools["mkfs.xfs"] = "xfsprogs"
+        gaps = closure_gaps(tools, profile("live.scm"), "systems/live.scm")
+        self.assertEqual(len(gaps), 1, gaps)
+        self.assertIn("mkfs.xfs", gaps[0])
+        self.assertIn("xfsprogs", gaps[0])
+
+    def test_package_names_in_comments_or_strings_do_not_count_as_installed(self) -> None:
+        source = (
+            "; xfsprogs is mentioned in a comment\n"
+            '(display "xfsprogs")\n'
+            "(packages (list wsm-tools))\n"
+        )
+        self.assertEqual(
+            closure_gaps({"mkfs.xfs": "xfsprogs"}, source, "synthetic.scm"),
+            ["mkfs.xfs: package xfsprogs is not installed by synthetic.scm"],
+        )
+
+    def test_base_package_dependencies_need_an_explicit_provider_comment(self) -> None:
+        tools = {"mkdir": "coreutils"}
+        unexplained = "(packages (append (list wsm-tools) %base-packages))\n"
+        explained = unexplained + ";; coreutils/mkdir comes from %base-packages-utils\n"
+        self.assertEqual(
+            closure_gaps(tools, unexplained, "synthetic.scm"),
+            ["mkdir: package coreutils is not installed by synthetic.scm"],
+        )
+        self.assertEqual(closure_gaps(tools, explained, "synthetic.scm"), [])
+
+    def test_non_base_tool_packages_come_from_the_disk_module(self) -> None:
+        for image in LIVE_IMAGES:
+            with self.subTest(image=image):
+                self.assertIn("(gnu packages disk)", _SCHEME_MASKER(profile(image)))
+
+
 
 
 if __name__ == "__main__":
