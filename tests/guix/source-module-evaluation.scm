@@ -10,7 +10,8 @@
 ;; scripts/check_scheme_module_coverage.py enforces that rule.
 (use-modules (guix packages)
              (wsm systems performance)
-             (wsm packages wsm))
+             (wsm packages wsm)
+             (wsm packages installer))
 
 (unless (and (list? %wsm-performance-services)
              (pair? %wsm-performance-services))
@@ -20,6 +21,10 @@
 ;; evaluated, and its header said so ("не зібрано й не перевірено").
 (unless (package? wsm-tools)
   (error "WSM package module did not export a package record for wsm-tools"))
+
+;; The GUI preview package: same rule, a module nobody evaluates is unchecked.
+(unless (package? wsm-installer)
+  (error "WSM installer module did not export its package record"))
 
 (display "WSM-SOURCE-MODULE-EVAL-OK ")
 (display (length %wsm-performance-services))

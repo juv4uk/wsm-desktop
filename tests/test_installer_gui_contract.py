@@ -77,5 +77,8 @@ class InstallerGuiContractTests(unittest.TestCase):
 
     def test_minimal_live_definitions_do_not_gain_qt_dependencies(self) -> None:
         live_minimal = (ROOT / "systems" / "live-minimal.scm").read_text(encoding="utf-8")
-        self.assertNotIn("wsm-installer", live_minimal)
+        # The package symbol, not any string that starts the same way: the
+        # minimal profile has a shepherd service called wsm-installer-selfcheck,
+        # which mentions the installer without depending on Qt.
+        self.assertNotRegex(live_minimal, r"\bwsm-installer\b(?!-selfcheck)")
         self.assertNotIn("python-pyside-6", live_minimal)
