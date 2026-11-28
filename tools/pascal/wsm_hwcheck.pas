@@ -168,15 +168,22 @@ begin
   Write(',"category":"', JsonEscape(D.Category), '"');
   Write(',"bus":"pci"');
   Write(',"discovery_status":"discovered"');
-  Write(',"identity":{"vendor_id":"', JsonEscape(D.VendorId), '"');
+  { local_path обовʼязковий: Python кладе його першим полем identity, і саме з
+    нього читається адреса пристрою. Без нього дві реалізації неможливо
+    зіставити за пристроями — і паритетний тест показав саме це. }
+  Write(',"identity":{"local_path":"/bus/pci/devices/', JsonEscape(Name), '",');
+  Write('"vendor_id":"', JsonEscape(D.VendorId), '"');
   Write(',"device_id":"', JsonEscape(D.ProductId), '"');
   if D.SubsystemVendorId <> '' then
     Write(',"subsystem_vendor_id":"', JsonEscape(D.SubsystemVendorId), '"');
   if D.SubsystemDeviceId <> '' then
     Write(',"subsystem_device_id":"', JsonEscape(D.SubsystemDeviceId), '"');
   Write('}');
+  { Словник статусів мусить бути той самий, що в Python-колекторі:
+    bound / none-known / unknown. «unbound» не зустрічається ніде в Python,
+    тому паритетний тест на ньому б падав — і правильно. }
   if D.Driver = '' then
-    Write(',"driver":{"status":"unbound"}')
+    Write(',"driver":{"status":"none-known"}')
   else
     Write(',"driver":{"status":"bound","module":"', JsonEscape(D.Driver), '"}');
   { The Python collector emits these three as explicit unknowns; a native
@@ -212,13 +219,18 @@ begin
   First := True;
   Found := False;
   Count := 0;
-  if FindFirst(PciDevices + '/*', faDirectory, SearchRec) = 0 then
+  { faAnyFile, а не faDirectory: записи /sys/bus/pci/devices — це symlink-и на
+    каталоги, і фільтр за faDirectory відкидав їх усі. Паритетний тест це
+    показав одразу: Python бачив десятки пристроїв, нативна версія — нуль.
+    Тому беремо все, а каталог перевіряємо через DirectoryExists, яка йде за
+    symlink-ом. }
+  if FindFirst(PciDevices + '/*', faAnyFile, SearchRec) = 0 then
   begin
     try
       repeat
         if (SearchRec.Name = '.') or (SearchRec.Name = '..') then
           Continue;
-        if (SearchRec.Attr and faDirectory) = 0 then
+        if not DirectoryExists(PciDevices + '/' + SearchRec.Name) then
           Continue;
         EmitDevice(PciDevices + '/' + SearchRec.Name, First);
         Inc(Count);

@@ -49,7 +49,11 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y fp-compiler-3.2.2 make binutils
+          # fpjson (модуль fpjson, який використовують wsm_classify і
+          # wsm_profile) живе в пакунку fp-units-fcl, а не в fp-compiler.
+          # Без нього компілятор каже «Can't find unit fpjson» — і саме це
+          # показав перший прогін, коли крок почав справді компілювати.
+          sudo apt-get install -y fp-compiler-3.2.2 fp-units-fcl make binutils
           test "$(fpc -iV)" = "3.2.2"
           fpc -iV
 
@@ -59,9 +63,25 @@ jobs:
       - name: Build every program
         run: |
           set -euo pipefail
-          mapfile -t programs < <(git ls-files '*.lpr' | grep -v '^third_party/' || true)
+          # Програма — це файл із ключовим словом `program', а не файл із
+          # певним розширенням. Попередня версія шукала лише *.lpr, тоді як у
+          # дереві п'ять *.pas — і крок друкував «No Pascal programs in the
+          # tree yet», тобто зелений результат доводив рівно нічого.
+          mapfile -t sources < <(git ls-files '*.pas' '*.pp' '*.lpr' | grep -v '^third_party/' || true)
+          programs=()
+          for source in "${sources[@]}"; do
+            if grep -qiE '^[[:space:]]*program[[:space:]]+[A-Za-z_]' "$source"; then
+              programs+=("$source")
+            fi
+          done
+          # Знайдено джерела, але жодної програми — це зламаний фільтр, а не
+          # порожнє дерево. Мовчазний зелений тут гірший за червоний.
+          if [ "${#sources[@]}" -gt 0 ] && [ "${#programs[@]}" -eq 0 ]; then
+            echo "::error::Pascal sources exist (${#sources[@]}) but none was recognised as a program"
+            exit 1
+          fi
           if [ "${#programs[@]}" -eq 0 ]; then
-            echo "No Pascal programs in the tree yet; nothing to compile."
+            echo "No Pascal sources in the tree yet; nothing to compile."
             echo "WSM_FPC_PROGRAMS=0" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
@@ -69,10 +89,10 @@ jobs:
           failed=0
           for program in "${programs[@]}"; do
             echo "::group::fpc $program"
-            # -Fu on the program's own directory: fpc searches the *current*
-            # directory for units, not the directory of the file it was given,
-            # so a program that `uses` a unit beside it only compiles when this
-            # path is explicit. wsm_install_cli.lpr uses wsmjson.pas this way.
+            # -Fu on the program's own directory: fpc searches the *current* directory
+            # for units, not the directory of the file it was given, so a program that
+            # `uses` a unit beside it only compiles when this path is explicit.
+            # wsm_install_cli.lpr uses wsmjson.pas this way.
             if ! fpc -O2 -Mobjfpc -Sh -Fu"$(dirname "$program")" \
                      -FUbuild/fpc -FEbuild/fpc "$program"; then
               echo "::error::Free Pascal refused to compile $program"
@@ -87,6 +107,12 @@ jobs:
             echo "Programs: ${#programs[@]}, failed: $failed"
           } >> "$GITHUB_STEP_SUMMARY"
           [ "$failed" -eq 0 ] || exit 1
+
+      # Паритет: дві реалізації одного звіту варті чогось лише тоді, коли
+      # щось їх порівнює. Тест збирає програму ще раз (дешево), запускає її
+      # і Python-колектор на тому самому sysfs і порівнює поля.
+      - name: Compare the native collector with the Python one
+        run: python3 tests/test_pascal_parity.py -v
 
       - name: Keep the compiled binaries
         if: always()
