@@ -64,7 +64,7 @@ jobs:
       - name: Check release metadata
         run: python scripts/check_release_info.py
 
-            - name: Summarize fast-check failure
+      - name: Summarize fast-check failure
         if: failure()
         run: |
           {
