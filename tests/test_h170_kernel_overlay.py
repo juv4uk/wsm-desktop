@@ -87,7 +87,9 @@ class H170LinuxLibreOverlayTests(unittest.TestCase):
         workflow = (ROOT / ".github" / "workflows" / "h170-gp107-release.yml").read_text(
             encoding="utf-8"
         )
-        data = self._yaml(workflow)
+        import yaml
+
+        data = yaml.load(workflow, Loader=yaml.BaseLoader)
         trigger = data["on"]["push"]
         self.assertEqual(trigger["branches"], ["main"])
         self.assertTrue({
