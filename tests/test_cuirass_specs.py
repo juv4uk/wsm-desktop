@@ -70,12 +70,10 @@ class SpecsTests(unittest.TestCase):
         self.assertTrue(any(line.startswith("(list") for line in code))
         self.assertNotIn("#~(list", self.text)
 
-    def test_names_are_symbols_as_the_manual_shows(self) -> None:
-        self.assertIn("(name 'wsm-channel)", self.text)
+    def test_only_bounded_image_and_h170_jobs_are_registered(self) -> None:
         self.assertIn("(name 'wsm-live-minimal-image)", self.text)
-
-    def test_the_channel_job_is_the_canonical_one(self) -> None:
-        self.assertIn("(build '(channels wsm))", self.text)
+        self.assertIn("(name 'h170-free-upstream-packages)", self.text)
+        self.assertNotIn("(build '(channels wsm))", self.text)
 
     def test_the_custom_job_names_a_resolvable_module(self) -> None:
         """Cuirass resolves the module through the channel root, so the file
@@ -149,6 +147,13 @@ class ServiceFragmentTests(unittest.TestCase):
     def test_h170_upstream_package_job_is_included(self) -> None:
         self.assertIn("(name 'h170-free-upstream-packages)", self.text)
         self.assertIn("(ci cuirass h170-free-packages)", self.text)
+
+    def test_broad_channel_build_is_not_in_the_service(self) -> None:
+        self.assertNotIn("(build '(channels wsm))", self.text)
+
+    def test_service_imports_gexp_syntax_explicitly(self) -> None:
+        self.assertIn("(guix gexp)", self.text)
+        self.assertIn("#~(list", self.text)
 
     def test_no_field_the_record_does_not_have(self) -> None:
         self.assertNotIn("use-substitutes?", self.text)
