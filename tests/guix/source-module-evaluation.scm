@@ -4,7 +4,8 @@
 (use-modules (guix packages)
              (guix licenses)
              (wsm systems performance)
-             (wsm packages wsm))
+             (wsm packages wsm)
+             (wsm packages linux-libre))
 
 (unless (and (list? %wsm-performance-services)
              (pair? %wsm-performance-services))
@@ -12,6 +13,10 @@
 
 (unless (package? wsm-tools)
   (error "WSM package module did not export wsm-tools"))
+
+(unless (and (package? linux-libre-h170)
+             (string=? (package-name linux-libre-h170) "linux-libre-h170"))
+  (error "H170 Linux-libre package module did not export linux-libre-h170"))
 
 (let ((license (package-license wsm-tools)))
   (unless (and (license? license)
