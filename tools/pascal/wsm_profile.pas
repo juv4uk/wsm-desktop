@@ -67,7 +67,9 @@ begin
     Result := AFieldName + ': empty path';
     Exit;
   end;
-  if (RawPath[1] = '/') or (Copy(RawPath, 1, 3) = '..\') or (Copy(RawPath, 1, 3) = '../') then
+  if (RawPath[1] = '/') or (Pos('\', RawPath) > 0) or
+     (Pos(':', RawPath) > 0) or (Pos('//', RawPath) > 0) or
+     (RawPath[Length(RawPath)] = '/') then
   begin
     Result := AFieldName + ': ' + RawPath + ' is not a safe relative path';
     Exit;
@@ -83,7 +85,7 @@ begin
     end
     else
       Rest := '';
-    if Part = '..' then
+    if (Part = '..') or (Part = '.') or (Part = '') then
     begin
       Result := AFieldName + ': ' + RawPath + ' escapes the bundle directory';
       Exit;
