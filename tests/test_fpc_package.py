@@ -78,6 +78,7 @@ class PackageTests(unittest.TestCase):
         self.assertIn("(name \"wsm-partition-fpc\")", self.text)
         self.assertIn("(name \"wsm-profile-fpc\")", self.text)
         self.assertIn("(name \"wsm-preflight-fpc\")", self.text)
+        self.assertIn("(name \"wsm-install-fpc\")", self.text)
         self.assertIn("(native-inputs (list fpc))", self.text)
         self.assertIn("(license wsm-license)", self.text)
         self.assertIn("build-hwcheck", self.text)
@@ -92,6 +93,9 @@ class PackageTests(unittest.TestCase):
         self.assertIn("install-profile", self.text)
         self.assertIn("build-preflight", self.text)
         self.assertIn("install-preflight", self.text)
+        self.assertIn("build-install", self.text)
+        self.assertIn("install-install", self.text)
+        self.assertIn("(propagated-inputs", self.text)
 
 
 class MakefileTests(unittest.TestCase):
