@@ -67,6 +67,7 @@ class CiFailureVisibilityTests(unittest.TestCase):
         self.assertIn("head.sha == $sha", script)
         self.assertIn("issues/$PR_NUMBER/comments", script)
         self.assertIn("HEAD_REPOSITORY", script)
+        self.assertIn("SOURCE_WORKFLOW_NAME", script)
         self.assertIn("GITHUB_REPOSITORY", script)
         self.assertNotIn("actions/checkout", script)
         self.assertNotIn("download-artifact", script)
