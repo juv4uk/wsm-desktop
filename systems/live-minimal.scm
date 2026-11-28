@@ -24,6 +24,7 @@
              (gnu services networking)
              (gnu services shepherd)
              (gnu system nss)
+             (gnu packages disk)
              (wsm packages wsm))
 
 ;; DHCP тут не потрібен окремою службою: NetworkManager має власний DHCP-клієнт
@@ -145,8 +146,12 @@
                  (home-directory "/home/wsm"))
                 %base-user-accounts))
 
-  ;; Рівно те, що потрібно, щоб дійти до консолі й запустити інсталятор.
-  (packages (append (list wsm-tools)
+  ;; Мінімальний live-профіль теж має містити пакети інструментів інсталятора.
+  ;; gptfdisk, parted і dosfstools не входять у %base-packages:
+  ;; вони надають sgdisk, partprobe та mkfs.fat відповідно.
+  ;; eudev, util-linux, e2fsprogs і coreutils приходять з %base-packages
+  ;; pinned Guix (linux/utils); причину звіряє TrustedToolClosureTests.
+  (packages (append (list wsm-tools gptfdisk parted dosfstools)
                     %base-packages))
 
   (services

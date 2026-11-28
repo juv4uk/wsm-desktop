@@ -34,6 +34,7 @@
              (gnu services sddm)
              (gnu packages fonts)
              (gnu packages kde-plasma)
+             (gnu packages disk)
              (wsm packages wsm))
 
 ;; Завантажуємо сусідній файл за абсолютним шляхом, а не через include з
@@ -70,12 +71,19 @@
 (operating-system
   (inherit base-os)
 
-  ;; Ті самі служби, що й у цільовому профілі, плюс наші інструменти.
+  ;; Інсталятор має мати свої інструменти в live-профілі.
+  ;; gptfdisk, parted і dosfstools не входять у %base-packages:
+  ;; вони надають sgdisk, partprobe та mkfs.fat відповідно.
+  ;; eudev, util-linux, e2fsprogs і coreutils приходять з %base-packages
+  ;; pinned Guix (linux/utils); причину звіряє TrustedToolClosureTests.
   (packages
    (cons* wsm-tools
           font-dejavu
           font-liberation
           font-google-noto
+          gptfdisk
+          parted
+          dosfstools
           (operating-system-packages base-os)))
 
   ;; У live-сесії немає сенсу тримати повний набір локалей у пам'яті.

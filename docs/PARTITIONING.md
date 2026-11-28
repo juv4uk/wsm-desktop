@@ -45,6 +45,10 @@ pinned Guix live closure/ISO не доведена. До package-closure і QEMU
 цей стан — `not-assessed`; абсолютний шлях сам по собі не є доказом, що файл
 існує. Не запускати план вручну й не трактувати його як дозвіл на APPLY.
 
+Джерельні визначення live-профілів доповнені явними пакетами, яких немає в %base-packages: gptfdisk (sgdisk), parted (partprobe) і dosfstools (mkfs.fat). Решта власників інструментів — eudev, util-linux, e2fsprogs та coreutils — походять із базових Guix package sets; причину задокументовано в обох Scheme-профілях. TrustedToolClosureTests звіряє канонічну tool_map з цими визначеннями та відкидає згадки пакетів лише в коментарях або рядках.
+
+Це закриває лише декларацію пакетів у source. Воно не доводить, що файли існують у зібраному образі або що планувальник уже генерує Guix-profile шляхи: tool_map досі містить FHS candidate paths, а prefix-aware path resolution потребує окремої інтеграції. Тому closure/runtime залишається not-assessed до перевірки image root або ISO. APPLY не вмикається.
+
 ## Відмови
 
 Планувальник відмовляє частіше, ніж погоджується. Кожна відмова має код:
