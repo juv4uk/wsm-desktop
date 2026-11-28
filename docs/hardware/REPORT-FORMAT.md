@@ -92,3 +92,17 @@
 ---
 
 Англійський переклад цього документа: [REPORT-FORMAT.en.md](REPORT-FORMAT.en.md). Канонічною є українська версія.
+
+
+## Нативні інструменти Free Pascal
+
+Для зменшення runtime closure WSM має окремі нативні Guix-пакети:
+
+- `wsm-hwcheck-fpc` — read-only колектор PCI identity та прямого driver binding із sysfs. Він формує повний конверт Hardware Evidence Report 1.1.0, але збирає лише PCI-пристрої; CPU, USB, block, DRM, firmware logs та функціональні тести в цьому зрізі не збираються. Відсутність цих фактів лишається явно невідомою, а не домислюється.
+- `wsm-classify-fpc` — діагностичний підсумок підсистем за тим самим контрактом, що й `wsm_install/classification.py`. `certified` завжди дорівнює нулю; результат не є дозволом на інсталяцію.
+
+Обидва пакети використовують `LicenseRef-Volnist` / `ВОЛЬНІСТЬ`. FPC є лише build-time `native-input`, а не runtime dependency; жоден із двох пакетів не тягне Python interpreter.
+
+Збірка локально з установленим FPC 3.2.2: `make -C tools/pascal clean all`. Перевірка пакетів у Guix: `make build-fpc-packages`. Workflow **Free Pascal build** компілює обидва executable, перевіряє JSON Schema 1.1.0 і порівнює PCI-колектор та класифікатор з Python-reference. До успішної компіляції й runtime parity ці пакети не вважаються перевіреними.
+
+Це зменшений native backend, а не повна заміна Python-колектора. Розширювати його слід окремими зрізами — CPU/ISA, USB, block/storage, DRM/display та runtime diagnostics — кожен із parity-тестами до увімкнення в системному профілі.
