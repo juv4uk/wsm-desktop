@@ -3,7 +3,9 @@
 ;; WSM Desktop — пакетне визначення власних інструментів для Guix.
 ;;
 ;; СТАТУС: не зібрано й не перевірено (у середовищі написання немає Guix).
-;; Перед використанням: guix build -f wsm/packages/wsm.scm
+;; Evaluation/build на pinned official Guix lock:
+;; guix time-machine -C channels.lock.scm -- build -L . \
+;;   -e '(@ (wsm packages wsm) wsm-tools)'
 ;;
 ;; Пакет ставить модулі wsm_hwcheck і wsm_install у site-packages разом зі
 ;; схемою звіту. Це необхідно, бо wsm_install/cli.py шукає схему відносно
@@ -84,4 +86,6 @@ against a versioned schema, and drafts a diagnostic-only installation plan for
 the GNU Guix backend.  Nothing in this package writes to a block device, invokes
 a system backend, or requires root.")
     (home-page "https://github.com/juv4uk/wsm-desktop")
-    (license gpl3+)))
+    (license (license "ВОЛЬНІСТЬ"
+                      "file://LICENSE"
+                      "LicenseRef-Volnist; see docs/LICENSING.md. source license only; no OSI/FSDG claim."))))

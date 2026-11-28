@@ -33,7 +33,7 @@ on:
       packages:
         description: "Package variables to archive, space separated (default: wsm-tools)"
         type: string
-        default: "wsm-tools"
+        default: "wsm-tools linux-libre mesa"
       attach_to_draft:
         description: "Existing DRAFT release tag to attach the archives to (empty: artifact only)"
         type: string
@@ -70,12 +70,20 @@ jobs:
           set -euo pipefail
           mkdir -p archives
           : > archives/store-paths.txt
-          for package in ${{ inputs.packages || 'wsm-tools' }}; do
+          for package in ${{ inputs.packages || 'wsm-tools linux-libre mesa' }}; do
             case "$package" in
               *[!A-Za-z0-9._+-]*) echo "refusing odd package name: $package" >&2; exit 1 ;;
             esac
-            store_path="$(guix time-machine -C channels.lock.scm -- \
-                            build -L . "$package" --no-grafts)"
+            case "$package" in
+              wsm-tools)
+                store_path="$(guix time-machine -C channels.lock.scm -- \
+                              build -L . -e '(@ (wsm packages wsm) wsm-tools)' --no-grafts)"
+                ;;
+              *)
+                store_path="$(guix time-machine -C channels.lock.scm -- \
+                              build -L . "$package" --no-grafts)"
+                ;;
+            esac
             printf '%s\t%s\n' "$package" "$store_path" >> archives/store-paths.txt
             echo "WSM_PACKAGE_BUILT=$package $store_path" >> "$GITHUB_STEP_SUMMARY"
           done
