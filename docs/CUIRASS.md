@@ -11,18 +11,18 @@ Cuirass — це власний CI GNU Guix. Він не замінює GitHub A
 
 | Що | Хто доводить |
 | --- | --- |
-| Образ збирається з зафіксованих каналів | **обидва** — і Cuirass, і workflow |
+| Derivation образу на однакових Guix/WSM revisions | **обидва**, коли WSM commit збігається |
 | Образ завантажується в BIOS і UEFI | **тільки** workflow (QEMU) |
 | Інсталятор у носії запускається | **тільки** workflow |
-| Заміни доступні іншим | **тільки** Cuirass |
+| Публікація власних substitutes для інших машин | **не налаштована** у поточному сервісному фрагменті |
 
-Третій рядок — причина існування Cuirass. Він збирає **всередині Guix** і віддає результати як substitutes, тобто наступна збірка не переробляє той самий closure з нуля.
+Cuirass будує **всередині Guix** і зберігає результати в базі та локальному store. Наявні довірені substitutes можуть прискорити отримання залежностей через конфігурацію Guix daemon. Це не означає, що сам сервер публікує власні результати як substitutes: для цього потрібні remote-server/worker, `guix-publish` і ключі підпису.
 
-## Дві незалежні дороги до тих самих байтів
+## Дві дороги до того самого профілю
 
-`ci/cuirass/images.scm` будує `operating-system-image` з `systems/live-minimal.scm` — те саме, що будує `scripts/build_iso.sh`.
+`ci/cuirass/images.scm` будує `operating-system-image` з `systems/live-minimal.scm` — той самий профіль, що використовує `scripts/build_iso.sh`.
 
-Це навмисна надлишковість: якщо workflow зелений, а Cuirass червоний (або навпаки), одна з двох доріг бреше про ті самі байти. Розбіжність видно одразу, а не через місяць.
+Це навмисна надлишковість. Для порівняння саме тих самих derivations мають збігатися офіційний Guix lock і WSM source commit; Cuirass окремо фіксує фактичний commit каналу під час кожної evaluation. Оскільки WSM тут відстежується через `main`, не називайте будь-який його запуск еквівалентом owner-authenticated release lock.
 
 ## Запуск
 
@@ -34,12 +34,14 @@ guix shell cuirass postgresql -- \
                    --database="dbname=cuirass host=/var/run/postgresql" \
                    --interval=300
 
-guix shell cuirass -- cuirass web --database="dbname=cuirass host=/var/run/postgresql"
+guix shell cuirass -- cuirass web \
+  --database="dbname=cuirass host=/var/run/postgresql" \
+  --port=8081 --listen=localhost
 ```
 
-Веб-інтерфейс — `http://localhost:8081`.
+Веб-інтерфейс — `http://localhost:8081`. Інтерфейс Cuirass не має власної автентифікації; залишайте його на loopback. Для віддаленого доступу потрібен автентифікований reverse proxy.
 
-Як сервіс — фрагмент у [`service.scm`](../ci/cuirass/service.scm), який вставляється в `services` хост-системи. Це фрагмент, а не повна декларація: повна стала б другою правдою про те, як налаштовані машини WSM.
+Як сервіс — фрагмент у [`service.scm`](../ci/cuirass/service.scm), який вставляється в `services` хост-системи. Файл специфікацій береться як `local-file` із сусіднього `specs.scm`, а не з неіснуючого шляху в системному профілі. Це фрагмент, а не повна декларація: повна стала б другою правдою про те, як налаштовані машини WSM.
 
 ## Що це **не** доводить
 
