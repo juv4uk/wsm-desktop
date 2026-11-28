@@ -49,7 +49,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y fp-compiler-3.2.2 make binutils
+          sudo apt-get install -y fp-compiler-3.2.2 fp-units-fcl-3.2.2 make binutils
           test "$(fpc -iV)" = "3.2.2"
           fpc -iV
 
@@ -64,22 +64,22 @@ jobs:
           )
           programs=()
           for source in "${pascal_sources[@]}"; do
-            # Compile program/library entry points from any supported Pascal source
-            # extension. Units are compiled as dependencies of their entry point.
-            if grep -Eiq '^[[:space:]]*(program|library)[[:space:]]+[A-Za-z_][A-Za-z0-9_]*([[:space:]]*;|[[:space:]]*)' "$source"; then
+            # Compile program/library entry points from every supported extension.
+            # A Pascal unit is compiled as an entry point's dependency.
+            if grep -Eiq '^[[:space:]]*(program|library)[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*;' "$source"; then
               programs+=("$source")
             fi
           done
           if [ "${#programs[@]}" -eq 0 ]; then
-            echo "No Pascal program/library entry points in the tree; nothing to compile."
+            echo "::error::No Pascal program/library entry points were found; refusing a vacuous successful build."
             echo "WSM_FPC_PROGRAMS=0" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
+            exit 1
           fi
           mkdir -p build/fpc
           failed=0
           for program in "${programs[@]}"; do
             echo "::group::fpc $program"
-            if ! fpc -B -O2 -Mobjfpc -Sh -FUbuild/fpc -FEbuild/fpc "$program"; then
+            if ! fpc -B -O2 -Mobjfpc -Sh -Fu"$(dirname "$program")" -FUbuild/fpc -FEbuild/fpc "$program"; then
               echo "::error::Free Pascal refused to compile $program"
               failed=$((failed + 1))
             fi
@@ -93,6 +93,14 @@ jobs:
             printf '%s\\n' "${programs[@]}"
           } >> "$GITHUB_STEP_SUMMARY"
           [ "$failed" -eq 0 ] || exit 1
+
+      - name: Set up Python for JSON Schema validation
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install report schema validator
+        run: python -m pip install --quiet 'jsonschema[format]==4.26.0'
 
       - name: Verify the WSM FPC collector against the Python reference
         run: python3 tests/test_fpc_collector_parity.py
