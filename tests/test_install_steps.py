@@ -7,6 +7,7 @@ import sys
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -139,6 +140,19 @@ class PathHijackTests(unittest.TestCase):
 
     Every step here is meant to run as root, so no step may rely on PATH.
     """
+
+    def test_non_guix_host_can_build_symbolic_preview_without_executables(self) -> None:
+        # A preview is data only and APPLY is disabled. Do not require host Guix
+        # tools merely to inspect the proposed plan; explicit profile roots and
+        # actual Guix System profiles still use strict resolution.
+        missing_profile = Path("/nonexistent/wsm-system-profile-for-tests")
+        with patch("wsm_install.install_steps.TRUSTED_PROFILE_ROOT", missing_profile):
+            steps = _plan_steps(layout())
+        self.assertTrue(steps)
+        self.assertTrue(
+            all(step.command[0] in TRUSTED_TOOLS.values() for step in steps),
+            "non-Guix preview must contain only logical allowlisted tool names",
+        )
 
     def test_every_command_starts_with_an_absolute_path(self) -> None:
         for firmware, disk in (("uefi", "/dev/nvme0n1"), ("bios", "/dev/sda")):
