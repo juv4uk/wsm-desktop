@@ -370,7 +370,7 @@ begin
   end;
 end;
 
-{ `^(0x)?[0-9a-fA-F]{4}$` }
+// `^(0x)?[0-9a-fA-F]{4}$` — a brace-comment would end at the `}` in the pattern.
 function MatchesPciIdPattern(const Text: string): Boolean;
 var
   Index, Start: Integer;
@@ -779,7 +779,8 @@ begin
       CheckAdditionalProperties(Platform, ChildPath(Location, 'platform'), PlatformAllowed);
       CheckDate(Platform.Member('bios_date'),
         ChildPath(ChildPath(Location, 'platform'), 'bios_date'));
-      for Index := 0 to PlatformAllowed.Count - 1 do
+      // TNameArray is a dynamic array, not a TStringList: it has Length, not Count.
+      for Index := 0 to Length(PlatformAllowed) - 1 do
         if PlatformAllowed[Index] <> 'bios_date' then
           ValueIsString(Platform.Member(PlatformAllowed[Index]),
             ChildPath(ChildPath(Location, 'platform'), PlatformAllowed[Index]));
