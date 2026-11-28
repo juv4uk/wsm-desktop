@@ -11,7 +11,7 @@
       summary that could say CERTIFIED would authorise an installation it
       cannot support.
 
-  JSON comes from FPC's own fpjson unit, which ships with the compiler: no
+  JSON comes from FPC's fpjson unit (Debian: fp-units-fcl): no
   external library enters the closure, which is the whole reason this exists.
 }
 program wsm_classify;
