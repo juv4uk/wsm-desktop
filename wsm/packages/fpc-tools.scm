@@ -49,7 +49,7 @@
     (description description)
     (home-page "https://github.com/juv4uk/wsm-desktop")
     (supported-systems '("x86_64-linux"))
-    (license wsm-license)))
+    (license wsm-license))))
 
 (define-public wsm-hwcheck-fpc
   (make-wsm-fpc-tool
