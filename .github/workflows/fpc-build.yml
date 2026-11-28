@@ -95,7 +95,9 @@ jobs:
       - name: Check the read-only partition planner contract
         run: python3 tests/test_fpc_partition.py
 
-      - name: Check the FPC profile reader source contract
+      - name: Check the FPC profile reader contract and runtime output
+        env:
+          WSM_PROFILE_FPC_BINARY: tools/pascal/build/wsm-profile
         run: python3 tests/test_fpc_profile.py
 
       - name: Keep the compiled binaries
