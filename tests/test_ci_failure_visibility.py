@@ -69,6 +69,8 @@ class CiFailureVisibilityTests(unittest.TestCase):
         self.assertIn("issues/$PR_NUMBER/comments", script)
         self.assertIn("HEAD_REPOSITORY", script)
         self.assertIn("SOURCE_WORKFLOW_NAME", script)
+        self.assertIn('431025036) SOURCE_WORKFLOW_NAME="CI"', script)
+        self.assertIn('431678119) SOURCE_WORKFLOW_NAME="Guix profile evaluation"', script)
         self.assertIn("GITHUB_REPOSITORY", script)
         self.assertNotIn("actions/checkout", script)
         self.assertNotIn("download-artifact", script)
