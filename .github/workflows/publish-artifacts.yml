@@ -69,9 +69,22 @@ jobs:
         run: |
           set -euo pipefail
           while IFS="$(printf '\t')" read -r package store_path; do
-            guix pack -f tarball -C zstd "$store_path"
-            archive="$(ls -1t *.tar.zst | head -1)"
-            mv "$archive" "artifacts/${package}.tar.zst"
+            # `guix pack` takes PACKAGE specifications, not store paths: it runs
+            # every positional argument through specification->package and exits
+            # with "unknown package" for a /gnu/store path. `guix package` does
+            # accept a store path, which is why the wrong form looks plausible.
+            #
+            # The tarball is written into the store and its path printed, so
+            # nothing appears in the working directory - copying is the step that
+            # makes it an artifact.
+            pack_output="$(guix time-machine -C channels.lock.scm -- \
+                            pack -f tarball -C zstd -L . "$package")"
+            tarball="$(printf '%s\n' "$pack_output" | tail -n 1)"
+            case "$tarball" in
+              /gnu/store/*.tar.zst) ;;
+              *) echo "refusing non-tarball output for $package: $tarball" >&2; exit 1 ;;
+            esac
+            cp "$tarball" "artifacts/${package}.tar.zst"
             ( cd artifacts && sha256sum "${package}.tar.zst" > "${package}.tar.zst.sha256" )
             ls -l "artifacts/${package}.tar.zst"
           done < artifacts/store-paths.txt
