@@ -39,7 +39,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: fpc-build-\${{ github.ref }}
+  group: fpc-build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -99,7 +99,7 @@ jobs:
       - name: Report compiler or parity failure
         if: failure()
         env:
-          GH_TOKEN: \${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -uo pipefail
           BODY=$(mktemp)
