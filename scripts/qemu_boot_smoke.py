@@ -42,6 +42,17 @@ MAX_BOOT_MARKER_BYTES = 1024
 PROCESS_READ_CHUNK_BYTES = 64 * 1024
 POST_KILL_DRAIN_SECONDS = 0.5
 
+# Kernel/userspace crash signals that invalidate a clean boot acceptance even
+# when a later login or installer marker appears. These are matched against
+# the complete serial stream, not only the bounded JSON tail.
+SERIAL_FAILURE_PATTERNS = (
+    ("segfault", b"segfault at "),
+    ("general-protection-fault", b"general protection fault:"),
+    ("kernel-oops", b"Oops:"),
+    ("kernel-panic", b"Kernel panic - not syncing:"),
+    ("kernel-bug", b"BUG: unable to handle"),
+)
+
 
 @dataclass(frozen=True)
 class BoundedProcessResult:
@@ -55,6 +66,7 @@ class BoundedProcessResult:
     stderr_truncated: bool
     marker_seen: bool
     second_marker_seen: bool = False
+    failure_markers_seen: tuple[str, ...] = ()
 
 
 def _append_bounded_tail(target: bytearray, chunk: bytes, limit: int) -> None:
@@ -125,6 +137,9 @@ def run_bounded_process(
         )
     second_seen = False
     second_overlap = b""
+    failure_markers_seen: set[str] = set()
+    failure_overlap = b""
+    failure_overlap_size = max(len(pattern) for _name, pattern in SERIAL_FAILURE_PATTERNS) - 1
     timed_out = False
     kill_drain_deadline: float | None = None
     streams = (process.stdout, process.stderr)
@@ -188,6 +203,14 @@ def run_bounded_process(
                         second_seen = second_bytes in candidate
                         overlap_size = max(0, len(second_bytes) - 1)
                         second_overlap = candidate[-overlap_size:] if overlap_size else b""
+                    failure_candidate = failure_overlap + chunk
+                    for failure_name, failure_pattern in SERIAL_FAILURE_PATTERNS:
+                        if failure_pattern in failure_candidate:
+                            failure_markers_seen.add(failure_name)
+                    failure_overlap = (
+                        failure_candidate[-failure_overlap_size:]
+                        if failure_overlap_size else b""
+                    )
                 else:
                     stderr_bytes_seen += len(chunk)
                     _append_bounded_tail(stderr_tail, chunk, max_stderr_bytes)
@@ -212,6 +235,7 @@ def run_bounded_process(
             stderr_truncated=stderr_bytes_seen > max_stderr_bytes,
             marker_seen=marker_seen,
             second_marker_seen=second_seen,
+            failure_markers_seen=tuple(sorted(failure_markers_seen)),
         )
     except BaseException:
         try:
@@ -553,8 +577,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             # True only when the guest itself printed the installer marker.
             # Boot evidence alone must never be reported as installer evidence.
             "guest_installer_execution": captured.second_marker_seen,
+            "serial_failure_markers": list(captured.failure_markers_seen),
+            "serial_clean": not captured.failure_markers_seen,
         }
         print(json.dumps(result, sort_keys=True, indent=2))
+        if captured.failure_markers_seen:
+            print(
+                "qemu-boot-smoke: guest serial contains fatal kernel/userspace crash signals: "
+                + ", ".join(captured.failure_markers_seen),
+                file=sys.stderr,
+            )
+            return 5
         if marker_seen:
             return 0
         if not args.boot_marker:
