@@ -35,9 +35,9 @@ jobs:
           set -euo pipefail
           test -s channels.lock.scm
           test -s wsm/packages/linux-libre.scm
-          STORE_PATH="$(guix time-machine -C channels.lock.scm -- build -L "$GITHUB_WORKSPACE" --no-grafts linux-libre-h170)"
+          STORE_PATH="$(guix time-machine -C channels.lock.scm -- build -L "$GITHUB_WORKSPACE" --no-grafts -e '(begin (use-modules (wsm packages linux-libre)) linux-libre-h170)')"
           test -d "$STORE_PATH"
-          SOURCE_PATH="$(guix time-machine -C channels.lock.scm -- build -S -L "$GITHUB_WORKSPACE" --no-grafts linux-libre-h170)"
+          SOURCE_PATH="$(guix time-machine -C channels.lock.scm -- build -S -L "$GITHUB_WORKSPACE" --no-grafts -e '(begin (use-modules (wsm packages linux-libre)) linux-libre-h170)')"
           test -d "$SOURCE_PATH"
           NAR_SHA256="$(guix hash --recursive --format=hex "$STORE_PATH")"
           {
