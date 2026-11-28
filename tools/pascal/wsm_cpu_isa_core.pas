@@ -208,6 +208,7 @@ begin
     CommonFlags.CaseSensitive := True;
 
     MissingFlags := 0;
+    HasCommonFlagSet := False;
     for Index := 0 to Blocks.Count - 1 do
     begin
       Fields := TStringList(ParsedBlocks[Index]);
@@ -231,8 +232,11 @@ begin
         Continue;
       end;
 
-      if CommonFlags.Count = 0 then
-        CommonFlags.Assign(FlagSet)
+      if not HasCommonFlagSet then
+      begin
+        CommonFlags.Assign(FlagSet);
+        HasCommonFlagSet := True;
+      end
       else
       begin
         for TokenIndex := CommonFlags.Count - 1 downto 0 do
