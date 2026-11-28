@@ -736,29 +736,77 @@ begin
   end;
 end;
 
-function StorageTransport(const EntryName, DevicePath: string): string;
+{ Шина, на якій справді сидить диск, з його предків у sysfs.
+  /sys/block/sdX сам по собі не каже нічого про SATA чи USB, а інсталятору
+  це важливо. Python резолвить symlink device і збирає subsystem КОЖНОГО
+  предка до кореня sysfs, а потім застосовує порядок пріоритету
+  usb → nvme → ata → mmc → virtio → scsi.
+
+  Попередня версія йшла вгору літеральним шляхом, тому бачила лише
+  /sys/block/sdX/device/subsystem (= scsi) і виходила з дерева: USB-флешка й
+  SATA-диск обидва ставали scsi-other. Це виправлено.
+
+  Резолв symlink тут обовʼязковий: fpReadLink повертає ОДИН рівень, а
+  /sys/block/sdX/device — це ланцюжок symlink-ів. Тому резолвимо циклом із
+  обмеженням глибини: sysfs не має циклів, але обмеження захищає від
+  нескінченного ходу при пошкодженому дереві. }
+function ResolveLinkChain(const Path: string; MaxDepth: Integer): string;
 var
-  Current, Subsystem: string;
+  Current, Target: string;
   Depth: Integer;
 begin
-  Result := 'unknown';
-  Current := DevicePath;
-  for Depth := 1 to 8 do
+  Current := Path;
+  for Depth := 1 to MaxDepth do
   begin
-    Subsystem := ReadLinkName(JoinPath(Current, 'subsystem'));
-    if Subsystem <> '' then
-    begin
-      if Subsystem = 'usb' then Exit('usb');
-      if Subsystem = 'nvme' then Exit('nvme');
-      if Subsystem = 'ata' then Exit('sata');
-      if Subsystem = 'mmc' then Exit('mmc');
-      if Subsystem = 'virtio' then Exit('virtio');
-      if Subsystem = 'scsi' then Exit('scsi-other');
-    end;
-    Current := ExtractFileDir(Current);
+    Target := ReadLinkName(Current);
+    if Target = '' then
+      Break;
+    if Target[1] = '/' then
+      Current := Target
+    else
+      Current := JoinPath(ExtractFileDir(Current), Target);
   end;
-  if Copy(EntryName, 1, 4) = 'nvme' then Result := 'nvme'
-  else if Copy(EntryName, 1, 3) = 'mmc' then Result := 'mmc';
+  Result := Current;
+end;
+
+function StorageTransport(const EntryName, DevicePath, SysfsRoot: string): string;
+var
+  Current, Subsystem: string;
+  Found: TStringList;
+  Depth: Integer;
+  StopAt: string;
+begin
+  Result := 'unknown';
+  StopAt := ExcludeTrailingPathDelimiter(SysfsRoot);
+  Found := TStringList.Create;
+  try
+    Current := ResolveLinkChain(DevicePath, 12);
+    for Depth := 1 to 12 do
+    begin
+      Subsystem := ReadLinkName(JoinPath(Current, 'subsystem'));
+      if (Subsystem <> '') and (Found.IndexOf(Subsystem) < 0) then
+        Found.Add(Subsystem);
+      if ExcludeTrailingPathDelimiter(Current) = StopAt then
+        Break;
+      Current := ExtractFileDir(Current);
+      if (Current = '') or (Current = '/') then
+        Break;
+    end;
+
+    { Той самий порядок пріоритету, що TRANSPORT_BY_SUBSYSTEM у Python. }
+    if Found.IndexOf('usb') >= 0 then Exit('usb');
+    if Found.IndexOf('nvme') >= 0 then Exit('nvme');
+    if Found.IndexOf('ata') >= 0 then Exit('sata');
+    if Found.IndexOf('mmc') >= 0 then Exit('mmc');
+    if Found.IndexOf('virtio') >= 0 then Exit('virtio');
+    if Found.IndexOf('scsi') >= 0 then Exit('scsi-other');
+
+    { Лише однозначні назви приймаються як запасний варіант. }
+    if Copy(EntryName, 1, 4) = 'nvme' then Result := 'nvme'
+    else if Copy(EntryName, 1, 3) = 'mmc' then Result := 'mmc';
+  finally
+    Found.Free;
+  end;
 end;
 
 procedure AddBlockDevices(const SysfsRoot, ObservedAt: string; Devices: TJSONArray);
@@ -835,7 +883,7 @@ begin
         Storage.Add('read_only', BooleanValue)
       else Missing.Add('read_only');
 
-      Transport := StorageTransport(Name, DevicePath);
+      Transport := StorageTransport(Name, DevicePath, SysfsRoot);
       { Python або додає transport, або перелічує його як unavailable — але не
         робить і те, і те. Наявний 'transport': 'unknown' разом із записом у
         unavailable був самосуперечливим. }
