@@ -123,6 +123,24 @@ class InstallModeTests(unittest.TestCase):
         self.assertEqual(commands[0][1:], ["--zap-all", "/dev/nvme0n1"])
         self.assertEqual(payload["handoff"][:3], ["guix", "system", "init"])
 
+    def test_install_refuses_cleanly_when_guix_profile_tools_are_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            report = root / "report.json"
+            report.write_text(FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
+            empty_profile = root / "empty-profile"
+            empty_profile.mkdir()
+            result = _run_cli_with_profile(
+                report,
+                empty_profile,
+                "--install", "--target-disk", "/dev/nvme0n1",
+                "--target-size-bytes", str(256 * GIB),
+                "--acknowledge-disk", "/dev/nvme0n1", "--quiet",
+            )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("install.tool-unavailable", result.stderr)
+        self.assertIn("found 0", result.stderr)
+
     def test_btrfs_and_xfs_are_refused_by_first_guix_preview(self) -> None:
         for filesystem in ("btrfs", "xfs"):
             with self.subTest(filesystem=filesystem):
