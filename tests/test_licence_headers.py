@@ -70,6 +70,23 @@ class LicenceHeaderTests(unittest.TestCase):
                 missing.append(path.relative_to(ROOT).as_posix())
         self.assertEqual(missing, [], f"no SPDX header: {missing}")
 
+    def test_wsm_guix_packages_use_the_owner_license_object(self) -> None:
+        module = (ROOT / "wsm" / "licenses.scm").read_text(encoding="utf-8")
+        self.assertIn('(license "ВОЛЬНІСТЬ"', module)
+        self.assertIn('"file://LICENSE"', module)
+        self.assertIn("LicenseRef-Volnist", module)
+
+        for relative in (
+            "wsm/packages/wsm.scm",
+            "systems/live-iso.scm",
+            "systems/live-compat.scm",
+        ):
+            with self.subTest(path=relative):
+                source = (ROOT / relative).read_text(encoding="utf-8")
+                self.assertIn("(license wsm-license)", source)
+                self.assertNotRegex(source, r"license[: ]+gpl3\\+")
+                self.assertIn("(wsm licenses)", source)
+
     def test_the_compatibility_lock_is_volnist_and_valid(self) -> None:
         """The Nonguix lock is our work even though it points at someone else's channel."""
         path = ROOT / "channels" / "compatibility.lock.scm"
