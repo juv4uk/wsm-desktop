@@ -183,7 +183,7 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
         self.assertIn('show "$package"', self.text)
         self.assertIn("license:", self.text)
         self.assertIn("package-info/*.rec", self.text)
-        self.assertIn("Package metadata", self.text)
+        self.assertIn("Pinned Guix package metadata", self.text)
 
     def test_archive_import_trust_and_checksums_are_distributed(self) -> None:
         self.assertIn("guix archive --generate-key", self.text)
