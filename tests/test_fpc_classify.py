@@ -49,6 +49,10 @@ class ContractParityTests(unittest.TestCase):
     def test_built_in_drivers_are_not_false_unknowns(self) -> None:
         self.assertIn("bound_driver", self.pas)
 
+    def test_evidence_states_match_python_vocabulary_without_device_prefixes(self) -> None:
+        self.assertIn("EvidenceStates.Add(State);", self.pas)
+        self.assertNotIn("EvidenceStates.Add(DeviceId + '=' + State)", self.pas)
+
     def test_classification_output_matches_the_versioned_schema_shape(self) -> None:
         for field in (
             "decision_policy", "coverage", "devices", "reasons",
