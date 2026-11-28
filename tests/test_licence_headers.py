@@ -75,6 +75,7 @@ class LicenceHeaderTests(unittest.TestCase):
         self.assertIn('(license "ВОЛЬНІСТЬ"', module)
         self.assertIn('"file://LICENSE"', module)
         self.assertIn("LicenseRef-Volnist", module)
+        self.assertTrue((ROOT / "LICENSE").is_file())
 
         for relative in (
             "wsm/packages/wsm.scm",
@@ -84,7 +85,7 @@ class LicenceHeaderTests(unittest.TestCase):
             with self.subTest(path=relative):
                 source = (ROOT / relative).read_text(encoding="utf-8")
                 self.assertIn("(license wsm-license)", source)
-                self.assertNotRegex(source, r"license[: ]+gpl3\\+")
+                self.assertNotRegex(source, r"license[: ]+gpl3\+")
                 self.assertIn("(wsm licenses)", source)
 
     def test_the_compatibility_lock_is_volnist_and_valid(self) -> None:
