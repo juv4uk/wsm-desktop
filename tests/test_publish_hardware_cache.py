@@ -110,6 +110,12 @@ class PublishHardwareCacheTests(unittest.TestCase):
         text = SCRIPT.read_text(encoding="utf-8")
         self.assertIn("-march=", text)
 
+    def test_it_captures_channel_resolution_evidence(self) -> None:
+        """The published RC6 shipped without it and fails our own release check."""
+        text = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("capture_channel_resolution.py", text)
+        self.assertIn("channels.resolved.scm", text)
+
     def test_it_never_publishes_the_compatibility_profile(self) -> None:
         completed = run(
             "--cpu", "skylake",

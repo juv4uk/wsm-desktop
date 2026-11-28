@@ -182,9 +182,34 @@ for package in "${PACKAGES[@]}"; do
   fi
 done
 
+# --- 6c. Доказ розв'язання каналів ------------------------------------------
+# Опублікований RC6 вийшов без channels.resolved.scm і channel-resolution.log,
+# тому наша ж перевірка релізу його не приймає. Ці два файли генеруються лише
+# машиною з Guix — тобто тут і зараз.
+CHANNEL_EVIDENCE=0
+if command -v guix >/dev/null 2>&1; then
+  note "знімаю доказ розв'язання каналів"
+  if python3 scripts/capture_channel_resolution.py \
+       --guix "$(command -v guix)" --lock channels.lock.scm --repo-root . \
+       --channels-output channels.resolved.scm \
+       --log-output channel-resolution.log; then
+    CHANNEL_EVIDENCE=1
+    note "готово: channels.resolved.scm, channel-resolution.log"
+  else
+    note "WARN: не вдалося зняти доказ каналів — реліз не пройде check-release-readiness"
+  fi
+else
+  note "WARN: guix не знайдено, доказ каналів не знято"
+fi
+
 # --- 7. Публікація ----------------------------------------------------------
 note "запускаю guix publish на порту $PORT"
 note "споживач авторизує ПУБЛІЧНИЙ ключ ЦІЄЇ машини ($GUIX_SYSCONFDIR/signing-key.pub),"
 note "  скопійований до себе: це повна довіра всьому, що ключ підписав"
+if [ "$CHANNEL_EVIDENCE" -eq 1 ]; then
+  note "долучити до релізу (окремо, вручну):"
+  note "  gh release upload <tag> channels.resolved.scm channel-resolution.log"
+fi
+
 exec guix publish --user=guix-publish --port="$PORT" --cache="$CACHE_DIR" \
   --workers=2 --ttl=90d
