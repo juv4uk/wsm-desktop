@@ -9,9 +9,9 @@
 ;;
 ;; This module lives under ci/ rather than wsm/ on purpose: wsm/ is the public
 ;; channel namespace, and every module there must be loadable by the channel's
-;; evaluation test. A CI helper is not part of the channel's API.
+;; evaluation test. A CI helper is not part of the public WSM channel API.
 
-(define-module (wsm ci images)
+(define-module (ci cuirass images)
   #:use-module (guix store)
   #:use-module (guix derivations)
   #:use-module (gnu system image)
