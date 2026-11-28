@@ -17,7 +17,7 @@
 | Scheme module | Файл | Стан |
 |---|---|---|
 | `(wsm systems performance)` | `wsm/systems/performance.scm` | source-tree evaluation на pinned Guix; authenticated channel lookup потребує окремого Phase B bootstrap |
-| `(wsm packages wsm)` | `wsm/packages/wsm.scm` | package metadata має невирішену ліцензійну суперечність #367; не оголошувати release-ready |
+| `(wsm packages wsm)` | `wsm/packages/wsm.scm` | Guix metadata посилається на власну ВОЛЬНІСТЬ (`file://LICENSE`); власник дозволив публікацію власних WSM package outputs 2026-11-28. Це не є OSI/FSDG чи upstream-GNU-Guix підтвердженням |
 
 Не переносити модулі з `wsm/` без необхідності: цей шлях уже відповідає Scheme namespace `(wsm …)`. Файли `systems/*.scm` залишаються machine/release configurations, а не публічним API channel namespace.
 
