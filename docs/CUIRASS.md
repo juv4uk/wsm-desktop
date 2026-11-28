@@ -14,13 +14,13 @@ Cuirass — це власний CI GNU Guix. Він не замінює GitHub A
 | Образ збирається з зафіксованих каналів | **обидва** — і Cuirass, і workflow |
 | Образ завантажується в BIOS і UEFI | **тільки** workflow (QEMU) |
 | Інсталятор у носії запускається | **тільки** workflow |
-| Заміни доступні іншим | **тільки** Cuirass |
+| Публікація build outputs як substitutes | **окремий substitute/publisher deployment**, не ця конфігурація |
 
-Третій рядок — причина існування Cuirass. Він збирає **всередині Guix** і віддає результати як substitutes, тобто наступна збірка не переробляє той самий closure з нуля.
+Cuirass збирає derivations **всередині Guix** і зберігає build results у build farm. Він сам по собі не робить їх доступними іншим машинам як substitutes: для цього потрібен окремо налаштований remote server/worker або substitute publisher, довірені signing keys і клієнтська конфігурація.
 
 ## Дві незалежні дороги до тих самих байтів
 
-`ci/cuirass/images.scm` будує `operating-system-image` з `systems/live-minimal.scm` — те саме, що будує `scripts/build_iso.sh`.
+`ci/cuirass/images.scm` завантажує `systems/live-minimal.scm` і через pinned Guix image API створює ISO derivation для того самого системного профілю, який використовує `scripts/build_iso.sh`.
 
 Це навмисна надлишковість: якщо workflow зелений, а Cuirass червоний (або навпаки), одна з двох доріг бреше про ті самі байти. Розбіжність видно одразу, а не через місяць.
 
