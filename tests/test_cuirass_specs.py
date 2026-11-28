@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""Cuirass specifications must describe the channels we actually pin."""
+"""Cuirass specifications must match the pinned Guix API and channel layout."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SPECS = ROOT / "ci" / "cuirass" / "specs.scm"
 IMAGES = ROOT / "ci" / "cuirass" / "images.scm"
 SERVICE = ROOT / "ci" / "cuirass" / "service.scm"
+PACKAGE = ROOT / "wsm" / "packages" / "wsm.scm"
 DOC = ROOT / "docs" / "CUIRASS.md"
 
 
@@ -65,7 +66,7 @@ class SpecsTests(unittest.TestCase):
         self.assertIn('(name "wsm-live-minimal-image")', self.text)
 
     def test_the_guix_channel_is_pinned_to_the_release_commit(self) -> None:
-        """A CI that floats is a CI that reports on a different tree."""
+        """Guix is pinned; WSM main intentionally remains a tracking input."""
         lock = (ROOT / "channels.lock.scm").read_text(encoding="utf-8")
         commit = re.search(r'\(commit "([0-9a-f]{40})"\)', lock).group(1)
         self.assertEqual(self.text.count(f'"{commit}"'), 2)
@@ -74,47 +75,74 @@ class SpecsTests(unittest.TestCase):
         self.assertEqual(self.text.count("make-channel-introduction"), 2)
         self.assertIn("9edb3f66fd807b096b48283debdcddccfea34bad", self.text)
 
-    def test_the_wsm_channel_points_at_this_repository(self) -> None:
+    def test_the_wsm_channel_is_a_tracking_development_input(self) -> None:
         self.assertEqual(self.text.count("https://github.com/juv4uk/wsm-desktop"), 2)
+        self.assertEqual(self.text.count('(branch "main")'), 2)
+        self.assertIn("NOT an immutable reproduction", self.text)
 
 
 class JobModuleTests(unittest.TestCase):
     def setUp(self) -> None:
         self.text = IMAGES.read_text(encoding="utf-8")
+        self.specs = SPECS.read_text(encoding="utf-8")
 
-    def test_the_module_exports_the_entry_point(self) -> None:
-        self.assertIn("#:export (cuirass-jobs))", self.text)
+    def test_module_name_matches_repository_path_and_custom_selector(self) -> None:
+        self.assertIn("(define-module (ci cuirass images)", self.text)
+        self.assertIn("(build '(custom (ci cuirass images)))", self.specs)
+        self.assertFalse((ROOT / "wsm" / "ci" / "images.scm").exists())
 
-    def test_it_builds_the_same_profile_the_release_builds(self) -> None:
-        self.assertIn("systems/live-minimal.scm", self.text)
+    def test_imports_the_pinned_cuirass_and_image_apis(self) -> None:
+        self.assertIn("((gnu ci) #:select (arguments->systems image->job))", self.text)
+        self.assertIn("((gnu system image) #:select (image-with-os iso9660-image))",
+                      self.text)
+        self.assertNotIn("operating-system-image", self.text)
+        self.assertNotIn("derivation->job", self.text)
 
-    def test_grafting_is_disabled(self) -> None:
-        """Grafting belongs on the user's machine, not in a build farm."""
-        self.assertIn("(%graft? #f)", self.text)
+    def test_profile_is_resolved_from_channel_load_path(self) -> None:
+        self.assertIn('search-path %load-path "systems/live-minimal.scm"', self.text)
+        self.assertIn("(primitive-load profile)", self.text)
 
-    def test_the_module_is_outside_the_channel_namespace(self) -> None:
-        """wsm/ is the channel API; a CI helper is not part of it."""
-        self.assertFalse((ROOT / "wsm" / "ci").exists())
-        self.assertIn("(wsm ci images)", self.text)
+    def test_job_uses_the_release_iso_image_type(self) -> None:
+        self.assertIn("(image-with-os iso9660-image", self.text)
+        self.assertIn('#:name "wsm-live-minimal-image"', self.text)
+        self.assertIn('#:system system', self.text)
+        self.assertIn("(arguments->systems arguments)", self.text)
+
+    def test_only_the_wsm_release_architecture_is_requested(self) -> None:
+        self.assertIn('"x86_64-linux"', self.text)
+        self.assertIn("Cuirass request does not include the WSM image system", self.text)
 
 
 class ServiceFragmentTests(unittest.TestCase):
-    def test_the_fragment_uses_substitutes(self) -> None:
-        """Without substitutes a build farm rebuilds every closure from source."""
-        text = SERVICE.read_text(encoding="utf-8")
-        self.assertIn("(use-substitutes? #t)", text)
-        self.assertIn("cuirass-service-type", text)
+    def test_service_load_path_is_installed_by_wsm_tools(self) -> None:
+        service = SERVICE.read_text(encoding="utf-8")
+        package = PACKAGE.read_text(encoding="utf-8")
+        self.assertIn("/share/wsm/ci/cuirass/specs.scm", service)
+        self.assertIn('"ci/cuirass/specs.scm"', package)
+        self.assertIn('"/share/wsm/ci/cuirass"', package)
+        self.assertIn("cuirass-service-type", service)
+        self.assertIn("(use-substitutes? #t)", service)
+        self.assertNotIn("guix publish", service)
+        self.assertNotIn("publish?", service)
 
 
 class DocumentationTests(unittest.TestCase):
-    def test_the_document_states_what_cuirass_cannot_prove(self) -> None:
-        text = DOC.read_text(encoding="utf-8")
-        self.assertIn("не завантажує образ", text.lower())
-        self.assertIn("не перевіряє інсталятор", text.lower())
+    def test_document_states_the_acceptance_boundary(self) -> None:
+        text = DOC.read_text(encoding="utf-8").lower()
+        self.assertIn("не завантажує образ", text)
+        self.assertIn("не перевіряє інсталятор", text)
+        self.assertIn("не публікує", text)
 
-    def test_the_document_admits_the_instance_never_ran(self) -> None:
-        text = DOC.read_text(encoding="utf-8")
-        self.assertIn("інстанс не запускався", text.lower())
+    def test_document_marks_registration_and_authentication_not_run(self) -> None:
+        text = DOC.read_text(encoding="utf-8").lower()
+        self.assertIn("not_run", text)
+        self.assertIn("phase b", text)
+        self.assertIn("не вимикати автентифікацію", text)
+
+    def test_document_distinguishes_tracking_channel_from_release_pin(self) -> None:
+        text = DOC.read_text(encoding="utf-8").lower()
+        self.assertIn("main", text)
+        self.assertIn("не є відтворенням релізу", text)
 
 
 if __name__ == "__main__":
