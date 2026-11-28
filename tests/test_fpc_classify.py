@@ -38,7 +38,9 @@ class ContractParityTests(unittest.TestCase):
         """Only driver-bound-not-tested and candidate-only count as known."""
         self.assertIn("'driver-bound-not-tested'", self.pas)
         self.assertIn("'candidate-only'", self.pas)
-        self.assertNotIn("'supported-tested'", self.pas)
+        self.assertIn("Exit('supported-tested')", self.pas)
+        self.assertIn("AllGood and (not AnyFailed)", self.pas)
+        self.assertNotIn("Level := 'supported-tested'", self.pas)
 
     def test_a_failed_function_blocks_known(self) -> None:
         self.assertIn("FailedFunctionTest", self.pas)
