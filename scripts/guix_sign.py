@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Generate a GNU Guix substitute signing key and narinfo signatures with
 nothing but the Python standard library.
 
