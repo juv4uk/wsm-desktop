@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""The FPC readers must be in the published pack, and the Python payload must not."""
+"""All native FPC tools must be in the published pack, not the Python payload."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ PACKAGES = ROOT / "wsm" / "packages" / "fpc-tools.scm"
 FPC_TOOLS = (
     "wsm-hwcheck-fpc",
     "wsm-classify-fpc",
+    "wsm-cpu-isa-fpc",
     "wsm-partition-fpc",
     "wsm-profile-fpc",
     "wsm-preflight-fpc",
@@ -24,11 +25,11 @@ class ManifestTests(unittest.TestCase):
     def setUp(self) -> None:
         self.text = MANIFEST.read_text(encoding="utf-8")
 
-    def test_every_fpc_reader_is_published(self) -> None:
+    def test_every_fpc_tool_is_published(self) -> None:
         for name in FPC_TOOLS:
             self.assertIn(f'"{name}"', self.text, f"{name} is not in the pack")
 
-    def test_every_published_reader_is_defined(self) -> None:
+    def test_every_published_tool_is_defined(self) -> None:
         """A manifest naming a package nobody defines fails only at build time."""
         definitions = PACKAGES.read_text(encoding="utf-8")
         for name in FPC_TOOLS:

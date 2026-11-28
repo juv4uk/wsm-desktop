@@ -1,124 +1,180 @@
 ;; SPDX-License-Identifier: LicenseRef-Volnist
 ;;
-;; The FPC edition of the hardware reader.
-;;
-;; Why a second implementation exists: the Python package propagated the full
-;; interpreter, and the published pack carried three separate Python builds
-;; (~226 MB of a 399 MB store). A Free Pascal binary is a single native
-;; executable: no interpreter, no site-packages, no schema library in the
-;; runtime closure.
-;;
-;; The two implementations are not interchangeable, and the split is deliberate:
-;; this one reads PCI identity only. JSON schema validation stays in CI, where
-;; Python already exists — putting a validator in the shipped binary would
-;; reintroduce exactly the dependency this package removes.
+;; Native Free Pascal packages for WSM evidence and installer tooling.
+;; Each package installs one executable. The compiler and FCL are build inputs;
+;; Python, tests and generated outputs are not part of the installed closure.
 
 (define-module (wsm packages fpc-tools)
   #:use-module (guix packages)
   #:use-module (guix gexp)
-  #:use-module (guix download)
   #:use-module (guix build-system gnu)
   #:use-module (gnu packages pascal)
   #:use-module (wsm licenses)
-  ;; `any' comes from SRFI-1 and `string-contains' from SRFI-13; the source
-  ;; select? predicate uses both, and without the imports the module fails to
-  ;; load only when Guix evaluates it.
-  #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-13)
-  #:export (wsm-hwcheck-fpc wsm-classify-fpc wsm-partition-fpc wsm-profile-fpc wsm-preflight-fpc wsm-install-fpc))
+  #:export (wsm-hwcheck-fpc
+            wsm-classify-fpc
+            wsm-cpu-isa-fpc
+            wsm-partition-fpc
+            wsm-profile-fpc
+            wsm-preflight-fpc
+            wsm-install-fpc))
+
+;; Guix passes absolute entry paths to select? for recursive local-file sources.
+;; Keep only the owner licence and the Pascal source/build directory.
+(define wsm-fpc-source
+  (local-file "../.." "wsm-desktop-source-fpc"
+              #:recursive? #t
+              #:select? (lambda (path _stat)
+                          (or (string-suffix? "/LICENSE" path)
+                              (string-suffix? "/tools" path)
+                              (string-suffix? "/tools/pascal" path)
+                              (string-contains path "/tools/pascal/")))))
+
+(define (wsm-fpc-arguments build-target check-target install-target)
+  (list
+   #:tests? #t
+   #:make-flags
+   #~(list (string-append "FPC=" #$(file-append fpc "/bin/fpc")))
+   #:phases
+   #~(modify-phases %standard-phases
+       (delete 'configure)
+       (replace 'build
+         (lambda* (#:key make-flags #:allow-other-keys)
+           (apply invoke "make" "-f" "tools/pascal/Makefile"
+                  #$build-target make-flags)))
+       (replace 'check
+         (lambda* (#:key make-flags #:allow-other-keys)
+           (apply invoke "make" "-f" "tools/pascal/Makefile"
+                  #$check-target make-flags)))
+       (replace 'install
+         (lambda* (#:key outputs make-flags #:allow-other-keys)
+           (apply invoke "make" "-f" "tools/pascal/Makefile"
+                  #$install-target
+                  (string-append "PREFIX=" (assoc-ref outputs "out"))
+                  make-flags))))))
 
 (define-public wsm-hwcheck-fpc
   (package
     (name "wsm-hwcheck-fpc")
     (version "0.1.0")
-    (source (local-file "../.." "wsm-desktop-source-fpc"
-                        #:recursive? #t
-                        #:select? (lambda (path _stat)
-                                    (not (any (lambda (skip)
-                                                (string-contains path skip))
-                                              '("/.git" "/__pycache__" "/build"))))))
+    (source wsm-fpc-source)
     (build-system gnu-build-system)
-    (arguments
-     (list
-      #:tests? #f
-      #:make-flags
-      #~(list (string-append "FPC=" #$(file-append fpc "/bin/fpc")))
-      #:phases
-      #~(modify-phases %standard-phases
-          (delete 'configure)
-          (replace 'build
-            (lambda* (#:key make-flags #:allow-other-keys)
-              (apply invoke "make" "-f" "tools/pascal/Makefile" "all" make-flags)))
-          (replace 'install
-            (lambda* (#:key outputs #:allow-other-keys)
-              (let* ((out (assoc-ref outputs "out"))
-                     (bin (string-append out "/bin")))
-                (install-file "tools/pascal/wsm-hwcheck" bin)
-                (install-file "tools/pascal/wsm-classify" bin)
-                (install-file "tools/pascal/wsm-partition" bin)
-                (install-file "tools/pascal/wsm-profile" bin)
-                (install-file "tools/pascal/wsm-preflight" bin)
-                (install-file "tools/pascal/wsm-install" bin)))))))
-    (synopsis "Read-only PCI hardware reader for WSM Desktop, built with FPC")
-    (description
-     "A native binary that reads PCI identity and driver binding from sysfs and
-writes a JSON report. It is the Free Pascal counterpart of the Python
-collector: no interpreter or Python library enters the runtime closure.  It
-reads only; it never opens a block device and needs no privileges.")
+    (arguments (wsm-fpc-arguments "build-hwcheck" "test-hwcheck" "install-hwcheck"))
+    (native-inputs (list fpc))
     (home-page "https://github.com/juv4uk/wsm-desktop")
+    (synopsis "Native Free Pascal hardware evidence collector")
+    (description
+     "Collects read-only Linux sysfs and procfs evidence. Unknown facts remain
+unknown; the report is local-only and the executable does not upload data,
+load modules, update firmware or modify devices.")
+    (supported-systems '("x86_64-linux"))
     (license wsm-license)))
 
 (define-public wsm-classify-fpc
   (package
-    (inherit wsm-hwcheck-fpc)
     (name "wsm-classify-fpc")
-    (synopsis "Diagnostic hardware classification for WSM Desktop, built with FPC")
+    (version "0.1.0")
+    (source wsm-fpc-source)
+    (build-system gnu-build-system)
+    (arguments (wsm-fpc-arguments "build-classify" "test-classify" "install-classify"))
+    (native-inputs (list fpc))
+    (home-page "https://github.com/juv4uk/wsm-desktop")
+    (synopsis "Conservative hardware evidence classifier")
     (description
-     "Reads a hardware report and produces the diagnostic subsystem summary.
-It is the Free Pascal counterpart of the Python classifier, and it keeps the
-same restraint: a subsystem is KNOWN only when every observed device has a
-driver binding or a candidate, a failed function test blocks that, and
-CERTIFIED is never emitted because report v1 has no coverage manifest.")))
+     "Classifies WSM subsystem evidence without turning missing or incomplete
+observations into certification. CERTIFIED is not emitted without a complete
+coverage manifest.")
+    (supported-systems '("x86_64-linux"))
+    (license wsm-license)))
+
+(define-public wsm-cpu-isa-fpc
+  (package
+    (name "wsm-cpu-isa-fpc")
+    (version "0.1.2")
+    (source wsm-fpc-source)
+    (build-system gnu-build-system)
+    (arguments (wsm-fpc-arguments "build-isa" "test-isa" "install-isa"))
+    (native-inputs (list fpc))
+    (home-page "https://github.com/juv4uk/wsm-desktop")
+    (synopsis "Conservative x86-64 ISA evidence from all logical processors")
+    (description
+     "Intersects observed Linux procfs CPU flags across all logical processors
+and reports the common x86-64 psABI level. It does not claim silicon inventory
+or performance.")
+    (supported-systems '("x86_64-linux"))
+    (license wsm-license)))
 
 (define-public wsm-partition-fpc
   (package
-    (inherit wsm-hwcheck-fpc)
     (name "wsm-partition-fpc")
-    (synopsis "Disk layout planner for WSM Desktop, built with FPC")
+    (version "0.1.0")
+    (source wsm-fpc-source)
+    (build-system gnu-build-system)
+    (arguments (wsm-fpc-arguments "build-partition" "test-partition" "install-partition"))
+    (native-inputs (list fpc))
+    (home-page "https://github.com/juv4uk/wsm-desktop")
+    (synopsis "Read-only disk layout planner")
     (description
-     "Builds a partition layout or refuses with a reason.  It plans and stops:
-it never runs sgdisk, never opens a block device and never writes.  The sgdisk
-invocations are emitted as data for a caller that holds the consent chain.")))
+     "Produces a partition plan or refuses with a reason. It never invokes
+sgdisk, opens a block device or writes storage; commands remain data for a
+separate caller to review and authorize.")
+    (supported-systems '("x86_64-linux"))
+    (license wsm-license)))
 
 (define-public wsm-profile-fpc
   (package
-    (inherit wsm-hwcheck-fpc)
     (name "wsm-profile-fpc")
-    (synopsis "Evidence bundle reader for WSM Desktop, built with FPC")
+    (version "0.1.0")
+    (source wsm-fpc-source)
+    (build-system gnu-build-system)
+    (arguments (wsm-fpc-arguments "build-profile" "test-profile" "install-profile"))
+    (native-inputs (list fpc))
+    (home-page "https://github.com/juv4uk/wsm-desktop")
+    (synopsis "Read-only evidence bundle validator")
     (description
-     "Checks an evidence bundle before an installation profile is accepted:
-schema version, path safety, at least one passing function, duplicate paths and
-artifact presence.  Digest verification is deliberately delegated and the
-output says so, so no caller mistakes this for a full check.")))
+     "Checks evidence schema version, path safety, duplicate artifact paths,
+artifact presence and passing functional evidence. SHA-256 verification is
+explicitly delegated and never claimed as complete.")
+    (supported-systems '("x86_64-linux"))
+    (license wsm-license)))
 
 (define-public wsm-preflight-fpc
   (package
-    (inherit wsm-hwcheck-fpc)
     (name "wsm-preflight-fpc")
-    (synopsis "Pre-install environment checks for WSM Desktop, built with FPC")
+    (version "0.1.0")
+    (source wsm-fpc-source)
+    (build-system gnu-build-system)
+    (arguments (wsm-fpc-arguments "build-preflight" "test-preflight" "install-preflight"))
+    (native-inputs (list fpc))
+    (home-page "https://github.com/juv4uk/wsm-desktop")
+    (synopsis "Read-only WSM installation preflight")
     (description
-     "Reports whether this machine can install WSM before anything is touched:
-required programs, guix, root, an unused mount point, the system declaration and
-the instruction set.  The verdict keeps the rule that makes it honest:
-incomplete is not a pass, and the exit code differs between fail and
-incomplete.")))
+     "Inspects required tools, privileges, an unused mount point, a Guix system
+declaration, a supplied hardware report and x86-64 long-mode evidence. It
+reports pass, fail or not-run without executing installer operations.")
+    (supported-systems '("x86_64-linux"))
+    (license wsm-license)))
 
 (define-public wsm-install-fpc
   (package
-    (inherit wsm-hwcheck-fpc)
     (name "wsm-install-fpc")
-    (synopsis "Installer frontend for WSM Desktop, built with FPC")
+    (version "0.1.0")
+    (source wsm-fpc-source)
+    (build-system gnu-build-system)
+    (arguments (wsm-fpc-arguments "build-install" "test-install" "install-install"))
+    (native-inputs (list fpc))
+    ;; The frontend resolves these sibling commands through PATH when they
+    ;; are not next to the installer binary. Keep the runtime graph native.
+    (propagated-inputs
+     (list wsm-preflight-fpc
+           wsm-hwcheck-fpc
+           wsm-classify-fpc
+           wsm-partition-fpc))
+    (home-page "https://github.com/juv4uk/wsm-desktop")
+    (synopsis "Native WSM installer frontend")
     (description
-     "Runs the five readers in order and prints a plan.  It executes only its
-sibling binaries, never a shell, and never sgdisk: the layout is a proposal for
-review, and the output says applied:false.")))
+     "Sequences preflight, hardware collection, classification and partition
+planning. It uses only the named reader executables, never a shell, and leaves
+the partition plan unapplied for operator review.")
+    (supported-systems '("x86_64-linux"))
+    (license wsm-license)))

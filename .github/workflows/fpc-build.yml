@@ -18,12 +18,20 @@ on:
       - "**/*.pas"
       - "**/*.lpr"
       - "**/*.pp"
+      - "tools/pascal/Makefile"
+      - "wsm/packages/fpc-tools.scm"
+      - "wsm/licenses.scm"
+      - "tests/test_fpc*.py"
       - ".github/workflows/fpc-build.yml"
   pull_request:
     paths:
       - "**/*.pas"
       - "**/*.lpr"
       - "**/*.pp"
+      - "tools/pascal/Makefile"
+      - "wsm/packages/fpc-tools.scm"
+      - "wsm/licenses.scm"
+      - "tests/test_fpc*.py"
       - ".github/workflows/fpc-build.yml"
   workflow_dispatch:
 
@@ -49,7 +57,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y fp-compiler-3.2.2 make binutils
+          sudo apt-get install -y fp-compiler-3.2.2 fp-units-fcl-3.2.2 python3-jsonschema make binutils
           test "$(fpc -iV)" = "3.2.2"
           fpc -iV
 
@@ -59,27 +67,71 @@ jobs:
       - name: Build every program
         run: |
           set -euo pipefail
-          mapfile -t programs < <(git ls-files '*.lpr' | grep -v '^third_party/' || true)
-          if [ "${#programs[@]}" -eq 0 ]; then
-            echo "No Pascal programs in the tree yet; nothing to compile."
-            echo "WSM_FPC_PROGRAMS=0" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
+          mapfile -t pascal_sources < <(
+            git ls-files '*.pas' '*.pp' '*.lpr' | grep -v '^third_party/' | sort || true
+          )
+          if [ "${#pascal_sources[@]}" -eq 0 ]; then
+            echo "::error::No Pascal sources in the tree; refusing a false-green build."
+            echo "WSM_FPC_SOURCES=0" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
           fi
+
+          programs=()
+          for source in "${pascal_sources[@]}"; do
+            if grep -Eiq '^[[:space:]]*(program|library)[[:space:]]+[A-Za-z_][A-Za-z0-9_]*' "$source"; then
+              programs+=("$source")
+            fi
+          done
+          if [ "${#programs[@]}" -eq 0 ]; then
+            echo "::error::Pascal sources exist but no program/library entry point was found."
+            echo "WSM_FPC_PROGRAMS=0" >> "$GITHUB_STEP_SUMMARY"
+            printf '%s\n' "${pascal_sources[@]}"
+            exit 1
+          fi
+
           mkdir -p build/fpc
           failed=0
           for program in "${programs[@]}"; do
+            name="$(basename "${program%.*}")"
             echo "::group::fpc $program"
-            if ! fpc -O2 -Mobjfpc -Sh -FUbuild/fpc -FEbuild/fpc "$program"; then
+            if ! fpc -B -O2 -Mobjfpc -Sh -Fu"$(dirname "$program")" \
+                -FUbuild/fpc -FEbuild/fpc -o"build/fpc/$name" "$program"; then
               echo "::error::Free Pascal refused to compile $program"
               failed=$((failed + 1))
             fi
             echo "::endgroup::"
           done
+          if [ "$failed" -eq 0 ]; then
+            test -x build/fpc/wsm_hwcheck
+            test -x build/fpc/wsm_classify
+            test -x build/fpc/wsm_cpu_isa
+            test -x build/fpc/wsm_partition
+            test -x build/fpc/wsm_profile
+            test -x build/fpc/wsm_preflight
+            test -x build/fpc/wsm_install
+            echo "::group::Hardware collector schema and PCI parity"
+            python3 tests/test_fpc_collector_parity.py || failed=$((failed + 1))
+            echo "::endgroup::"
+            echo "::group::Classifier behavior tests"
+            python3 tests/test_fpc_classify_runtime.py || failed=$((failed + 1))
+            echo "::endgroup::"
+            echo "::group::CPU ISA contract tests"
+            python3 tests/test_fpc_cpu_isa_runtime.py
+            python3 tests/test_fpc_partition.py
+            python3 tests/test_fpc_partition_runtime.py || failed=$((failed + 1))
+            python3 tests/test_fpc_profile.py
+            python3 tests/test_fpc_profile_runtime.py || failed=$((failed + 1))
+            python3 tests/test_fpc_preflight.py
+            python3 tests/test_fpc_preflight_runtime.py || failed=$((failed + 1))
+            python3 tests/test_fpc_cli.py
+            python3 tests/test_fpc_install_runtime.py || failed=$((failed + 1))
+            echo "::endgroup::"
+          fi
           ls -l build/fpc || true
           {
-            echo "### Free Pascal build"
+            echo "### Free Pascal build and runtime tests"
             echo ""
-            echo "Programs: ${#programs[@]}, failed: $failed"
+            echo "Sources: ${#pascal_sources[@]}, program entry points: ${#programs[@]}, failed: $failed"
           } >> "$GITHUB_STEP_SUMMARY"
           [ "$failed" -eq 0 ] || exit 1
 
@@ -94,6 +146,7 @@ jobs:
 
       - name: Повідомити причину збою
         if: failure()
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

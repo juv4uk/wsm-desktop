@@ -46,6 +46,32 @@ begin
   Inc(ProblemCount);
 end;
 
+function JsonEscape(const Value: string): string;
+var
+  I: Integer;
+  C: Char;
+begin
+  Result := '';
+  for I := 1 to Length(Value) do
+  begin
+    C := Value[I];
+    case C of
+      '"': Result := Result + '\"';
+      '\': Result := Result + '\\';
+      #8: Result := Result + '\b';
+      #9: Result := Result + '\t';
+      #10: Result := Result + '\n';
+      #12: Result := Result + '\f';
+      #13: Result := Result + '\r';
+    else
+      if Ord(C) < 32 then
+        Result := Result + ' '
+      else
+        Result := Result + C;
+    end;
+  end;
+end;
+
 function Str(Obj: TJSONObject; const Key: string): string;
 begin
   Result := '';
@@ -56,7 +82,7 @@ end;
 { Absolute paths and `..' segments are rejected before any file is opened:
   a bundle that points outside itself is not a bundle, and following it would
   turn a data file into a filesystem instruction. }
-function PathProblem(const RawPath, Label: string): string;
+function PathProblem(const RawPath, FieldName: string): string;
 var
   Part: string;
   Rest: string;
@@ -64,12 +90,12 @@ begin
   Result := '';
   if RawPath = '' then
   begin
-    Result := Label + ': empty path';
+    Result := FieldName + ': empty path';
     Exit;
   end;
   if (RawPath[1] = '/') or (Copy(RawPath, 1, 3) = '..\') or (Copy(RawPath, 1, 3) = '../') then
   begin
-    Result := Label + ': ' + RawPath + ' is not a safe relative path';
+    Result := FieldName + ': ' + RawPath + ' is not a safe relative path';
     Exit;
   end;
   Rest := RawPath;
@@ -85,7 +111,7 @@ begin
       Rest := '';
     if Part = '..' then
     begin
-      Result := Label + ': ' + RawPath + ' escapes the bundle directory';
+      Result := FieldName + ': ' + RawPath + ' escapes the bundle directory';
       Exit;
     end;
   end;
@@ -183,6 +209,7 @@ end;
 var
   Text: TStringList;
   Parser: TJSONParser;
+  Data: TJSONData;
   Root: TJSONObject;
   Ok: Boolean;
   I: Integer;
@@ -205,16 +232,11 @@ begin
       end;
     end;
 
-    Parser := nil;
+    Parser := TJSONParser.Create(Text.Text);
+    Data := nil;
     try
       try
-        Parser := TJSONParser.Create(Text.Text);
-        if not (Parser.Parse is TJSONObject) then
-        begin
-          WriteLn(StdErr, 'wsm-profile: evidence is not a JSON object');
-          Halt(4);
-        end;
-        Root := TJSONObject(Parser.Parse);
+        Data := Parser.Parse;
       except
         on E: Exception do
         begin
@@ -223,23 +245,37 @@ begin
         end;
       end;
 
+      if not (Data is TJSONObject) then
+      begin
+        WriteLn(StdErr, 'wsm-profile: evidence is not a JSON object');
+        Halt(4);
+      end;
+      Root := TJSONObject(Data);
+
       Ok := CheckBundle(Root, ExtractFileDir(ExpandFileName(ParamStr(1))));
 
-      Write('{"ok":', Ok, ',"schema":"', SupportedSchema, '"');
+      Write('{"ok":');
+      if Ok then
+        Write('true')
+      else
+        Write('false');
+      Write(',"schema":"', JsonEscape(SupportedSchema), '"');
       Write(',"digest_verification":"delegated"');
       Write(',"problems":[');
       for I := 0 to ProblemCount - 1 do
       begin
         if I > 0 then Write(',');
-        Write('"', Problems[I], '"');
+        Write('"', JsonEscape(Problems[I]), '"');
       end;
       WriteLn(']}');
 
       if not Ok then
         Halt(5);
     finally
+      Data.Free;
       Parser.Free;
     end;
+
   finally
     Text.Free;
   end;

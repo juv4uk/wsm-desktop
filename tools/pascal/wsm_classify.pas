@@ -24,6 +24,7 @@ uses
 const
   LevelKnown = 'KNOWN';
   LevelUnknown = 'UNKNOWN';
+  ProgramVersion = '0.1.0';
 
 type
   TSubsystemMap = record
@@ -120,6 +121,40 @@ begin
   end;
 end;
 
+function JsonEscape(const Value: string): string;
+var
+  Index: Integer;
+  Character: Char;
+begin
+  Result := '';
+  for Index := 1 to Length(Value) do
+  begin
+    Character := Value[Index];
+    case Character of
+      '"': Result := Result + '\"';
+      '\': Result := Result + '\\';
+      #8: Result := Result + '\b';
+      #9: Result := Result + '\t';
+      #10: Result := Result + '\n';
+      #12: Result := Result + '\f';
+      #13: Result := Result + '\r';
+    else
+      if Character < ' ' then
+        Result := Result + '\u' + IntToHex(Ord(Character), 4)
+      else
+        Result := Result + Character;
+    end;
+  end;
+end;
+
+procedure PrintHelp;
+begin
+  WriteLn('wsm-classify ', ProgramVersion);
+  WriteLn('Usage: wsm-classify REPORT.json');
+  WriteLn('Reads a WSM hardware report and emits a conservative subsystem summary.');
+  WriteLn('CERTIFIED is always zero until the report defines a complete coverage manifest.');
+end;
+
 function CategoryInList(const Category, Allowed: string): Boolean;
 var
   Padded: string;
@@ -154,7 +189,7 @@ begin
     Inc(Count);
     if Ids <> '' then
       Ids := Ids + ',';
-    Ids := Ids + '"' + Str(Device, 'device_id') + '=' + State + '"';
+    Ids := Ids + '"' + JsonEscape(Str(Device, 'device_id') + '=' + State) + '"';
 
     if not ((State = 'driver-bound-not-tested') or (State = 'candidate-only')) then
       AllGood := False;
@@ -193,11 +228,22 @@ var
   Text: TStringList;
   Parser: TJSONParser;
   Root: TJSONObject;
+  Parsed: TJSONData;
   Devices: TJSONArray;
   First: Boolean;
   KnownCount, UnknownCount: Integer;
   I: Integer;
 begin
+  if (ParamCount = 1) and ((ParamStr(1) = '--help') or (ParamStr(1) = '-h')) then
+  begin
+    PrintHelp;
+    Halt(0);
+  end;
+  if (ParamCount = 1) and (ParamStr(1) = '--version') then
+  begin
+    WriteLn('wsm-classify ', ProgramVersion);
+    Halt(0);
+  end;
   if ParamCount <> 1 then
   begin
     WriteLn(StdErr, 'usage: wsm-classify REPORT.json');
@@ -217,18 +263,24 @@ begin
     end;
 
     Parser := nil;
+    Root := nil;
+    Parsed := nil;
     try
       try
         Parser := TJSONParser.Create(Text.Text);
-        if not (Parser.Parse is TJSONObject) then
+        Parsed := Parser.Parse;
+        if not (Parsed is TJSONObject) then
         begin
+          FreeAndNil(Parsed);
           WriteLn(StdErr, 'wsm-classify: report is not a JSON object');
           Halt(4);
         end;
-        Root := TJSONObject(Parser.Parse);
+        Root := TJSONObject(Parsed);
+        Parsed := nil; { Root now owns the single parsed document. }
       except
         on E: Exception do
         begin
+          FreeAndNil(Parsed);
           WriteLn(StdErr, 'wsm-classify: report is not valid JSON: ', E.Message);
           Halt(4);
         end;
@@ -261,6 +313,8 @@ begin
       Write('named capability. This summary does not authorise a plan."');
       WriteLn('}');
     finally
+      Root.Free;
+      FreeAndNil(Parsed);
       Parser.Free;
     end;
   finally

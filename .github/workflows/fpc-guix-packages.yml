@@ -1,0 +1,139 @@
+# SPDX-License-Identifier: LicenseRef-Volnist
+name: Native FPC Guix packages
+
+# Evaluate and build WSM-owned Pascal packages using the exact official Guix
+# lock. No substitutes, release assets, or Git-branch binaries are published.
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/fpc-guix-packages.yml"
+      - "channels.lock.scm"
+      - "Makefile"
+      - "tests/guix/source-module-evaluation.scm"
+      - "wsm/packages/fpc-tools.scm"
+      - "wsm/licenses.scm"
+      - "tools/pascal/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fpc-guix-packages-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  evaluate-and-build:
+    name: Evaluate and build all native WSM FPC packages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v7
+
+      - name: Use the GNU Guix project's authenticated Codeberg mirror
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Transport only; channels.lock.scm and its introduction remain exact.
+          git config --global url."https://codeberg.org/guix/guix.git".insteadOf "https://git.guix.gnu.org/guix.git"
+          echo "Guix transport uses the canonical Codeberg mirror; lock identity is unchanged." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Guix build host
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y guix
+          sudo systemctl enable --now guix-daemon.service
+          guix --version
+
+      - name: Evaluate WSM package modules against the locked Guix
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 45m guix time-machine -C channels.lock.scm -- \
+            repl -L . tests/guix/source-module-evaluation.scm
+          echo "WSM package records evaluated against the pinned official Guix source." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build all seven native FPC packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/wsm-fpc-package-build"
+          mkdir -p "$OUT"
+          timeout 120m guix time-machine -C channels.lock.scm -- \
+            build -L . --no-grafts --keep-going \
+            wsm-hwcheck-fpc wsm-classify-fpc wsm-cpu-isa-fpc wsm-partition-fpc \
+            wsm-profile-fpc wsm-preflight-fpc wsm-install-fpc \
+            | tee "$OUT/store-paths.txt"
+
+          mapfile -t outputs < <(grep -E '^/gnu/store/[a-z0-9]{32}-' "$OUT/store-paths.txt")
+          test "${#outputs[@]}" -eq 7
+          test -x "${outputs[0]}/bin/wsm-hwcheck"
+          test -x "${outputs[1]}/bin/wsm-classify"
+          test -x "${outputs[2]}/bin/wsm-cpu-isa"
+          test -x "${outputs[3]}/bin/wsm-partition"
+          test -x "${outputs[4]}/bin/wsm-profile"
+          test -x "${outputs[5]}/bin/wsm-preflight"
+          test -x "${outputs[6]}/bin/wsm-install"
+
+          "${outputs[0]}/bin/wsm-hwcheck" --version
+          "${outputs[1]}/bin/wsm-classify" --version
+          "${outputs[2]}/bin/wsm-cpu-isa" --version
+          plan="$("${outputs[3]}/bin/wsm-partition" --disk /dev/sdz --size 20000000000 --firmware uefi --ack /dev/sdz)"
+          printf '%s\n' "$plan" | grep -F '"executed":false' >/dev/null
+          set +e
+          "${outputs[3]}/bin/wsm-partition" --disk /dev/sdz1 --size 20000000000 --firmware uefi --ack /dev/sdz1 >/dev/null 2>&1
+          refusal_status=$?
+          set -e
+          test "$refusal_status" -eq 10
+
+          profile_json="$OUT/profile.json"
+          printf '%s\n' '{"schema":"wsm-profile-evidence/2","verified_functions":[{"status":"pass"}],"artifacts":[]}' > "$profile_json"
+          profile_output="$("${outputs[4]}/bin/wsm-profile" "$profile_json")"
+          printf '%s\n' "$profile_output" | grep -F '"ok":true' >/dev/null
+          printf '%s\n' "$profile_output" | grep -F '"digest_verification":"delegated"' >/dev/null
+
+          preflight_mount="$OUT/preflight-mount"
+          mkdir -p "$preflight_mount"
+          printf '%s\n' '(operating-system)' > "$OUT/desktop.scm"
+          set +e
+          preflight_output="$("${outputs[5]}/bin/wsm-preflight" --mount-point "$preflight_mount" --system-file "$OUT/desktop.scm")"
+          preflight_status=$?
+          set -e
+          test "$preflight_status" -eq 1 -o "$preflight_status" -eq 6
+          printf '%s\n' "$preflight_output" | grep -F '"schema":"wsm-preflight/1"' >/dev/null
+          printf '%s\n' "$preflight_output" | grep -F '"id":"report","status":"not-run"' >/dev/null
+
+          set +e
+          install_output="$("${outputs[6]}/bin/wsm-install" --not-a-valid-option 2>&1)"
+          install_status=$?
+          set -e
+          test "$install_status" -eq 2
+          printf '%s\n' "$install_output" | grep -F 'usage: wsm-install' >/dev/null
+
+          {
+            echo "## Native FPC Guix package build"
+            echo
+            echo "| Package | Store output |"
+            echo "| --- | --- |"
+            echo "| wsm-hwcheck-fpc | `${outputs[0]}` |"
+            echo "| wsm-classify-fpc | `${outputs[1]}` |"
+            echo "| wsm-cpu-isa-fpc | `${outputs[2]}` |"
+            echo "| wsm-partition-fpc | `${outputs[3]}` |"
+            echo "| wsm-profile-fpc | `${outputs[4]}` |"
+            echo "| wsm-preflight-fpc | `${outputs[5]}` |"
+            echo "| wsm-install-fpc | `${outputs[6]}` |"
+            echo
+            echo "The compiler is a native build input; no Python runtime is propagated."
+            echo "No Release, substitute cache, or Git-branch binary was published."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Summarize package build failure
+        if: failure()
+        run: |
+          {
+            echo "## Native FPC Guix package build failed"
+            echo "No package output is being reported as verified."
+            echo "Inspect the exact failed Guix command and compiler diagnostic above."
+          } >> "$GITHUB_STEP_SUMMARY"
