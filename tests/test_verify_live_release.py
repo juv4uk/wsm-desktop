@@ -324,6 +324,35 @@ class PartsTests(unittest.TestCase):
             self.assertEqual(payload["artifact"], "WSM-Desktop-fixture.iso")
             self.assertTrue(payload["artifact_source"].startswith("parts"))
 
+class RegistryTests(unittest.TestCase):
+    """A verdict in docs/artifacts must match the registry entry beside it."""
+
+    def setUp(self) -> None:
+        self.registry = (ROOT / "docs" / "VERIFIED-ARTIFACTS.md").read_text(encoding="utf-8")
+
+    def test_the_rc6_verdict_is_committed(self) -> None:
+        path = ROOT / "docs" / "artifacts" / "iso-verdict-0.1.0-rc6-minimal-live.json"
+        self.assertTrue(path.is_file())
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(payload["schema"], "wsm-release-verdict/1")
+        self.assertEqual(payload["artifact"], "WSM-Desktop-0.1.0-rc6-Minimal-Live.iso")
+
+    def test_the_registry_names_the_same_digest(self) -> None:
+        payload = json.loads(
+            (ROOT / "docs" / "artifacts" / "iso-verdict-0.1.0-rc6-minimal-live.json")
+            .read_text(encoding="utf-8")
+        )
+        self.assertIn(payload["artifact_sha256"], self.registry)
+
+    def test_the_registry_states_the_installer_was_executed(self) -> None:
+        self.assertIn("WSM_INSTALLER_OK", self.registry)
+        self.assertIn("guest_installer_execution", self.registry)
+
+    def test_the_registry_does_not_claim_publication(self) -> None:
+        """The draft is verified, not published; the text must say so."""
+        section = self.registry[self.registry.index("rc6-minimal-live"):]
+        self.assertIn("не опублікована", section[:400])
+
 
 
 if __name__ == "__main__":
