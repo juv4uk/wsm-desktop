@@ -10,6 +10,31 @@ ROOT = Path(__file__).resolve().parents[1]
 CHANNEL_SET = ROOT / "channels" / "wsm.scm"
 
 
+class FreeChannelSetTests(unittest.TestCase):
+    """The Free set must actually contain the channel it claims to publish.
+
+    Until 2026-11-28 channels/free.scm returned %default-channels only, so the
+    published WSM channel was not in the set a consumer actually pulls.
+    """
+
+    def setUp(self) -> None:
+        self.text = (ROOT / "channels" / "free.scm").read_text(encoding="utf-8")
+
+    def test_it_includes_the_wsm_channel(self) -> None:
+        self.assertIn("(name 'wsm)", self.text)
+
+    def test_the_wsm_channel_comes_after_upstream(self) -> None:
+        """WSM must not be able to shadow a base package."""
+        self.assertLess(
+            self.text.index("%default-channels"),
+            self.text.index("(name 'wsm)"),
+        )
+
+    def test_it_does_not_claim_authentication(self) -> None:
+        self.assertIn("не автентифікований", self.text)
+        self.assertNotIn("make-channel-introduction", self.text)
+
+
 class ChannelSetTests(unittest.TestCase):
     def setUp(self) -> None:
         self.text = CHANNEL_SET.read_text(encoding="utf-8")
