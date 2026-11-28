@@ -159,54 +159,50 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
 
 
 class HardwareBuildEvidenceTests(unittest.TestCase):
-    """Building is allowed while #367 is open; retaining/distributing a NAR is not."""
+    """Ephemeral Guix build evidence must never retain or distribute a NAR."""
 
     WORKFLOW = ROOT / ".github" / "workflows" / "hw-build-evidence.yml"
 
-    def text(self) -> str:
-        return self.WORKFLOW.read_text(encoding="utf-8")
+    def setUp(self) -> None:
+        self.source = self.WORKFLOW.read_text(encoding="utf-8")
+        self.workflow = yaml.load(self.source, Loader=yaml.BaseLoader)
 
-    def test_it_never_retains_or_uploads_a_nar_file(self) -> None:
-        text = self.text()
-        self.assertIn("guix time-machine -C channels.lock.scm", text)
+    def test_it_is_manual_only_and_read_only(self) -> None:
+        self.assertEqual(set(self.workflow["on"]), {"workflow_dispatch"})
+        self.assertEqual(self.workflow["permissions"], {"contents": "read"})
+
+    def test_package_input_is_data_not_shell_source(self) -> None:
+        self.assertIn("PACKAGES: ${{ inputs.packages }}", self.source)
+        self.assertIn('read -r -a packages <<< "$PACKAGES"', self.source)
+        self.assertIn('for package in "${packages[@]}"', self.source)
+        self.assertNotIn("for package in ${{ inputs.packages }}", self.source)
+        self.assertIn('""|-*|*[!A-Za-z0-9._+-]*)', self.source)
+        self.assertIn("package list must be a single line", self.source)
+
+    def test_build_uses_the_locked_channel(self) -> None:
+        self.assertIn("guix time-machine -C channels.lock.scm -- build", self.source)
+
+    def test_nar_stream_is_counted_but_never_retained_or_uploaded(self) -> None:
+        self.assertIn('archive --export "$store_path" 2>/dev/null | wc -c', self.source)
+        self.assertIn("NAR stream counted and discarded", self.source)
         for forbidden in (
-            "guix archive --export \"$store_path\" > ",
             "actions/upload-artifact",
             "gh release upload",
             "actions/deploy-pages",
+            "signing-key.sec",
+            "GUIX_SIGNING_KEY",
         ):
             with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, text)
-
-    def test_it_records_the_size_that_decides_later_publishing(self) -> None:
-        """The nar size is the arithmetic a publishing decision needs."""
-        self.assertIn("nar size (bytes)", self.text())
-        self.assertIn("archive --export", self.text())
-        self.assertIn("PACKAGES: ${{ inputs.packages }}", self.text())
-        self.assertIn('for package in "${packages[@]}"', self.text())
-        self.assertIn("package list must be a single line", self.text())
-        self.assertIn('""|-*', self.text())
-        self.assertNotIn("for package in ${{ inputs.packages }}", self.text())
-
-    def test_it_says_in_the_summary_that_nothing_was_published(self) -> None:
-        self.assertIn("NAR stream counted and discarded", self.text())
-
-    def test_a_failing_package_fails_the_run(self) -> None:
-        text = self.text()
-        self.assertIn("failures=$((failures + 1))", text)
-        self.assertIn('exit 1', text)
+                self.assertNotIn(forbidden, self.source)
 
     def test_failure_reporter_uses_summary_not_github_write_api(self) -> None:
-        text = self.text()
-        self.assertIn("GITHUB_STEP_SUMMARY", text)
-        self.assertNotIn("gh api", text)
-        self.assertNotIn("GH_TOKEN:", text)
+        self.assertIn("GITHUB_STEP_SUMMARY", self.source)
+        self.assertNotIn("gh api", self.source)
+        self.assertNotIn("GH_TOKEN:", self.source)
 
-    def test_it_is_manual_only_and_needs_no_approval_phrase(self) -> None:
-        """Building locally is not distribution, so it does not need the owner gate."""
-        text = self.text()
-        self.assertIn("workflow_dispatch:", text)
-        self.assertNotIn("owner_approval", text)
+    def test_failure_of_any_package_fails_the_job(self) -> None:
+        self.assertIn('if [[ "$failures" -ne 0 ]]; then', self.source)
+        self.assertIn('exit 1', self.source)
 
 if __name__ == "__main__":
     unittest.main()
