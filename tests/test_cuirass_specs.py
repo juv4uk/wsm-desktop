@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SPECS = ROOT / "ci" / "cuirass" / "specs.scm"
 IMAGES = ROOT / "ci" / "cuirass" / "images.scm"
 SERVICE = ROOT / "ci" / "cuirass" / "service.scm"
+H170_PACKAGES = ROOT / "ci" / "cuirass" / "h170-free-packages.scm"
 DOC = ROOT / "docs" / "CUIRASS.md"
 
 
@@ -82,6 +83,10 @@ class SpecsTests(unittest.TestCase):
         self.assertIn("(build '(custom (ci cuirass images)))", self.text)
         self.assertTrue((ROOT / "ci" / "cuirass" / "images.scm").is_file())
 
+    def test_h170_free_package_job_is_declared(self) -> None:
+        self.assertIn("(build '(custom (ci cuirass h170-free-packages)))", self.text)
+        self.assertTrue(H170_PACKAGES.is_file())
+
     def test_the_guix_channel_is_pinned_to_the_release_commit(self) -> None:
         lock = (ROOT / "channels.lock.scm").read_text(encoding="utf-8")
         commit = re.search(r'\(commit "([0-9a-f]{40})"\)', lock).group(1)
@@ -114,6 +119,25 @@ class JobModuleTests(unittest.TestCase):
         self.assertIn("systems/live-minimal.scm", self.text)
 
 
+class H170PackageJobTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.text = code_only(H170_PACKAGES.read_text(encoding="utf-8"))
+
+    def test_module_namespace_matches_its_channel_path(self) -> None:
+        self.assertIn("(define-module (ci cuirass h170-free-packages)", self.text)
+
+    def test_job_reads_the_upstream_h170_manifest(self) -> None:
+        self.assertIn("drivers/profiles/h170-free-packages.scm", self.text)
+        self.assertIn("(manifest-entries manifest)", self.text)
+        self.assertIn("(manifest-entry-item", self.text)
+
+    def test_job_resolves_each_root_as_a_pinned_package_derivation(self) -> None:
+        self.assertIn("(package-derivation store package system #:graft? #f)", self.text)
+        self.assertIn("(derivation->job", self.text)
+        self.assertIn("x86_64-linux", self.text)
+        self.assertNotIn("guix publish", self.text)
+
+
 class ServiceFragmentTests(unittest.TestCase):
     def setUp(self) -> None:
         self.text = code_only(SERVICE.read_text(encoding="utf-8"))
@@ -121,6 +145,10 @@ class ServiceFragmentTests(unittest.TestCase):
     def test_the_service_type_comes_from_the_right_module(self) -> None:
         self.assertIn("(gnu services cuirass)", self.text)
         self.assertNotIn("(gnu services ci)", self.text)
+
+    def test_h170_upstream_package_job_is_included(self) -> None:
+        self.assertIn("(name 'h170-free-upstream-packages)", self.text)
+        self.assertIn("(ci cuirass h170-free-packages)", self.text)
 
     def test_no_field_the_record_does_not_have(self) -> None:
         self.assertNotIn("use-substitutes?", self.text)
