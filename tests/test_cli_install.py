@@ -3,12 +3,14 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -60,7 +62,7 @@ class InstallModeTests(unittest.TestCase):
         with (
             patch("wsm_install.cli.build_plan", return_value=(None, [], [])),
             patch("wsm_install.cli._tool_prefixes_for_running_system", return_value=GUIX_PROFILE_PREFIXES),
-            patch("wsm_install.partition.Disk"),
+            patch("wsm_install.partition.Disk", return_value=SimpleNamespace(path="/dev/nvme0n1")),
             patch("wsm_install.partition.plan", return_value=layout),
             patch("wsm_install.install_steps.plan_steps", return_value=[]) as plan_steps,
             patch("wsm_install.install_steps.backend_command", return_value=["guix"]),
