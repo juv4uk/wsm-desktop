@@ -599,17 +599,107 @@ begin
     Missing.Free;
 end;
 
-function CollectNetworkFacts: TJSONObject;
+{ Шина, на якій справді сидить диск, з його предків у sysfs.
+  /sys/block/sdX сам по собі не каже нічого про SATA чи USB, а інсталятору
+  це важливо. Python резолвить symlink device і збирає subsystem КОЖНОГО
+  предка до кореня sysfs, а потім застосовує порядок пріоритету
+  usb → nvme → ata → mmc → virtio → scsi.
+
+  Попередня версія йшла вгору літеральним шляхом, тому бачила лише
+  /sys/block/sdX/device/subsystem (= scsi) і виходила з дерева: USB-флешка й
+  SATA-диск обидва ставали scsi-other. Це виправлено.
+
+  Резолв symlink тут обовʼязковий: fpReadLink повертає ОДИН рівень, а
+  /sys/block/sdX/device — це ланцюжок symlink-ів. Тому резолвимо циклом із
+  обмеженням глибини: sysfs не має циклів, але обмеження захищає від
+  нескінченного ходу при пошкодженому дереві. }
+function ResolveLinkChain(const Path: string; MaxDepth: Integer): string;
 var
-  Missing, Interfaces: TJSONArray;
+  Current, Target: string;
+  Depth: Integer;
+begin
+  Current := Path;
+  for Depth := 1 to MaxDepth do
+  begin
+    Target := ReadLinkName(Current);
+    if Target = '' then
+      Break;
+    if Target[1] = '/' then
+      Current := Target
+    else
+      Current := JoinPath(ExtractFileDir(Current), Target);
+  end;
+  Result := Current;
+end;
+
+{ Мережеві інтерфейси, привʼязані до цієї PCI-функції.
+  Python порівнює розвʼязаний /sys/class/net/<if>/device із розвʼязаним
+  шляхом пристрою — саме так, а не за назвою інтерфейсу, бо імена на кшталт
+  enp1s0 нічого не гарантують.
+
+  MAC-адреса не читається взагалі: профіль приватності звіту її забороняє, а
+  ідентичність NIC — це vendor:device плюс драйвер, не апаратна адреса.
+  Це не забудькуватість, а свідоме обмеження, і воно має лишитися таким. }
+function CollectNetworkFacts(const DevicePath, SysfsRoot: string): TJSONObject;
+var
+  Root, Name, Backing, Owner, Value: string;
+  Names: TStringList;
+  Interfaces, UnavailableList: TJSONArray;
+  Interface_: TJSONObject;
+  Index: Integer;
+  Number: Int64;
+  BooleanValue: Boolean;
 begin
   Result := TJSONObject.Create;
-  Result.Add('status', 'unknown');
+  Root := JoinPath(SysfsRoot, 'class/net');
+  if not DirectoryExists(Root) then
+  begin
+    Result.Add('status', 'unknown');
+    Interfaces := TJSONArray.Create;
+    Result.Add('interfaces', Interfaces);
+    UnavailableList := TJSONArray.Create;
+    UnavailableList.Add('interfaces');
+    Result.Add('unavailable', UnavailableList);
+    Exit;
+  end;
+
+  { Резолвимо обидва боки ланцюжком: /sys/class/net/<if>/device — це symlink
+    на PCI-функцію, а не той самий рядок, що шлях у /sys/bus/pci/devices. }
+  Owner := ResolveLinkChain(DevicePath, 12);
   Interfaces := TJSONArray.Create;
+  Names := TStringList.Create;
+  try
+    ListSortedEntries(Root, Names);
+    for Index := 0 to Names.Count - 1 do
+    begin
+      Name := Names[Index];
+      Backing := ResolveLinkChain(JoinPath(JoinPath(Root, Name), 'device'), 12);
+      if (Backing = '') or (Backing <> Owner) then
+        Continue;
+
+      Interface_ := TJSONObject.Create;
+      Interface_.Add('name', Name);
+
+      Value := ReadValue(JoinPath(JoinPath(Root, Name), 'operstate'));
+      AddIfPresent(Interface_, 'operstate', Value);
+      Value := ReadValue(JoinPath(JoinPath(Root, Name), 'duplex'));
+      AddIfPresent(Interface_, 'duplex', Value);
+
+      if ReadBoolean(JoinPath(JoinPath(Root, Name), 'carrier'), BooleanValue) then
+        Interface_.Add('carrier', BooleanValue);
+      if ReadInteger(JoinPath(JoinPath(Root, Name), 'speed'), Number) and (Number >= 0) then
+        Interface_.Add('speed_mbps', Number);
+      if ReadInteger(JoinPath(JoinPath(Root, Name), 'mtu'), Number) and (Number > 0) then
+        Interface_.Add('mtu', Number);
+
+      Interfaces.Add(Interface_);
+    end;
+  finally
+    Names.Free;
+  end;
+
+  Result.Add('status', 'observed');
   Result.Add('interfaces', Interfaces);
-  Missing := TJSONArray.Create;
-  Missing.Add('interfaces');
-  Result.Add('unavailable', Missing);
 end;
 
 procedure AddPCIDevices(const SysfsRoot, ObservedAt: string; Devices: TJSONArray);
@@ -666,7 +756,7 @@ begin
       if Category = 'gpu' then
         Device.Add('gpu', CollectGPUFacts(DevicePath))
       else if Category = 'network' then
-        Device.Add('network', CollectNetworkFacts);
+        Device.Add('network', CollectNetworkFacts(DevicePath, SysfsRoot));
 
       Devices.Add(Device);
     end;
@@ -734,39 +824,6 @@ begin
   finally
     Names.Free;
   end;
-end;
-
-{ Шина, на якій справді сидить диск, з його предків у sysfs.
-  /sys/block/sdX сам по собі не каже нічого про SATA чи USB, а інсталятору
-  це важливо. Python резолвить symlink device і збирає subsystem КОЖНОГО
-  предка до кореня sysfs, а потім застосовує порядок пріоритету
-  usb → nvme → ata → mmc → virtio → scsi.
-
-  Попередня версія йшла вгору літеральним шляхом, тому бачила лише
-  /sys/block/sdX/device/subsystem (= scsi) і виходила з дерева: USB-флешка й
-  SATA-диск обидва ставали scsi-other. Це виправлено.
-
-  Резолв symlink тут обовʼязковий: fpReadLink повертає ОДИН рівень, а
-  /sys/block/sdX/device — це ланцюжок symlink-ів. Тому резолвимо циклом із
-  обмеженням глибини: sysfs не має циклів, але обмеження захищає від
-  нескінченного ходу при пошкодженому дереві. }
-function ResolveLinkChain(const Path: string; MaxDepth: Integer): string;
-var
-  Current, Target: string;
-  Depth: Integer;
-begin
-  Current := Path;
-  for Depth := 1 to MaxDepth do
-  begin
-    Target := ReadLinkName(Current);
-    if Target = '' then
-      Break;
-    if Target[1] = '/' then
-      Current := Target
-    else
-      Current := JoinPath(ExtractFileDir(Current), Target);
-  end;
-  Result := Current;
 end;
 
 function StorageTransport(const EntryName, DevicePath, SysfsRoot: string): string;
