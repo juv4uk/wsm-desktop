@@ -528,7 +528,8 @@ var
   Value: Boolean;
   Number: Int64;
   LinkRoot, Name: string;
-  Search: TSearchRec;
+  Names: TStringList;
+  Index: Integer;
   Cards, Missing: TJSONArray;
   Link: TJSONObject;
 begin
@@ -544,14 +545,17 @@ begin
   Cards := TJSONArray.Create;
   if DirectoryExists(LinkRoot) then
   begin
-    if FindFirst(JoinPath(LinkRoot, '*'), faAnyFile, Search) = 0 then
-    begin
-      repeat
-        Name := Search.Name;
-        if (Name <> '.') and (Name <> '..') and (Copy(Name, 1, 4) = 'card') then
+    Names := TStringList.Create;
+    try
+      ListSortedEntries(LinkRoot, Names);
+      for Index := 0 to Names.Count - 1 do
+      begin
+        Name := Names[Index];
+        if Copy(Name, 1, 4) = 'card' then
           Cards.Add(Name);
-      until FindNext(Search) <> 0;
-      FindClose(Search);
+      end;
+    finally
+      Names.Free;
     end;
     Result.Add('drm_cards', Cards);
   end
@@ -674,19 +678,19 @@ end;
 procedure AddUSBDevices(const SysfsRoot, ObservedAt: string; Devices: TJSONArray);
 var
   Root, Name, DevicePath, Vendor, Product, ClassValue, Model, Manufacturer: string;
-  Search: TSearchRec;
+  Names: TStringList;
+  Index: Integer;
   Identity, Device: TJSONObject;
 begin
   Root := JoinPath(SysfsRoot, 'bus/usb/devices');
   if not DirectoryExists(Root) then
     Exit;
-  if FindFirst(JoinPath(Root, '*'), faAnyFile, Search) <> 0 then
-    Exit;
+  Names := TStringList.Create;
   try
-    repeat
-      Name := Search.Name;
-      if (Name = '.') or (Name = '..') then
-        Continue;
+    ListSortedEntries(Root, Names);
+    for Index := 0 to Names.Count - 1 do
+    begin
+      Name := Names[Index];
       DevicePath := JoinPath(Root, Name);
       { Так само, як для PCI: Python зберігає сире значення ("1d6b"), а не
         нормалізоване; idVendor у sysfs уже без 0x, тому нормалізація тут
@@ -714,9 +718,9 @@ begin
         ObservedAt, nil);
       Device.Add('identity', Identity);
       Devices.Add(Device);
-    until FindNext(Search) <> 0;
+    end;
   finally
-    FindClose(Search);
+    Names.Free;
   end;
 end;
 
@@ -862,7 +866,7 @@ end;
 procedure AddDisplayDevices(const SysfsRoot, ObservedAt: string; Devices: TJSONArray);
 var
   Root, Name, EntryPath, Status, ModesText, Mode: string;
-  Search: TSearchRec;
+  Names: TStringList;
   Display, Device: TJSONObject;
   Modes: TJSONArray;
   Lines: TStringList;
@@ -871,12 +875,13 @@ begin
   Root := JoinPath(SysfsRoot, 'class/drm');
   if not DirectoryExists(Root) then
     Exit;
-  if FindFirst(JoinPath(Root, '*'), faAnyFile, Search) <> 0 then
-    Exit;
+  Names := TStringList.Create;
   try
-    repeat
-      Name := Search.Name;
-      if (Name = '.') or (Name = '..') or (Pos('-', Name) = 0) then
+    ListSortedEntries(Root, Names);
+    for Index := 0 to Names.Count - 1 do
+    begin
+      Name := Names[Index];
+      if Pos('-', Name) = 0 then
         Continue;
       EntryPath := JoinPath(Root, Name);
       if not FileExists(JoinPath(EntryPath, 'status')) then
@@ -913,9 +918,9 @@ begin
         ObservedAt, nil);
       Device.Add('display', Display);
       Devices.Add(Device);
-    until FindNext(Search) <> 0;
+    end;
   finally
-    FindClose(Search);
+    Names.Free;
   end;
 end;
 
