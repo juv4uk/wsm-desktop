@@ -32,6 +32,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Створити окрему чернетку релізу WSM-пакетів
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          short_sha="${GITHUB_SHA:0:12}"
+          tag="wsm-channel-${short_sha}"
+          if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "WSM Guix channel packages — $short_sha" \
+              --notes "Guix package artifacts built from WSM source commit $GITHUB_SHA and the pinned channels.lock.scm. Package assets are separate from WSM installer ISO releases." \
+              --draft --prerelease
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Dedicated package draft: $tag" >> "$GITHUB_STEP_SUMMARY"
+
+
       - name: Use the GNU Guix project's authenticated Codeberg mirror
         shell: bash
         run: |
@@ -108,21 +127,27 @@ jobs:
             artifacts/store-paths.txt
           if-no-files-found: error
 
-      - name: Прикріпити до чернетки релізу, якщо вона існує
+      - name: Опублікувати перевірені WSM-пакети в окремому релізі
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
         run: |
           set -euo pipefail
-          tag="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 20 \
-                  --json tagName,isDraft --jq '.[] | select(.isDraft) | .tagName' | head -1)"
-          if [ -z "$tag" ]; then
-            echo "Чернетки релізу немає — артефакти лишилися в artifacts прогону."
-            echo "### Чернетки релізу немає" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          gh release upload "$tag" --repo "$GITHUB_REPOSITORY" \
+          test -n "$TAG"
+          ( cd artifacts && sha256sum -c *.tar.zst.sha256 )
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" \
             artifacts/*.tar.zst artifacts/*.tar.zst.sha256 --clobber
-          echo "WSM_PUBLISHED_TO_DRAFT=$tag" >> "$GITHUB_STEP_SUMMARY"
+          READBACK="$RUNNER_TEMP/wsm-package-readback"
+          mkdir -p "$READBACK"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$READBACK" \
+            --pattern '*.tar.zst' --pattern '*.tar.zst.sha256'
+          (
+            cd "$READBACK"
+            sha256sum -c *.tar.zst.sha256
+            for archive in *.tar.zst; do zstd -t "$archive"; done
+          )
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+          echo "WSM_PUBLISHED_TO_RELEASE=$TAG" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Повідомити про збій
         if: failure()
