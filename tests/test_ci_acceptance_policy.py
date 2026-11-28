@@ -128,7 +128,7 @@ class ReleaseAcceptanceTimeoutTests(unittest.TestCase):
             )
 
 class PackageArchiveWorkflowTests(unittest.TestCase):
-    """The owner allowed publication; these are the limits that still hold."""
+    """The owner-authorized WSM pack is manual, bounded and license-preserving."""
 
     WORKFLOW = ROOT / ".github" / "workflows" / "package-archives.yml"
 
@@ -136,47 +136,65 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
         self.text = self.WORKFLOW.read_text(encoding="utf-8")
         self.workflow = yaml.load(self.text, Loader=yaml.BaseLoader)
 
-    def test_the_job_is_not_disabled_any_more(self) -> None:
+    def test_the_job_is_enabled_and_owner_permission_is_recorded(self) -> None:
         self.assertNotEqual(self.workflow["jobs"]["archive"].get("if"), "${{ false }}")
-
-    def test_the_owner_permission_is_recorded_in_the_file(self) -> None:
         self.assertIn("ВЛАСНИК ДАВ ДОЗВІЛ", self.text)
 
-    def test_workflow_starts_only_deliberately(self) -> None:
-        """Owner's ADR requires an explicit manual run; a tag is not a substitute."""
+    def test_workflow_is_manual_only_and_targets_main(self) -> None:
         self.assertEqual(set(self.workflow["on"]), {"workflow_dispatch"})
         self.assertEqual(self.workflow["jobs"]["archive"]["if"], "${{ github.ref == 'refs/heads/main' }}")
 
-    def test_no_signing_key_is_created_or_read_here(self) -> None:
-        for forbidden in ("secrets.", "guix archive --generate-key", "signing-key"):
-            with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, self.text)
+    def test_permissions_are_scoped_to_pack_attestation_and_release(self) -> None:
+        self.assertEqual(
+            self.workflow["permissions"],
+            {
+                "contents": "write",
+                "attestations": "write",
+                "id-token": "write",
+                "artifact-metadata": "write",
+            },
+        )
 
-    def test_publication_is_limited_to_a_verified_draft(self) -> None:
-        self.assertIn("--json isDraft", self.text)
-        self.assertIn("refusing: $TAG is not a draft release", self.text)
-        self.assertNotIn("gh release create", self.text)
-        self.assertNotIn("--draft=false", self.text)
-
-    def test_the_archives_are_built_on_the_release_lock(self) -> None:
-        self.assertIn("guix time-machine -C channels.lock.scm", self.text)
-
-    def test_a_package_name_that_is_not_a_name_is_refused(self) -> None:
-        """Only the fixed owner package is built; no user-controlled package shell input exists."""
-        self.assertIn("(wsm packages wsm)", self.text)
-        self.assertIn("wsm-tools", self.text)
+    def test_build_uses_the_pinned_channel_and_fixed_wsm_package(self) -> None:
+        build = next(
+            step for step in self.workflow["jobs"]["archive"]["steps"]
+            if step.get("name") == "Evaluate and build the WSM package pack on the locked Guix"
+        )["run"]
+        self.assertIn("guix time-machine -C channels.lock.scm", build)
+        self.assertIn("(wsm packages wsm)", build)
+        self.assertIn("wsm-tools", build)
+        self.assertIn("--format=tarball -C gzip", build)
         self.assertNotIn("inputs.packages", self.text)
         self.assertNotIn("github.event.inputs.packages", self.text)
 
-    def test_a_tag_push_does_not_trigger_package_archives(self) -> None:
-        self.assertEqual(set(self.workflow["on"]), {"workflow_dispatch"})
-        self.assertNotIn("push:", self.text)
-        self.assertNotIn("packages-*", self.text)
+    def test_exact_license_provenance_checksums_and_attestation_are_included(self) -> None:
+        build = next(
+            step for step in self.workflow["jobs"]["archive"]["steps"]
+            if step.get("name") == "Evaluate and build the WSM package pack on the locked Guix"
+        )["run"]
+        self.assertIn("cp -- LICENSE archives/LICENSE", build)
+        self.assertIn("sha256sum", build)
+        self.assertIn("PROVENANCE.txt", build)
+        self.assertIn("No OSI or GNU FSDG classification is claimed.", build)
+        self.assertIn("actions/attest@v4", self.text)
+        artifact = next(
+            step for step in self.workflow["jobs"]["archive"]["steps"]
+            if step.get("name") == "Keep the package as a workflow artifact"
+        )
+        self.assertIn("archives/LICENSE", artifact["with"]["path"])
 
-    def test_no_draft_means_the_archives_stay_in_the_artifact(self) -> None:
-        """Attaching nowhere is recorded, while the Actions artifact remains available."""
-        self.assertIn("no draft release to attach to", self.text)
-        self.assertIn("WSM_PACKAGE_ATTACHED_TO=none", self.text)
+    def test_publication_is_limited_to_an_explicit_existing_draft(self) -> None:
+        self.assertIn("Attach the pack to an explicitly named existing Draft Release", self.text)
+        self.assertIn("inputs.attach_to_draft != ''", self.text)
+        self.assertIn("--json isDraft", self.text)
+        self.assertIn("refusing: $TAG is not a draft release", self.text)
+        self.assertNotIn("gh release list", self.text)
+        self.assertNotIn("gh release create", self.text)
+
+    def test_failure_is_visible_without_claiming_publication(self) -> None:
+        self.assertIn("Report package build or publication failure", self.text)
+        self.assertIn("No successful package publication is claimed.", self.text)
+
 
 class H170SubstituteLaneTests(unittest.TestCase):
     def test_the_fixed_h170_substitute_lane_remains_separate(self) -> None:
