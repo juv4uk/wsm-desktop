@@ -7,11 +7,14 @@ import contextlib
 import importlib.util
 import io
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+from capture_channel_resolution import capture, evidence_document  # noqa: E402
 
 
 def load_checker():
@@ -45,7 +48,17 @@ def build(directory: Path, installer_executed: bool = True) -> None:
     channels_path = directory / "channels.resolved.scm"
     channels_path.write_text("(list (channel (name 'guix)))\n", encoding="utf-8")
     channel_log_path = directory / "channel-resolution.log"
-    channel_log_path.write_bytes(b"")  # A successful resolution may emit no stderr.
+    channel_command = [
+        "/usr/bin/guix", "time-machine", "-C", "/repo/channels.lock.scm",
+        "-L", "/repo", "--", "describe", "-f", "channels",
+    ]
+    channel_log_path.write_text(
+        json.dumps(
+            evidence_document(channel_command, channels_path.read_bytes(), b"", 0),
+            sort_keys=True,
+        ) + "\\n",
+        encoding="utf-8",
+    )
 
     image_path = directory / "image.iso"
     image_path.write_bytes(b"iso-image-bytes")
@@ -166,6 +179,86 @@ def make_parts(directory: Path, first: bytes = b"iso-", second: bytes = b"image-
         encoding="utf-8",
     )
     write_sums(directory, image_assets=part_names, extra=("ISO-CHECKSUMS.sha256",))
+
+
+class ChannelResolutionCaptureTests(unittest.TestCase):
+    def test_successful_resolution_with_empty_stderr_is_explicit_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fake_guix = root / "guix"
+            fake_guix.write_text(
+                "#!/bin/sh\necho \"(list (channel (name 'guix)))\"\n",
+                encoding="utf-8",
+            )
+            fake_guix.chmod(0o755)
+            stdout, stderr, status, launch_error = capture([
+                str(fake_guix), "time-machine", "-C", "/repo/channels.lock.scm",
+                "-L", "/repo", "--", "describe", "-f", "channels",
+            ])
+            document = evidence_document(
+                [str(fake_guix), "time-machine", "-C", "/repo/channels.lock.scm",
+                 "-L", "/repo", "--", "describe", "-f", "channels"],
+                stdout, stderr, status, launch_error,
+            )
+            self.assertEqual(status, 0)
+            self.assertIsNone(launch_error)
+            self.assertTrue(stdout)
+            self.assertEqual(document["stderr"]["bytes"], 0)
+            self.assertEqual(document["stderr"]["text"], "")
+            self.assertEqual(document["stderr"]["base64"], "")
+
+    def test_failed_resolution_keeps_its_exit_status_and_stderr(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            fake_guix = Path(temporary) / "guix"
+            fake_guix.write_text(
+                "#!/bin/sh\necho \"channel trust failure\" >&2\nexit 17\n",
+                encoding="utf-8",
+            )
+            fake_guix.chmod(0o755)
+            stdout, stderr, status, launch_error = capture([
+                str(fake_guix), "time-machine", "-C", "/repo/channels.lock.scm",
+                "-L", "/repo", "--", "describe", "-f", "channels",
+            ])
+            self.assertEqual(status, 17)
+            self.assertIsNone(launch_error)
+            self.assertIn(b"channel trust failure", stderr)
+
+    def test_release_checker_rejects_an_empty_resolution_log(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            build(directory)
+            log = directory / "channel-resolution.log"
+            log.write_bytes(b"")
+            manifest_path = directory / "build-manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["guix"]["channel_resolution_log_sha256"] = checker.sha256_of(log)
+            manifest["guix"]["channel_resolution_log_bytes"] = 0
+            write_json(manifest_path, manifest)
+            refresh_after_build_manifest_change(directory)
+            found = checker.problems(directory)
+            self.assertTrue(
+                any("channel-resolution.log" in problem for problem in found), found
+            )
+
+    def test_release_checker_rejects_a_transcript_for_another_command(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            build(directory)
+            log_path = directory / "channel-resolution.log"
+            transcript = json.loads(log_path.read_text(encoding="utf-8"))
+            transcript["command"] = ["/usr/bin/guix", "describe", "-f", "channels"]
+            write_json(log_path, transcript)
+            build_manifest_path = directory / "build-manifest.json"
+            build_manifest = json.loads(build_manifest_path.read_text(encoding="utf-8"))
+            build_manifest["guix"]["channel_resolution_log_sha256"] = checker.sha256_of(log_path)
+            build_manifest["guix"]["channel_resolution_log_bytes"] = log_path.stat().st_size
+            write_json(build_manifest_path, build_manifest)
+            refresh_after_build_manifest_change(directory)
+            found = checker.problems(directory)
+            self.assertTrue(
+                any("expected locked Guix describe command" in problem for problem in found),
+                found,
+            )
 
 
 class ReleaseReadinessTests(unittest.TestCase):

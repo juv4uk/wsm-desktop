@@ -108,17 +108,22 @@ printf '%s\n' "build-iso: output=$ISO_OUTPUT"
 printf '%s\n' "build-iso: resolving locked channels (Guix authentication is not disabled)"
 
 # Resolve the exact channel set through the same time-machine lock used below.
-if guix time-machine -C "$LOCK" -L "$ROOT" -- describe -f channels >"$CHANNELS_FILE" 2>"$CHANNELS_LOG"; then
+# The helper invokes exactly:
+# guix time-machine -C "$LOCK" -L "$ROOT" -- describe -f channels
+# Unlike an stderr-only redirection, its JSON transcript records argv, exit status,
+# stdout digest/size, and either stderr bytes or an explicit empty-stderr value.
+if python3 "$ROOT/scripts/capture_channel_resolution.py" \
+    --guix "$(command -v guix)" \
+    --lock "$LOCK" \
+    --repo-root "$ROOT" \
+    --channels-output "$CHANNELS_FILE" \
+    --log-output "$CHANNELS_LOG"; then
     :
 else
     status=$?
     printf '%s\n' "build-iso: locked channel resolution failed (exit $status)" >&2
-    tail -n 80 "$CHANNELS_LOG" >&2 || true
+    cat "$CHANNELS_LOG" >&2 || true
     exit "$status"
-fi
-if [ ! -s "$CHANNELS_FILE" ]; then
-    printf '%s\n' "build-iso: locked channel description is empty." >&2
-    exit 6
 fi
 if grep -Eiq 'channel authentication disabled' "$CHANNELS_FILE" "$CHANNELS_LOG"; then
     printf '%s\n' "build-iso: refusing to build because channel authentication is disabled." >&2
