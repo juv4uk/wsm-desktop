@@ -35,6 +35,7 @@ from scripts.qemu_boot_smoke import (
     main,
     parse_disk_size_mib,
     run_bounded_process,
+    sha256_of,
     validate_iso,
     validate_limits,
 )
