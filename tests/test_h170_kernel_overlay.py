@@ -45,7 +45,7 @@ class H170LinuxLibreOverlayTests(unittest.TestCase):
         text = MATRIX.read_text(encoding="utf-8").lower()
         self.assertIn("linux-libre-h170", text)
         self.assertIn("не доводить", text)
-        self.assertIn("feсs", text.replace("фecs", "feсs"))
+        self.assertIn("fecs", text)
 
 
 if __name__ == "__main__":

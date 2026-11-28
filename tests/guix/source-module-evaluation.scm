@@ -9,6 +9,7 @@
 ;; from this list is a module nobody has checked.
 ;; scripts/check_scheme_module_coverage.py enforces that rule.
 (use-modules (guix packages)
+             (gnu packages linux)
              (wsm systems performance)
              (wsm packages wsm)
              (wsm packages linux-libre))
