@@ -12,9 +12,11 @@
 ;; фактів і командний рядок. Два бінарники з однаковою назвою в одному store
 ;; були б гіршими за два пакети з різними назвами.
 ;;
-;; Чому trivial-build-system: у tools/pascal/ немає configure, а
-;; gnu-build-system додав би configure, make та validate-runpath, які тут
-;; нічого не перевіряють. Компілятор викликається один раз у фазі 'build.
+;; Чому gnu-build-system, а не trivial-build-system: у закріпленому Guix
+;; trivial-build-system не приймає #:phases ("Unrecognized keyword: #:phases"),
+;; а збірка тут — саме фаза. configure видаляється, 'build викликає компілятор
+;; один раз, 'install кладе результат. validate-runpath вимкнено: fpc не пише
+;; RUNPATH, а єдина залежність бінарника — libc із самого store.
 ;;
 ;; Прапорці — ті самі, що в tools/pascal/Makefile (-Mobjfpc -Sh -O2): без -Sh
 ;; директива {$H+} ігнорується і рядки обрізаються на першому байті >127.
@@ -22,7 +24,7 @@
 (define-module (wsm packages wsm-hwcheck-fpc-slice)
   #:use-module (guix packages)
   #:use-module (guix gexp)
-  #:use-module (guix build-system trivial)
+  #:use-module (guix build-system gnu)
   #:use-module (gnu packages pascal)
   #:use-module (wsm licenses)
   ;; `any` походить із SRFI-1, `string-contains` — із SRFI-13. Обидва
@@ -47,15 +49,21 @@
                                     (not (any (lambda (skip)
                                                 (string-contains path skip))
                                               '("/.git" "/__pycache__" "/build"))))))
-    (build-system trivial-build-system)
+    (build-system gnu-build-system)
     (arguments
      (list
+      #:tests? #f
+      ;; fpc does not write a RUNPATH and the only runtime dependency is the
+      ;; libc already in the store; validate-runpath would fail on a binary that
+      ;; is in fact fine.
+      #:validate-runpath? #f
       #:modules '((guix build utils))
       #:phases
       #~(modify-phases %standard-phases
+          (delete 'configure)
           (replace 'build
             (lambda* (#:key inputs #:allow-other-keys)
-              (let ((fpc (search-input-file inputs "/bin/fpc")))
+              (let ((fpc (string-append (assoc-ref inputs "fpc") "/bin/fpc")))
                 ;; -O2 — узгоджений рівень оптимізації порту.
                 ;; -Mobjfpc -Sh — режим і ANSI-рядки, як у tools/pascal/Makefile.
                 ;; -FE — каталог, куди компілятор кладе бінарник.
@@ -64,7 +72,7 @@
                 ;; Компілятор, який нічого не створив, не є успішною збіркою.
                 (unless (file-exists? "wsm-hwcheck-slice")
                   (error "fpc returned success but produced no wsm-hwcheck-slice")))))
-          (add-after 'build 'install
+          (replace 'install
             (lambda* (#:key outputs #:allow-other-keys)
               (let* ((out (assoc-ref outputs "out"))
                      (bin (string-append out "/bin")))
