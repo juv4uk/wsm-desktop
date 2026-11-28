@@ -10,6 +10,7 @@
              (guix profiles)
              (guix store)
              (srfi srfi-1)
+             (gnu services)
              (wsm systems performance)
              (wsm packages wsm)
              ((ci cuirass h170-free-packages) #:select (cuirass-jobs)))
@@ -78,4 +79,12 @@
 (display "H170-FREE-PACKAGE-MANIFEST-EVAL-OK: 9 official Guix package roots")
 (newline)
 (display "H170-FREE-CUIRASS-JOBS-EVAL-OK: 9 derivations resolved, not built")
+(newline)
+
+;; Evaluate the service declaration as a real Guix service object. This does
+;; not register a Cuirass instance or start PostgreSQL/web services.
+(primitive-load "ci/cuirass/service.scm")
+(unless (service? wsm-cuirass-service)
+  (error "Cuirass host fragment did not create a service object"))
+(display "WSM-CUIRASS-SERVICE-EVAL-OK: service object created, instance NOT_RUN")
 (newline)
