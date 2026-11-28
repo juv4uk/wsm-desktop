@@ -158,7 +158,8 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
     def test_the_package_roots_come_from_the_fixed_h170_manifest(self) -> None:
         self.assertIn("drivers/profiles/h170-free-packages.scm", self.text)
         self.assertIn("expected = (", self.text)
-        self.assertIn("test \${#PACKAGES[@]} -eq 11", self.text)
+        self.assertIn('test "${#PACKAGES[@]}" -eq 11', self.text)
+        self.assertIn('test "${#STORE_PATHS[@]}" -eq 11', self.text)
         self.assertIn('mapfile -t PACKAGES < "$OUT/packages.txt"', self.text)
         for forbidden in (
             "wsm-tools",
