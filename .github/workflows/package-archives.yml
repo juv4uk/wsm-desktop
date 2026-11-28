@@ -5,8 +5,14 @@ name: H170 Free Guix package publication
 # nonfree firmware are intentionally outside this archive.
 on:
   push:
+    branches:
+      - "main"
     tags:
       - "packages-h170-free-*"
+    paths:
+      - ".github/workflows/package-archives.yml"
+      - "channels.lock.scm"
+      - "drivers/profiles/h170-free-packages.scm"
   workflow_dispatch:
 
 permissions:
@@ -42,6 +48,11 @@ jobs:
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             test "$REF" = "refs/heads/main" || {
               echo "manual publication is allowed only from main" >&2
+              exit 1
+            }
+          elif [ "$EVENT_NAME" = "push" ] && [ "$REF" = "refs/heads/main" ]; then
+            git merge-base --is-ancestor "$SHA" origin/main || {
+              echo "main publication commit is not reachable from origin/main" >&2
               exit 1
             }
           elif [[ "$REF" == refs/tags/packages-h170-free-* ]]; then
