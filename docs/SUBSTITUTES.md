@@ -1,57 +1,69 @@
-# Субститути WSM — публікацію дозволено власником 2026-11-28
+# H170 Free — субститути Guix
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Стан: **OWNER_APPROVED / MANUAL_ONLY**
-- Workflow публікації: **увімкнений, запуск лише вручну**
-- Package/NAR export: **увімкнений; рішення щодо #367 прийняв власник, issue лишається відкритим**
-- Підписний ключ: **не створений і не збережений у CI**
-- Cuirass: **окремий build coordinator; не є автоматичним substitute server**
+- Workflow: .github/workflows/substitutes.yml
+- Маніфест: drivers/profiles/h170-free-packages.scm
+- Guix inputs: channels.lock.scm — зафіксований офіційний Guix, без додаткових каналів
+- NAR assets: незмінний GitHub Release для кожного cache snapshot
+- .narinfo, nix-cache-info, public key та provenance: GitHub Pages
+- Публічний cache workflow: запускається після релевантного merge в main або вручну
 
-## Що є в репозиторії
+## H170 Free package roots
 
-`scripts/narinfo_to_release_urls.py` — локальний конвертер URL у Guix narinfo. Він не створює ключі, не підписує дані, не збирає package closures і не публікує архіви.
+Початковий кеш містить десять upstream Guix package roots:
 
-`.github/workflows/substitutes.yml` та `.github/workflows/package-archives.yml` увімкнені 2026-11-28 рішенням власника. Обидва запускаються **лише вручну**, без тригерів на push чи тег; жоден із них не створює й не читає підписний ключ, крім `substitutes.yml`, який бере його з секрету і без нього падає.
+- mesa, vulkan-loader, vulkan-tools
+- pciutils, usbutils, alsa-utils
+- ethtool, nvme-cli, smartmontools, lm-sensors
 
-## Рішення, яких бракує
+Це upstream-компоненти для графіки, Vulkan, інвентаризації, аудіо, мережі та накопичувачів. Manifest не містить WSM-owned tools, закритих NVIDIA/Intel firmware чи пропрієтарних драйверів. Збірка цих package roots не доводить фізичну сумісність плати H170 або функціональність GTX 1050 Ti.
 
-**1. Ліцензія та право на розповсюдження — issue #367.**
+Кастомне ядро linux-libre-h170 — окремий WSM package з pinned upstream Linux-libre та одним upstream GP107 Nouveau atomic-KMS fix. Воно має власний exact-lock build та окремий Release workflow; його не підмінює звичайний linux-libre у цьому upstream manifest.
 
-Потрібне окреме рішення власника щодо суперечності між repository license declaration та Guix package metadata, а також щодо права розповсюджувати отримані package outputs/NARs. Поки issue #367 відкрите, не запускайте package archive workflow, не прикріплюйте NAR до Releases/Actions artifacts і не вмикайте substitute workflow.
+## Підпис cache snapshot
 
-**2. Channel trust — issue #534 / Phase B.**
+Кожний cache snapshot отримує окрему ефемерну пару Guix archive keys, створену на ізольованому GitHub Actions runner:
 
-Потрібні owner-signed introduction/history, `.guix-authorizations`, публічний keyring та успішна перевірка звичайним `guix git authenticate` consumer. Не використовуйте `--disable-authentication`, вигаданий fingerprint або рухому гілку як production source.
+- приватний ключ використовується лише для підпису NAR у цьому запуску;
+- приватний ключ не потрапляє до репозиторію, Actions artifacts, Release чи Pages;
+- публічний ключ публікується як signing-key.pub у відповідному Release і на Pages;
+- Release містить NAR assets, provenance, input revision, публічний ключ і SHA256SUMS;
+- після upload workflow завантажує Release назад і перевіряє кожен checksum.
 
-**3. Endpoint і ключ.**
+Ключ змінюється для кожного snapshot. Після оновлення кешу клієнт має перевірити нову пару Release/Pages, а потім авторизувати актуальний публічний ключ. Старий ключ не слід вважати ключем нового snapshot. Це deliberate rotation без постійного owner secret; довіра користувача встановлюється до конкретного опублікованого snapshot, а не до рухомого приватного ключа.
 
-Власник має зафіксувати українською в ADR:
-- точні URLs metadata та NAR assets;
-- хто генерує і зберігає private key, де він використовується, хто має доступ;
-- ротацію, відкликання та процедуру компрометації;
-- дозволений trigger (manual/tag/release) та хто його запускає;
-- retention, доступність, ліміти й процес видалення старих assets.
+## Підключення клієнта
 
-GitHub Releases та Pages були названі допустимими hosting families, але це не затверджує конкретний endpoint, signing key custody або право розповсюджувати WSM builds.
+Після успішного workflow візьми Pages URL та Release tag із summary. Переконайся, що signing-key.pub і provenance у Release відповідають файлам, розгорнутим на Pages. Перевір checksum Release assets. Лише після цього авторизуй актуальний public key:
 
-## Поточна схема — лише варіант для майбутнього рішення
+~~~sh
+curl -fsS <PAGES_URL>/signing-key.pub -o signing-key.pub
+guix archive --authorize < signing-key.pub
+~~~
 
-Можлива архітектура після owner approval: підписані Guix narinfo як metadata + NAR archives як окремі immutable assets. Вона не повинна запускатися автоматично від push у `main`.
+Далі додай Pages URL до substitute-urls Guix daemon поряд з офіційними серверами. Якщо згодом Pages розгорнуто з новим cache snapshot, повтори перевірку й авторизуй новий ключ.
 
-Підпис Guix narinfo охоплює ідентичність store object (StorePath, NarHash, NarSize, References та Deriver, якщо присутній), а транспортний URL можна переписати лише якщо це підтверджено конкретним pinned Guix форматом і тестами. Converter має зберігати всі підписані поля байт-у-байт та відмовлятися від неоднозначних/multi-URL форматів, які він не підтримує.
+## Що залишається поза кешем
 
-До окремої перевірки pinned Guix не припускайте, що compression layout, ім'я NAR asset, location `signing-key.pub` або cache warm-up збігаються з поточним upstream manual.
+- WSM-owned wsm-tools і live tools мають окрему ліцензійну metadata review у #367. Це не затримує upstream Free package set.
+- NVIDIA GP107 firmware не включається й не перерозповсюджується; #586 залишається окремою правовою межею.
+- Compatibility/Nonguix і proprietary NVIDIA packages не входять до Free cache.
+- Автентифікація самого WSM channel через Phase B — інший механізм. Цей cache будується з офіційного Guix lock і не представляється як authenticated WSM channel consumption.
 
-## Що дозволено робити до рішення
+## Межі доказів
 
-- статично перевіряти Scheme/Python код, YAML і тестові fixtures;
-- звіряти очікуваний формат із pinned Guix source;
-- складати release manifest без package output binaries;
-- документувати trust, ownership, provenance та acceptance gates.
+Успішний cache workflow доводить для конкретного Guix lock і manifest:
+- package derivations evaluated і built;
+- NAR roots створені та підписані;
+- NAR assets опубліковані в Release;
+- .narinfo/nix-cache-info розгорнуті в Pages;
+- опубліковані файли пройшли read-back SHA-256 перевірку.
 
-Не створюйте signing keys, не додавайте secrets, не запускайте package build/export, не створюйте GitHub Release assets, не викладайте Pages metadata і не вмикайте workflow guards до явного owner approval українською.
+Він не доводить:
+- фізичний boot на GA-H170-Gaming 3;
+- binding Nouveau/i915 або роботу Ethernet, audio, SATA/NVMe чи USB на реальній машині;
+- GP107 KMS, 3D, NVK compute, reclocking або firmware loading;
+- інсталяцію, розмітку диска, BIOS/UEFI зміну або suspend/resume.
 
-## Статус
-
-Жоден substitute cache не опублікований цією роботою. Наявність workflow чи конвертера не означає, що канал автентифіковано, package build пройшов або бінарний output дозволено розповсюджувати.
+ISO, NAR та інші великі артефакти не комітяться у звичайні Git-гілки.
