@@ -98,7 +98,7 @@ JSON-масивом аргументів, який передається як `
 
 | Урок | Наше рішення |
 | --- | --- |
-| PATH-підміна у привілейованому кроці | усі команди в `install_steps.py` — абсолютні шляхи з фіксованої таблиці; тест забороняє голе ім'я |
+| PATH-підміна у привілейованому кроці | planner резолвить закритий tool allowlist лише в `/run/current-system/profile/{bin,sbin}`; тест відхиляє PATH/FHS fallback |
 | Рядок замість argv | команди — списки аргументів; тест забороняє `shell=True`, `os.system`, `os.popen` у наших модулях |
 | Третій бік як виконання коду | Nonguix винесено в окремий профіль Compatibility, поза вільним деревом і поза live-образом |
 
@@ -198,7 +198,7 @@ JSON-масивом аргументів, який передається як `
 
 | Клас | Prevent rule у WSM | Detect rule | Статус | Доказ |
 | --- | --- | --- | --- | --- |
-| PATH-підміна у привілейованому кроці (Omarchy #8172) | усі команди — абсолютні шляхи з фіксованої таблиці | тест перевіряє кожну команду плану | `covered` | `tests/test_install_steps.py::test_every_command_starts_with_an_absolute_path` |
+| PATH-підміна у привілейованому кроці (Omarchy #8172) | усі команди — абсолютні шляхи лише з allowlisted Guix system profile | тест перевіряє кожну команду плану | `covered` | `tests/test_install_steps.py::test_every_command_starts_with_an_absolute_path` |
 | Рядок замість argv (Omarchy #7926) | команди — списки аргументів; shell-API заборонені в модулях | AST-policy замість пошуку рядків | `covered` | `tests/test_repo_hygiene.py::test_project_modules_do_not_use_shell_interpreting_apis` |
 | Невільна залежність потрапляє до Free payload (WSM policy) | Nonguix лише в окремому Compatibility-профілі; Free channel відхиляє його | політика каналів перевіряє розділення профілів | `covered` | `tests/test_check_channels.py::test_nonguix_is_refused_by_free_policy` |
 | Неперевірена тема/плагін виконує код (Omarchy CVE-2026-108913) | WSM поки не має механізму встановлення сторонніх тем/плагінів; поява такого механізму вимагатиме окремого threat review, provenance та явної згоди | немає такого install/execution path у поточному дереві | `out-of-scope` | — |
