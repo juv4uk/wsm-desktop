@@ -98,6 +98,8 @@ class H170LinuxLibreOverlayTests(unittest.TestCase):
         self.assertIn('gh release create', workflow)
         self.assertIn('gh release download', workflow)
         self.assertIn('sha256sum -c SHA256SUMS', workflow)
+        self.assertIn('> SHA256SUMS', workflow)
+        self.assertIn('sha256sum RELEASE-NOTES.md >> SHA256SUMS', workflow)
         self.assertNotIn('secrets.GUIX_SIGNING_KEY', workflow)
         self.assertNotIn('actions/upload-artifact', workflow)
         # Negative dependency checks belong to the actual Scheme package
