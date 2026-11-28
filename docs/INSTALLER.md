@@ -32,7 +32,7 @@ wsm-install у консольному режимі й wsm-install --tui (або 
 5. Єдиний WSM Guix backend перевіряє plan/target і виконує deployment.
 6. Після встановлення перевіряється результат та створюється зрозумілий звіт.
 
-Frontend відповідає за подання й взаємодію; він не стає другим системним backend-ом. Calamares може надавати власний UX і partitioning view, але deployment, Guix-конфігурація та встановлення bootloader мають залишатися узгодженими з єдиним WSM/Guix ownership contract. Заборонено запускати два writers для partitioning, root filesystem, bootloader або system activation.
+Frontend відповідає за подання й взаємодію; він не стає другим системним backend-ом. Calamares може надавати UX вибору цілі та partition plan, але його built-in jobs не мають самостійно змінювати partition table або файлові системи, якщо ці дії виконує WSM backend. Якщо обраний Calamares module не може експортувати read-only typed plan, потрібен WSM adapter/view, а не другий writer. Deployment, Guix-конфігурація та встановлення bootloader мають залишатися узгодженими з єдиним WSM/Guix ownership contract. Заборонено запускати два writers для partitioning, root filesystem, bootloader або system activation.
 
 ## Поточний стан реалізації (не плутати з цільовою вимогою)
 
