@@ -29,6 +29,16 @@ jobs:
       - name: Check documentation
         run: python scripts/check_docs.py
 
+      - name: Report branch drift
+        # CONTRIBUTING.md asks for a rebase before a PR is marked ready; six PRs
+        # conflicted at once because nothing measured it. Reports, never fails:
+        # a gate that blocks honest work gets bypassed.
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          git fetch --quiet --unshallow 2>/dev/null || git fetch --quiet origin main
+          python scripts/check_branch_freshness.py --base origin/main >> "$GITHUB_STEP_SUMMARY"
+
       - name: Check Cuirass specifications
         # Cuirass builds inside Guix on the same pinned channels; its specs are
         # code and drift like code.
