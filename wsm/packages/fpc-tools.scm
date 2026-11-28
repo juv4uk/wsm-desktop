@@ -1,77 +1,77 @@
 ;; SPDX-License-Identifier: LicenseRef-Volnist
 ;;
-;; The FPC edition of the hardware reader.
-;;
-;; Why a second implementation exists: the Python package propagated the full
-;; interpreter, and the published pack carried three separate Python builds
-;; (~226 MB of a 399 MB store). A Free Pascal binary is a single native
-;; executable: no interpreter, no site-packages, no schema library in the
-;; runtime closure.
-;;
-;; The two implementations are not interchangeable, and the split is deliberate:
-;; this one reads PCI identity only. JSON schema validation stays in CI, where
-;; Python already exists — putting a validator in the shipped binary would
-;; reintroduce exactly the dependency this package removes.
+;; Native Free Pascal WSM tools. The compiler is a build-time input only.
+;; Each executable is packaged independently; neither package propagates FPC,
+;; Python, or a schema-validation runtime to its consumers.
 
 (define-module (wsm packages fpc-tools)
-  #:use-module (guix packages)
-  #:use-module (guix gexp)
-  #:use-module (guix download)
   #:use-module (guix build-system gnu)
+  #:use-module (guix gexp)
+  #:use-module (guix packages)
   #:use-module (gnu packages pascal)
-  #:use-module (guix licenses)
-  ;; `any' comes from SRFI-1 and `string-contains' from SRFI-13; the source
-  ;; select? predicate uses both, and without the imports the module fails to
-  ;; load only when Guix evaluates it.
-  #:use-module (srfi srfi-1)
+  #:use-module (wsm licenses)
   #:use-module (srfi srfi-13)
   #:export (wsm-hwcheck-fpc wsm-classify-fpc))
 
-(define-public wsm-hwcheck-fpc
+(define (wsm-fpc-source)
+  (local-file "../.." "wsm-fpc-source"
+              #:recursive? #t
+              #:select? (lambda (path _stat)
+                          (or (string=? path "LICENSE")
+                              (string=? path "tools")
+                              (string=? path "tools/pascal")
+                              (string-prefix? "tools/pascal/" path)))))
+
+(define (make-wsm-fpc-tool package-name build-target test-target install-target synopsis description)
   (package
-    (name "wsm-hwcheck-fpc")
-    (version "0.1.0")
-    (source (local-file "../.." "wsm-desktop-source-fpc"
-                        #:recursive? #t
-                        #:select? (lambda (path _stat)
-                                    (not (any (lambda (skip)
-                                                (string-contains path skip))
-                                              '("/.git" "/__pycache__" "/build"))))))
+    (name package-name)
+    (version "0.2.0")
+    (source (wsm-fpc-source))
     (build-system gnu-build-system)
     (arguments
      (list
-      #:tests? #f
-      #:make-flags
-      #~(list (string-append "FPC=" #$(file-append fpc "/bin/fpc")))
+      #:tests? #t
       #:phases
       #~(modify-phases %standard-phases
           (delete 'configure)
           (replace 'build
-            (lambda* (#:key make-flags #:allow-other-keys)
-              (apply invoke "make" "-f" "tools/pascal/Makefile" "all" make-flags)))
+            (lambda* (#:key #:allow-other-keys)
+              (invoke "make" "-C" "tools/pascal" #$build-target)))
+          (replace 'check
+            (lambda* (#:key #:allow-other-keys)
+              (invoke "make" "-C" "tools/pascal" #$test-target)))
           (replace 'install
             (lambda* (#:key outputs #:allow-other-keys)
-              (let* ((out (assoc-ref outputs "out"))
-                     (bin (string-append out "/bin")))
-                (install-file "tools/pascal/wsm-hwcheck" bin)
-                (install-file "tools/pascal/wsm-classify" bin)))))))
-    (synopsis "Read-only PCI hardware reader for WSM Desktop, built with FPC")
-    (description
-     "A native binary that reads PCI identity and driver binding from sysfs and
-writes a JSON report. It is the Free Pascal counterpart of the Python
-collector: no interpreter or Python library enters the runtime closure.  It
-reads only; it never opens a block device and needs no privileges.")
+              (invoke "make" "-C" "tools/pascal" #$install-target
+                      (string-append "PREFIX=" (assoc-ref outputs "out")))))))
+    (native-inputs (list fpc))
+    (synopsis synopsis)
+    (description description)
     (home-page "https://github.com/juv4uk/wsm-desktop")
-    (license license:gpl3+)))
+    (supported-systems '("x86_64-linux"))
+    (license wsm-license)))
+
+(define-public wsm-hwcheck-fpc
+  (make-wsm-fpc-tool
+   "wsm-hwcheck-fpc"
+   "build-wsm-hwcheck"
+   "test-wsm-hwcheck"
+   "install-wsm-hwcheck"
+   "Read-only native hardware evidence collector for WSM Desktop"
+   "Reads PCI, USB, storage, display, CPU, and platform identity evidence from
+Linux sysfs and procfs, then emits the WSM hardware evidence schema 1.1 report.
+It is unprivileged and read-only: it does not load modules, write to devices,
+upload data, or infer functional compatibility from driver binding. Free Pascal
+is used only while building the executable."))
 
 (define-public wsm-classify-fpc
-  (package
-    (inherit wsm-hwcheck-fpc)
-    (name "wsm-classify-fpc")
-    (synopsis "Diagnostic hardware classification for WSM Desktop, built with FPC")
-    (description
-     "Reads a hardware report and produces the diagnostic subsystem summary.
-It is the Free Pascal counterpart of the Python classifier, and it keeps the
-same restraint: a subsystem is KNOWN only when every observed device has a
-driver binding or a candidate, a failed function test blocks that, and
-CERTIFIED is never emitted because report v1 has no coverage manifest.")))
+  (make-wsm-fpc-tool
+   "wsm-classify-fpc"
+   "build-wsm-classify"
+   "test-wsm-classify"
+   "install-wsm-classify"
+   "Diagnostic hardware classifier for WSM Desktop"
+   "Reads a WSM hardware report and summarizes evidence by subsystem. It never
+claims CERTIFIED: functional-test results apply only to their named capability,
+and untested driver bindings are not presented as functional validation. Free
+Pascal is used only while building the executable."))
