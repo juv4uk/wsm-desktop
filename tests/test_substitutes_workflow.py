@@ -86,6 +86,9 @@ class SubstituteWorkflowTests(unittest.TestCase):
         self.assertEqual(self.data["permissions"]["attestations"], "write")
         self.assertEqual(self.data["permissions"]["artifact-metadata"], "write")
 
+    def test_latest_cache_run_supersedes_stale_work_and_retries_get_unique_tags(self) -> None:
+        self.assertIn("cancel-in-progress: true", self.text)
+        self.assertIn('CACHE_TAG="h170-free-cache-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}"', self.text)
     def test_public_key_and_provenance_are_published_and_attested(self) -> None:
         prepare = self.step("Prepare immutable Release assets and Pages metadata")["run"]
         self.assertIn("./site/signing-key.pub", prepare)
@@ -119,6 +122,25 @@ class SubstituteWorkflowTests(unittest.TestCase):
         self.assertIn("signing-key.pub", self.text)
         self.assertIn("SHA256SUMS", self.text)
         self.assertIn("provenance.json", self.text)
+
+    def test_release_stays_draft_until_attestation_and_readback_pass(self) -> None:
+        create = self.text.index("gh release create")
+        upload = self.text.index("gh release upload")
+        attest = self.text.index("uses: actions/attest@v4")
+        readback = self.text.index("Read back and verify the draft Release assets")
+        publish = self.text.index("Publish the verified H170 Free Release")
+        pages = self.text.index("Deploy Pages metadata")
+        self.assertLess(create, upload)
+        self.assertLess(upload, attest)
+        self.assertLess(attest, readback)
+        self.assertLess(readback, publish)
+        self.assertLess(publish, pages)
+        self.assertIn("--draft", self.text[create:attest])
+        self.assertIn("gh release download", self.text[readback:publish])
+        self.assertIn("sha256sum -c SHA256SUMS", self.text[readback:publish])
+        self.assertIn("sha256sum -c metadata.SHA256SUMS", self.text[readback:publish])
+        self.assertIn("zstd -t", self.text[readback:publish])
+        self.assertIn("draft=false", self.text[publish:pages])
 
     def test_failure_is_reported_without_claiming_success(self) -> None:
         step = self.step("Report publication failure")
