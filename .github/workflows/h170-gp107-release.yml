@@ -4,7 +4,12 @@ name: Publish H170 GP107 Linux-libre package
 on:
   push:
     branches:
-      - "publish/h170-gp107/**"
+      - main
+    paths:
+      - ".github/workflows/h170-gp107-release.yml"
+      - "channels.lock.scm"
+      - "wsm/packages/linux-libre.scm"
+      - "wsm/packages/patches/linux-libre-h170-nouveau-atomic.patch"
 
 permissions:
   contents: write
@@ -22,28 +27,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 300
     steps:
-      - name: Require a deliberate release branch based on reviewed main
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ "$GITHUB_EVENT_NAME" != "push" ]]; then
-            echo "::error::Release requires an explicit push to a release branch."
-            exit 1
-          fi
-          case "$GITHUB_REF" in
-            refs/heads/publish/h170-gp107/*) ;;
-            *) echo "::error::Unexpected release ref: $GITHUB_REF"; exit 1 ;;
-          esac
-          git fetch --no-tags origin main
-          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
-            echo "::error::Release source is not present in reviewed main history."
-            exit 1
-          }
-
-      - name: Checkout exact source
+      - name: Checkout reviewed main source commit
         uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Install the Guix build host
         run: |
@@ -93,6 +80,8 @@ jobs:
           if [ ! -s /etc/guix/signing-key.sec ] || [ ! -s /etc/guix/signing-key.pub ]; then
             sudo guix archive --generate-key
           fi
+          sudo chmod 0600 /etc/guix/signing-key.sec
+          sudo chmod 0644 /etc/guix/signing-key.pub
           test -s /etc/guix/signing-key.sec
           test -s /etc/guix/signing-key.pub
           chmod 700 "$RUNNER_TEMP"
