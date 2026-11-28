@@ -17,6 +17,12 @@ from wsm_install.executor import (  # noqa: E402
     execute,
 )
 from wsm_install.install_steps import TRUSTED_TOOLS, Step  # noqa: E402
+from wsm_install.disk_identity import (  # noqa: E402
+    DiskIdentity,
+    IdentityError,
+    capture,
+    require_unchanged,
+)
 from wsm_install.consent import (  # noqa: E402
     ConsentError,
     grant_consent,
@@ -356,6 +362,88 @@ class AdmissibleArgvTests(unittest.TestCase):
         payload = results[0].as_dict()
         self.assertFalse(payload["admissible"])
         self.assertIn("allowlist", payload["inadmissible_reason"])
+
+
+class FakeDiskObserver:
+    def __init__(
+        self,
+        identity: dict[str, object] | None = None,
+        partitions: tuple[str, ...] = ("/dev/nvme0n1p1", "/dev/nvme0n1p2"),
+        live: str | None = None,
+    ) -> None:
+        self.identity = identity if identity is not None else {
+            "major_minor": "259:0",
+            "size_bytes": 500107862016,
+            "removable": False,
+        }
+        self._partitions = partitions
+        self._live = live
+
+    def block_identity(self, path: str) -> dict[str, object] | None:
+        return self.identity
+
+    def partitions(self, path: str) -> tuple[str, ...]:
+        return self._partitions
+
+    def live_device(self) -> str | None:
+        return self._live
+
+
+class DiskIdentityTests(unittest.TestCase):
+    """The target is re-identified immediately before the first write."""
+
+    def test_an_unchanged_disk_passes(self) -> None:
+        observer = FakeDiskObserver()
+        require_unchanged(capture(observer, "/dev/nvme0n1"), observer)
+
+    def test_a_missing_block_device_is_refused(self) -> None:
+        class Missing(FakeDiskObserver):
+            def block_identity(self, path: str) -> dict[str, object] | None:
+                return None
+
+        with self.assertRaises(IdentityError) as caught:
+            capture(Missing(), "/dev/nvme0n1")
+        self.assertEqual(caught.exception.code, "identity.missing")
+
+    def test_a_changed_node_is_drift(self) -> None:
+        expected = capture(FakeDiskObserver(), "/dev/nvme0n1")
+        moved = FakeDiskObserver(identity={"major_minor": "8:0", "size_bytes": 500107862016, "removable": False})
+        with self.assertRaises(IdentityError) as caught:
+            require_unchanged(expected, moved)
+        self.assertEqual(caught.exception.code, "identity.drift")
+        self.assertIn("259:0", caught.exception.message)
+
+    def test_a_changed_size_is_drift(self) -> None:
+        expected = capture(FakeDiskObserver(), "/dev/nvme0n1")
+        smaller = FakeDiskObserver(identity={"major_minor": "259:0", "size_bytes": 16003253424, "removable": False})
+        with self.assertRaises(IdentityError) as caught:
+            require_unchanged(expected, smaller)
+        self.assertEqual(caught.exception.code, "identity.drift")
+
+    def test_a_changed_removable_flag_is_drift(self) -> None:
+        expected = capture(FakeDiskObserver(), "/dev/nvme0n1")
+        replugged = FakeDiskObserver(identity={"major_minor": "259:0", "size_bytes": 500107862016, "removable": True})
+        with self.assertRaises(IdentityError) as caught:
+            require_unchanged(expected, replugged)
+        self.assertEqual(caught.exception.code, "identity.drift")
+
+    def test_a_changed_topology_is_drift(self) -> None:
+        expected = capture(FakeDiskObserver(), "/dev/nvme0n1")
+        repartitioned = FakeDiskObserver(partitions=("/dev/nvme0n1p1",))
+        with self.assertRaises(IdentityError) as caught:
+            require_unchanged(expected, repartitioned)
+        self.assertEqual(caught.exception.code, "identity.drift")
+
+    def test_the_live_medium_is_refused_with_its_own_code(self) -> None:
+        expected = capture(FakeDiskObserver(), "/dev/sdb")
+        live = FakeDiskObserver(live="/dev/sdb1")
+        with self.assertRaises(IdentityError) as caught:
+            require_unchanged(expected, live)
+        self.assertEqual(caught.exception.code, "identity.live-device")
+
+    def test_a_different_live_medium_does_not_block_the_target(self) -> None:
+        expected = capture(FakeDiskObserver(), "/dev/nvme0n1")
+        require_unchanged(expected, FakeDiskObserver(live="/dev/sdb1"))
 
 
 if __name__ == "__main__":
