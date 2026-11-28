@@ -147,7 +147,7 @@ class PackageTests(unittest.TestCase):
 
     def test_all_native_packages_use_fpc_as_a_build_time_input(self) -> None:
         self.assertIn("(gnu packages pascal)", self.text)
-        self.assertEqual(self.text.count("(define-public wsm-"), 6)
+        self.assertEqual(self.text.count("(define-public wsm-"), 7)
         self.assertEqual(self.text.count("(native-inputs (list fpc))"), 2)
         self.assertEqual(self.text.count("(define (fpc-package-arguments"), 1)
         self.assertNotIn("(inherit wsm-hwcheck-fpc)", self.text)
@@ -155,7 +155,7 @@ class PackageTests(unittest.TestCase):
         self.assertIn("(define (fpc-installer-arguments)", self.text)
         self.assertIn("(inputs (list wsm-preflight-fpc", self.text)
         self.assertIn("(symlink (string-append input \"/bin/\" program)", self.text)
-        for name in ("wsm-hwcheck-fpc", "wsm-classify-fpc", "wsm-partition-fpc", "wsm-profile-fpc", "wsm-preflight-fpc", "wsm-install-fpc"):
+        for name in ("wsm-hwcheck-fpc", "wsm-classify-fpc", "wsm-cpu-isa-fpc", "wsm-partition-fpc", "wsm-profile-fpc", "wsm-preflight-fpc", "wsm-install-fpc"):
             self.assertIn(name, self.text)
 
     def test_package_license_is_the_actual_owner_license(self) -> None:
@@ -181,7 +181,7 @@ class MakefileAndWorkflowTests(unittest.TestCase):
     def test_makefile_outputs_correct_names_outside_the_source_directory(self) -> None:
         text = MAKE.read_text(encoding="utf-8")
         self.assertIn("BUILD_DIR ?= build", text)
-        for name in ("wsm-hwcheck", "wsm-classify", "wsm-partition", "wsm-profile", "wsm-preflight", "wsm-install"):
+        for name in ("wsm-hwcheck", "wsm-classify", "wsm-cpu-isa", "wsm-partition", "wsm-profile", "wsm-preflight", "wsm-install"):
             self.assertIn(f"-o$(BUILD_DIR)/{name}", text)
         self.assertIn("-Mobjfpc", text)
         self.assertIn("-Sh", text)
@@ -226,14 +226,15 @@ class RuntimeParityTests(unittest.TestCase):
             )
         cls.hwcheck = cls.build_dir / "wsm-hwcheck"
         cls.classifier = cls.build_dir / "wsm-classify"
+        cls.cpu_isa = cls.build_dir / "wsm-cpu-isa"
         cls.partition = cls.build_dir / "wsm-partition"
         cls.profile = cls.build_dir / "wsm-profile"
         cls.preflight = cls.build_dir / "wsm-preflight"
         cls.installer = cls.build_dir / "wsm-install"
         if not all(path.is_file() for path in (
-            cls.hwcheck, cls.classifier, cls.partition, cls.profile, cls.preflight, cls.installer
+            cls.hwcheck, cls.classifier, cls.cpu_isa, cls.partition, cls.profile, cls.preflight, cls.installer
         )):
-            raise AssertionError("FPC Makefile did not produce all six expected binaries")
+            raise AssertionError("FPC Makefile did not produce all seven expected binaries")
 
     @classmethod
     def tearDownClass(cls) -> None:
