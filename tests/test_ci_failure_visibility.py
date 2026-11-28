@@ -50,6 +50,15 @@ def inline_failure_reporter(workflow: Path) -> bool:
     )
 
 
+def inline_step_summary_reporter(workflow: Path) -> bool:
+    """A read-only failure summary is visible without a GitHub write token."""
+    return any(
+        "failure()" in str(step.get("if", ""))
+        and "GITHUB_STEP_SUMMARY" in str(step.get("run", ""))
+        for step in steps_of(workflow)
+    )
+
+
 def exact_open_main_prs(
     candidates: list[dict],
     *,
@@ -251,12 +260,19 @@ class CiFailureVisibilityTests(unittest.TestCase):
             if workflow not in TRUSTED_WORKFLOWS | {TRUSTED_REPORTER}
             and not all_jobs_disabled(workflow)
             and not inline_failure_reporter(workflow)
+            and not inline_step_summary_reporter(workflow)
         ]
         self.assertEqual(
             missing,
             [],
             "these workflows fail without leaving a readable cause: " + ", ".join(missing),
         )
+
+    def test_hardware_evidence_has_read_only_summary_reporter(self) -> None:
+        workflow = WORKFLOWS / "hw-build-evidence.yml"
+        self.assertTrue(inline_step_summary_reporter(workflow))
+        self.assertFalse(inline_failure_reporter(workflow))
+
 
     def test_disabled_distribution_workflows_do_not_need_failure_reporters(self) -> None:
         for name in ("substitutes.yml", "package-archives.yml"):
