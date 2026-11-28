@@ -69,12 +69,13 @@ class SpecsTests(unittest.TestCase):
         self.assertTrue(any(line.startswith("(list") for line in code))
         self.assertNotIn("#~(list", self.text)
 
-    def test_names_are_symbols_as_the_manual_shows(self) -> None:
-        self.assertIn("(name 'wsm-channel)", self.text)
+    def test_the_narrow_image_job_is_the_only_registered_job(self) -> None:
         self.assertIn("(name 'wsm-live-minimal-image)", self.text)
+        self.assertEqual(self.text.count("(specification"), 1)
 
-    def test_the_channel_job_is_the_canonical_one(self) -> None:
-        self.assertIn("(build '(channels wsm))", self.text)
+    def test_broad_channel_build_waits_for_license_allowlist(self) -> None:
+        self.assertNotIn("(build '(channels wsm))", self.text)
+        self.assertIn("issue #367", SPECS.read_text(encoding="utf-8"))
 
     def test_the_custom_job_names_a_resolvable_module(self) -> None:
         """Cuirass resolves the module through the channel root, so the file
@@ -153,6 +154,10 @@ class ServiceFragmentTests(unittest.TestCase):
         """The gexp is evaluated in a build sandbox; /run/current-system is not there."""
         self.assertIn("#~(list", self.text)
         self.assertNotIn("/run/current-system/profile/share", self.text)
+        self.assertEqual(self.text.count("(specification"), 1)
+
+    def test_broad_channel_build_is_not_registered(self) -> None:
+        self.assertNotIn("(build '(channels wsm))", self.text)
 
 
 class DocumentationTests(unittest.TestCase):
