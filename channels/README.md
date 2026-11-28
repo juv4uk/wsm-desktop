@@ -17,23 +17,6 @@ guix time-machine -C channels.lock.scm -- describe -f channels
 виконує channel authentication у Guix. PASS лише структурної перевірки не
 доводить криптографічну автентифікацію.
 
-## Набір каналів WSM (не lock)
-
-[`wsm.scm`](wsm.scm) — набір, який робить `(wsm packages wsm)` доступним **як
-канал**, а не через `-L "$PWD"`:
-
-```sh
-guix time-machine -C channels/wsm.scm -- describe      # відмова: не автентифіковано
-guix time-machine -C channels/wsm.scm --disable-authentication -- describe
-```
-
-Друга команда працює вже сьогодні. Саме тому нею не користуються для релізних
-збірок: вона вимикає ту саму перевірку, яку проєкт обіцяє.
-
-Це **не** lock: `wsm` тут іде за гілкою `main`, бо канал ще не має
-introduction. Релізні збірки й далі використовують `channels.lock.scm` із
-точними commit-ами.
-
 ## Набір каналів WSM (не release lock)
 
 `wsm.scm` додає WSM до канонічного `%default-channels` із `(guix channels)`. Офіційний Guix channel не копіюється в окремий record: branch та introduction залишаються авторитетними в самій версії Guix. WSM іде за `main`, але поки не має власного introduction, тому звичайна автентифікація має відмовити:
