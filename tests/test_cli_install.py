@@ -257,5 +257,42 @@ class ClassificationSummaryTests(unittest.TestCase):
         self.assertIn("--profile-evidence is accepted only", result.stderr)
 
 
+class AdmissionReportTests(unittest.TestCase):
+    """--admission says what APPLY would require, and offers no approval itself."""
+
+    def build(self, *extra: str) -> subprocess.CompletedProcess:
+        return run_cli(
+            "--report", str(FIXTURE),
+            "--install",
+            "--target-disk", "/dev/nvme0n1",
+            "--target-size-bytes", str(256 * GIB),
+            "--acknowledge-disk", "/dev/nvme0n1",
+            *extra,
+        )
+
+    def test_the_report_is_absent_unless_asked(self) -> None:
+        result = self.build()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("admission", json.loads(result.stdout))
+
+    def test_a_target_that_is_not_a_block_device_is_refused(self) -> None:
+        """The host has no /dev/nvme0n1, and the report must say so rather than guess."""
+        result = self.build("--admission")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        admission = json.loads(result.stdout)["admission"]
+        self.assertEqual(admission["status"], "refused")
+        self.assertIn("identity.missing", admission["reason"])
+        self.assertEqual(admission["steps"], [])
+
+    def test_a_preview_never_reports_a_destructive_step_as_admitted(self) -> None:
+        """Whenever the plan can be judged, no destructive step may come back admitted."""
+        result = self.build("--admission")
+        admission = json.loads(result.stdout)["admission"]
+        for step in admission.get("steps", []):
+            if step["destructive"]:
+                self.assertNotEqual(step["status"], "admitted")
+                self.assertIn("consent", step["reason"])
+
+
 if __name__ == "__main__":
     unittest.main()
