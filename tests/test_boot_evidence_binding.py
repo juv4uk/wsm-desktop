@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import sys
 import tempfile
@@ -36,8 +38,13 @@ class BootEvidenceBindingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             iso = Path(tmp) / "live.iso"
             iso.write_bytes(b"placeholder")
-            result = main(["--iso", str(iso), "--dry-run"])
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                result = main(["--iso", str(iso), "--dry-run"])
+            payload = json.loads(stdout.getvalue())
+            expected_sha256 = sha256_of(iso)
         self.assertEqual(result, 0)
+        self.assertEqual(payload["iso_sha256"], expected_sha256)
 
     def test_the_workflow_refuses_evidence_from_another_image(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "release-minimal-live.yml").read_text(encoding="utf-8")
@@ -46,7 +53,7 @@ class BootEvidenceBindingTests(unittest.TestCase):
 
     def test_the_harness_records_the_digest(self) -> None:
         source = (ROOT / "scripts" / "qemu_boot_smoke.py").read_text(encoding="utf-8")
-        self.assertEqual(source.count('"iso_sha256"'), 2)
+        self.assertEqual(source.count('"iso_sha256":'), 2)
 
 
 if __name__ == "__main__":
