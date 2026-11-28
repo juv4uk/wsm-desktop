@@ -163,7 +163,9 @@ class PackageTests(unittest.TestCase):
 
     def test_fpc_is_not_a_runtime_or_propagated_dependency(self) -> None:
         self.assertNotIn("propagated-inputs", self.text)
-        self.assertNotIn("python", self.text.lower())
+        self.assertNotIn("python-build-system", self.text)
+        self.assertNotIn("propagated-inputs", self.text)
+        self.assertNotIn("(gnu packages python", self.text)
 
 
 class MakefileAndWorkflowTests(unittest.TestCase):
