@@ -54,6 +54,14 @@ class Gp107EvidenceReferenceTests(unittest.TestCase):
     def test_it_says_the_gbps_is_conditional_traffic(self) -> None:
         self.assertIn("умовний", self.section)
 
+    def test_device_local_numbers_are_marked_not_accepted(self) -> None:
+        self.assertIn("NOT ACCEPTED / EXPLORATORY", self.section)
+        self.assertIn("не мав явних Vulkan", self.section)
+        self.assertIn("memory dependencies", self.section)
+        self.assertIn("CODE-UPDATED, PHYSICAL-RERUN-PENDING", self.section)
+        self.assertIn("docs/22-device-local-transfer-and-compute-phases.md", self.section)
+        self.assertIn("не результат WSM", self.section)
+
     def test_it_points_at_the_canonical_issue(self) -> None:
         self.assertIn("gp107-nvidia-re/issues/18", self.section)
 
