@@ -1,183 +1,29 @@
-name: Субститути каналу
-
 # SPDX-License-Identifier: LicenseRef-Volnist
-#
-# Публікує зібрані пакети каналу `wsm` як статичний кеш субститутів:
-# архіви — release assets, метадані — gh-pages.
-#
-# ВЛАСНИК ДАВ ДОЗВІЛ 2026-11-28 («починай публікувати гуікс пакети під моє
-# залізо»). Попередня версія цього файлу була заглушкою з `if: false`, що чекала
-# саме цього рішення: тоді не було ні ключа, ні узгодженого endpoint-у.
-#
-# Три речі, які лишаються обовʼязковими після дозволу:
-#   * запуск ЛИШЕ вручну — автопублікація на кожен push не потрібна і дорога;
-#   * ключ підпису тільки із секрету, ніколи з репозиторію;
-#   * без ключа — падіння, а не публікація: непідписаний кеш користувач не
-#     зможе авторизувати, тобто робота була б марною.
-#
-# Деталі схеми: docs/SUBSTITUTES.md
+name: WSM Guix substitutes
+
+# Fail-closed stub. Do not dispatch a substitute publisher until the owner has
+# explicitly approved signing-key custody, the exact H170 package allowlist,
+# authenticated source provenance, endpoint, rotation and revocation policy.
+# Upstream-only H170 package build evidence is handled separately by
+# hw-build-evidence.yml; it does not export NARs or publish substitutes.
 
 on:
   workflow_dispatch:
-    inputs:
-      packages:
-        description: "Пакети каналу через пробіл"
-        required: false
-        default: "wsm-tools"
 
 permissions:
-  contents: write
-  pages: write
-  id-token: write
+  contents: read
 
 concurrency:
-  group: substitutes
+  group: wsm-substitute-publication
   cancel-in-progress: false
 
 jobs:
   publish:
-    name: Зібрати, підписати, опублікувати
+    if: ${{ false }}
+    name: Disabled pending owner-controlled signer and trust decision
     runs-on: ubuntu-24.04
-    environment:
-      name: github-pages
-      url: ${{ steps.pages.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-
-      # Офіційний статичний тарбол, а не guix-install.sh. Скрипт не має
-      # --unattended (такого прапорця не існує — він виходить із кодом 1), а
-      # його внутрішній wget проти ftp.gnu.org під `set -eo pipefail` віддає
-      # код 4 (мережевий збій) і валить усю установку.
-      - name: Встановити GNU Guix
-        env:
-          GUIX_VERSION: "1.5.0"
-          GUIX_SHA256: "aa41025489c5061543e9c48873eaa829b900b2da75d40f9648913622f5f47817"
+      - name: Publication is not authorized
         run: |
-          set -euo pipefail
-          TARBALL="guix-binary-${GUIX_VERSION}.x86_64-linux.tar.xz"
-          DEST="/tmp/${TARBALL}"
-          PROFILE="/var/guix/profiles/per-user/root/current-guix"
-          for attempt in 1 2 3; do
-            if curl -fsSL --connect-timeout 20 --max-time 900 \
-                     --retry 3 --retry-delay 5 --retry-connrefused \
-                     -o "$DEST" "https://ftp.gnu.org/gnu/guix/${TARBALL}"; then
-              break
-            fi
-            rm -f "$DEST"
-            if [ "$attempt" -eq 3 ]; then
-              echo "::error::не вдалося завантажити ${TARBALL}"; exit 1
-            fi
-            sleep 15
-          done
-          test -s "$DEST" || { echo "::error::порожній тарбол"; exit 1; }
-          echo "${GUIX_SHA256}  ${DEST}" | sha256sum -c -
-          sudo tar --extract --strip-components=1 --file "$DEST" -C /
-          sudo mkdir -p /root/.config/guix
-          sudo ln -sfn "$PROFILE" /root/.config/guix/current
-          sudo ln -sfn "$PROFILE/bin/guix" /usr/local/bin/guix
-          getent group guixbuild >/dev/null || sudo groupadd --system guixbuild
-          for i in $(seq -w 1 10); do
-            id "guixbuilder$i" >/dev/null 2>&1 || \
-              sudo useradd -g guixbuild -G guixbuild -d /var/empty \
-                -s /usr/sbin/nologin -c "Guix build user $i" --system "guixbuilder$i"
-          done
-          sudo mkdir -p /var/log/guix
-          sudo bash -c "nohup $PROFILE/bin/guix-daemon --build-users-group=guixbuild \
-                        >/var/log/guix/daemon.log 2>&1 &"
-          for _ in $(seq 1 60); do
-            [ -S /var/guix/daemon-socket/socket ] && break
-            sleep 1
-          done
-          [ -S /var/guix/daemon-socket/socket ] || {
-            sudo tail -n 50 /var/log/guix/daemon.log || true
-            echo "::error::guix-daemon не створив сокет"; exit 1
-          }
-          sudo chmod 0666 /var/guix/daemon-socket/socket
-          echo "$PROFILE/bin" >> "$GITHUB_PATH"
-          guix --version
-
-      - name: Перевірити ключ підпису
-        env:
-          SIGNING_KEY: ${{ secrets.GUIX_SIGNING_KEY }}
-        run: |
-          set -euo pipefail
-          if [ -z "${SIGNING_KEY:-}" ]; then
-            echo "::error::Секрет GUIX_SIGNING_KEY не заданий."
-            echo "Створіть ключ на своїй машині: sudo guix archive --generate-key"
-            echo "Потім: gh secret set GUIX_SIGNING_KEY --repo ${{ github.repository }} < /etc/guix/signing-key.sec"
-            echo "Без ключа кеш буде непідписаним, і користувач не зможе його авторизувати."
-            exit 1
-          fi
-          sudo install -d -m 700 /etc/guix
-          printf '%s\n' "$SIGNING_KEY" | sudo tee /etc/guix/signing-key.sec >/dev/null
-          sudo chmod 600 /etc/guix/signing-key.sec
-          echo "ключ встановлено"
-
-      - name: Зібрати пакети каналу
-        run: |
-          set -euo pipefail
-          PACKAGES="${{ github.event.inputs.packages }}"
-          echo "збираю: $PACKAGES"
-          guix build --no-substitutes $PACKAGES | tee /tmp/store-paths.txt
-
-      - name: Прогріти кеш
-        # guix publish лінивий: він створює narinfo і nar на запит. Без прогріву
-        # каталог кешу порожній, і публікувати нічого.
-        run: |
-          set -euo pipefail
-          sudo guix publish --cache=/var/cache/publish --port=3000 --compression=zstd:9 &
-          for _ in $(seq 1 30); do
-            curl -sf http://localhost:3000/nix-cache-info >/dev/null && break
-            sleep 1
-          done
-          while read -r path; do
-            [ -n "$path" ] || continue
-            hash=$(basename "$path" | cut -d- -f1)
-            curl -sf "http://localhost:3000/${hash}.narinfo" >/dev/null || true
-          done < /tmp/store-paths.txt
-          sudo find /var/cache/publish -name '*.narinfo' | wc -l
-
-      - name: Переписати URL на release assets
-        run: |
-          set -euo pipefail
-          python3 scripts/narinfo_to_release_urls.py \
-            --source /var/cache/publish \
-            --destination ./site \
-            --base-url "https://github.com/${{ github.repository }}/releases/download/substitutes"
-          sudo cp /var/cache/publish/nix-cache-info ./site/ 2>/dev/null || true
-          sudo cp /var/cache/publish/signing-key.pub ./site/ 2>/dev/null || true
-          touch ./site/.nojekyll
-
-      - name: Опублікувати архіви в реліз
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh release view substitutes >/dev/null 2>&1 || \
-            gh release create substitutes --title "Субститути каналу" \
-              --notes "Архіви для статичного кешу субститутів. Метадані — на Pages."
-          sudo find /var/cache/publish/nar -name '*.nar.zst' -size -2000M | while read -r nar; do
-            gh release upload substitutes "$nar" --clobber
-          done
-
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: ./site
-
-      - uses: actions/deploy-pages@v4
-        id: pages
-
-      - name: Повідомити про збій
-        if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          {
-            echo "### Публікація субститутів не вдалася"
-            echo "Перша помилка і її точний вивід — у логах попереднього кроку."
-            echo "Найчастіші причини: немає секрету GUIX_SIGNING_KEY, мережевий збій"
-            echo "при завантаженні тарболу Guix, або guix-daemon не створив сокет."
-          } >> "$GITHUB_STEP_SUMMARY"
-          gh api "repos/${{ github.repository }}/commits/$GITHUB_SHA/comments" \
-            -f body="Публікація субститутів не вдалася. Причина — у логах прогону." || true
+          echo "NOT_AUTHORIZED: no owner-controlled signing-key custody or endpoint ADR"
+          exit 1
