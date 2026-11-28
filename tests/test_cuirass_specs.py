@@ -92,17 +92,24 @@ class JobModuleTests(unittest.TestCase):
         """Grafting belongs on the user's machine, not in a build farm."""
         self.assertIn("(%graft? #f)", self.text)
 
-    def test_the_module_is_outside_the_channel_namespace(self) -> None:
-        """wsm/ is the channel API; a CI helper is not part of it."""
+    def test_the_module_path_matches_its_declared_name(self) -> None:
+        """Guile resolves module names from paths relative to the load root."""
         self.assertFalse((ROOT / "wsm" / "ci").exists())
-        self.assertIn("(wsm ci images)", self.text)
+        module = re.search(r"\\(define-module\\s+\\(([^)]+)\\)", self.text)
+        self.assertIsNotNone(module)
+        module_path = ROOT.joinpath(*module.group(1).split()).with_suffix(".scm")
+        self.assertEqual(module_path, IMAGES)
+        self.assertIn("(ci cuirass images)", self.text)
 
 
 class ServiceFragmentTests(unittest.TestCase):
     def test_the_fragment_uses_substitutes(self) -> None:
         """Without substitutes a build farm rebuilds every closure from source."""
         text = SERVICE.read_text(encoding="utf-8")
-        self.assertIn("(use-substitutes? #t)", text)
+        self.assertIn("(gnu services cuirass)", text)
+        self.assertNotIn("(gnu services ci)", text)
+        self.assertNotIn("(use-substitutes? #t)", text)
+        self.assertIn('(local-file "specs.scm"', text)
         self.assertIn("cuirass-service-type", text)
 
 
@@ -111,6 +118,9 @@ class DocumentationTests(unittest.TestCase):
         text = DOC.read_text(encoding="utf-8")
         self.assertIn("не завантажує образ", text.lower())
         self.assertIn("не перевіряє інсталятор", text.lower())
+        self.assertIn("--port=8081", text)
+        self.assertIn("--listen=localhost", text)
+        self.assertIn("не налаштована", text.lower())
 
     def test_the_document_admits_the_instance_never_ran(self) -> None:
         text = DOC.read_text(encoding="utf-8")
