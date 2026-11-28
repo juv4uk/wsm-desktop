@@ -182,6 +182,9 @@ class HardwareBuildEvidenceTests(unittest.TestCase):
         """The nar size is the arithmetic a publishing decision needs."""
         self.assertIn("nar size (bytes)", self.text())
         self.assertIn("archive --export", self.text())
+        self.assertIn("PACKAGES: ${{ inputs.packages }}", self.text())
+        self.assertIn('for package in "${packages[@]}"', self.text())
+        self.assertNotIn("for package in ${{ inputs.packages }}", self.text())
 
     def test_it_says_in_the_summary_that_nothing_was_published(self) -> None:
         self.assertIn("publishes nothing", self.text())
@@ -190,6 +193,12 @@ class HardwareBuildEvidenceTests(unittest.TestCase):
         text = self.text()
         self.assertIn("failures=$((failures + 1))", text)
         self.assertIn('exit 1', text)
+
+    def test_failure_reporter_uses_summary_not_github_write_api(self) -> None:
+        text = self.text()
+        self.assertIn("GITHUB_STEP_SUMMARY", text)
+        self.assertNotIn("gh api", text)
+        self.assertNotIn("GH_TOKEN:", text)
 
     def test_it_is_manual_only_and_needs_no_approval_phrase(self) -> None:
         """Building locally is not distribution, so it does not need the owner gate."""
