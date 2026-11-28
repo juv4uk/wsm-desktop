@@ -259,7 +259,11 @@ class CiFailureVisibilityTests(unittest.TestCase):
         )
 
     def test_disabled_distribution_workflows_do_not_need_failure_reporters(self) -> None:
-        for name in ("substitutes.yml", "package-archives.yml"):
+        # `substitutes.yml` left this set on 2026-11-28, when the owner approved
+        # publication: it is now an enabled workflow and carries its own inline
+        # failure reporter, which `test_other_workflows_keep_their_existing_failure_reporting`
+        # enforces.
+        for name in ("package-archives.yml",):
             workflow = WORKFLOWS / name
             with self.subTest(workflow=name):
                 self.assertTrue(all_jobs_disabled(workflow))
