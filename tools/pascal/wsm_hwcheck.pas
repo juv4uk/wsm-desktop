@@ -309,7 +309,7 @@ begin
   if Item.Revision <> '' then Identity.Add('revision', Item.Revision);
   if Item.ClassId <> '' then Identity.Add('class_id', Item.ClassId);
   if Item.ModAlias <> '' then Identity.Add('modalias', Item.ModAlias);
-  Identity.Add('local_path', '/' + Source.Substring(5));
+  Identity.Add('local_path', '/bus/pci/devices/' + Item.Address);
   Result.Add('identity', Identity);
 
   Driver := TJSONObject.Create;
@@ -370,13 +370,12 @@ begin
   Environment.Add('kernel_release', KernelRelease);
   Environment.Add('boot_mode', BootMode);
   Environment.Add('boot_mode_evidence', BootEvidence);
-  Environment.Add('virtualization', 'unknown');
   Platform := ReadPlatformFacts;
+  Environment.Add('virtualization', VirtualizationKind(Platform));
   if Platform.Count > 0 then
-  begin
-    Environment.Add('platform', Platform);
-    Environment.Strings['virtualization'] := VirtualizationKind(Platform);
-  end;
+    Environment.Add('platform', Platform)
+  else
+    Platform.Free;
   Result.Add('environment', Environment);
 
   Collectors := TJSONArray.Create;
@@ -430,7 +429,6 @@ var
   Devices: TDeviceArray;
   Report: TJSONObject;
   HasPciBus: Boolean;
-  Argument: string;
 begin
   if ParamCount > 0 then
   begin
