@@ -53,6 +53,7 @@ class BoundedProcessResult:
     stdout_truncated: bool
     stderr_truncated: bool
     marker_seen: bool
+    second_marker_seen: bool = False
 
 
 def _append_bounded_tail(target: bytearray, chunk: bytes, limit: int) -> None:
@@ -71,6 +72,7 @@ def run_bounded_process(
     *,
     timeout_seconds: float,
     marker: str | None,
+    second_marker: str | None = None,
     popen_factory: Callable[..., Any] | None = None,
     max_stdout_bytes: int = MAX_SERIAL_CAPTURE_BYTES,
     max_stderr_bytes: int = MAX_STDERR_CAPTURE_BYTES,
@@ -115,6 +117,13 @@ def run_bounded_process(
     stderr_bytes_seen = 0
     marker_seen = False
     marker_overlap = b""
+    second_bytes = second_marker.encode("utf-8") if second_marker else b""
+    if len(second_bytes) > MAX_BOOT_MARKER_BYTES:
+        raise ValueError(
+            f"installer marker must be no more than {MAX_BOOT_MARKER_BYTES} UTF-8 bytes"
+        )
+    second_seen = False
+    second_overlap = b""
     timed_out = False
     kill_drain_deadline: float | None = None
     streams = (process.stdout, process.stderr)
@@ -173,6 +182,11 @@ def run_bounded_process(
                         marker_seen = marker_bytes in candidate
                         overlap_size = max(0, len(marker_bytes) - 1)
                         marker_overlap = candidate[-overlap_size:] if overlap_size else b""
+                    if second_bytes and not second_seen:
+                        candidate = second_overlap + chunk
+                        second_seen = second_bytes in candidate
+                        overlap_size = max(0, len(second_bytes) - 1)
+                        second_overlap = candidate[-overlap_size:] if overlap_size else b""
                 else:
                     stderr_bytes_seen += len(chunk)
                     _append_bounded_tail(stderr_tail, chunk, max_stderr_bytes)
@@ -196,6 +210,7 @@ def run_bounded_process(
             stdout_truncated=stdout_bytes_seen > max_stdout_bytes,
             stderr_truncated=stderr_bytes_seen > max_stderr_bytes,
             marker_seen=marker_seen,
+            second_marker_seen=second_seen,
         )
     except BaseException:
         try:
@@ -355,6 +370,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cpus", type=int, default=2)
     parser.add_argument("--disk-size", default="4G")
     parser.add_argument(
+        "--installer-marker",
+        help=(
+            "marker the live system prints only after running the installer "
+            "entrypoint; proves the image ships a working installer, which "
+            "boot alone does not"
+        ),
+    )
+    parser.add_argument(
         "--boot-marker",
         help="literal text that must appear on the serial console to confirm boot",
     )
@@ -483,6 +506,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 command,
                 timeout_seconds=args.timeout_seconds,
                 marker=args.boot_marker,
+                second_marker=args.installer_marker,
             )
         except (OSError, subprocess.SubprocessError) as exc:
             print(f"qemu-boot-smoke: cannot start or capture QEMU: {exc}", file=sys.stderr)
@@ -512,7 +536,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             "guest_uefi_vars_source": (
                 "private-copy-of-vars-template" if args.firmware == "uefi" else None
             ),
-            "guest_installer_execution": False,
+            # True only when the guest itself printed the installer marker.
+            # Boot evidence alone must never be reported as installer evidence.
+            "guest_installer_execution": captured.second_marker_seen,
         }
         print(json.dumps(result, sort_keys=True, indent=2))
         if marker_seen:
