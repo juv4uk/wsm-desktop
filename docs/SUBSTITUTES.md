@@ -1,57 +1,59 @@
-# Субститути WSM — публікацію дозволено власником 2026-11-28
+# Публікація Guix-пакетів H170 та substitute-сервіс
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Стан: **OWNER_APPROVED / MANUAL_ONLY**
-- Workflow публікації: **увімкнений, запуск лише вручну**
-- Package/NAR export: **увімкнений; рішення щодо #367 прийняв власник, issue лишається відкритим**
-- Підписний ключ: **не створений і не збережений у CI**
-- Cuirass: **окремий build coordinator; не є автоматичним substitute server**
+## Поточний стан
 
-## Що є в репозиторії
+- H170 Free upstream package bundle: **дозволено власником 2026-11-28**.
+- Package roots: **linux-libre** і **mesa**, лише з офіційного Guix channel, зафіксованого в channels.lock.scm.
+- Публікація: успішний запуск пакувального workflow створює версійований GitHub prerelease з повною recursive store closure, контрольними сумами, публічним ключем Guix archive та GitHub build provenance.
+- Guix archive signing key: одноразовий ключ daemon на ephemeral runner; приватний ключ не завантажується й не зберігається в репозиторії. Публікується лише signing-key.pub для перевірки та імпорту.
+- Substitute endpoint/server: **не розгорнутий**. Цей пакетний release не є substitute cache.
+- Cuirass: окремий build coordinator; його конфігурація сама по собі не публікує substitutes.
 
-`scripts/narinfo_to_release_urls.py` — локальний конвертер URL у Guix narinfo. Він не створює ключі, не підписує дані, не збирає package closures і не публікує архіви.
+## Дозволений H170 Free package set
 
-`.github/workflows/substitutes.yml` та `.github/workflows/package-archives.yml` увімкнені 2026-11-28 рішенням власника. Обидва запускаються **лише вручну**, без тригерів на push чи тег; жоден із них не створює й не читає підписний ключ, крім `substitutes.yml`, який бере його з секрету і без нього падає.
+Єдині roots першого пакета:
 
-## Рішення, яких бракує
+- linux-libre — kernel candidate з upstream Guix package metadata;
+- mesa — userspace candidate для Intel i915 та upstream Nouveau/NVK.
 
-**1. Ліцензія та право на розповсюдження — issue #367.**
+Workflow не завантажує WSM package modules і не бере довільні package expressions із dispatch inputs. Він використовує тільки офіційний pinned channel у channels.lock.scm; WSM channel Phase B/authentication не обходиться й не вимикається.
 
-Потрібне окреме рішення власника щодо суперечності між repository license declaration та Guix package metadata, а також щодо права розповсюджувати отримані package outputs/NARs. Поки issue #367 відкрите, не запускайте package archive workflow, не прикріплюйте NAR до Releases/Actions artifacts і не вмикайте substitute workflow.
+Публікація запускається тільки явно: tag packages-h170-free-* або workflow_dispatch з main. На push до main автоматичної збірки чи публікації немає. Успішна збірка, експорт повної closure, створення attestation та read-back/checksum verification передують створенню prerelease. Бінарні артефакти не потрапляють у звичайні Git-гілки.
 
-**2. Channel trust — issue #534 / Phase B.**
+## Provenance та імпорт
 
-Потрібні owner-signed introduction/history, `.guix-authorizations`, публічний keyring та успішна перевірка звичайним `guix git authenticate` consumer. Не використовуйте `--disable-authentication`, вигаданий fingerprint або рухому гілку як production source.
+Кожен prerelease містить:
 
-**3. Endpoint і ключ.**
+- recursive Guix NAR bundle, стиснений zstd і розбитий на частини до 1.8 GiB;
+- signing-key.pub для одноразового підпису Guix archive;
+- SHA256SUMS та окремий digest зібраного bundle;
+- точний channels.lock.scm, channel description і hash lock-файла;
+- package roots, store paths, recursive NAR hashes та closure-size report;
+- provenance.txt та IMPORT.md.
 
-Власник має зафіксувати українською в ADR:
-- точні URLs metadata та NAR assets;
-- хто генерує і зберігає private key, де він використовується, хто має доступ;
-- ротацію, відкликання та процедуру компрометації;
-- дозволений trigger (manual/tag/release) та хто його запускає;
-- retention, доступність, ліміти й процес видалення старих assets.
+GitHub Actions додає build provenance attestation до кожної частини архіву. На споживацькій машині спочатку потрібно перевірити контрольні суми, свідомо авторизувати ключ цього конкретного релізу, а потім передати з'єднані частини через zstd у guix archive --import. Ключ не слід автоматично авторизувати для майбутніх релізів.
 
-GitHub Releases та Pages були названі допустимими hosting families, але це не затверджує конкретний endpoint, signing key custody або право розповсюджувати WSM builds.
+## Межі ліцензій і апаратної сумісності
 
-## Поточна схема — лише варіант для майбутнього рішення
+Issue #367 залишається відкритим, але не є загальною забороною на сторонні upstream packages. Його межа — WSM-owned програми й артефакти з фактичною LicenseRef-Volnist, зокрема wsm-tools та wsm-live-tools. Їх не включати до публічного package set і не називати GPL, доки власник не визначить коректне effective license metadata.
 
-Можлива архітектура після owner approval: підписані Guix narinfo як metadata + NAR archives як окремі immutable assets. Вона не повинна запускатися автоматично від push у `main`.
+Не включати в H170 Free closure:
 
-Підпис Guix narinfo охоплює ідентичність store object (StorePath, NarHash, NarSize, References та Deriver, якщо присутній), а транспортний URL можна переписати лише якщо це підтверджено конкретним pinned Guix форматом і тестами. Converter має зберігати всі підписані поля байт-у-байт та відмовлятися від неоднозначних/multi-URL форматів, які він не підтримує.
+- linux-firmware та NVIDIA GP107 FECS/GPCCS blobs;
+- Intel microcode, i915 DMC/GuC/HuC та інші nonfree firmware;
+- Nonguix, nvda-580 або інший пропрієтарний NVIDIA driver;
+- WSM-owned LicenseRef-Volnist executables.
 
-До окремої перевірки pinned Guix не припускайте, що compression layout, ім'я NAR asset, location `signing-key.pub` або cache warm-up збігаються з поточним upstream manual.
+Окрема ліцензійна межа NVIDIA firmware описана в issue #586 та коментарях до #367. Власницький дозвіл на upstream Free package work не змінює умови сторонньої firmware license.
 
-## Що дозволено робити до рішення
+Профіль drivers/profiles/h170-free.json залишається draft. Package build і store closure не доводять фізичне завантаження, binding, KMS, 3D/compute, стабільність або приймання системи на Gigabyte GA-H170-Gaming 3.
 
-- статично перевіряти Scheme/Python код, YAML і тестові fixtures;
-- звіряти очікуваний формат із pinned Guix source;
-- складати release manifest без package output binaries;
-- документувати trust, ownership, provenance та acceptance gates.
+Поточний locked linux-libre candidate має відомий GP107 Nouveau atomic-KMS regression window. Окремий linux-libre-h170 backport не включається в цей release до успішної Scheme evaluation та повної Guix kernel build на точному lock. Відсутність FECS/GPCCS firmware також означає, що GP107 3D/compute у цьому Free bundle не заявляється.
 
-Не створюйте signing keys, не додавайте secrets, не запускайте package build/export, не створюйте GitHub Release assets, не викладайте Pages metadata і не вмикайте workflow guards до явного owner approval українською.
+## Substitute service — окремий майбутній контур
 
-## Статус
+.github/workflows/substitutes.yml не є частиною package release. Він потребує довготривалого signing identity, затвердженого endpoint, key custody/rotation/revocation та довіреної клієнтської конфігурації. Жоден секрет GUIX_SIGNING_KEY, довготривалий приватний ключ або substitute URL не створюється цим package workflow.
 
-Жоден substitute cache не опублікований цією роботою. Наявність workflow чи конвертера не означає, що канал автентифіковано, package build пройшов або бінарний output дозволено розповсюджувати.
+Cuirass може координувати derivation builds, але не надає HTTP substitute endpoint сам по собі. Розгортання guix publish або іншого substitute publisher потребує окремого рішення та окремих довірених ключів.
