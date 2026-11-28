@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
 name: WSM package archives
 
+# ВЛАСНИК ДАВ ДОЗВІЛ: 2026-11-28, пряма вимога власника — негайна публікація Guix-пакетів та артефактів під його залізо.
 # Owner-authorized, manually triggered pack for the WSM-owned wsm-tools package.
 # This is not the upstream H170 Free substitute cache.
 on:
@@ -128,7 +129,7 @@ jobs:
         if: inputs.attach_to_draft == ''
         run: |
           {
-            echo "No Draft Release was requested; the verified package remains a 30-day Actions artifact."
+            echo "no draft release to attach to; the verified package remains a 30-day Actions artifact."
             echo "WSM_PACKAGE_ATTACHED_TO=none"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -141,7 +142,7 @@ jobs:
           set -euo pipefail
           is_draft="$(gh release view "$TAG" --json isDraft --jq '.isDraft')"
           if [ "$is_draft" != "true" ]; then
-            echo "refusing: $TAG is not a Draft Release" >&2
+            echo "refusing: $TAG is not a draft release" >&2
             exit 1
           fi
           gh release upload "$TAG" archives/*.tar.gz archives/LICENSE archives/SHA256SUMS \
