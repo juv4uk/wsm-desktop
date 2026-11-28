@@ -9,6 +9,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+SYSFS = Path("/sys/class/block")
 sys.path.insert(0, str(ROOT))
 
 from wsm_install.executor import (  # noqa: E402
@@ -973,6 +974,64 @@ class SysfsObserverTests(unittest.TestCase):
         result = verify_step(step, FilesystemObserver())
         self.assertEqual(result.status, "unverified")
         self.assertIn("inventory is unavailable", result.detail)
+
+
+class RealSysfsObserverTests(unittest.TestCase):
+    """The observers must distinguish 'nothing there' from 'cannot read it'.
+
+    Two mistakes are easy to make and were both made in this module's first version:
+    matching partition names by prefix (so `sdaa` looked like a child of `sda`), and
+    returning an empty tuple when sysfs could not be read, which reads as a real
+    answer. These tests pin the difference. They skip where the host has no sysfs
+    rather than asserting something about the machine they happen to run on.
+    """
+
+    def test_an_unknown_device_is_none_and_not_an_empty_inventory(self) -> None:
+        observer = SysfsDiskObserver()
+        self.assertIsNone(observer.block_identity("/dev/definitely-not-a-device"))
+        self.assertIsNone(observer.partitions("/dev/definitely-not-a-device"))
+
+    def test_a_partition_path_is_not_accepted_as_a_whole_disk(self) -> None:
+        observer = SysfsDiskObserver()
+        self.assertIsNone(observer.block_identity("/dev/definitely-not-a-device1"))
+
+    def test_unreadable_topology_is_none_rather_than_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            block = root / "class" / "block" / "sda"
+            block.mkdir(parents=True)
+            (block / "dev").write_text("8:0\n", encoding="utf-8")
+            (block / "size").write_text("100\n", encoding="utf-8")
+            (block / "removable").write_text("0\n", encoding="utf-8")
+            (block / "sda1").mkdir()
+            block.chmod(0o000)
+            try:
+                self.assertIsNone(SysfsDiskObserver(sys_root=root).partitions("/dev/sda"))
+            finally:
+                block.chmod(0o755)
+
+    @unittest.skipUnless(SYSFS.is_dir(), "no sysfs on this host")
+    def test_real_partitions_are_listed_without_prefix_matching(self) -> None:
+        observer = SysfsDiskObserver()
+        for entry in sorted(SYSFS.iterdir()):
+            if (entry / "partition").is_file():
+                continue
+            # Class/block entries also expose holders, bdi, queue, power,
+            # and integrity directories. Only a child with the kernel's
+            # partition attribute is a real partition node.
+            children = tuple(
+                child.name for child in entry.iterdir()
+                if child.is_dir()
+                and child.name != entry.name
+                and (child / "partition").is_file()
+            )
+            if not children:
+                continue
+            listed = observer.partitions(f"/dev/{entry.name}")
+            self.assertIsNotNone(listed, f"{entry.name} has children but reported None")
+            self.assertEqual(sorted(listed), sorted(f"/dev/{child}" for child in children))
+            return
+        self.skipTest("no disk with partitions on this host")
 
 
 if __name__ == "__main__":

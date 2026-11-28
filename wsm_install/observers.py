@@ -39,11 +39,17 @@ class SysfsDiskObserver:
         if not name or "/" in name or name in {".", ".."}:
             return None
         candidate = self.sys_root / "class" / "block" / name
-        if not candidate.is_dir():
-            return None
-        # A partition has its own top-level sysfs block object too. It is not
-        # an admissible whole-disk target for disk identity capture.
-        if (candidate / "partition").is_file():
+        try:
+            if not candidate.is_dir():
+                return None
+            # A partition has its own top-level sysfs block object too. It is not
+            # an admissible whole-disk target for disk identity capture.
+            if (candidate / "partition").is_file():
+                return None
+        except OSError:
+            # An unreadable sysfs entry is not a device we can describe. Returning
+            # None here is what makes `partitions` report "unreadable" instead of
+            # raising through the caller or looking like an empty disk.
             return None
         return candidate
 
