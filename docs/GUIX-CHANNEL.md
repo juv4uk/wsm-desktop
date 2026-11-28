@@ -166,6 +166,12 @@ git log --format="%G? %GK" -40 origin/main
 
 Після Phase B потрібна окрема перевірка реального channel consumer: зафіксувати owner-approved WSM commit у H170 release lock, запустити стандартний `guix time-machine` без `-L .` і без `--disable-authentication`, а тоді імпортувати той самий public module. Цей тест не можна вмикати раніше підписаного introduction та підтвердженої authorizations chain.
 
+## Побудова, а не лише оцінювання
+
+Оцінювання профілів у CI доводить, що деривації обчислюються. Щоб мати доказ
+**збірки** й не платити за неї щоразу, є окремий джобсет Cuirass:
+[CUIRASS.md](CUIRASS.md), специфікація `etc/cuirass/wsm-desktop.scm`.
+
 ## Release gates
 
 | Рівень | Що доводить | Чого не доводить |
