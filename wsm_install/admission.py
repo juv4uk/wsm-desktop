@@ -21,6 +21,7 @@ will one day need — not the apply path itself.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Callable, Sequence
 
@@ -125,7 +126,8 @@ def admit(
 
         verdicts.append(StepAdmission(index, single, destructive, "admitted"))
 
-    refused = [verdict for verdict in verdicts if verdict.status != "admitted"]
+    verdicts = _cover_stateless_steps(steps, disk, verdicts)
+    refused = [verdict for verdict in verdicts if verdict.status == "refused"]
     if refused:
         return AdmissionReport(
             plan_digest=plan,
@@ -134,6 +136,52 @@ def admit(
             steps=tuple(verdicts),
         )
     return AdmissionReport(plan_digest=plan, status="admitted", reason="", steps=tuple(verdicts))
+
+
+_DEVICE = re.compile(r"/dev/[A-Za-z0-9._/-]+")
+
+
+def _covers(candidate: Step, disk: str) -> bool:
+    """Does this step read the device a stateless earlier step was preparing?"""
+    for argument in candidate.command:
+        for referenced in _DEVICE.findall(argument):
+            if referenced == disk or referenced.startswith(disk + "p") or (
+                referenced.startswith(disk) and referenced[len(disk):].isdigit()
+            ):
+                return True
+    return False
+
+
+def _cover_stateless_steps(
+    steps: Sequence[Step], disk: str, verdicts: list[StepAdmission]
+) -> list[StepAdmission]:
+    """Let a later, verified step vouch for an earlier step that has no state of its own.
+
+    `partprobe` and `udevadm settle` deliberately have no postcondition: they ask the
+    kernel to notice a new table and wait for device nodes, and leave nothing to read.
+    Refusing the whole plan for that would be wrong, and admitting them on their own
+    would be the fake success #280 exists to remove.
+
+    The plan itself carries the evidence: if a later step is admitted and reads a
+    device under this disk, then the table and the nodes it needed were there. That
+    is a plan-level argument, and it is recorded as such — the step stays marked as
+    covered rather than verified.
+    """
+    for position, verdict in enumerate(verdicts):
+        if verdict.status != "refused" or "unverified" not in verdict.reason:
+            continue
+        for later_position in range(position + 1, len(verdicts)):
+            later = verdicts[later_position]
+            if later.status == "admitted" and _covers(steps[later_position], disk):
+                verdicts[position] = StepAdmission(
+                    verdict.index,
+                    verdict.step_digest,
+                    verdict.destructive,
+                    "admitted-covered",
+                    f"no postcondition of its own; covered by step {later.index}",
+                )
+                break
+    return verdicts
 
 
 def _grant(disk: str, steps: Sequence[Step], index: int):
