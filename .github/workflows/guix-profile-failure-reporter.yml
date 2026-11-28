@@ -1,0 +1,117 @@
+name: Guix evaluation failure reporter
+
+# Keep this workflow on the default branch. workflow_run uses this trusted
+# definition after the PR-controlled evaluator completes. It never checks out
+# or executes the triggering PR source, scripts, or artifacts.
+on:
+  workflow_run:
+    workflows: ["Guix profile evaluation"]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  report-failure:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      pull-requests: read
+      issues: write
+    steps:
+      - name: Validate trusted run metadata and report the failure
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+
+          # Do not interpolate webhook values into shell source. Accept only a
+          # positive decimal run ID, then obtain authoritative metadata from
+          # the GitHub API with the reporter's read-only Actions permission.
+          if [[ ! "$RUN_ID" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Invalid workflow run ID"
+            exit 1
+          fi
+          if [[ ! "$REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+            echo "::error::Invalid repository name"
+            exit 1
+          fi
+
+          WORKFLOW_JSON="$(gh api "repos/$REPOSITORY/actions/workflows/guix-profile-evaluation.yml")"
+          jq -e '
+            .path == ".github/workflows/guix-profile-evaluation.yml" and
+            .name == "Guix profile evaluation" and
+            .state == "active"
+          ' <<<"$WORKFLOW_JSON" >/dev/null
+          EXPECTED_WORKFLOW_ID="$(jq -r '.id' <<<"$WORKFLOW_JSON")"
+          if [[ ! "$EXPECTED_WORKFLOW_ID" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Could not resolve the trusted Guix workflow identity"
+            exit 1
+          fi
+
+          RUN_JSON="$(gh api "repos/$REPOSITORY/actions/runs/$RUN_ID")"
+          jq -e \
+            --arg repo "$REPOSITORY" \
+            --argjson run_id "$RUN_ID" \
+            --argjson workflow_id "$EXPECTED_WORKFLOW_ID" '
+              .id == $run_id and
+              .workflow_id == $workflow_id and
+              .name == "Guix profile evaluation" and
+              .path == ".github/workflows/guix-profile-evaluation.yml" and
+              .event == "pull_request" and
+              .conclusion == "failure" and
+              .repository.full_name == $repo
+            ' <<<"$RUN_JSON" >/dev/null
+
+          RUN_HEAD_SHA="$(jq -r '.head_sha // empty' <<<"$RUN_JSON")"
+          if [[ ! "$RUN_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Invalid source commit in workflow run metadata"
+            exit 1
+          fi
+
+          # GitHub supplies PR associations for the run. Validate each PR
+          # against the run SHA and base repository before writing a comment.
+          PR_NUMBERS="$(jq -r '[.pull_requests[]?.number | select(type == "number" and . > 0)] | unique | .[]' <<<"$RUN_JSON")"
+          if [[ -z "$PR_NUMBERS" ]]; then
+            echo "No associated pull request; nothing to report."
+            exit 0
+          fi
+
+          BODY="$(printf '%s\n' \
+            '### Guix profile evaluation failed' \
+            '' \
+            "Commit: $RUN_HEAD_SHA" \
+            "Workflow run: $GITHUB_SERVER_URL/$REPOSITORY/actions/runs/$RUN_ID" \
+            '' \
+            'The evaluator runs with read-only repository permissions. Inspect the first failing Guix command in the workflow logs and verify the exact pinned Guix/WSM revisions.' \
+            '' \
+            'WSM_CHANNEL_AUTHENTICATION=NOT_TESTED')"
+
+          while IFS= read -r PR_NUMBER; do
+            [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || {
+              echo "::warning::Ignoring invalid PR association"
+              continue
+            }
+
+            PR_JSON="$(gh api "repos/$REPOSITORY/pulls/$PR_NUMBER")"
+            if ! jq -e \
+              --arg repo "$REPOSITORY" \
+              --arg sha "$RUN_HEAD_SHA" '
+                .state == "open" and
+                .base.repo.full_name == $repo and
+                .head.sha == $sha
+              ' <<<"$PR_JSON" >/dev/null; then
+              echo "Skipping PR #$PR_NUMBER because it is closed, has moved, or does not target this repository."
+              continue
+            fi
+
+            gh api --method POST "repos/$REPOSITORY/issues/$PR_NUMBER/comments" \
+              -f body="$BODY" >/dev/null
+            echo "Reported Guix evaluation failure to PR #$PR_NUMBER."
+          done <<<"$PR_NUMBERS"
