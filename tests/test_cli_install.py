@@ -17,14 +17,34 @@ FIXTURE = ROOT / "tests" / "fixtures" / "hardware" / "complete-machine.json"
 PARTIAL = ROOT / "tests" / "fixtures" / "hardware" / "desktop-observed.json"
 
 
+_TEST_RUNNER = """
+import sys
+from unittest.mock import patch
+import wsm_install.install_steps as install_steps
+from wsm_install.cli import main
+
+def synthetic_tool_path(name):
+    return f"/run/current-system/profile/bin/{install_steps.TRUSTED_TOOLS[name]}"
+
+with patch.object(install_steps, "resolve_trusted_tool", side_effect=synthetic_tool_path):
+    raise SystemExit(main(sys.argv[1:]))
+"""
+
+
+def run_cli_args(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [sys.executable, "-c", _TEST_RUNNER, *args],
+        capture_output=True, text=True, check=False, cwd=ROOT,
+    )
+
+
 def run_cli(*extra: str, backend: str = "guix") -> subprocess.CompletedProcess:
     with tempfile.TemporaryDirectory() as temporary:
         report = Path(temporary) / "report.json"
         report.write_text(FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
-        return subprocess.run(
-            [sys.executable, "-m", "wsm_install", "--preflight", "--dry-run",
-             "--report", str(report), "--backend", backend, *extra],
-            capture_output=True, text=True, check=False, cwd=ROOT,
+        return run_cli_args(
+            "--preflight", "--dry-run", "--report", str(report),
+            "--backend", backend, *extra,
         )
 
 
@@ -152,17 +172,13 @@ class InstallModeTests(unittest.TestCase):
             report = Path(temporary) / "report.json"
             original = FIXTURE.read_bytes()
             report.write_bytes(original)
-            result = subprocess.run(
-                [
-                    sys.executable, "-m", "wsm_install",
-                    "--preflight", "--dry-run",
-                    "--report", str(report), "--backend", "guix",
-                    "--install", "--target-disk", "/dev/nvme0n1",
-                    "--target-size-bytes", str(256 * GIB),
-                    "--acknowledge-disk", "/dev/nvme0n1",
-                    "--write-plan", str(report), "--quiet",
-                ],
-                capture_output=True, text=True, check=False, cwd=ROOT,
+            result = run_cli_args(
+                "--preflight", "--dry-run",
+                "--report", str(report), "--backend", "guix",
+                "--install", "--target-disk", "/dev/nvme0n1",
+                "--target-size-bytes", str(256 * GIB),
+                "--acknowledge-disk", "/dev/nvme0n1",
+                "--write-plan", str(report), "--quiet",
             )
             self.assertEqual(result.returncode, 2)
             self.assertIn("write-plan.refused", result.stderr)
