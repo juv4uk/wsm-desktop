@@ -128,76 +128,34 @@ class ReleaseAcceptanceTimeoutTests(unittest.TestCase):
             )
 
 class PackageArchiveWorkflowTests(unittest.TestCase):
-    """An archive workflow must not become a distribution channel by accident."""
+    """Package builds and NAR export stay disabled until issue #367 is resolved."""
 
     WORKFLOW = ROOT / ".github" / "workflows" / "package-archives.yml"
 
-    def text(self) -> str:
-        return self.WORKFLOW.read_text(encoding="utf-8")
+    def setUp(self) -> None:
+        self.text = self.WORKFLOW.read_text(encoding="utf-8")
+        self.workflow = yaml.load(self.text, Loader=yaml.BaseLoader)
 
-    def test_it_runs_only_when_a_person_asks(self) -> None:
-        text = self.text()
-        self.assertIn("workflow_dispatch:", text)
-        self.assertNotIn("tags:", text)
-        self.assertNotIn("branches:", text)
+    def test_workflow_is_manual_only(self) -> None:
+        self.assertEqual(set(self.workflow["on"]), {"workflow_dispatch"})
 
-    def test_it_publishes_no_signing_key_and_no_release_of_its_own(self) -> None:
-        """Attaching to a draft is allowed; creating or publishing a release is not."""
-        text = self.text()
+    def test_package_job_is_explicitly_disabled(self) -> None:
+        self.assertEqual(self.workflow["jobs"]["archive"]["if"], "${{ false }}")
+
+    def test_no_build_export_or_downloadable_artifact_exists(self) -> None:
         for forbidden in (
-            "secrets.",
-            "guix archive --generate-key",
-            "git push",
-            "gh release create",
-            "gh release edit",
-            "--draft=false",
+            "guix build wsm-tools",
+            "guix archive --export",
+            "actions/upload-artifact",
+            "gh release upload",
+            "actions/deploy-pages",
         ):
             with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, text)
+                self.assertNotIn(forbidden, self.text)
 
-    def test_the_archive_is_built_on_the_release_lock(self) -> None:
-        self.assertIn("guix time-machine -C channels.lock.scm", self.text())
-
-    def test_the_artifact_is_kept_with_a_checksum(self) -> None:
-        text = self.text()
-        self.assertIn("actions/upload-artifact@v7", text)
-        self.assertIn("sha256sum wsm-tools.nar", text)
-        self.assertIn("retention-days: 30", text)
-
-    def test_it_says_why_it_is_not_a_substitute_server(self) -> None:
-        text = self.text().lower()
-        self.assertIn("not a substitute server", text)
-        self.assertIn("#741", text)
-
-
-class ReleaseAssetAttachmentTests(unittest.TestCase):
-    """A package may reach a draft release, never a published one."""
-
-    WORKFLOW = ROOT / ".github" / "workflows" / "package-archives.yml"
-
-    def text(self) -> str:
-        return self.WORKFLOW.read_text(encoding="utf-8")
-
-    def test_attachment_is_optional_and_manual(self) -> None:
-        text = self.text()
-        self.assertIn("attach_to_draft", text)
-        self.assertIn("if: inputs.attach_to_draft != ''", text)
-
-    def test_it_refuses_a_release_that_is_not_a_draft(self) -> None:
-        text = self.text()
-        self.assertIn('--json isDraft', text)
-        self.assertIn('refusing:', text)
-        self.assertIn('exit 1', text)
-
-    def test_it_uploads_only_the_archive_and_its_checksum(self) -> None:
-        text = self.text()
-        self.assertIn('gh release upload "$TAG" wsm-tools.nar wsm-tools.nar.sha256', text)
-
-    def test_it_never_publishes_a_release(self) -> None:
-        text = self.text()
-        for forbidden in ("gh release edit", "--draft=false", "gh release create"):
-            with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, text)
+    def test_workflow_records_the_licensing_gate(self) -> None:
+        self.assertIn("#367", self.text)
+        self.assertIn("розповсюдження", self.text.lower())
 
 if __name__ == "__main__":
     unittest.main()

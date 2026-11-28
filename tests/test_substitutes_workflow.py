@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""The substitute workflow must fail loudly without a key, and never leak one."""
+"""Substitute publication must stay disabled until explicit owner decisions."""
 
 from __future__ import annotations
 
@@ -15,62 +15,38 @@ WORKFLOW = ROOT / ".github" / "workflows" / "substitutes.yml"
 class SubstituteWorkflowTests(unittest.TestCase):
     def setUp(self) -> None:
         self.text = WORKFLOW.read_text(encoding="utf-8")
-        self.data = yaml.safe_load(self.text)
-        self.steps = self.data["jobs"]["publish"]["steps"]
+        self.data = yaml.load(self.text, Loader=yaml.BaseLoader)
 
-    def step(self, needle: str) -> dict:
-        for step in self.steps:
-            if needle in (step.get("name") or "") or needle in str(step.get("uses", "")):
-                return step
-        raise AssertionError(f"no step matching {needle!r}")
+    def test_workflow_is_manual_only(self) -> None:
+        events = self.data["on"]
+        self.assertEqual(set(events), {"workflow_dispatch"})
 
-    def test_the_workflow_parses(self) -> None:
-        self.assertIn("publish", self.data["jobs"])
+    def test_publication_job_is_explicitly_disabled(self) -> None:
+        job = self.data["jobs"]["publish"]
+        self.assertEqual(job["if"], "${{ false }}")
+        self.assertIn("вимкнено", self.text.lower())
 
-    def test_it_runs_on_manual_dispatch(self) -> None:
-        self.assertIn("workflow_dispatch", self.data[True])
-
-    def test_it_has_the_permissions_pages_needs(self) -> None:
+    def test_no_publication_permissions_are_granted(self) -> None:
         permissions = self.data["permissions"]
-        for key in ("contents", "pages", "id-token"):
-            self.assertEqual(permissions[key], "write" if key != "id-token" else "write")
+        self.assertEqual(permissions, {"contents": "read"})
 
-    def test_the_key_comes_from_a_secret_and_is_checked(self) -> None:
-        step = self.step("ключ")
-        self.assertIn("secrets.GUIX_SIGNING_KEY", str(step))
-        # Missing key must stop the run: an unsigned cache cannot be authorised
-        # by a client, so publishing it would be busywork.
-        self.assertIn("exit 1", step["run"])
-
-    def test_no_key_material_is_committed(self) -> None:
-        """A path is fine; the key itself is not."""
+    def test_no_signing_key_or_deployment_action_is_referenced(self) -> None:
         for marker in (
-            "BEGIN OPENSSH PRIVATE KEY",
-            "(signing-key",
-            "(private-key",
+            "secrets.",
+            "GUIX_SIGNING_KEY",
+            "signing-key.sec",
+            "guix archive --generate-key",
+            "gh release upload",
+            "actions/deploy-pages",
+            "actions/upload-pages-artifact",
         ):
-            self.assertNotIn(marker, self.text)
-        # A base64 blob longer than 64 characters in a workflow is key material.
-        import re
+            with self.subTest(marker=marker):
+                self.assertNotIn(marker, self.text)
 
-        blobs = re.findall(r"[A-Za-z0-9+/]{64,}={0,2}", self.text)
-        self.assertEqual(blobs, [], f"possible key material: {blobs[:1]}")
-
-    def test_the_cache_is_warmed_before_publishing(self) -> None:
-        """`guix publish` is lazy; without a warmup the cache directory is empty."""
-        warm = self.step("Прогріти")
-        self.assertIn("narinfo", warm["run"])
-
-    def test_archives_go_to_a_release_and_metadata_to_pages(self) -> None:
-        self.assertIn("gh release upload substitutes", self.text)
-        self.assertIn("upload-pages-artifact", self.text)
-        # The split is the whole point: nar archives must not be in the site.
-        self.assertIn("--base-url \"https://github.com/${{ github.repository }}/releases/download/substitutes\"", self.text)
-
-    def test_pages_deployment_uses_the_official_actions(self) -> None:
-        uses = [step.get("uses", "") for step in self.steps]
-        self.assertIn("actions/upload-pages-artifact@v3", uses)
-        self.assertIn("actions/deploy-pages@v4", uses)
+    def test_it_names_the_required_owner_gates(self) -> None:
+        self.assertIn("#367", self.text)
+        self.assertIn("endpoint", self.text.lower())
+        self.assertIn("key custody", self.text.lower())
 
 
 if __name__ == "__main__":
