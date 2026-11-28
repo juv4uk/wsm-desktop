@@ -70,7 +70,7 @@ class H170LinuxLibreOverlayTests(unittest.TestCase):
         self.assertNotIn('secrets.GUIX_SIGNING_KEY', workflow)
         self.assertNotIn('actions/upload-artifact', workflow)
         self.assertIn(
-            "Firmware policy: no NVIDIA firmware, proprietary driver, or Nonguix input",
+            "Firmware policy: no NVIDIA firmware, proprietary driver, or nonfree driver payload",
             workflow,
         )
 
