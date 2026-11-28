@@ -72,7 +72,7 @@ jobs:
       - name: Build the Free Pascal front end
         run: |
           set -euo pipefail
-          guix build -L . -f wsm/packages/wsm-install-fpc.scm > /tmp/fpc-store-path.txt
+          guix build -L . -e '(@ (wsm packages wsm-install-fpc) wsm-install-fpc)' > /tmp/fpc-store-path.txt
           cat /tmp/fpc-store-path.txt
           printf 'FPC_STORE_PATH=%s\n' "$(tail -n1 /tmp/fpc-store-path.txt)" >> "$GITHUB_ENV"
 
@@ -95,7 +95,7 @@ jobs:
             echo "### FPC install CLI parity failed"
             echo "The first failing step and its exact output are in the preceding step logs."
             echo "Reproduce locally with:"
-            echo '  guix build -L . -f wsm/packages/wsm-install-fpc.scm'
+            echo '  guix build -L . -e '(@ (wsm packages wsm-install-fpc) wsm-install-fpc)''
             echo '  python3 scripts/check_fpc_cli_parity.py --pascal <store path>/bin/wsm-install-fpc'
             echo "A self-test failure means the harness, not the Pascal code, is wrong."
           } >> "$GITHUB_STEP_SUMMARY"
