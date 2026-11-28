@@ -18,6 +18,7 @@
 |---|---|---|
 | `(wsm systems performance)` | `wsm/systems/performance.scm` | source-tree evaluation на pinned Guix; authenticated channel lookup потребує окремого Phase B bootstrap |
 | `(wsm packages wsm)` | `wsm/packages/wsm.scm` | package metadata має невирішену ліцензійну суперечність #367; не оголошувати release-ready |
+| `(wsm packages linux-libre)` | `wsm/packages/linux-libre.scm` | `linux-libre-h170`: pinned upstream linux-libre + один GP107 Nouveau atomic-KMS backport; Guix build і H170 runtime ще не підтверджені |
 
 Не переносити модулі з `wsm/` без необхідності: цей шлях уже відповідає Scheme namespace `(wsm …)`. Файли `systems/*.scm` залишаються machine/release configurations, а не публічним API channel namespace.
 

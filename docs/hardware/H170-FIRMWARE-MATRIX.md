@@ -236,3 +236,31 @@ package/hash. Зовнішній GP107 test host не замінює H170.
 - **Profile pass**: усі попередні рівні підтверджені саме для заявленого профілю (Free або Compatibility), а manifest зберігає provenance.
 
 Поки ці критерії не виконані, H170 profile залишається draft, а невідомі стани не підвищуються.
+
+
+## 11. H170 Free: вузький Nouveau atomic-KMS kernel candidate
+
+Pinned Guix commit
+`4e5195be20d9b124df8a8bb69213412236e4668e` selects
+`linux-libre 7.3.5`. The Nouveau atomic-modesetting regression fix
+`ed7fb901fce31588bd12ab95adc36ebcb51bc8ea` is present in mainline but absent
+from the Linux 7.3.5/7.3.6 source snapshots audited for this target.
+
+The WSM channel defines `linux-libre-h170` as a derivative of that exact
+Guix package. It inherits the upstream source, deblob transformations,
+configuration, build phases, inputs, supported systems, kernel ABI and
+license, then appends only the upstream Nouveau display fix. The patch adds
+the atomic check and commit hooks when the device uses atomic modesetting.
+
+**Evidence boundary:**
+- this is source/recipe integration, not a completed Guix evaluation or kernel build;
+- it adds no NVIDIA firmware, proprietary driver, Nonguix input or binary blob;
+- it does not fix GP107 FECS/GPCCS firmware requirements for GR 3D/compute;
+- it does not prove GP107 KMS on the owner's H170 system, or physical driver binding;
+- the H170 manifest remains `runtime_binding=unknown`, `functional_validation=not-run`, and profile status remains `draft`.
+
+The exact upstream patch is retained at
+`wsm/packages/patches/linux-libre-h170-nouveau-atomic.patch`. Its Guix
+package object is checked by `tests/guix/source-module-evaluation.scm` against
+the official pinned lock; a full source evaluation and kernel build are still
+required before it can be called build-ready.
