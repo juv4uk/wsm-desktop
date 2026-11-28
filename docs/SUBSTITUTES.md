@@ -12,6 +12,8 @@
 
 Початковий H170 Free cache містить рівно 11 upstream-пакетів із фіксованого маніфесту:
 
+Це число означає специфікації маніфесту, а не кількість store outputs: Guix multi-output пакети можуть додавати окремі `lib`, `doc` або `bin` outputs. Реальний прогін цього самого pinned manifest повернув 15 store outputs для 11 специфікацій. Publisher перевіряє щонайменше 11 outputs і вимагає, щоб кількість створених NAR та narinfo дорівнювала фактичній кількості outputs.
+
 - `linux-libre`
 - `mesa`
 - `vulkan-loader`
