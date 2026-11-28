@@ -291,10 +291,6 @@ jobs:
             sha256sum signing-key.pub provenance.json > metadata.SHA256SUMS
           )
 
-          gh release create "$CACHE_TAG" \
-            --title "WSM H170 Free substitute cache ${GITHUB_RUN_NUMBER}" \
-            --notes "Pinned H170 Free upstream-only package cache. Source commit: ${GITHUB_SHA}. Signing key is ephemeral to this run; private key is not published. NAR assets are immutable; metadata is deployed separately to Pages."
-          gh release upload "$CACHE_TAG" "${NARS[@]}" ./site/signing-key.pub ./site/SHA256SUMS ./site/provenance.json ./site/metadata.SHA256SUMS
 
       - name: Attest the exact NAR and cache metadata
         uses: actions/attest@v4
@@ -305,6 +301,28 @@ jobs:
             ./site/SHA256SUMS
             ./site/provenance.json
             ./site/metadata.SHA256SUMS
+
+      - name: Publish immutable Release assets and verify read-back
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          CACHE_TAG="h170-free-cache-${GITHUB_RUN_NUMBER}"
+          READBACK_DIR="$RUNNER_TEMP/h170-free-release-readback"
+          gh release create "$CACHE_TAG" \
+            --title "WSM H170 Free substitute cache ${GITHUB_RUN_NUMBER}" \
+            --notes "Pinned H170 Free upstream-only package cache. Source commit: ${GITHUB_SHA}. Signing key is ephemeral to this run; private key is not published. NAR assets are immutable; metadata is deployed separately to Pages."
+          gh release upload "$CACHE_TAG" \
+            /var/cache/guix/h170-free/nar/*.nar.zst \
+            ./site/signing-key.pub ./site/SHA256SUMS ./site/provenance.json ./site/metadata.SHA256SUMS
+          mkdir -p "$READBACK_DIR"
+          gh release download "$CACHE_TAG" --dir "$READBACK_DIR"
+          (
+            cd "$READBACK_DIR"
+            sha256sum -c SHA256SUMS
+            sha256sum -c metadata.SHA256SUMS
+          )
+          echo "Release $CACHE_TAG read-back checksum verification passed." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Pages metadata
         uses: actions/upload-pages-artifact@v3
