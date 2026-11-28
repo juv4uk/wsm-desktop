@@ -15,6 +15,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # Historical .guix-authorizations commits are part of the key-retention check.
 
       - uses: actions/setup-python@v7
         with:
@@ -51,6 +53,17 @@ jobs:
 
       - name: Report WSM channel bootstrap artifacts
         run: python scripts/check_channel_auth.py .
+
+      - name: Checkout WSM public keyring
+        if: ${{ hashFiles('.guix-authorizations') != '' }}
+        uses: actions/checkout@v7
+        with:
+          ref: keyring
+          path: .channel-keyring
+          fetch-depth: 1
+
+      - name: Check WSM channel authorizations
+        run: python scripts/check_channel_authorizations.py . --keyring-dir .channel-keyring
 
       # Кожен скрипт, який `make check-*` запускає, мусить запускатися і тут.
       # Інакше перевірка існує лише на машині того, хто її додав, а зелений CI
