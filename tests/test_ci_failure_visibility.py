@@ -42,16 +42,25 @@ def all_jobs_disabled(workflow: Path) -> bool:
     )
 
 
+def inline_write_reporter(workflow: Path) -> bool:
+    """Detect a PR-controlled workflow writing comments through a token."""
+    return any(
+        ("failure()" in str(step.get("if", "")) or "always()" in str(step.get("if", "")))
+        and REPORTS.search(str(step.get("run", "")))
+        for step in steps_of(workflow)
+    )
+
+
 def inline_failure_reporter(workflow: Path) -> bool:
-    """Accept either a trusted inline comment or a readable run-summary reporter."""
-    for step in steps_of(workflow):
-        condition = str(step.get("if", ""))
-        script = str(step.get("run", ""))
-        if "failure()" not in condition and "always()" not in condition:
-            continue
-        if REPORTS.search(script) or "$GITHUB_STEP_SUMMARY" in script:
-            return True
-    return False
+    """Accept a readable summary or an inline comment as a failure explanation."""
+    return any(
+        ("failure()" in str(step.get("if", "")) or "always()" in str(step.get("if", "")))
+        and (
+            REPORTS.search(str(step.get("run", "")))
+            or "$GITHUB_STEP_SUMMARY" in str(step.get("run", ""))
+        )
+        for step in steps_of(workflow)
+    )
 
 
 def exact_open_main_prs(
@@ -107,7 +116,7 @@ class CiFailureVisibilityTests(unittest.TestCase):
                 document = document_of(workflow)
                 self.assertEqual(document.get("permissions"), {"contents": "read"})
                 self.assertFalse(
-                    inline_failure_reporter(workflow),
+                    inline_write_reporter(workflow),
                     f"{workflow.name} is PR-controlled and must not write a comment",
                 )
 
