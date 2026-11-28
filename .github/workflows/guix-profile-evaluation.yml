@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/guix-profile-evaluation.yml"
+      - ".github/workflows/guix-profile-failure-reporter.yml"
       - ".guix-channel"
       - ".guix-authorizations"
       - "channels.lock.scm"
@@ -18,8 +19,6 @@ on:
 
 permissions:
   contents: read
-  # Коментар до коміту з причиною збою — див. docs/ECOSYSTEM-PRINCIPLES.md.
-  pull-requests: read
 
 concurrency:
   group: guix-profile-evaluation-${{ github.event.pull_request.number || github.ref }}
@@ -32,10 +31,6 @@ jobs:
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@v7
-
-      # Кожен прогін `guix time-machine` інакше заново витягує checkout каналу.
-      # Ключ — сам lock, тому зміна каналу природно інвалідовує кеш, а решта
-      # прогонів його перевикористовує. Так робить Guix CI у Bitcoin Core.
       - name: Restore Guix checkout cache
         id: guix-checkouts
         uses: actions/cache/restore@v4
@@ -43,7 +38,6 @@ jobs:
           path: ~/.cache/guix/checkouts
           key: guix-checkouts-${{ hashFiles('channels.lock.scm', 'channels/*.scm') }}
           restore-keys: guix-checkouts-
-
       - name: Install Guix
         run: |
           set -euo pipefail
@@ -51,35 +45,22 @@ jobs:
           sudo apt-get install -y guix
           sudo systemctl enable --now guix-daemon.service
           guix --version
-
       - name: Evaluate pinned Guix profiles with local WSM source modules
         run: |
           set -euo pipefail
           make check-guix-eval
           echo "WSM_CHANNEL_AUTHENTICATION=NOT_TESTED" | tee -a "$GITHUB_STEP_SUMMARY"
-
+      - name: Summarize Guix evaluation failure
+        if: failure()
+        run: |
+          {
+            echo "### Guix profile evaluation failed"
+            echo "The first failing command and its exact output are in the preceding step logs."
+            echo "WSM_CHANNEL_AUTHENTICATION=NOT_TESTED"
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Save Guix checkout cache
         if: success() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
         uses: actions/cache/save@v4
         with:
           path: ~/.cache/guix/checkouts
           key: ${{ steps.guix-checkouts.outputs.cache-primary-key }}
-
-      - name: Повідомити причину збою
-        if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -uo pipefail
-          BODY=$(mktemp)
-          {
-            echo "### Guix profile evaluation: оцінювання не завершилось"
-            echo ""
-            echo "Commit: \`$GITHUB_SHA\`"
-            echo ""
-            echo "Логи задачі потребують авторизації, тому причина лишається тут."
-            echo "Найчастіші причини: модуль не імпортовано, локальний load-path,"
-            echo "невідповідність API pinned Guix."
-          } > "$BODY"
-          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
-            -F body=@"$BODY" >/dev/null && echo "причину записано коментарем"
