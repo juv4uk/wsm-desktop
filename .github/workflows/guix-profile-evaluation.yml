@@ -98,7 +98,7 @@ jobs:
       - name: Evaluate the H170 source module against the exact lock
         run: |
           set -euo pipefail
-          guix time-machine -C channels.lock.scm -- repl -L . tests/guix/source-module-evaluation.scm
+          guix time-machine -C channels.lock.scm -- repl -L . tests/guix/h170-kernel-module-evaluation.scm
 
       - name: Build the H170 GP107 kernel package on the exact Guix lock
         timeout-minutes: 240
