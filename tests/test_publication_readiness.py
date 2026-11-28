@@ -114,10 +114,22 @@ class PublicationReadinessTests(unittest.TestCase):
         self.assertEqual(checker.problems(self.root), [])
 
     def test_the_real_repository_is_currently_blocked(self) -> None:
-        """If this ever passes, the owner resolved #367 — update the policy text."""
+        """#367 was resolved via option (a); the other blockers still stand.
+
+        The licence mismatch no longer appears: every package definition now
+        carries the custom `<license>` object. What remains is the unsigned
+        channel and the nonfree Compatibility definitions (#586). If this test
+        ever fails because there are no blockers at all, the owner has closed
+        both — and the policy text should be updated in the same change.
+        """
         found = checker.problems(ROOT)
-        self.assertTrue(found, "the repository reports no blockers; #367 may be resolved")
-        self.assertTrue(any("#367" in item for item in found), found)
+        self.assertTrue(found, "no blockers at all; update the publication policy text")
+        self.assertFalse(
+            any("#367" in item for item in found),
+            "#367 reappeared: a package definition declares a licence that "
+            "contradicts the repository licence",
+        )
+        self.assertTrue(any("guix-authorizations" in item for item in found), found)
 
 
 if __name__ == "__main__":
