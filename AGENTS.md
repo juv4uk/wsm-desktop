@@ -34,6 +34,7 @@
 
 - Стан каналу звітує `python3 scripts/check_channel_auth.py .` (`scripts/check_channel_auth.py`; та сама команда в цілі `check-channel-artifacts`). Він друкує, які артефакти присутні, і навмисно не вирішує, чи канал автентифікований.
 - Заблоковано на підписі власника: `.guix-authorizations`, підписаний introduction commit і keyring-гілка. Без них канал не можна називати authenticated чи вносити в release lock; агент не вигадує fingerprint, commit або ключ. Порядок кроків, включно з `guix git authenticate`, — [docs/GUIX-CHANNEL.md](docs/GUIX-CHANNEL.md), розділ «Автентифікація каналу».
+- `.github/workflows/substitutes.yml` наразі є fail-closed gate: не dispatch-ити його для публікації, не додавати `GUIX_SIGNING_KEY`, не використовувати довільні package inputs і не обходити #367/#534. Канонічний стан — [docs/SUBSTITUTES.md](docs/SUBSTITUTES.md); build evidence без export — PR #773.
 
 ### 3. Перший hardware profile для машини власника (Gigabyte GA-H170-Gaming 3)
 

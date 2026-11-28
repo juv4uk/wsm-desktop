@@ -1,57 +1,32 @@
-# Субститути WSM — технічний прототип, публікацію вимкнено
+# Субститути WSM — publication gate
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Стан: **NOT_AUTHORIZED / NOT_PUBLISHED**
-- Workflow публікації: **вимкнений fail-closed guard**
-- Package/NAR export: **вимкнений до licensing decision #367**
-- Підписний ключ: **не створений і не збережений у CI**
-- Cuirass: **окремий build coordinator; не є автоматичним substitute server**
+- Стан: **PUBLICATION_PAUSED / NOT_PUBLISHED**
+- Workflow: ручний і fail-closed; він лише пояснює незакриті умови та завершується помилкою.
+- Build evidence: окремий upstream-only lane у [PR #773](https://github.com/juv4uk/wsm-desktop/pull/773) (`linux-libre`, `mesa`); це не NAR export і не право на розповсюдження.
+- Signing key: не зберігається в repository чи GitHub Actions secrets цим workflow.
 
-## Що є в репозиторії
+## Чому публікація зараз призупинена
 
-`scripts/narinfo_to_release_urls.py` — локальний конвертер URL у Guix narinfo. Він не створює ключі, не підписує дані, не збирає package closures і не публікує архіви.
+Merge #771 увімкнув workflow, який міг зібрати довільний package input, за замовчуванням `wsm-tools`, використати GitHub signing secret і змінювати Releases та Pages. Ця версія замінює той небезпечний шлях fail-closed gate-ом. Жодних substitute assets не було створено.
 
-`.github/workflows/substitutes.yml` та `.github/workflows/package-archives.yml` тимчасово залишені як вимкнені декларації наміру. Обидва мають `if: ${{ false }}`, ручний тригер без автоматичного push-тригера, read-only permissions і не виконують жодної build/export/deploy дії.
+Потрібні всі умови:
 
-## Рішення, яких бракує
+1. **License / redistribution (#367).** Власник має затвердити ліцензію та право розповсюдження кожного WSM-owned package/output. До цього `wsm-tools`, `wsm-live-tools` і Compatibility packages не входять до публічного cache.
+2. **Channel trust (#534 / Phase B).** Потрібні owner-signed introduction/history, `.guix-authorizations`, публічний keyring і успішний стандартний `guix git authenticate` consumer. Не приймаються unsigned bypass, вигаданий fingerprint або рухома `main` замість authenticated source.
+3. **Key custody.** Окремий owner-ratified ADR має описати генерацію, зберігання, доступ, ротацію, відкликання та incident response. Загальне доручення почати підготовку пакетів саме по собі не задає, де зберігати private signing key.
+4. **Immutable package allowlist and provenance.** Для кожного package root мають бути зафіксовані Guix/WSM source commits, derivation/store path, license decision, build evidence і підписаний narinfo. Жодних package names, що передаються довільним shell input.
+5. **Endpoint / retention.** ADR має затвердити URL metadata/NARs, доступ, retention, видалення, monitoring і відповідального оператора.
 
-**1. Ліцензія та право на розповсюдження — issue #367.**
+## Дозволена робота до цього моменту
 
-Потрібне окреме рішення власника щодо суперечності між repository license declaration та Guix package metadata, а також щодо права розповсюджувати отримані package outputs/NARs. Поки issue #367 відкрите, не запускайте package archive workflow, не прикріплюйте NAR до Releases/Actions artifacts і не вмикайте substitute workflow.
+- Перевіряти Guix source/derivations на exact `channels.lock.scm`.
+- Збирати upstream-only package roots у тимчасовому store для build evidence, без export або upload.
+- Перевіряти `linux-libre`/Mesa та hardware profile окремо; package build не доводить драйверне binding або фізичну роботу H170.
 
-**2. Channel trust — issue #534 / Phase B.**
+## Що workflow робить зараз
 
-Потрібні owner-signed introduction/history, `.guix-authorizations`, публічний keyring та успішна перевірка звичайним `guix git authenticate` consumer. Не використовуйте `--disable-authentication`, вигаданий fingerprint або рухому гілку як production source.
+`.github/workflows/substitutes.yml` має лише `workflow_dispatch`, `contents: read` і один крок, який записує `PUBLICATION_PAUSED` у `$GITHUB_STEP_SUMMARY`, після чого завершується ненульовим кодом. Він не встановлює Guix, не читає secrets, не збирає package, не запускає `guix publish`, не змінює Releases чи Pages.
 
-**3. Endpoint і ключ.**
-
-Власник має зафіксувати українською в ADR:
-- точні URLs metadata та NAR assets;
-- хто генерує і зберігає private key, де він використовується, хто має доступ;
-- ротацію, відкликання та процедуру компрометації;
-- дозволений trigger (manual/tag/release) та хто його запускає;
-- retention, доступність, ліміти й процес видалення старих assets.
-
-GitHub Releases та Pages були названі допустимими hosting families, але це не затверджує конкретний endpoint, signing key custody або право розповсюджувати WSM builds.
-
-## Поточна схема — лише варіант для майбутнього рішення
-
-Можлива архітектура після owner approval: підписані Guix narinfo як metadata + NAR archives як окремі immutable assets. Вона не повинна запускатися автоматично від push у `main`.
-
-Підпис Guix narinfo охоплює ідентичність store object (StorePath, NarHash, NarSize, References та Deriver, якщо присутній), а транспортний URL можна переписати лише якщо це підтверджено конкретним pinned Guix форматом і тестами. Converter має зберігати всі підписані поля байт-у-байт та відмовлятися від неоднозначних/multi-URL форматів, які він не підтримує.
-
-До окремої перевірки pinned Guix не припускайте, що compression layout, ім'я NAR asset, location `signing-key.pub` або cache warm-up збігаються з поточним upstream manual.
-
-## Що дозволено робити до рішення
-
-- статично перевіряти Scheme/Python код, YAML і тестові fixtures;
-- звіряти очікуваний формат із pinned Guix source;
-- складати release manifest без package output binaries;
-- документувати trust, ownership, provenance та acceptance gates.
-
-Не створюйте signing keys, не додавайте secrets, не запускайте package build/export, не створюйте GitHub Release assets, не викладайте Pages metadata і не вмикайте workflow guards до явного owner approval українською.
-
-## Статус
-
-Жоден substitute cache не опублікований цією роботою. Наявність workflow чи конвертера не означає, що канал автентифіковано, package build пройшов або бінарний output дозволено розповсюджувати.
+Коли всі умови будуть закриті, потрібен окремий reviewed PR з allowlist-only pipeline, owner-approved signing design і точними provenance gates. Не знімайте цей guard простим перемиканням `if: false` або додаванням signing secret.

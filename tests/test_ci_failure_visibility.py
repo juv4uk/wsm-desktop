@@ -43,11 +43,15 @@ def all_jobs_disabled(workflow: Path) -> bool:
 
 
 def inline_failure_reporter(workflow: Path) -> bool:
-    return any(
-        "failure()" in str(step.get("if", ""))
-        and REPORTS.search(str(step.get("run", "")))
-        for step in steps_of(workflow)
-    )
+    """Accept either a trusted inline comment or a readable run-summary reporter."""
+    for step in steps_of(workflow):
+        condition = str(step.get("if", ""))
+        script = str(step.get("run", ""))
+        if "failure()" not in condition and "always()" not in condition:
+            continue
+        if REPORTS.search(script) or "$GITHUB_STEP_SUMMARY" in script:
+            return True
+    return False
 
 
 def exact_open_main_prs(
