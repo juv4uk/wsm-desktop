@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: h170-free-core-package-evidence-${{ github.ref }}
@@ -139,3 +140,14 @@ jobs:
             echo "Commit: `$GITHUB_SHA`"
             echo "Evaluation/build did not complete. No NAR export, Actions artifact, Release asset, Pages deployment or substitute was created."
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report build failure in the pull request
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          gh issue comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --body "H170 Free package evidence failed on `$GITHUB_SHA`. No NAR or binary artifact was exported. See the failed workflow step logs and job summary."
+
