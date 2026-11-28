@@ -87,6 +87,28 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Без ключа кеш усе одно корисний: офіційні пакети Guix зберігають
+          # СВІЙ підпис від ci.guix.gnu.org, і клієнт їх приймає. Наші власні
+          # пакети тоді лишаються непідписаними — клієнт їх пропустить і
+          # збере з джерел, тобто гірше, але не зламано.
+          #
+          # Тому відсутність ключа — це режим роботи, а не привід зупиняти все.
+          # Жорсткий вихід тут блокував публікацію офіційних субститутів, яким
+          # підпис не потрібен узагалі.
+          if [ -z "${GUIX_SIGNING_KEY:-}" ] || [ -z "${GUIX_SIGNING_PUBLIC_KEY:-}" ]; then
+            {
+              echo "::warning::Немає ключа підпису — режим дзеркала без підпису."
+              echo "WSM_SUBSTITUTES_SIGNED=false"
+              echo "Офіційні субститути Guix лишаються чинними: їхній підпис від"
+              echo "ci.guix.gnu.org зберігається. Наші власні пакети в цьому прогоні"
+              echo "непідписані, і клієнт збереже їх із джерел."
+              echo "Щоб підписувати: python3 scripts/guix_sign.py keygen, далі"
+              echo "секрет GUIX_SIGNING_KEY і змінна GUIX_SIGNING_PUBLIC_KEY."
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "WSM_SUBSTITUTES_SIGNED=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          echo "WSM_SUBSTITUTES_SIGNED=true" >> "$GITHUB_ENV"
           sudo install -d -m 0700 /etc/guix
           sudo guix archive --generate-key
           sudo test -s /etc/guix/signing-key.sec
