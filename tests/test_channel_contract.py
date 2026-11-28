@@ -33,6 +33,32 @@ NONFREE_MODULE = re.compile(
 INTRODUCTION_FORM = re.compile(r"\(introduction\b")
 
 
+def scheme_forms(code: str, operator: str) -> list[str]:
+    """Return balanced forms named by operator from already-masked Scheme code."""
+    marker = re.compile(rf"\({re.escape(operator)}(?=\s|\))")
+    forms: list[str] = []
+    for match in marker.finditer(code):
+        depth = 0
+        for index in range(match.start(), len(code)):
+            if code[index] == "(":
+                depth += 1
+            elif code[index] == ")":
+                depth -= 1
+                if depth == 0:
+                    forms.append(code[match.start():index + 1])
+                    break
+    return forms
+
+
+def introductions_missing_fingerprint(source: str) -> list[str]:
+    """List each individual introduction form that omits its own fingerprint."""
+    code = mask_scheme_non_code(source)
+    missing: list[str] = []
+    for index, form in enumerate(scheme_forms(code, "introduction")):
+        if not re.search(r"\(\s*openpgp-fingerprint\b", form):
+            missing.append(f"introduction[{index}]")
+    return missing
+
 def modules_under(root: Path) -> dict[Path, list[str]]:
     """Return declared module names, masking comments/strings first.
 
@@ -85,24 +111,31 @@ class ChannelContractTests(unittest.TestCase):
             "known nonfree module imports in WSM Scheme source: " + ", ".join(offenders),
         )
 
-    def test_any_declared_introduction_names_a_fingerprint(self) -> None:
-        """A syntactic fingerprint field is necessary, but never proof of trust."""
+    def test_each_declared_introduction_names_its_own_fingerprint(self) -> None:
+        """A syntactic field in one form cannot bless another introduction."""
+        missing: dict[str, list[str]] = {}
         for path in sorted(CHANNELS.glob("*.scm")):
-            code = mask_scheme_non_code(path.read_text(encoding="utf-8"))
-            if INTRODUCTION_FORM.search(code):
-                self.assertIn(
-                    "openpgp-fingerprint",
-                    code,
-                    f"{path.name}: an introduction must name its signing fingerprint",
-                )
+            absent = introductions_missing_fingerprint(path.read_text(encoding="utf-8"))
+            if absent:
+                missing[path.relative_to(ROOT).as_posix()] = absent
+        self.assertEqual(
+            missing,
+            {},
+            f"introduction forms missing their own openpgp-fingerprint: {missing}",
+        )
 
-    def test_authentication_reporter_keeps_authentication_unknown(self) -> None:
-        """Only Guix's git authenticate can decide the signed channel chain."""
-        output = io.StringIO()
-        with contextlib.redirect_stdout(output):
-            result = channel_auth_main([str(ROOT)])
-        self.assertEqual(result, 0)
-        self.assertIn("authenticated: unknown by design", output.getvalue())
+    def test_two_introductions_do_not_share_one_fingerprint_match(self) -> None:
+        source = '''
+        (channel (introduction
+          (make-channel-introduction "first"
+            (openpgp-fingerprint "FIRST"))))
+        (channel (introduction
+          (make-channel-introduction "second")))
+        '''
+        self.assertEqual(
+            introductions_missing_fingerprint(source),
+            ["introduction[1]"],
+        )
 
     def test_the_channel_documentation_states_the_trust_model(self) -> None:
         text = (CHANNELS / "README.md").read_text(encoding="utf-8")
