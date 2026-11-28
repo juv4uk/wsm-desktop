@@ -57,6 +57,49 @@ jobs:
           make check-guix-eval
           echo "WSM_CHANNEL_AUTHENTICATION=NOT_TESTED" | tee -a "$GITHUB_STEP_SUMMARY"
 
+      - name: Save Guix checkout cache
+        if: success() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/guix/checkouts
+          key: ${{ steps.guix-checkouts.outputs.cache-primary-key }}
+
+      - name: Summarize Guix evaluation failure
+        if: failure()
+        run: |
+          {
+            echo "### Guix profile evaluation failed"
+            echo "The first failing command and its exact output are in the preceding step logs."
+            echo "WSM_CHANNEL_AUTHENTICATION=NOT_TESTED"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  build-h170-kernel:
+    name: Evaluate and build the H170 GP107 kernel candidate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Restore Guix checkout cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/guix/checkouts
+          key: guix-checkouts-${{ hashFiles('channels.lock.scm', 'channels/*.scm') }}
+          restore-keys: guix-checkouts-
+
+      - name: Install Guix
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y guix
+          sudo systemctl enable --now guix-daemon.service
+          guix --version
+
+      - name: Evaluate the H170 source module against the exact lock
+        run: |
+          set -euo pipefail
+          guix time-machine -C channels.lock.scm -- repl -L . tests/guix/source-module-evaluation.scm
+
       - name: Build the H170 GP107 kernel package on the exact Guix lock
         timeout-minutes: 240
         run: |
@@ -82,18 +125,19 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           guix time-machine -C channels.lock.scm -- size "$STORE_PATH" >> "$GITHUB_STEP_SUMMARY"
 
+
       - name: Save Guix checkout cache
-        if: success() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+        if: success()
         uses: actions/cache/save@v4
         with:
           path: ~/.cache/guix/checkouts
-          key: ${{ steps.guix-checkouts.outputs.cache-primary-key }}
+          key: guix-checkouts-${{ hashFiles('channels.lock.scm', 'channels/*.scm') }}
 
-      - name: Summarize Guix evaluation failure
+      - name: Summarize H170 kernel build failure
         if: failure()
         run: |
           {
-            echo "### Guix profile evaluation failed"
-            echo "The first failing command and its exact output are in the preceding step logs."
-            echo "WSM_CHANNEL_AUTHENTICATION=NOT_TESTED"
+            echo "### H170 kernel candidate evaluation/build failed"
+            echo "Pinned Guix module evaluation and package build are reported independently of the full system-profile job."
+            echo "No H170 kernel Release was published."
           } >> "$GITHUB_STEP_SUMMARY"
