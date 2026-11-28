@@ -59,9 +59,25 @@ jobs:
       - name: Build every program
         run: |
           set -euo pipefail
-          mapfile -t programs < <(git ls-files '*.lpr' | grep -v '^third_party/' || true)
+          # Програма — це файл із ключовим словом `program', а не файл із
+          # певним розширенням. Попередня версія шукала лише *.lpr, тоді як у
+          # дереві п'ять *.pas — і крок друкував «No Pascal programs in the
+          # tree yet», тобто зелений результат доводив рівно нічого.
+          mapfile -t sources < <(git ls-files '*.pas' '*.pp' '*.lpr' | grep -v '^third_party/' || true)
+          programs=()
+          for source in "${sources[@]}"; do
+            if grep -qiE '^[[:space:]]*program[[:space:]]+[A-Za-z_]' "$source"; then
+              programs+=("$source")
+            fi
+          done
+          # Знайдено джерела, але жодної програми — це зламаний фільтр, а не
+          # порожнє дерево. Мовчазний зелений тут гірший за червоний.
+          if [ "${#sources[@]}" -gt 0 ] && [ "${#programs[@]}" -eq 0 ]; then
+            echo "::error::Pascal sources exist (${#sources[@]}) but none was recognised as a program"
+            exit 1
+          fi
           if [ "${#programs[@]}" -eq 0 ]; then
-            echo "No Pascal programs in the tree yet; nothing to compile."
+            echo "No Pascal sources in the tree yet; nothing to compile."
             echo "WSM_FPC_PROGRAMS=0" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
@@ -69,7 +85,9 @@ jobs:
           failed=0
           for program in "${programs[@]}"; do
             echo "::group::fpc $program"
-            if ! fpc -O2 -Mobjfpc -Sh -FUbuild/fpc -FEbuild/fpc "$program"; then
+            # -Fu: каталог модулів, бо програма й unit лежать поруч.
+            if ! fpc -O2 -Mobjfpc -Sh -FUbuild/fpc -FEbuild/fpc \
+                 -Fu"$(dirname "$program")" "$program"; then
               echo "::error::Free Pascal refused to compile $program"
               failed=$((failed + 1))
             fi
