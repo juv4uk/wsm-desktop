@@ -14,10 +14,14 @@ name: Публікація артефактів каналу
 on:
   workflow_dispatch:
     inputs:
-      packages:
-        description: "Пакети через пробіл (типово: wsm-tools)"
+      manifest:
+        description: "Манифест пакетів для заліза (типово: H170 Free)"
         required: false
-        default: "wsm-tools"
+        default: "drivers/profiles/h170-free-packages.scm"
+      packages:
+        description: "Окремі пакети через пробіл (порожньо — брати манифест)"
+        required: false
+        default: ""
   push:
     branches:
       - "publish/**"
@@ -41,6 +45,7 @@ jobs:
           guix --version
 
       - name: Зібрати пакети із зафіксованого каналу
+        if: ${{ (inputs.packages || '') != '' }}
         id: build
         run: |
           set -euo pipefail
@@ -65,7 +70,27 @@ jobs:
           done
           cat artifacts/store-paths.txt
 
+      - name: Запакувати набір для заліза (манифест) без ключа
+        if: ${{ (inputs.packages || '') == '' }}
+        run: |
+          set -euo pipefail
+          manifest="${{ inputs.manifest || 'drivers/profiles/h170-free-packages.scm' }}"
+          # `guix pack -m` приймає манифест і пакує весь набір одним архівом.
+          # Це і є «пакети під моє залізо»: ядро, Mesa, Vulkan, інструменти.
+          pack_output="$(guix time-machine -C channels.lock.scm -- \
+                          pack -f tarball -C zstd -L . -m "$manifest")"
+          tarball="$(printf '%s\n' "$pack_output" | tail -n 1)"
+          case "$tarball" in
+            /gnu/store/*.tar.zst) ;;
+            *) echo "refusing non-tarball output: $tarball" >&2; exit 1 ;;
+          esac
+          cp "$tarball" "artifacts/h170-free-pack.tar.zst"
+          ( cd artifacts && sha256sum h170-free-pack.tar.zst > h170-free-pack.tar.zst.sha256 )
+          ls -l artifacts/h170-free-pack.tar.zst
+          echo "WSM_PACKED_MANIFEST=$manifest" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Запакувати кожен пакет у tarball (без ключа)
+        if: ${{ (inputs.packages || '') != '' }}
         run: |
           set -euo pipefail
           while IFS="$(printf '\t')" read -r package store_path; do
