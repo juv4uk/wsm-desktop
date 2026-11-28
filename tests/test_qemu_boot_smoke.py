@@ -216,6 +216,41 @@ class QemuBootSmokeTests(unittest.TestCase):
             runner.assert_called_once()
             self.assertEqual(runner.call_args.kwargs["marker"], "WSM-LIVE-READY")
 
+    def test_runtime_fails_when_boot_marker_follows_guest_segfault(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            iso = Path(directory) / "live.iso"
+            iso.write_bytes(b"synthetic ISO placeholder")
+
+            def fake_run(command, **kwargs):
+                Path(command[4]).touch()
+                return subprocess.CompletedProcess(command, 0, "", "")
+
+            captured = BoundedProcessResult(
+                returncode=None,
+                timed_out=True,
+                stdout_tail=b"init[1]: segfault at 3fff00\\nWSM-LIVE-READY\\n",
+                stderr_tail=b"",
+                stdout_bytes_seen=48,
+                stderr_bytes_seen=0,
+                stdout_truncated=False,
+                stderr_truncated=False,
+                marker_seen=True,
+                failure_markers_seen=("segfault",),
+            )
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with patch("scripts.qemu_boot_smoke.shutil.which", side_effect=lambda name: name), patch(
+                "scripts.qemu_boot_smoke.subprocess.run", side_effect=fake_run
+            ), patch("scripts.qemu_boot_smoke.run_bounded_process", return_value=captured), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                result = main(["--iso", str(iso), "--boot-marker", "WSM-LIVE-READY"])
+
+            self.assertEqual(result, 5)
+            payload = json.loads(stdout.getvalue())
+            self.assertTrue(payload["boot_confirmed"])
+            self.assertFalse(payload["serial_clean"])
+            self.assertEqual(payload["serial_failure_markers"], ["segfault"])
+            self.assertIn("fatal kernel/userspace crash signals", stderr.getvalue())
+
     def test_bounded_capture_detects_marker_before_retained_tail(self) -> None:
         marker = "WSM_MARKER_AT_STREAM_START"
         child = (
@@ -263,6 +298,26 @@ class QemuBootSmokeTests(unittest.TestCase):
         self.assertTrue(result.marker_seen)
         self.assertTrue(result.stdout_truncated)
         self.assertLessEqual(len(result.stdout_tail), 8)
+
+    def test_bounded_capture_detects_serial_segfault_split_across_reads(self) -> None:
+        child = (
+            "import os, time\\n"
+            "os.write(1, b'init[1]: segf')\\n"
+            "time.sleep(0.05)\\n"
+            "os.write(1, b'ault at 3fff00\\nWSM_LIVE_READY\\n' + b'X' * 200000)\\n"
+        )
+        result = run_bounded_process(
+            [sys.executable, "-c", child],
+            timeout_seconds=5,
+            marker="WSM_LIVE_READY",
+            max_stdout_bytes=1024,
+            max_stderr_bytes=512,
+            read_chunk_bytes=3,
+        )
+        self.assertTrue(result.marker_seen)
+        self.assertEqual(result.failure_markers_seen, ("segfault",))
+        self.assertTrue(result.stdout_truncated)
+        self.assertNotIn(b"segfault", result.stdout_tail)
 
     def test_bounded_capture_kills_noisy_child_after_timeout(self) -> None:
         child = (
