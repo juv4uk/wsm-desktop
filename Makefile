@@ -287,9 +287,4 @@ check-release-readiness:
 
 check-channel-authorizations:
 	$(PYTHON) tests/test_channel_authorizations.py
-	@if test -f .guix-authorizations; then \
-		test -n "$(KEYRING_DIR)" || { printf '%s\\n' 'check-channel-authorizations: KEYRING_DIR must point to the keyring branch checkout' >&2; exit 1; }; \
-		$(PYTHON) scripts/check_channel_authorizations.py . --keyring-dir "$(KEYRING_DIR)"; \
-	else \
-		$(PYTHON) scripts/check_channel_authorizations.py .; \
-	fi
+	$(PYTHON) scripts/check_channel_authorizations.py . --keyring-dir "$(KEYRING_DIR)"
