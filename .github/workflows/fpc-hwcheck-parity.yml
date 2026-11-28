@@ -137,8 +137,10 @@ jobs:
           {
             echo "### FPC hwcheck parity failed"
             echo "The first failing command and its exact output are in the preceding step logs."
-            echo "A failed build step means the package or the Pascal source does not compile:"
-            echo "no Pascal was compiled in the authoring environment, so CI is the first build."
+            echo "A failed build step means the package definition or the compile phase is wrong."
+            echo "Note that the pinned Guix rejects #:phases on trivial-build-system, and that"
+            echo "\`guix build -f FILE' uses the file's last expression - a bare"
+            echo "\`define-public' returns #<unspecified>. Both were hit here."
             echo "A failed compare step means the two collectors disagree; the diff names the"
             echo "group, the field and both values."
             echo "Reproduce the comparison locally with:"
