@@ -202,5 +202,29 @@ class StartupBenchmarkTests(unittest.TestCase):
     def test_it_refuses_a_meaningless_sample_size(self) -> None:
         self.assertIn("--runs below 3 is noise", self.SCRIPT.read_text(encoding="utf-8"))
 
+
+class FreePascalBuildTests(unittest.TestCase):
+    """A Pascal file nothing compiles is source text, not a program."""
+
+    WORKFLOW = ROOT / ".github" / "workflows" / "fpc-build.yml"
+
+    def setUp(self) -> None:
+        self.text = self.WORKFLOW.read_text(encoding="utf-8")
+
+    def test_the_toolchain_version_is_pinned_and_checked(self) -> None:
+        self.assertIn("fp-compiler-3.2.2", self.text)
+        self.assertIn('test "$(fpc -iV)" = "3.2.2"', self.text)
+
+    def test_it_compiles_every_program_in_the_tree(self) -> None:
+        self.assertIn("git ls-files '*.lpr'", self.text)
+        self.assertIn("fpc -O2", self.text)
+
+    def test_a_compile_error_fails_the_run(self) -> None:
+        self.assertIn("Free Pascal refused to compile", self.text)
+        self.assertIn("exit 1", self.text)
+
+    def test_it_does_not_claim_success_when_there_is_nothing_to_build(self) -> None:
+        self.assertIn("WSM_FPC_PROGRAMS=0", self.text)
+
 if __name__ == "__main__":
     unittest.main()
