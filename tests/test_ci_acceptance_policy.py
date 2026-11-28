@@ -143,10 +143,9 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
         self.assertIn("ВЛАСНИК ДАВ ДОЗВІЛ", self.text)
 
     def test_workflow_starts_only_deliberately(self) -> None:
-        """Two deliberate entry points, no branch trigger: nothing appears unasked."""
-        self.assertEqual(set(self.workflow["on"]), {"push", "workflow_dispatch"})
-        self.assertEqual(self.workflow["on"]["push"]["tags"], ["packages-*"])
-        self.assertNotIn("branches:", self.text)
+        """Owner's ADR requires an explicit manual run; a tag is not a substitute."""
+        self.assertEqual(set(self.workflow["on"]), {"workflow_dispatch"})
+        self.assertEqual(self.workflow["jobs"]["archive"]["if"], "${{ github.ref == 'refs/heads/main' }}")
 
     def test_no_signing_key_is_created_or_read_here(self) -> None:
         for forbidden in ("secrets.", "guix archive --generate-key", "signing-key"):
@@ -163,21 +162,21 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
         self.assertIn("guix time-machine -C channels.lock.scm", self.text)
 
     def test_a_package_name_that_is_not_a_name_is_refused(self) -> None:
-        self.assertIn("*[!A-Za-z0-9._+-]*", self.text)
-        self.assertIn("refusing odd package name", self.text)
+        """Only the fixed owner package is built; no user-controlled package shell input exists."""
+        self.assertIn("(wsm packages wsm)", self.text)
+        self.assertIn("wsm-tools", self.text)
+        self.assertNotIn("inputs.packages", self.text)
+        self.assertNotIn("github.event.inputs.packages", self.text)
 
-    def test_a_tag_push_attaches_to_the_newest_draft(self) -> None:
-        """One pushed tag must be enough to put the archives in front of a person."""
-        text = self.text
-        self.assertIn("gh release list", text)
-        self.assertIn("select(.isDraft)", text)
-        self.assertIn('TAG="${REQUESTED:-}"', text)
+    def test_a_tag_push_does_not_trigger_package_archives(self) -> None:
+        self.assertEqual(set(self.workflow["on"]), {"workflow_dispatch"})
+        self.assertNotIn("push:", self.text)
+        self.assertNotIn("packages-*", self.text)
 
     def test_no_draft_means_the_archives_stay_in_the_artifact(self) -> None:
-        """Attaching nowhere must be a recorded outcome, not a silent failure."""
-        text = self.text
-        self.assertIn("no draft release to attach to", text)
-        self.assertIn("WSM_PACKAGE_ATTACHED_TO=none", text)
+        """Attaching nowhere is recorded, while the Actions artifact remains available."""
+        self.assertIn("no draft release to attach to", self.text)
+        self.assertIn("WSM_PACKAGE_ATTACHED_TO=none", self.text)
 
 if __name__ == "__main__":
     unittest.main()
