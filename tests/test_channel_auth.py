@@ -68,6 +68,24 @@ class InspectTests(unittest.TestCase):
         self.assertIn("ftp.gnu.org", script)
         self.assertIn("guix-daemon", script)
 
+class InstallerJobTests(unittest.TestCase):
+    """An installer nobody runs is a claim, not a tool."""
+
+    def setUp(self) -> None:
+        self.text = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    def test_a_job_runs_the_repository_installer(self) -> None:
+        self.assertIn("./scripts/install-guix.sh", self.text)
+
+    def test_the_job_is_manual_only(self) -> None:
+        """It installs a daemon on a throwaway runner; that must be deliberate."""
+        self.assertIn("github.event_name == 'workflow_dispatch'", self.text)
+
+    def test_the_job_proves_more_than_a_version_string(self) -> None:
+        self.assertIn("guix-daemon", self.text)
+        self.assertIn("build --dry-run", self.text)
+
+
 
 if __name__ == "__main__":
     unittest.main()
