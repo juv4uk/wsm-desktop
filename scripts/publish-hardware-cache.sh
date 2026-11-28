@@ -12,8 +12,7 @@
 #
 # Використання:
 #   scripts/publish-hardware-cache.sh --dry-run          # показати план
-#   sudo scripts/publish-hardware-cache.sh --cpu skylake \
-#       --license-decision custom-record --channel-unsigned-accepted
+#   sudo scripts/publish-hardware-cache.sh --cpu skylake
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -24,8 +23,6 @@ note() { echo "publish: $*"; }
 
 DRY_RUN=0
 CPU=""
-LICENSE_DECISION=""
-UNSIGNED_ACCEPTED=0
 SKIP_CPU_CHECK=0
 CACHE_DIR="/var/cache/guix/publish"
 ROOTS_DIR="/var/lib/wsm-publish-roots"
@@ -43,8 +40,6 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --dry-run) DRY_RUN=1 ;;
     --cpu) need_value "$@"; CPU="$2"; shift ;;
-    --license-decision) need_value "$@"; LICENSE_DECISION="$2"; shift ;;
-    --channel-unsigned-accepted) UNSIGNED_ACCEPTED=1 ;;
     --skip-cpu-check) SKIP_CPU_CHECK=1 ;;
     --cache) need_value "$@"; CACHE_DIR="$2"; shift ;;
     --roots) need_value "$@"; ROOTS_DIR="$2"; shift ;;
@@ -60,12 +55,11 @@ done
 if [ "$DRY_RUN" -eq 1 ]; then
   printf '%s\n' \
     "publish: DRY RUN — нічого не виконано." \
-    "  рішення #367:  ${LICENSE_DECISION:-<не названо — реальний запуск відмовить>}" \
-    "  канал:         $([ "$UNSIGNED_ACCEPTED" -eq 1 ] && echo 'без підпису, прийнято явно' || echo '<не названо — реальний запуск відмовить>')" \
-    "  CPU:           ${CPU:-<не названо — реальний запуск відмовить>}" \
+    "  CPU:           ${CPU:-<не вказано — реальний запуск відмовить>}" \
+    "  канал:         автентифікація каналу окрема від підпису бінарного кешу" \
     "" \
     "План:" \
-    "  1. перевірка root і ключа в $GUIX_SYSCONFDIR" \
+    "  1. перевірка фактичних ліцензійних метаданих і scope Free-публікації" \
     "  2. перевірка прапорців CPU для -march=${CPU:-<cpu>}" \
     "  3. guix build -L . --tune=${CPU:-<cpu>} --root=$ROOTS_DIR/<pkg> wsm-tools" \
     "  4. порівняння деривацій з --tune і без: якщо однакові — тюнінг не застосовано" \
@@ -81,25 +75,18 @@ if [ "$DRY_RUN" -eq 1 ]; then
   exit 0
 fi
 
-# --- 1. Рішення власника -----------------------------------------------------
-case "$LICENSE_DECISION" in
-  custom-record|relicensed) note "рішення #367: $LICENSE_DECISION" ;;
-  "") die "#367 не вирішено: передайте --license-decision custom-record або relicensed.
-         Політика забороняє публікувати пакет із метаданими, що суперечать ліцензії,
-         і забороняє маскувати це заміною ідентифікатора." ;;
-  *) die "невідоме рішення #367: $LICENSE_DECISION" ;;
-esac
-
-# --- 2. Канал ----------------------------------------------------------------
+# --- 1. Фактичні метадані та межі публікації -------------------------------
+# Перевірка читає реальні ліцензійні поля та задокументовані рішення. Вона
+# не вимагає окремого підтвердження для вже вирішених #367/#586 і не плутає
+# підпис бінарного кешу з автентифікацією Git-каналу.
+python3 scripts/check_publication_readiness.py \
+  || die "у фактичних метаданих лишилася невирішена суперечність; дивіться звіт вище"
 if [ ! -f .guix-authorizations ]; then
-  [ "$UNSIGNED_ACCEPTED" -eq 1 ] || die "немає .guix-authorizations. Непідписаний
-         канал можна збирати локально, але не можна публікувати як
-         автентифікований. Якщо публікація без підпису — це свідоме рішення,
-         передайте --channel-unsigned-accepted."
-  note "канал публікується без підпису: це прийнято явно"
+  note "Git-канал не автентифікований; це не блокує підписаний бінарний кеш"
 fi
+note "публікується лише Free-набір; Compatibility/NVIDIA firmware не включені"
 
-# --- 3. CPU ------------------------------------------------------------------
+# --- 2. CPU ------------------------------------------------------------------
 [ -n "$CPU" ] || die "не вказано --cpu. Для H170 з Kaby/Skylake-класом
        передайте явну назву (наприклад skylake), а не native."
 [ "$CPU" = "native" ] && die "--tune=native заборонено для публікації: бінарники
