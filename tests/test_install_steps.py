@@ -271,5 +271,42 @@ class ToolPrefixTests(unittest.TestCase):
         self.assertIn(TRUSTED_TOOLS["sgdisk"], [step.command[0] for step in steps])
 
 
+class BackendCommandBindingTests(unittest.TestCase):
+    """The handoff can pin its channel set and must not take a half-specified path."""
+
+    def test_the_default_shape_is_unchanged(self) -> None:
+        command = backend_command(layout(), "systems/desktop.scm")
+        self.assertEqual(command, ["guix", "system", "init", "systems/desktop.scm", "/mnt"])
+
+    def test_a_lock_pins_the_channel_set_through_time_machine(self) -> None:
+        command = backend_command(
+            layout(), "systems/desktop.scm", "/mnt",
+            lock="channels/compatibility.lock.scm",
+        )
+        self.assertEqual(
+            command,
+            [
+                "guix", "time-machine", "-C", "channels/compatibility.lock.scm", "--",
+                "system", "init", "systems/desktop.scm", "/mnt",
+            ],
+        )
+
+    def test_an_absolute_guix_path_is_used_as_given(self) -> None:
+        command = backend_command(
+            layout(), "systems/desktop.scm", guix_path="/run/current-system/profile/bin/guix"
+        )
+        self.assertEqual(command[0], "/run/current-system/profile/bin/guix")
+
+    def test_a_bare_guix_path_is_refused(self) -> None:
+        with self.assertRaises(Refused) as caught:
+            backend_command(layout(), "systems/desktop.scm", guix_path="guix")
+        self.assertEqual(caught.exception.code, "backend.guix-path")
+
+    def test_a_lock_that_is_not_scheme_is_refused(self) -> None:
+        with self.assertRaises(Refused) as caught:
+            backend_command(layout(), "systems/desktop.scm", lock="channels.lock.txt")
+        self.assertEqual(caught.exception.code, "backend.lock")
+
+
 if __name__ == "__main__":
     unittest.main()

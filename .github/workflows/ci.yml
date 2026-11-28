@@ -58,6 +58,16 @@ jobs:
       - name: Check document ownership
         run: python scripts/check_doc_ownership.py
 
+      # The closure gate: `make check-tool-closure`. This step runs the checker's
+      # own self-check against throwaway roots (pass on a complete root, a named
+      # failure for a missing or non-executable tool, and `--prefix` mode for a
+      # Guix-shaped root with no /usr). It does NOT verify the image: the runner's
+      # filesystem is not the image, and the image ships neither /usr nor these
+      # packages yet. Run `python scripts/check_tool_closure.py --root <image root>`
+      # against a built image for that; the script says so on every pass.
+      - name: Check installer tool closure
+        run: python scripts/check_tool_closure.py --self-check
+
       - name: Check profile evidence
         run: python scripts/check_profile_evidence.py
 

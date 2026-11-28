@@ -143,6 +143,14 @@ Bootstrap має бути виконаний власником ключа. Ни
 
 Після Phase B потрібна окрема перевірка реального channel consumer: зафіксувати owner-approved WSM commit у H170 release lock, запустити стандартний `guix time-machine` без `-L .` і без `--disable-authentication`, а тоді імпортувати той самий public module. Цей тест не можна вмикати раніше підписаного introduction та підтвердженої authorizations chain.
 
+### Канонічне джерело upstream channel
+
+`channels/wsm.scm` імпортує `(guix channels)` і додає лише WSM record через
+`cons*` до `%default-channels`. Це зберігає upstream Guix introduction та
+його default branch без дублювання URL, fingerprint або introduction commit
+у WSM-репозиторії. Рухомий WSM record використовує гілку `main`; він не
+потрапляє до Free release lock.
+
 ### Smoke перевірка channel set через Guix CLI
 
 `make check-guix-eval` запускає діагностичну перевірку `channels/wsm.scm` двома шляхами:

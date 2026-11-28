@@ -19,10 +19,7 @@ guix time-machine -C channels.lock.scm -- describe -f channels
 
 ## Набір каналів WSM (не lock)
 
-[`wsm.scm`](wsm.scm) — набір для розробки, який об'єднує офіційний GNU Guix
-channel на рухомій гілці `master` із репозиторієм WSM на гілці `main`.
-Офіційний Guix channel містить canonical introduction; WSM поки не має
-власного introduction.
+[`wsm.scm`](wsm.scm) — development set, який додає WSM поверх офіційного Guix `%default-channels`. Це важливо: URL, default branch та canonical introduction офіційного каналу не дублюються у WSM і залишаються під контролем upstream Guix. WSM додається з рухомої гілки `main` і поки не має власного introduction.
 
 Звичайна команда має відмовити на автентифікації WSM:
 
