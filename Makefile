@@ -120,10 +120,10 @@ check-guix-eval:
 	$(MAKE) check-compatibility-eval
 	$(GUIX) time-machine -C channels.lock.scm -L . -- home -L . build systems/home.scm --dry-run
 
-# Build all three native FPC packages with the exact pinned Guix channel.
+# Build all four native FPC packages with the exact pinned Guix channel.
 # This is a real compile, not only Scheme package-record evaluation.
 build-fpc-packages:
-	$(GUIX) time-machine -C channels.lock.scm -- build -L . wsm-hwcheck-fpc wsm-classify-fpc wsm-partition-fpc
+	$(GUIX) time-machine -C channels.lock.scm -- build -L . wsm-hwcheck-fpc wsm-classify-fpc wsm-partition-fpc wsm-profile-fpc
 
 # Compatibility is opt-in and always uses its own authenticated Guix + Nonguix lock.
 # This target resolves the lock and evaluates the full system graph without building it.
