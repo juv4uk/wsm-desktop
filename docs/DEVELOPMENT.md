@@ -25,6 +25,25 @@
 
 Для перевірки конкретного ISO використовуйте `python scripts/qemu_boot_smoke.py --iso /absolute/path/to/image.iso`. Деталі й межі доказів — у [ручних QEMU runtime-перевірках](testing/QEMU-GUEST-CI.md).
 
+## Встановлення Guix на сторонній GNU/Linux хост
+
+Коли для розробки потрібен **сам пакетний менеджер Guix** на вже встановленій чужій GNU/Linux системі, використовуйте офіційний upstream installer:
+
+- [Офіційний `guix-install.sh`](https://guix.gnu.org/guix-install.sh)
+- [Розділ Installation у GNU Guix Reference Manual](https://guix.gnu.org/manual/en/html_node/Installation.html)
+
+Перед виконанням перегляньте завантажений скрипт і дотримуйтеся інструкцій upstream:
+
+```sh
+wget -O guix-install.sh https://guix.gnu.org/guix-install.sh
+less guix-install.sh
+sudo bash ./guix-install.sh
+```
+
+Це встановлює Guix як пакетний менеджер **на поточний host**. Це не встановлення Guix System, не встановлення WSM і не створення довіри до WSM channel. Для системного встановлення використовується окремий [Guix System installation flow](https://guix.gnu.org/manual/en/html_node/System-Installation.html), а відтворювані перевірки WSM продовжують pin-ити точні inputs через `guix time-machine` і lock-файли.
+
+WSM не підтримує власну копію host bootstrap script і не змінює upstream `gnu/installer`.
+
 ## Guix bring-up
 
 Перевірте доступність Guix:

@@ -11,6 +11,12 @@
 - [Invoking guix system](https://guix.gnu.org/manual/en/html_node/Invoking-guix-system.html) — build, init, vm та інші дії guix system.
 - [Channels](https://guix.gnu.org/manual/en/html_node/Channels.html) — канали, автентифікація та відтворення.
 - [Creating a channel](https://guix.gnu.org/manual/en/html_node/Creating-a-Channel.html) — вимоги до власного каналу та застереження щодо сумісності API.
+- [Офіційний installer для сторонніх дистрибутивів](https://guix.gnu.org/guix-install.sh) — shell-скрипт для встановлення Guix package manager на вже запущеній GNU/Linux системі.
+- [Installation](https://guix.gnu.org/manual/en/html_node/Installation.html) — встановлення Guix як package manager на foreign distribution.
+- [System Installation](https://guix.gnu.org/manual/en/html_node/System-Installation.html) — окремий процес встановлення повноцінної Guix System.
+
+
+**Важливо про межу інсталятора:** `guix-install.sh` із офіційного сайту встановлює пакетний менеджер Guix на вже працюючу сторонню GNU/Linux ОС. Він не встановлює Guix System і не замінює `guix system init`, guided/manual system installation чи WSM installer frontend. Це також не WSM channel trust bootstrap: introduction і `guix git authenticate` є окремою процедурою.
 
 ## Calamares
 
