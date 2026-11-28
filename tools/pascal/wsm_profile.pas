@@ -56,7 +56,7 @@ end;
 { Absolute paths and `..' segments are rejected before any file is opened:
   a bundle that points outside itself is not a bundle, and following it would
   turn a data file into a filesystem instruction. }
-function PathProblem(const RawPath, Label: string): string;
+function PathProblem(const RawPath, FieldName: string): string;
 var
   Part: string;
   Rest: string;
