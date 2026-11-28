@@ -42,13 +42,15 @@ CATEGORY_TO_FUNCTION = {
 
 
 def pci_ids_from(report: dict[str, Any]) -> list[str]:
+    # One implementation, shared with the matcher: two copies of this rule
+    # drifted apart once already, and the signature silently stopped being
+    # written because the collector's keys were never read here either.
+    from wsm_install.profile_match import pci_pairs_from_identity
+
     found: set[str] = set()
     for device in report.get("devices", []):
         identity = device.get("identity") or {}
-        for key in ("pci_id", "vendor_device", "vendor:device"):
-            value = identity.get(key)
-            if isinstance(value, str) and ":" in value:
-                found.add(value.lower())
+        found |= pci_pairs_from_identity(identity)
         for item in device.get("evidence") or []:
             if not isinstance(item, dict):
                 continue

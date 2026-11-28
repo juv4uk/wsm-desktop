@@ -25,14 +25,43 @@ from typing import Any, Iterable
 PCI_KEYS = ("pci_id", "pci_ids", "address", "identity")
 
 
-def _pci_ids_from_device(device: dict[str, Any]) -> set[str]:
-    """Collect every vendor:device pair the report exposes for one device."""
+def _normalise_pci_value(value: str) -> str:
+    """sysfs writes ``0x10de``; a signature is written ``10de``."""
+    text = value.strip().lower()
+    if text.startswith("0x"):
+        text = text[2:]
+    return text
+
+
+def pci_pairs_from_identity(identity: dict[str, Any]) -> set[str]:
+    """Build ``vendor:device`` pairs from whatever shape the report uses.
+
+    The collector writes ``vendor_id`` and ``device_id`` as separate raw sysfs
+    values. An earlier version of this module looked only for a pre-joined
+    ``pci_id``/``vendor:device`` string, which no producer in this repository
+    ever emits - so every report matched no profile, and the matcher could
+    never say anything but "signature does not match this machine".
+    """
     found: set[str] = set()
-    identity = device.get("identity") or {}
+    vendor = identity.get("vendor_id")
+    device = identity.get("device_id")
+    if isinstance(vendor, str) and isinstance(device, str):
+        left = _normalise_pci_value(vendor)
+        right = _normalise_pci_value(device)
+        if left and right:
+            found.add(f"{left}:{right}")
     for key in ("pci_id", "vendor_device", "vendor:device"):
         value = identity.get(key)
         if isinstance(value, str) and ":" in value:
             found.add(value.lower())
+    return found
+
+
+def _pci_ids_from_device(device: dict[str, Any]) -> set[str]:
+    """Collect every vendor:device pair the report exposes for one device."""
+    found: set[str] = set()
+    identity = device.get("identity") or {}
+    found |= pci_pairs_from_identity(identity)
     evidence = device.get("evidence") or []
     for item in evidence:
         for key in ("pci_id", "vendor_device"):
