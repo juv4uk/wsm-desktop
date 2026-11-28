@@ -203,6 +203,7 @@ class QemuBootSmokeTests(unittest.TestCase):
                 result = main(["--iso", str(iso), "--boot-marker", "WSM-LIVE-READY"])
             self.assertEqual(result, 0)
             payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["iso_sha256"], sha256_of(iso))
             self.assertTrue(payload["boot_confirmed"])
             self.assertTrue(payload["qemu_timed_out"])
             self.assertEqual(payload["serial_output_tail"], "booting\nWSM-LIVE-READY\n")
