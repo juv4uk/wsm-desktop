@@ -1,36 +1,33 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-name: WSM hardware package build evidence
+name: WSM H170 Free package build evidence
 
-# Ephemeral build evidence only. No NAR file, Actions artifact, Release or Pages output.
-# The runner's store disappears after the job. Distribution remains disabled until #367,
-# channel trust, firmware rights (#586), endpoint and key custody are approved.
+# Builds the fixed upstream-only manifest in an ephemeral runner.
+# It does not export NARs, upload artifacts, publish a release or start a substitute server.
 
 on:
+  pull_request:
+    paths:
+      - ".github/workflows/hw-build-evidence.yml"
+      - "drivers/profiles/h170-free-packages.scm"
+      - "channels.lock.scm"
+      - "tests/test_h170_free_package_manifest.py"
   workflow_dispatch:
-    inputs:
-      packages:
-        description: "Guix package variables, separated by spaces"
-        required: false
-        type: string
-        default: "wsm-tools"
 
 permissions:
   contents: read
 
 concurrency:
-  group: wsm-hw-build-evidence
+  group: h170-free-package-evidence-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
-    name: Build package set and report metadata (no retained NAR)
+    name: Evaluate and build H170 Free package candidates
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 240
     steps:
       - name: Checkout exact source
         uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
 
       - name: Install Guix
         run: |
@@ -38,61 +35,60 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y guix
           sudo systemctl enable --now guix-daemon.service
-          guix --version
+          guix --version | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - name: Build each package on the release lock
-        env:
-          PACKAGES: ${{ inputs.packages }}
-        shell: bash
+      - name: Check the fixed package manifest
+        run: python3 tests/test_h170_free_package_manifest.py
+
+      - name: Evaluate pinned package derivations
         run: |
           set -euo pipefail
-          if [[ "$PACKAGES" == *$'\n'* || "$PACKAGES" == *$'\r'* ]]; then
-            echo "package list must be a single line" >&2
-            exit 1
-          fi
-          read -r -a packages <<< "$PACKAGES"
-          if [[ "${#packages[@]}" -eq 0 ]]; then
-            echo "package list is empty" >&2
-            exit 1
-          fi
-          {
-            echo "| package | store path | NAR stream bytes |"
-            echo "| --- | --- | --- |"
-          } >> "$GITHUB_STEP_SUMMARY"
-          failures=0
-          for package in "${packages[@]}"; do
-            case "$package" in
-              ""|-*|*[!A-Za-z0-9._+-]*)
-                echo "refusing invalid package name: $package" >&2
-                exit 1
-                ;;
-            esac
-            if ! store_path="$(guix time-machine -C channels.lock.scm -- build -L . --no-grafts "$package")"; then
-              echo "| $package | BUILD FAILED | — |" >> "$GITHUB_STEP_SUMMARY"
-              failures=$((failures + 1))
-              continue
-            fi
-            # Count the serialized NAR through a process-local pipe. wc discards
-            # the stream; no NAR file or downloadable artifact is retained.
-            size="$(guix time-machine -C channels.lock.scm -- archive --export "$store_path" 2>/dev/null | wc -c | tr -d '[:space:]')"
-            echo "| $package | `$store_path` | $size |" >> "$GITHUB_STEP_SUMMARY"
-          done
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "NAR stream counted and discarded; no archive file or artifact was retained or published." >> "$GITHUB_STEP_SUMMARY"
-          if [[ "$failures" -ne 0 ]]; then
-            echo "$failures package(s) failed to build" >&2
-            exit 1
-          fi
+          guix time-machine -C channels.lock.scm -- \
+            build --dry-run --no-grafts \
+            --manifest=drivers/profiles/h170-free-packages.scm
 
-      - name: Пояснити причину збою в summary
-        if: failure()
+      - name: Build the H170 Free candidate closure
         run: |
+          set -euo pipefail
+          PATHS_FILE="$RUNNER_TEMP/h170-free-store-paths.txt"
+          LOG_FILE="$RUNNER_TEMP/h170-free-build.log"
+          if ! guix time-machine -C channels.lock.scm -- \
+              build --no-grafts --keep-going \
+              --manifest=drivers/profiles/h170-free-packages.scm \
+              >"$PATHS_FILE" 2>"$LOG_FILE"; then
+            tail -n 160 "$LOG_FILE" >&2 || true
+            echo "H170 Free package build failed; no NAR was exported." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          mapfile -t STORE_PATHS < <(grep -E '^/gnu/store/[a-z0-9]{32}-' "$PATHS_FILE")
+          if [ "${#STORE_PATHS[@]}" -ne 11 ]; then
+            echo "Expected 11 package outputs, got ${#STORE_PATHS[@]}" >&2
+            cat "$PATHS_FILE" >&2
+            exit 1
+          fi
           {
-            echo "### WSM hardware build evidence: збірка не завершилась"
+            echo "## H170 Free package build evidence"
             echo ""
-            echo "Commit: `$GITHUB_SHA`"
+            echo "Input lock: channels.lock.scm (official Guix only)."
+            echo "Manifest: drivers/profiles/h170-free-packages.scm."
             echo ""
-            echo "Один або кілька пакетів набору не збираються на locked-каналах."
-            echo "Жодного NAR-файлу або завантажуваного артефакту не створено."
-            df -h / || true
+            echo "| package output | NAR SHA-256 |"
+            echo "| --- | --- |"
           } >> "$GITHUB_STEP_SUMMARY"
+          for store_path in "${STORE_PATHS[@]}"; do
+            test -e "$store_path"
+            output_name="${store_path##*/}"
+            nar_sha256="$(guix hash --recursive --format=hex "$store_path")"
+            echo "| `$output_name` | `$nar_sha256` |" >> "$GITHUB_STEP_SUMMARY"
+          done
+          {
+            echo ""
+            echo "### Store and closure sizes"
+            echo "The following pinned-Guix report records each output's self size and dependency closure size."
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+          guix time-machine -C channels.lock.scm -- size "${STORE_PATHS[@]}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**NOT_PUBLISHED:** no NAR export, Actions artifact, Release asset, Pages deployment, signing key or substitute endpoint was created." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Limit:** package build/closure evidence is not driver binding, firmware loading, GPU acceleration, boot or H170 physical acceptance. The pinned Linux-libre 7.3.5 GP107 atomic-init gap remains open (#514)." >> "$GITHUB_STEP_SUMMARY"

@@ -34,6 +34,7 @@
 
 - Стан каналу звітує `python3 scripts/check_channel_auth.py .` (`scripts/check_channel_auth.py`; та сама команда в цілі `check-channel-artifacts`). Він друкує, які артефакти присутні, і навмисно не вирішує, чи канал автентифікований.
 - Заблоковано на підписі власника: `.guix-authorizations`, підписаний introduction commit і keyring-гілка. Без них канал не можна називати authenticated чи вносити в release lock; агент не вигадує fingerprint, commit або ключ. Порядок кроків, включно з `guix git authenticate`, — [docs/GUIX-CHANNEL.md](docs/GUIX-CHANNEL.md), розділ «Автентифікація каналу».
+- H170 Free package candidates: `drivers/profiles/h170-free-packages.scm`; exact-lock build evidence runs via `.github/workflows/hw-build-evidence.yml`. This is an upstream-only candidate closure, not a hardware support verdict or permission to export NARs/releases/substitutes.
 
 ### 3. Перший hardware profile для машини власника (Gigabyte GA-H170-Gaming 3)
 

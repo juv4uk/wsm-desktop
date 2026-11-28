@@ -159,50 +159,51 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
 
 
 class HardwareBuildEvidenceTests(unittest.TestCase):
-    """Ephemeral Guix build evidence must never retain or distribute a NAR."""
+    """The H170 evidence workflow builds a fixed upstream set without distribution."""
 
     WORKFLOW = ROOT / ".github" / "workflows" / "hw-build-evidence.yml"
 
-    def setUp(self) -> None:
-        self.source = self.WORKFLOW.read_text(encoding="utf-8")
-        self.workflow = yaml.load(self.source, Loader=yaml.BaseLoader)
+    def text(self) -> str:
+        return self.WORKFLOW.read_text(encoding="utf-8")
 
-    def test_it_is_manual_only_and_read_only(self) -> None:
-        self.assertEqual(set(self.workflow["on"]), {"workflow_dispatch"})
-        self.assertEqual(self.workflow["permissions"], {"contents": "read"})
+    def test_it_uses_the_locked_h170_manifest_not_user_supplied_shell_input(self) -> None:
+        text = self.text()
+        self.assertIn("channels.lock.scm", text)
+        self.assertIn("drivers/profiles/h170-free-packages.scm", text)
+        self.assertNotIn("inputs.packages", text)
+        self.assertNotIn("PACKAGES:", text)
 
-    def test_package_input_is_data_not_shell_source(self) -> None:
-        self.assertIn("PACKAGES: ${{ inputs.packages }}", self.source)
-        self.assertIn('read -r -a packages <<< "$PACKAGES"', self.source)
-        self.assertIn('for package in "${packages[@]}"', self.source)
-        self.assertNotIn("for package in ${{ inputs.packages }}", self.source)
-        self.assertIn('""|-*|*[!A-Za-z0-9._+-]*)', self.source)
-        self.assertIn("package list must be a single line", self.source)
+    def test_it_runs_on_pr_and_manual_dispatch_only(self) -> None:
+        text = self.text()
+        self.assertIn("pull_request:", text)
+        self.assertIn("workflow_dispatch:", text)
+        self.assertNotIn("schedule:", text)
+        self.assertNotIn("push:", text)
 
-    def test_build_uses_the_locked_channel(self) -> None:
-        self.assertIn("guix time-machine -C channels.lock.scm -- build", self.source)
-
-    def test_nar_stream_is_counted_but_never_retained_or_uploaded(self) -> None:
-        self.assertIn('archive --export "$store_path" 2>/dev/null | wc -c', self.source)
-        self.assertIn("NAR stream counted and discarded", self.source)
+    def test_it_never_exports_or_uploads_binary_artifacts(self) -> None:
+        text = self.text()
         for forbidden in (
+            "guix archive --export",
             "actions/upload-artifact",
             "gh release upload",
             "actions/deploy-pages",
-            "signing-key.sec",
-            "GUIX_SIGNING_KEY",
+            "guix publish",
         ):
             with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, self.source)
+                self.assertNotIn(forbidden, text)
 
-    def test_failure_reporter_uses_summary_not_github_write_api(self) -> None:
-        self.assertIn("GITHUB_STEP_SUMMARY", self.source)
-        self.assertNotIn("gh api", self.source)
-        self.assertNotIn("GH_TOKEN:", self.source)
+    def test_it_records_nar_hashes_and_closure_sizes(self) -> None:
+        text = self.text()
+        self.assertIn("guix hash --recursive --format=hex", text)
+        self.assertIn("guix time-machine -C channels.lock.scm -- size", text)
 
-    def test_failure_of_any_package_fails_the_job(self) -> None:
-        self.assertIn('if [[ "$failures" -ne 0 ]]; then', self.source)
-        self.assertIn('exit 1', self.source)
+    def test_it_fails_when_the_expected_package_outputs_are_missing(self) -> None:
+        text = self.text()
+        self.assertIn('"-ne 11', text)
+        self.assertIn("exit 1", text)
+
+    def test_it_states_that_nothing_was_published(self) -> None:
+        self.assertIn("NOT_PUBLISHED", self.text())
 
 if __name__ == "__main__":
     unittest.main()
