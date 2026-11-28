@@ -918,10 +918,10 @@ class SysfsObserverTests(unittest.TestCase):
             root = Path(temporary)
             partition = root / "class" / "block" / "sda1"
             partition.mkdir(parents=True)
-            (partition / "partition").write_text("1\\n", encoding="utf-8")
-            (partition / "dev").write_text("8:1\\n", encoding="utf-8")
-            (partition / "size").write_text("100\\n", encoding="utf-8")
-            (partition / "removable").write_text("0\\n", encoding="utf-8")
+            (partition / "partition").write_text("1\n", encoding="utf-8")
+            (partition / "dev").write_text("8:1\n", encoding="utf-8")
+            (partition / "size").write_text("100\n", encoding="utf-8")
+            (partition / "removable").write_text("0\n", encoding="utf-8")
             observer = SysfsDiskObserver(sys_root=root)
             self.assertIsNone(observer.block_identity("/dev/sda1"))
 
