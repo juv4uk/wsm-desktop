@@ -415,6 +415,14 @@ def main(argv: list[str] | None = None) -> int:
     arguments = parser.parse_args(argv)
 
     root = Path(arguments.root)
+    # A CI checkout of the keyring branch lands in .channel-keyring. Detecting it
+    # here keeps the CI step a single unconditional command, which is what
+    # tests/test_ci_parity.py requires: a conditional step would mean green CI
+    # does not prove the check ran.
+    if arguments.keyring_dir is None:
+        default_keyring = root / ".channel-keyring"
+        if default_keyring.is_dir():
+            arguments.keyring_dir = default_keyring
     found = problems(
         root,
         keyring_dir=arguments.keyring_dir,

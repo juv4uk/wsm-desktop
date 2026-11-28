@@ -62,14 +62,13 @@ jobs:
           path: .channel-keyring
           fetch-depth: 1
 
+      # Один безумовний виклик: скрипт сам каже «not bootstrapped», коли
+      # .guix-authorizations немає, і сам перевіряє keyring, коли той
+      # checkout-нуто. Умовний крок означав би, що зелений CI не доводить,
+      # що перевірка виконувалася — це і ловить tests/test_ci_parity.py.
       - name: Check WSM channel authorizations
         shell: bash
-        run: |
-          if test -f .guix-authorizations; then
-            python scripts/check_channel_authorizations.py . --keyring-dir .channel-keyring
-          else
-            python scripts/check_channel_authorizations.py .
-          fi
+        run: python scripts/check_channel_authorizations.py .
 
       # Кожен скрипт, який `make check-*` запускає, мусить запускатися і тут.
       # Інакше перевірка існує лише на машині того, хто її додав, а зелений CI
