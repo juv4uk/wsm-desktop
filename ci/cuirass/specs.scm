@@ -39,14 +39,6 @@
    (branch "main")))
 
 (list
- ;; Every package the channel provides. This is the canonical Cuirass job and
- ;; it subsumes the single-package case: today the channel ships one package,
- ;; and when it ships three this job still covers them without an edit.
- (specification
-  (name 'wsm-channel)
-  (priority 1)
-  (build '(channels wsm))
-  (channels (list %wsm-guix-channel %wsm-channel)))
 
  ;; The live image derivation. Cuirass builds the same expression the release
  ;; workflow builds, so a broken profile shows up here within one poll interval
