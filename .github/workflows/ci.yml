@@ -29,6 +29,11 @@ jobs:
       - name: Check documentation
         run: python scripts/check_docs.py
 
+      - name: Check Cuirass specifications
+        # Cuirass builds inside Guix on the same pinned channels; its specs are
+        # code and drift like code.
+        run: python tests/test_cuirass_specs.py
+
       - name: Check Scheme imports
         # Two builds failed at read time on a missing #:use-module; this catches
         # the known set without waiting twenty minutes for Guix.
