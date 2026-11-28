@@ -348,3 +348,50 @@ upstream patches та пакетною інтеграцією.
 
 [H170 firmware/capability matrix](../hardware/H170-FIRMWARE-MATRIX.md)
 зводить firmware dependencies, ліцензійні обмеження та межі Free profile.
+
+
+## Пакети-кандидати для H170 Free (за pinned Guix lock)
+
+Це **карта upstream package names**, а не підтвердження їх розв'язання чи збірки.
+Для in-kernel драйверів окремих Guix-рецептів на кожен модуль не потрібно:
+їх постачає пакет ядра `linux-libre`. Користувацькі графічні драйвери
+Intel/NVK постачає один upstream пакет `mesa`.
+
+| Апаратний шлях | Guix package candidates | Що саме покриває кандидат |
+|---|---|---|
+| Intel MEI / HECI | `linux-libre` | модулі `mei` та `mei_me` |
+| Intel HD Graphics 530 | `linux-libre`, `mesa` | kernel `i915` + Mesa Intel userspace |
+| NVIDIA GP107 у Free research path | `linux-libre`, `mesa` | kernel `nouveau` + Mesa/NVK userspace; не закриває firmware |
+| Killer E2200 | `linux-libre` | kernel `alx` |
+| Kingston NV2 NVMe | `linux-libre` | вбудований NVMe host path |
+| Samsung SATA | `linux-libre` | kernel `ahci` |
+| HDA audio | `linux-libre` | kernel `snd_hda_intel`; точний codec ще не підтверджений |
+
+У locked Guix snapshot package source вже показує, що Mesa 26.2.6 для
+`x86_64-linux` збирається з Vulkan drivers `amd,intel,intel_hasvk,nouveau,swrast,virtio`,
+а типовий Linux-libre 7.3 x86_64 config має відповідні kernel options.
+Це дозволяє назвати `linux-libre` і `mesa` як **кандидатні upstream пакети**,
+але не означає, що package query, Guix evaluation, build, closure, ISO presence,
+initrd inclusion або hardware function пройшли.
+
+У H170 Free manifest для кожного рядка тому лишаються
+`package_resolution: not-assessed`, `runtime_binding: unknown` і
+`functional_validation: not-run` (окрім окремого вже описаного MEI witness,
+який не доводить WSM Guix runtime). Package names не є WSM-owned recipes;
+не створювати дублікати upstream драйверів у `wsm/packages/`.
+
+### Firmware не є частиною цього набору
+
+- GP107 FECS/GPCCS та пов'язаний Nouveau GR firmware — nonfree; не включати
+  до Free й не позначати package candidate до окремого clearance за #586.
+- Skylake DMC/GuC та Intel CPU microcode — окремі optional/nonfree capabilities;
+  не додавати до Free closure.
+- Не додавати загальний `linux-firmware` пакет лише заради цих пристроїв:
+  спершу потрібна точна file/closure/license перевірка та явне рішення.
+- Proprietary NVIDIA 580.x / Nonguix — окремий opt-in Compatibility path,
+  не Free candidate; його package resolution, ABI, license та redistribution
+  лишаються неоціненими.
+
+`pciutils` та `usbutils` — діагностичні інструменти інвентаризації, не
+kernel-driver packages. Їхню присутність у live image слід перевіряти окремо
+від цієї driver-candidate map.
