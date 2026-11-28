@@ -19,20 +19,34 @@ guix time-machine -C channels.lock.scm -- describe -f channels
 
 ## Набір каналів WSM (не lock)
 
-[`wsm.scm`](wsm.scm) — набір, який робить `(wsm packages wsm)` доступним **як
-канал**, а не через `-L "$PWD"`:
+[`wsm.scm`](wsm.scm) — набір для розробки, який додає репозиторій WSM до
+штатного `%default-channels` Guix і робить `(wsm packages wsm)` доступним як
+канал, а не через `-L "$PWD"`. Офіційний Guix channel та його introduction
+успадковуються з інсталяції Guix; WSM канал іде за гілкою `main`, але поки
+не має власного introduction.
+
+Звичайна команда має відмовити саме на WSM trust bootstrap:
 
 ```sh
-guix time-machine -C channels/wsm.scm -- describe      # відмова: не автентифіковано
-guix time-machine -C channels/wsm.scm --disable-authentication -- describe
+guix time-machine -C channels/wsm.scm -- describe -f channels
 ```
 
-Друга команда працює вже сьогодні. Саме тому нею не користуються для релізних
-збірок: вона вимикає ту саму перевірку, яку проєкт обіцяє.
+Діагностичне читання без автентифікації:
 
-Це **не** lock: `wsm` тут іде за гілкою `main`, бо канал ще не має
-introduction. Релізні збірки й далі використовують `channels.lock.scm` із
-точними commit-ами.
+```sh
+guix time-machine -C channels/wsm.scm --disable-authentication -- describe -f channels
+```
+
+**Не використовуйте** `--disable-authentication` у release, installer або
+production workflow. Успішне діагностичне читання не є доказом автентифікації:
+звіт повинен залишатися `WSM_CHANNEL_AUTHENTICATION=NOT_TESTED`.
+
+Це **не** release lock. Релізні збірки й далі використовують
+`channels.lock.scm` із точними commit-ами. Для переходу WSM на звичайний
+authenticated channel спершу потрібні owner-signed introduction commit,
+`.guix-authorizations`, public-only `keyring` branch і успішна consumer-side
+перевірка `guix git authenticate`. Не вигадуйте fingerprint і не передавайте
+секретний ключ у GitHub/CI.
 
 ## Compatibility
 
