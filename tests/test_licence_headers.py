@@ -79,6 +79,7 @@ class LicenceHeaderTests(unittest.TestCase):
 
         for relative in (
             "wsm/packages/wsm.scm",
+            "wsm/packages/fpc-tools.scm",
             "systems/live-iso.scm",
             "systems/live-compat.scm",
         ):

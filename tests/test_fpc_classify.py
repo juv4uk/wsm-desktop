@@ -31,21 +31,43 @@ class ContractParityTests(unittest.TestCase):
 
     def test_certified_stays_at_zero(self) -> None:
         """A summary that could say CERTIFIED would authorise a plan it cannot support."""
-        self.assertIn('"CERTIFIED":0', self.pas)
+        self.assertIn("Counts.Add('certified', 0)", self.pas)
         self.assertNotIn("LevelCertified", self.pas)
 
     def test_a_passed_test_never_promotes_a_subsystem(self) -> None:
         """Only driver-bound-not-tested and candidate-only count as known."""
         self.assertIn("'driver-bound-not-tested'", self.pas)
         self.assertIn("'candidate-only'", self.pas)
-        self.assertNotIn("'supported-tested'", self.pas)
+        self.assertIn("Exit('supported-tested')", self.pas)
+        self.assertIn("AllGood and (not AnyFailed)", self.pas)
+        self.assertNotIn("Level := 'supported-tested'", self.pas)
 
     def test_a_failed_function_blocks_known(self) -> None:
-        self.assertIn("HasFailedFunction", self.pas)
+        self.assertIn("FailedFunctionTest", self.pas)
         self.assertIn("AnyFailed", self.pas)
 
     def test_built_in_drivers_are_not_false_unknowns(self) -> None:
         self.assertIn("bound_driver", self.pas)
+
+    def test_evidence_states_match_python_vocabulary_without_device_prefixes(self) -> None:
+        self.assertIn("EvidenceStates.Add(State);", self.pas)
+        self.assertNotIn("EvidenceStates.Add(DeviceId + '=' + State)", self.pas)
+
+    def test_classification_output_matches_the_versioned_schema_shape(self) -> None:
+        for field in (
+            "decision_policy", "coverage", "devices", "reasons",
+            "observation", "evidence_states", "functional_tests", "device_evidence",
+        ):
+            with self.subTest(field=field):
+                self.assertIn("'" + field + "'", self.pas)
+        for count in ("certified", "known", "unknown"):
+            with self.subTest(count=count):
+                self.assertIn("Counts.Add('" + count + "'", self.pas)
+
+    def test_json_parser_is_not_called_twice_and_status_is_authoritative(self) -> None:
+        self.assertIn("RootData := GetJSON(InputText.Text)", self.pas)
+        self.assertNotIn("Parser.Parse", self.pas)
+        self.assertIn("Str(TJSONObject(ItemData), 'status') = 'failed'", self.pas)
 
 
 class SafetyTests(unittest.TestCase):

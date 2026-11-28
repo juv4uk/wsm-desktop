@@ -60,11 +60,30 @@ end;
 
 { Whole block devices only. A partition (nvme0n1p1, sda1) or an image file is
   never a valid target, and guessing would erase the wrong thing. }
+function IsAsciiLowerLetters(const Value: string): Boolean;
+var
+  I: Integer;
+begin
+  Result := Value <> '';
+  for I := 1 to Length(Value) do
+    if not ((Value[I] >= 'a') and (Value[I] <= 'z')) then
+      Exit(False);
+end;
+
+function IsAsciiDigits(const Value: string): Boolean;
+var
+  I: Integer;
+begin
+  Result := Value <> '';
+  for I := 1 to Length(Value) do
+    if not ((Value[I] >= '0') and (Value[I] <= '9')) then
+      Exit(False);
+end;
+
 function IsWholeBlockDevice(const Path: string): Boolean;
 var
-  Base: string;
-  I: Integer;
-  Digits: Boolean;
+  Base, Suffix: string;
+  Index, DigitStart: Integer;
 begin
   Result := False;
   if Copy(Path, 1, 5) <> '/dev/' then
@@ -73,37 +92,44 @@ begin
   if Base = '' then
     Exit;
 
-  { sdX / vdX / hdX: one letter only - sda1 must be rejected. }
-  if ((Copy(Base, 1, 2) = 'sd') or (Copy(Base, 1, 2) = 'vd') or
-      (Copy(Base, 1, 2) = 'hd')) and (Length(Base) = 3) then
+  { Match Python DEVICE_PATH exactly: sd[a-z]+ and vd[a-z]+. }
+  if (Copy(Base, 1, 2) = 'sd') or (Copy(Base, 1, 2) = 'vd') then
   begin
-    Result := (Base[3] >= 'a') and (Base[3] <= 'z');
+    Suffix := Copy(Base, 3, Length(Base) - 2);
+    Result := IsAsciiLowerLetters(Suffix);
     Exit;
   end;
 
-  { nvme0n1: letters, digits, 'n', digits - nvme0n1p1 must be rejected. }
+  { NVMe namespace: nvme[0-9]+n[0-9]+; partitions have a trailing pN. }
   if Copy(Base, 1, 4) = 'nvme' then
   begin
-    Digits := False;
-    for I := 5 to Length(Base) do
+    Index := 5;
+    while Index <= Length(Base) do
     begin
-      if Base[I] = 'n' then
-        Digits := True
-      else if not ((Base[I] >= '0') and (Base[I] <= '9')) then
-        Exit;
+      if not ((Base[Index] >= '0') and (Base[Index] <= '9')) then
+        Break;
+      Inc(Index);
     end;
-    Result := Digits and (Pos('p', Base) = 0);
+    if Index = 5 then Exit;
+    if Index > Length(Base) then Exit;
+    if Base[Index] <> 'n' then Exit;
+    Inc(Index);
+    DigitStart := Index;
+    while Index <= Length(Base) do
+    begin
+      if not ((Base[Index] >= '0') and (Base[Index] <= '9')) then
+        Exit;
+      Inc(Index);
+    end;
+    Result := Index > DigitStart;
     Exit;
   end;
 
-  { mmcblk0: mmcblk0p1 must be rejected. }
+  { MMC whole disk: mmcblk[0-9]+; mmcblk0p1 is a partition. }
   if Copy(Base, 1, 6) = 'mmcblk' then
   begin
-    Digits := True;
-    for I := 7 to Length(Base) do
-      if not ((Base[I] >= '0') and (Base[I] <= '9')) then
-        Digits := False;
-    Result := Digits;
+    Suffix := Copy(Base, 7, Length(Base) - 6);
+    Result := IsAsciiDigits(Suffix);
     Exit;
   end;
 end;
@@ -111,7 +137,7 @@ end;
 procedure ValidateTarget(const Disk: TDisk; const Acknowledgement, Firmware: string;
   ExpectedSize: Int64);
 var
-  Minimum, Drift, Delta: Int64;
+  Minimum, Delta: Int64;
 begin
   if not IsWholeBlockDevice(Disk.Path) then
     Refuse('disk.path',
@@ -139,12 +165,12 @@ begin
     Delta := Disk.SizeBytes - ExpectedSize;
     if Delta < 0 then
       Delta := -Delta;
-    Drift := (Delta * 100) div ExpectedSize;
-    if Drift > SizeTolerancePercent then
+    { Compare without multiplying 64-bit sizes or rounding fractional drift down. }
+    if Delta > (ExpectedSize div (100 div SizeTolerancePercent)) then
       Refuse('disk.size-drift',
-        Format('%s reports %d bytes but %d was expected (%d%% drift); ' +
+        Format('%s reports %d bytes but %d was expected (more than %d%% drift); ' +
                'the disk may have been replaced',
-               [Disk.Path, Disk.SizeBytes, ExpectedSize, Drift]));
+               [Disk.Path, Disk.SizeBytes, ExpectedSize, SizeTolerancePercent]));
   end;
 end;
 

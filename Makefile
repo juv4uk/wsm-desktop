@@ -7,7 +7,7 @@ PRODUCT ?= free
 
 
 
-.PHONY: check-driver-profiles check check-ci-policy qemu-acceptance-manual check-guix-eval check-compatibility-eval release-gate describe-compatibility-lock build-compatibility-system image-live-compat check-docs check-doc-ownership check-regression-register check-release-info check-artifact-versions check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle check-profiles check-agent check-calamares check-channels check-cli-install check-env-preflight check-evidence-drafter check-executor check-tool-closure check-guided check-hygiene check-install-steps check-isa check-journal check-live-acceptance check-makefile check-observation check-partition check-perf-baseline check-boot-profile check-profile-evidence check-profile-match check-profiles-matrix check-release-verdict check-state check-syntax check-tui check-licences image-live-minimal check-temp-paths check-test-registration check-release-assets check-classification check-classification-policy check-readme-stage check-classification-schema check-ci-parity check-scheme-imports check-no-sleep-readiness check-ci-failure-visibility check-tests check-gp107-reference check-channel-artifacts check-release-docs check-channel-contract check-release-readiness check-cuirass check-branch-freshness check-narinfo check-substitutes check-package-version check-guix-sign check-lean-closure check-fpc-package check-fpc-classify check-fpc-partition check-fpc-profile
+.PHONY: check-driver-profiles check check-ci-policy qemu-acceptance-manual check-guix-eval check-compatibility-eval release-gate describe-compatibility-lock build-compatibility-system image-live-compat check-docs check-doc-ownership check-regression-register check-release-info check-artifact-versions check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle check-profiles check-agent check-calamares check-channels check-cli-install check-env-preflight check-evidence-drafter check-executor check-tool-closure check-guided check-hygiene check-install-steps check-isa check-journal check-live-acceptance check-makefile check-observation check-partition check-perf-baseline check-boot-profile check-profile-evidence check-profile-match check-profiles-matrix check-release-verdict check-state check-syntax check-tui check-licences image-live-minimal check-temp-paths check-test-registration check-release-assets check-classification check-classification-policy check-readme-stage check-classification-schema check-ci-parity check-scheme-imports check-no-sleep-readiness check-ci-failure-visibility check-tests check-gp107-reference check-channel-artifacts check-release-docs check-channel-contract check-release-readiness check-cuirass check-branch-freshness check-narinfo check-substitutes check-package-version check-guix-sign check-lean-closure check-fpc-package check-fpc-classify check-fpc-partition check-fpc-profile build-fpc-packages
 
 check: check-ci-policy check-docs check-doc-ownership check-regression-register check-release-info check-artifact-versions check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa check-live-acceptance check-profiles-matrix check-perf-baseline check-boot-profile check-profile-evidence check-driver-profiles check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-hygiene check-channels check-executor check-tool-closure check-cli-install check-calamares check-guided check-tui check-agent check-journal check-env-preflight check-observation check-licences check-temp-paths check-test-registration check-release-assets check-classification check-classification-policy check-readme-stage check-classification-schema check-ci-parity check-scheme-imports check-no-sleep-readiness check-ci-failure-visibility check-tests check-gp107-reference check-channel-artifacts check-release-docs check-channel-contract check-release-readiness check-cuirass check-branch-freshness check-narinfo check-substitutes check-package-version check-guix-sign check-lean-closure check-fpc-package check-fpc-classify check-fpc-partition check-fpc-profile
 
@@ -112,12 +112,18 @@ check-licences:
 # Not part of `check` on purpose - a contributor without Guix must still pass.
 check-guix-eval:
 	$(GUIX) time-machine -C channels.lock.scm -- repl -L . tests/guix/source-module-evaluation.scm
+	$(MAKE) build-fpc-packages
 	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/minimal.scm --dry-run
 	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/desktop.scm --dry-run
 	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/live.scm --dry-run
 	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/live-minimal.scm --dry-run
 	$(MAKE) check-compatibility-eval
 	$(GUIX) time-machine -C channels.lock.scm -L . -- home -L . build systems/home.scm --dry-run
+
+# Build all four native FPC packages with the exact pinned Guix channel.
+# This is a real compile, not only Scheme package-record evaluation.
+build-fpc-packages:
+	$(GUIX) time-machine -C channels.lock.scm -- build -L . wsm-hwcheck-fpc wsm-classify-fpc wsm-partition-fpc wsm-profile-fpc
 
 # Compatibility is opt-in and always uses its own authenticated Guix + Nonguix lock.
 # This target resolves the lock and evaluates the full system graph without building it.
@@ -149,17 +155,17 @@ check-branch-freshness:
 check-package-version:
 	$(PYTHON) tests/test_package_version.py
 
-check-fpc-profile:
-	$(PYTHON) tests/test_fpc_profile.py
+check-fpc-classify:
+	$(PYTHON) tests/test_fpc_classify.py
 
 check-fpc-partition:
 	$(PYTHON) tests/test_fpc_partition.py
 
-check-fpc-classify:
-	$(PYTHON) tests/test_fpc_classify.py
-
 check-fpc-package:
 	$(PYTHON) tests/test_fpc_package.py
+
+check-fpc-profile:
+	$(PYTHON) tests/test_fpc_profile.py
 
 check-lean-closure:
 	$(PYTHON) tests/test_lean_closure.py

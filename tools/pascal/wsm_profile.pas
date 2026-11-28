@@ -56,7 +56,7 @@ end;
 { Absolute paths and `..' segments are rejected before any file is opened:
   a bundle that points outside itself is not a bundle, and following it would
   turn a data file into a filesystem instruction. }
-function PathProblem(const RawPath, Label: string): string;
+function PathProblem(const RawPath, AFieldName: string): string;
 var
   Part: string;
   Rest: string;
@@ -64,12 +64,14 @@ begin
   Result := '';
   if RawPath = '' then
   begin
-    Result := Label + ': empty path';
+    Result := AFieldName + ': empty path';
     Exit;
   end;
-  if (RawPath[1] = '/') or (Copy(RawPath, 1, 3) = '..\') or (Copy(RawPath, 1, 3) = '../') then
+  if (RawPath[1] = '/') or (Pos('\', RawPath) > 0) or
+     (Pos(':', RawPath) > 0) or (Pos('//', RawPath) > 0) or
+     (RawPath[Length(RawPath)] = '/') then
   begin
-    Result := Label + ': ' + RawPath + ' is not a safe relative path';
+    Result := AFieldName + ': ' + RawPath + ' is not a safe relative path';
     Exit;
   end;
   Rest := RawPath;
@@ -83,9 +85,9 @@ begin
     end
     else
       Rest := '';
-    if Part = '..' then
+    if (Part = '..') or (Part = '.') or (Part = '') then
     begin
-      Result := Label + ': ' + RawPath + ' escapes the bundle directory';
+      Result := AFieldName + ': ' + RawPath + ' escapes the bundle directory';
       Exit;
     end;
   end;
@@ -118,8 +120,16 @@ begin
       Source := TJSONObject(Document.Find('profile_source'));
       Issue := PathProblem(Str(Source, 'path'), 'profile_source');
       if Issue <> '' then
-        AddProblem(Issue);
-    end;
+        AddProblem(Issue)
+      else
+      begin
+        FullPath := IncludeTrailingPathDelimiter(ArtifactRoot) + Str(Source, 'path');
+        if not FileExists(FullPath) then
+          AddProblem('profile_source: source file does not exist under the bundle directory');
+      end;
+    end
+    else
+      AddProblem('profile_source must be a JSON object');
 
   Seen := TStringList.Create;
   try
@@ -136,6 +146,11 @@ begin
             Continue;
           Item := TJSONObject(Artifacts.Items[I]);
           DeclaredPath := Str(Item, 'path');
+          if Copy(DeclaredPath, 1, 10) <> 'artifacts/' then
+          begin
+            AddProblem('artifacts/' + IntToStr(I) + ': path must be stored under artifacts/');
+            Continue;
+          end;
           Issue := PathProblem(DeclaredPath, 'artifacts/' + IntToStr(I));
           if Issue <> '' then
           begin
@@ -183,7 +198,10 @@ end;
 var
   Text: TStringList;
   Parser: TJSONParser;
+  RootData: TJSONData;
   Root: TJSONObject;
+  Output: TJSONObject;
+  OutputProblems: TJSONArray;
   Ok: Boolean;
   I: Integer;
 begin
@@ -206,15 +224,17 @@ begin
     end;
 
     Parser := nil;
+    RootData := nil;
     try
       try
         Parser := TJSONParser.Create(Text.Text);
-        if not (Parser.Parse is TJSONObject) then
+        RootData := Parser.Parse;
+        if not (RootData is TJSONObject) then
         begin
           WriteLn(StdErr, 'wsm-profile: evidence is not a JSON object');
           Halt(4);
         end;
-        Root := TJSONObject(Parser.Parse);
+        Root := TJSONObject(RootData);
       except
         on E: Exception do
         begin
@@ -225,19 +245,26 @@ begin
 
       Ok := CheckBundle(Root, ExtractFileDir(ExpandFileName(ParamStr(1))));
 
-      Write('{"ok":', Ok, ',"schema":"', SupportedSchema, '"');
-      Write(',"digest_verification":"delegated"');
-      Write(',"problems":[');
-      for I := 0 to ProblemCount - 1 do
-      begin
-        if I > 0 then Write(',');
-        Write('"', Problems[I], '"');
+      Output := TJSONObject.Create;
+      OutputProblems := TJSONArray.Create;
+      try
+        Output.Add('ok', Ok);
+        Output.Add('schema', SupportedSchema);
+        Output.Add('digest_verification', 'delegated');
+        for I := 0 to ProblemCount - 1 do
+          OutputProblems.Add(Problems[I]);
+        Output.Add('problems', OutputProblems);
+        OutputProblems := nil;
+        WriteLn(Output.AsJSON);
+      finally
+        OutputProblems.Free;
+        Output.Free;
       end;
-      WriteLn(']}');
 
       if not Ok then
         Halt(5);
     finally
+      RootData.Free;
       Parser.Free;
     end;
   finally

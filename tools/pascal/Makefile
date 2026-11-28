@@ -1,28 +1,39 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
 #
-# FPC is invoked with -Mobjfpc and -Sh so the unit's {$mode objfpc}{$H+}
-# directives are honoured; without -Sh the H+ (ANSI strings) is ignored and
-# the JSON builder silently truncates on the first byte above 127.
+# FPC is invoked with -Mobjfpc and -Sh so {$mode objfpc}{$H+} is honoured.
+# Build outputs stay under build/ and never pollute the source tree.
 
 FPC ?= fpc
 FPCFLAGS ?= -Mobjfpc -Sh -O2 -vewn
-TARGETS = wsm-hwcheck wsm-classify wsm-partition wsm-profile
+BUILD_DIR ?= build
 
-all: $(TARGETS)
+all: wsm-hwcheck wsm-classify wsm-partition wsm-profile
 
-wsm-hwcheck: wsm_hwcheck.pas
-	$(FPC) $(FPCFLAGS) -owsw-hwcheck wsm_hwcheck.pas
+wsm-hwcheck: $(BUILD_DIR)/wsm-hwcheck
 
-wsm-classify: wsm_classify.pas
-	$(FPC) $(FPCFLAGS) -owsw-classify wsm_classify.pas
+wsm-classify: $(BUILD_DIR)/wsm-classify
 
-wsm-partition: wsm_partition.pas
-	$(FPC) $(FPCFLAGS) -owsw-partition wsm_partition.pas
+wsm-partition: $(BUILD_DIR)/wsm-partition
 
-wsm-profile: wsm_profile.pas
-	$(FPC) $(FPCFLAGS) -owsw-profile wsm_profile.pas
+wsm-profile: $(BUILD_DIR)/wsm-profile
+
+$(BUILD_DIR)/wsm-hwcheck: wsm_hwcheck.pas
+	mkdir -p $(BUILD_DIR)
+	$(FPC) $(FPCFLAGS) -FE$(BUILD_DIR) -FU$(BUILD_DIR) -o$(BUILD_DIR)/wsm-hwcheck wsm_hwcheck.pas
+
+$(BUILD_DIR)/wsm-classify: wsm_classify.pas
+	mkdir -p $(BUILD_DIR)
+	$(FPC) $(FPCFLAGS) -FE$(BUILD_DIR) -FU$(BUILD_DIR) -o$(BUILD_DIR)/wsm-classify wsm_classify.pas
+
+$(BUILD_DIR)/wsm-partition: wsm_partition.pas
+	mkdir -p $(BUILD_DIR)
+	$(FPC) $(FPCFLAGS) -FE$(BUILD_DIR) -FU$(BUILD_DIR) -o$(BUILD_DIR)/wsm-partition wsm_partition.pas
+
+$(BUILD_DIR)/wsm-profile: wsm_profile.pas
+	mkdir -p $(BUILD_DIR)
+	$(FPC) $(FPCFLAGS) -FE$(BUILD_DIR) -FU$(BUILD_DIR) -o$(BUILD_DIR)/wsm-profile wsm_profile.pas
 
 clean:
-	rm -f $(TARGETS) *.o *.ppu
+	rm -rf $(BUILD_DIR) *.o *.ppu
 
-.PHONY: all clean
+.PHONY: all wsm-hwcheck wsm-classify wsm-partition wsm-profile clean
