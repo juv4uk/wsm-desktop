@@ -232,7 +232,10 @@ begin
   if Driver = nil then
   begin
     Driver := TJSONObject.Create;
-    Driver.Add('status', 'unknown');
+    if (Category = 'cpu') or (Category = 'motherboard') or (Category = 'display') then
+      Driver.Add('status', 'not-applicable')
+    else
+      Driver.Add('status', 'unknown');
   end;
   Result.Add('driver', Driver);
 
@@ -278,6 +281,10 @@ const
     'sys_vendor', 'product_name', 'board_vendor', 'board_name',
     'board_version', 'bios_vendor', 'bios_version', 'bios_release'
   );
+  JsonNames: array[0..7] of string = (
+    'system_vendor', 'product_name', 'board_vendor', 'board_name',
+    'board_version', 'bios_vendor', 'bios_version', 'bios_release'
+  );
 var
   Index: Integer;
   Value, DateValue: string;
@@ -289,7 +296,7 @@ begin
   begin
     Value := CleanValue(ReadValue(JoinPath(DmiRoot, SourceNames[Index])));
     if Value <> '' then
-      Result.Add(SourceNames[Index], Value);
+      Result.Add(JsonNames[Index], Value);
   end;
   DateValue := NormalizeBiosDate(ReadValue(JoinPath(DmiRoot, 'bios_date')));
   AddIfPresent(Result, 'bios_date', DateValue);
@@ -647,7 +654,7 @@ begin
       Device := NewBaseDevice('usb-' + Name, USBCategory(ClassValue), 'usb',
         'sysfs:/bus/usb/devices/' + Name,
         'USB device identity was read from sysfs; composite interfaces are not enumerated in this revision.',
-        ObservedAt, nil);
+        ObservedAt, NewDriverFacts(DevicePath));
       Device.Add('identity', Identity);
       Devices.Add(Device);
     until FindNext(Search) <> 0;
