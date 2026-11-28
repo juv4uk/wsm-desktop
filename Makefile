@@ -151,9 +151,11 @@ check-package-version:
 
 check-fpc-classify:
 	$(PYTHON) tests/test_fpc_classify.py
+	$(PYTHON) tests/test_fpc_classify_runtime.py
 
 check-fpc-package:
 	$(PYTHON) tests/test_fpc_package.py
+	$(PYTHON) tests/test_fpc_collector_parity.py
 
 check-lean-closure:
 	$(PYTHON) tests/test_lean_closure.py
