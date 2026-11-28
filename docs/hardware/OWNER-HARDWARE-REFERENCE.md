@@ -162,44 +162,17 @@ channel, Linux-libre чи повний склад саме цієї H170 кон�
 Для зведеного огляду firmware, microcode, ліцензій і функціональних обмежень
 див. [H170 firmware/capability matrix](H170-FIRMWARE-MATRIX.md).
 
-## Актуалізація GP107: software hardening і межа апаратних доказів (2026-11-28)
+## Актуалізація GP107: safe-offset deferral і межа H170 доказів (2026-11-28)
 
-Канонічний знімок зовнішнього дослідницького репозиторію:
-[juv4uk/gp107-nvidia-re @ 8cb70ae489474eccbec9ce7809f642a11eefc8c1](https://github.com/juv4uk/gp107-nvidia-re/tree/8cb70ae489474eccbec9ce7809f642a11eefc8c1).
-Це пізніший source snapshot для GP107 research, а не доказ на H170.
+Канонічний стан зовнішнього GP107 research:
+[juv4uk/gp107-nvidia-re @ `2f98a9b100ae3ea905c25090c1c06191ab9744e2`](https://github.com/juv4uk/gp107-nvidia-re/tree/2f98a9b100ae3ea905c25090c1c06191ab9744e2).
+PR [#54](https://github.com/juv4uk/gp107-nvidia-re/pull/54) злитий у `master`; PR #53 закритий як superseded без merge. Exact-head static validation #46085676976 для #54 завершився success.
 
-- [docs/29](https://github.com/juv4uk/gp107-nvidia-re/blob/8cb70ae489474eccbec9ce7809f642a11eefc8c1/docs/29-userspace-capability-driver.md)
-  і [docs/30](https://github.com/juv4uk/gp107-nvidia-re/blob/8cb70ae489474eccbec9ce7809f642a11eefc8c1/docs/30-userspace-capability-ledger.md)
-  описують C11 userspace/sysfs identity, fail-closed driver binding та capability ledger.
-  Після merged hardening приватний mapper використовує pinned PCI directory fd:
-  перевіряє BDF, vendor/device/revision, subsystem IDs, `uevent` і PCI config
-  через цей самий fd; `resource0` відкривається відносно нього з
-  `O_NOFOLLOW`, розмір перевіряється через `fstat`, а driver binding
-  повторно перевіряється перед read-only mapping. Synthetic substitution
-  witnesses доводять відмову на підміні BDF/device у fixture, а не на фізичній H170.
-- Це **не** означає, що фізичний BAR0 read став безпечним або був виконаний.
-  У поточному GP107 `master` лишається production path до
-  `openat(resource0)` / `mmap(PROT_READ)`; сам `PROT_READ` не доводить,
-  що читання довільного регістру не має side effects. Фізичний MMIO/BAR,
-  driver unbind і BOOT0 залишаються **NOT AUTHORIZED / NOT RUN / UNPROVEN**.
-- [GP107 PR #53](https://github.com/juv4uk/gp107-nvidia-re/pull/53) пропонує
-  наступний безпечніший крок: після identity/driver/BAR/offset software gates
-  повертати `read-safe-offset-unproven`, не відкривати `resource0` і не
-  виконувати mapping/read. На момент цього знімка PR **не злитий**:
-  exact-head run `46084831447` завершився failure у необов'язковому host
-  inventory tail; review також вимагає перенести новий pinned-dirfd захист із
-  master у PR перед повторним CI. Тому це pending candidate, не чинний
-  merged contract і не підстава запускати MMIO.
-- GP107 [docs/20–21](https://github.com/juv4uk/gp107-nvidia-re/tree/8cb70ae489474eccbec9ce7809f642a11eefc8c1/docs)
-  лишаються NVIDIA R580-only HOST_VISIBLE/HOST_COHERENT baseline та матрицею
-  108 точок на окремому тестовому host. Це не NVK A/B і не H170 performance
-  baseline. [docs/22](https://github.com/juv4uk/gp107-nvidia-re/blob/8cb70ae489474eccbec9ce7809f642a11eefc8c1/docs/22-device-local-transfer-and-compute-phases.md)
-  містить виправлений command-stream код із memory dependencies та
-  `memoryTypeBits` check, але виправлення ще потребує build, synchronization
-  validation і нових фізичних повторів; історичні DEVICE_LOCAL цифри лишаються
-  **NOT ACCEPTED / EXPLORATORY**.
-- Для WSM це лише зовнішня device-level/software evidence. Вона не підвищує
-  H170 `runtime_binding`, firmware presence, KMS/display, functional validation
-  або Free/Compatibility profile verdicts. Їхні стани лишаються такими, як
-  підтверджено власними H170 manifests; потрібен окремий native Linux
-  `wsm-hwcheck` report на самій платі.
+- **C11 public API:** `gp107_mmio_read32()` вимагає opt-in, сканує exact target identity, повторно перевіряє pinned PCI device directory через один fd (`BDF`, `vendor/device/revision`, `subsystem IDs`, PCI config та driver link), перевіряє BAR0 type/size і offset, а потім повертає `GP107_ERR_SAFE_OFFSET_UNPROVEN=21`. Production C API більше не відкриває вміст `resource0`, не робить `mmap`/`munmap` і не читає BAR register. `stat(resource0)` у звичайній inventory може зчитати лише metadata про розмір; це не aperture read.
+- **Pascal API:** `Read32()` теж завершується `STATUS_SAFE_OFFSET_UNPROVEN=21` до `FpOpen`/`FpMMap`/`FpMunmap`; вона не читає BAR. Однак identity parity ще неповна: `ReadBinding()` відкриває та перевіряє PCI directory, закриває fd, а потім викликає path-based `FpReadLink`; `vendor/device/config` у Pascal inventory також читаються за pathname. Це не еквівалент C pinned-dirfd/BDF-substitution захисту. У Pascal `Load32Asm()` досі оголошений у public `interface`, хоча `Read32()` його не викликає. Це окрема follow-up API-hygiene/identity задача, не дозвіл на BAR access.
+- **Ledger:** bound driver дає `denied`; unbound без opt-in — `deferred/opt-in-required`; unbound із `--allow-mmio` — `deferred/read-safe-offset-unproven`. Стану `granted` немає. `owner-approval=not-inferred` і `physical-mmio=not-authorized` лишаються незмінними.
+- **Доказ CI:** run #46085676976 пройшов exact SHA `343400a23fe4d91e73cd7256f0e682552253e8df` із FPC 3.2.2, C11 `-Werror`, synthetic fixtures, safe-offset deferral та static ASM inspection. Це source/compile/synthetic evidence; воно не є фізичним runtime test і не є повним локальним `make test` на H170.
+- Жодного безпечного GP107 BAR0 register offset досі не доведено. Фізичний MMIO/BAR, driver unbind, BOOT0, firmware, Nouveau boot, Vulkan enumeration/submit та reboot залишаються **NOT AUTHORIZED / NOT RUN / UNPROVEN**.
+- GP107 [docs/20–21](https://github.com/juv4uk/gp107-nvidia-re/tree/2f98a9b100ae3ea905c25090c1c06191ab9744e2/docs) залишаються NVIDIA R580-only HOST_VISIBLE/HOST_COHERENT baseline та матрицею 108 точок на окремому тестовому host. Це не NVK A/B і не H170 performance baseline. [docs/22](https://github.com/juv4uk/gp107-nvidia-re/blob/2f98a9b100ae3ea905c25090c1c06191ab9744e2/docs/22-device-local-transfer-and-compute-phases.md) досі має історичні DEVICE_LOCAL цифри **NOT ACCEPTED / EXPLORATORY**; код barriers/`memoryTypeBits` потребує окремих build, synchronization validation і нового runtime rerun.
+- Для WSM це лише зовнішня GP107/software evidence. Воно не підвищує H170 `runtime_binding`, firmware presence, KMS/display, functional validation або Free/Compatibility profile verdicts. Потрібен окремий native Linux `wsm-hwcheck` report на самій платі; Windows/WSL facts та сторонній GP107 host не є H170 certification.
+
