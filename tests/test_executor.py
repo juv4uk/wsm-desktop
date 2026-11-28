@@ -211,6 +211,16 @@ class VerifierContractTests(unittest.TestCase):
         self.assertEqual(verify_step(step, FakeObserver(disks=("/dev/nvme0n1",))).status, "verified")
         self.assertEqual(verify_step(step, FakeObserver(disks=("/dev/sda",))).status, "failed")
 
+    def test_missing_partition_inventory_is_unverified_not_failed(self) -> None:
+        class UnknownPartitionObserver(FakeObserver):
+            def partitioned_disks(self) -> tuple[str, ...] | None:
+                return None
+
+        step = Step(["/usr/sbin/sgdisk", "-n", "1:0:+512M", "/dev/nvme0n1"], "partition")
+        result = verify_step(step, UnknownPartitionObserver())
+        self.assertEqual(result.status, "unverified")
+        self.assertIn("inventory is unavailable", result.detail)
+
     def test_every_trusted_tool_has_a_verifier(self) -> None:
         for name, executable in TRUSTED_TOOLS.items():
             with self.subTest(tool=name):
@@ -375,7 +385,7 @@ class FakeDiskObserver:
     def __init__(
         self,
         identity: dict[str, object] | None = None,
-        partitions: tuple[str, ...] = ("/dev/nvme0n1p1", "/dev/nvme0n1p2"),
+        partitions: tuple[str, ...] | None = ("/dev/nvme0n1p1", "/dev/nvme0n1p2"),
         live: str | None = None,
     ) -> None:
         self.identity = identity if identity is not None else {
@@ -389,7 +399,7 @@ class FakeDiskObserver:
     def block_identity(self, path: str) -> dict[str, object] | None:
         return self.identity
 
-    def partitions(self, path: str) -> tuple[str, ...]:
+    def partitions(self, path: str) -> tuple[str, ...] | None:
         return self._partitions
 
     def live_device(self) -> str | None:
@@ -402,6 +412,12 @@ class DiskIdentityTests(unittest.TestCase):
     def test_an_unchanged_disk_passes(self) -> None:
         observer = FakeDiskObserver()
         require_unchanged(capture(observer, "/dev/nvme0n1"), observer)
+
+    def test_unreadable_partition_topology_is_refused(self) -> None:
+        with self.assertRaises(IdentityError) as caught:
+            capture(FakeDiskObserver(partitions=None), "/dev/nvme0n1")
+        self.assertEqual(caught.exception.code, "identity.missing")
+        self.assertIn("partition topology", caught.exception.message)
 
     def test_a_missing_block_device_is_refused(self) -> None:
         class Missing(FakeDiskObserver):
@@ -869,8 +885,10 @@ class SysfsObserverTests(unittest.TestCase):
         (block / "dev").write_text(dev + "\n", encoding="utf-8")
         (block / "size").write_text(str(sectors) + "\n", encoding="utf-8")
         (block / "removable").write_text(removable + "\n", encoding="utf-8")
-        for part in parts:
-            (block / part).mkdir()
+        for number, part in enumerate(parts, start=1):
+            partition = block / part
+            partition.mkdir()
+            (partition / "partition").write_text(f"{number}\n", encoding="utf-8")
 
     def test_identity_is_read_from_sysfs(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -886,12 +904,45 @@ class SysfsObserverTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             self.assertIsNone(SysfsDiskObserver(sys_root=Path(temporary)).block_identity("/dev/nope"))
 
-    def test_partitions_are_listed_from_the_block_directory(self) -> None:
+    def test_noncanonical_paths_do_not_alias_a_sysfs_basename(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            self._disk(root, "sda", parts=("sda1", "sda2", "sdaa"))
+            self._disk(root, "sda")
             observer = SysfsDiskObserver(sys_root=root)
-            self.assertEqual(observer.partitions("/dev/sda"), ("/dev/sda1", "/dev/sda2", "/dev/sdaa"))
+            for path in ("sda", "/tmp/sda", "/dev/disk/by-id/sda", "/dev/../sda"):
+                with self.subTest(path=path):
+                    self.assertIsNone(observer.block_identity(path))
+
+    def test_a_partition_node_is_not_accepted_as_a_whole_disk(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            partition = root / "class" / "block" / "sda1"
+            partition.mkdir(parents=True)
+            (partition / "partition").write_text("1\n", encoding="utf-8")
+            (partition / "dev").write_text("8:1\n", encoding="utf-8")
+            (partition / "size").write_text("100\n", encoding="utf-8")
+            (partition / "removable").write_text("0\n", encoding="utf-8")
+            observer = SysfsDiskObserver(sys_root=root)
+            self.assertIsNone(observer.block_identity("/dev/sda1"))
+
+    def test_only_sysfs_partition_entries_are_listed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._disk(root, "sda", parts=("sda1", "sda2"))
+            # A separate disk name sharing the prefix is not a partition of sda.
+            (root / "class" / "block" / "sda" / "sdaa").mkdir()
+            observer = SysfsDiskObserver(sys_root=root)
+            self.assertEqual(observer.partitions("/dev/sda"), ("/dev/sda1", "/dev/sda2"))
+
+    def test_unreadable_partition_marker_makes_topology_unknown(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._disk(root, "sda", parts=())
+            partition = root / "class" / "block" / "sda" / "sda1"
+            partition.mkdir()
+            (partition / "partition").write_text("not-a-number\n", encoding="utf-8")
+            observer = SysfsDiskObserver(sys_root=root)
+            self.assertIsNone(observer.partitions("/dev/sda"))
 
     def test_the_live_device_comes_from_the_root_mount(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -915,6 +966,13 @@ class SysfsObserverTests(unittest.TestCase):
             self.assertIsNone(observer.filesystem_of("/dev/sda1"))
             self.assertTrue(observer.is_mounted("/mnt"))
             self.assertFalse(observer.is_mounted("/elsewhere"))
+            self.assertIsNone(observer.partitioned_disks())
+
+    def test_partition_table_verifier_treats_unavailable_inventory_as_unverified(self) -> None:
+        step = Step(["/usr/sbin/sgdisk", "-n", "1:0:+512M", "/dev/sda"], "partition")
+        result = verify_step(step, FilesystemObserver())
+        self.assertEqual(result.status, "unverified")
+        self.assertIn("inventory is unavailable", result.detail)
 
 
 if __name__ == "__main__":
