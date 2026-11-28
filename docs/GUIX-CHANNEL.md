@@ -94,6 +94,10 @@ Wi-Fi, Bluetooth, Thunderbolt, webcam та інша неінвентаризов
 
 Наявність `.guix-channel` сама по собі **не** робить канал authenticated. У репозиторії ще немає підтвердженого WSM `.guix-authorizations`, signed introduction commit і публічного keyring branch. Тому зараз не можна рекламувати WSM channel як криптографічно автентифікований або включати його до production release lock.
 
+### Guix CLI smoke для channel set
+
+Guix profile evaluation додатково читає `channels/wsm.scm` безпосередньо через `guix time-machine`. Звичайний виклик має відмовити з діагностикою автентифікації WSM; окремий тестовий виклик із `--disable-authentication` використовується лише щоб перевірити, що Guix розбирає набір і бачить `guix` та `wsm`. Цей режим не перевіряє довіру, не змінює release locks і не входить у production installation. Звіт явно вказує `WSM_CHANNEL_AUTHENTICATION=NOT_TESTED`. Фактичний trust acceptance починається лише після owner-signed introduction та успішного `guix git authenticate` без вимкнення перевірки.
+
 Bootstrap має бути виконаний власником ключа. Нижче — точний формат і порядок локальної операції; placeholders не можна копіювати як готові значення.
 
 1. Перевірити локальні secret keys та повний fingerprint, включно з signing subkey:
