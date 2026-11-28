@@ -39,9 +39,13 @@
 ;; Check a private imported binding as the custom job body is not evaluated
 ;; merely by importing its module. A missing (gnu ci) import would otherwise
 ;; escape the simple procedure? test until the first actual Cuirass evaluation.
-(unless (procedure?
-         (module-ref (resolve-module '(ci cuirass images)) 'derivation->job))
+(define cuirass-images-module (resolve-module '(ci cuirass images)))
+(unless (procedure? (module-ref cuirass-images-module 'derivation->job))
   (error "Cuirass image module has no derivation->job binding from (gnu ci)"))
+(unless (procedure? (module-ref cuirass-images-module '%graft?))
+  (error "Cuirass image module has no %graft? parameter binding"))
+(unless (procedure? (module-ref cuirass-images-module 'assq-ref))
+  (error "Cuirass image module has no assq-ref binding"))
 
 ;; Load the service fragment as a real Guix configuration, not a text-only
 ;; assertion. This catches moved/renamed Cuirass service fields and imports.
