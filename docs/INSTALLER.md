@@ -80,18 +80,18 @@ Calamares розрізняє user-visible view modules та job modules. View mo
 
 Наведений workflow є цільовою специфікацією графічного шляху. Він ще не реалізований і не повинен видаватися за доступну можливість до завершення package, settings, module та QEMU acceptance.
 
-1. Welcome та інформація про статус підтримки.
-2. Мова та клавіатура.
-3. Часовий пояс.
-4. Вибір профілю Free або Compatibility з поясненням наслідків.
-5. Розмітка диска та монтування перевіреним модулем Calamares.
-6. WSM configuration summary: диск, partition plan, mount points, profile, boot mode.
-7. Явне підтвердження незворотних дій.
-8. WSM preflight.
-9. Генерація конфігурації Guix.
-10. Guix system build / перевірка конфігурації.
-11. Guix system init.
-12. Перевірка завершення та звіт.
+1. Welcome та інформація про статус підтримки й доступні режими інсталяції.
+2. Мова, клавіатура та часовий пояс.
+3. WSM hardware preflight: локальний звіт, статуси пристроїв і попередження.
+4. Пояснення readiness та вибір профілю Free або Compatibility.
+5. Вибір цільового диска й розмітка через Calamares/KPMcore; до явного підтвердження — лише формування плану.
+6. WSM configuration summary: диск, partition plan, mount points, profile, firmware/boot mode.
+7. Перевірка свіжості hardware evidence та повторна перевірка identity цільового диска.
+8. Явне підтвердження незворотних дій із точним показом, що буде стерто/створено.
+9. Передача типізованого plan єдиному WSM Guix backend; backend повторно перевіряє ціль.
+10. Guix system build / перевірка конфігурації та deployment через один owner.
+11. Post-install verification, включно з файловою системою та bootloader.
+12. Перевірка завершення, звіт і зрозумілий стан успіху/помилки.
 
 ## Що не можна просто взяти зі стандартного Calamares
 
@@ -128,7 +128,7 @@ Guix configuration має бути єдиним джерелом істини д
 
 ## Поточний стан
 
-Робочого Calamares settings.conf, module.desc або deployment-коду поки немає. Вони будуть додані після M2, коли ми підтвердимо доступність Calamares, його залежностей та інтерфейс API у цільовому live-середовищі. Див. README у installer/calamares/.
+Calamares є обов'язковим графічним frontend-ом основного універсального WSM Installer Live ISO, але його реалізація ще не готова. У репозиторії є заготовка WSM Python jobmodule; немає підтвердженого Guix package/closure, повного settings.conf, повного module chain, запуску в live ISO або реального installation acceptance. Перелік конкретних частин і критеріїв — у README installer/calamares/. Поточний RC6 Minimal Live не містить Calamares і не є доказом готовності графічного шляху.
 
 Пов'язані документи:
 
