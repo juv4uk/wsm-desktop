@@ -59,9 +59,19 @@ jobs:
       - name: Build every program
         run: |
           set -euo pipefail
-          mapfile -t programs < <(git ls-files '*.lpr' | grep -v '^third_party/' || true)
+          mapfile -t pascal_sources < <(
+            git ls-files '*.lpr' '*.pas' '*.pp' | grep -v '^third_party/' || true
+          )
+          programs=()
+          for source in "${pascal_sources[@]}"; do
+            # Compile program/library entry points from any supported Pascal source
+            # extension. Units are compiled as dependencies of their entry point.
+            if grep -Eiq '^[[:space:]]*(program|library)[[:space:]]+[A-Za-z_][A-Za-z0-9_]*([[:space:]]*;|[[:space:]]*)' "$source"; then
+              programs+=("$source")
+            fi
+          done
           if [ "${#programs[@]}" -eq 0 ]; then
-            echo "No Pascal programs in the tree yet; nothing to compile."
+            echo "No Pascal program/library entry points in the tree; nothing to compile."
             echo "WSM_FPC_PROGRAMS=0" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
@@ -69,7 +79,7 @@ jobs:
           failed=0
           for program in "${programs[@]}"; do
             echo "::group::fpc $program"
-            if ! fpc -O2 -Mobjfpc -Sh -FUbuild/fpc -FEbuild/fpc "$program"; then
+            if ! fpc -B -O2 -Mobjfpc -Sh -FUbuild/fpc -FEbuild/fpc "$program"; then
               echo "::error::Free Pascal refused to compile $program"
               failed=$((failed + 1))
             fi
@@ -79,9 +89,13 @@ jobs:
           {
             echo "### Free Pascal build"
             echo ""
-            echo "Programs: ${#programs[@]}, failed: $failed"
+            echo "Program entry points: ${#programs[@]}, failed: $failed"
+            printf '%s\\n' "${programs[@]}"
           } >> "$GITHUB_STEP_SUMMARY"
           [ "$failed" -eq 0 ] || exit 1
+
+      - name: Verify the WSM FPC collector against the Python reference
+        run: python3 tests/test_fpc_collector_parity.py
 
       - name: Keep the compiled binaries
         if: always()
