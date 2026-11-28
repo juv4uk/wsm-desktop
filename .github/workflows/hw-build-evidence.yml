@@ -1,0 +1,102 @@
+# SPDX-License-Identifier: LicenseRef-Volnist
+name: WSM hardware package build evidence
+
+# Builds the package set a specific machine needs and records what happened, WITHOUT
+# exporting a package closure. This is the "ephemeral build evidence" that
+# package-archives.yml is allowed to become while #367 is open.
+#
+# Why this is not distribution: nothing is uploaded, attached or published. `guix build`
+# populates the runner's own store, the workflow writes sizes, hashes and versions into
+# the run summary, and the store disappears with the runner. A reader learns whether the
+# set builds on the locked channels; nobody receives a binary.
+#
+# What it answers for the owner's H170: does the set this board needs — the installer,
+# the kernel configuration, the firmware, the open GPU stack — actually build against
+# the pinned channels? That question can be answered today, and answering it is the
+# prerequisite for every later decision about publishing.
+#
+# Substitute publication and NAR export stay disabled until the owner settles #367,
+# channel trust, an endpoint and key custody. See docs/SUBSTITUTES.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      packages:
+        description: "Package variables to build, space separated"
+        type: string
+        default: "wsm-tools"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wsm-hw-build-evidence
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build the hardware package set (no export)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install Guix
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y guix
+          sudo systemctl enable --now guix-daemon.service
+          guix --version
+
+      - name: Build each package on the release lock
+        run: |
+          set -euo pipefail
+          {
+            echo "| package | store path | nar size (bytes) |"
+            echo "| --- | --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          failures=0
+          for package in ${{ inputs.packages }}; do
+            case "$package" in
+              *[!A-Za-z0-9._+-]*) echo "refusing odd package name: $package" >&2; exit 1 ;;
+            esac
+            if ! store_path="$(guix time-machine -C channels.lock.scm -- \
+                                 build -L . "$package" --no-grafts 2>&1)"; then
+              echo "| $package | BUILD FAILED | — |" >> "$GITHUB_STEP_SUMMARY"
+              echo "$store_path" >&2
+              failures=$((failures + 1))
+              continue
+            fi
+            # The nar size is the number that decides whether an archive could ever fit
+            # in a release asset or a substitute cache; recording it now means the
+            # decision later is arithmetic instead of guesswork.
+            size="$(guix time-machine -C channels.lock.scm -- \
+                      archive --export "$store_path" 2>/dev/null | wc -c)"
+            echo "| $package | \`$store_path\` | $size |" >> "$GITHUB_STEP_SUMMARY"
+          done
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Exported: none. This run publishes nothing." >> "$GITHUB_STEP_SUMMARY"
+          [ "$failures" -eq 0 ] || { echo "$failures package(s) failed to build" >&2; exit 1; }
+
+      - name: Повідомити причину збою
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          BODY=$(mktemp)
+          {
+            echo "### WSM hardware build evidence: збірка не завершилась"
+            echo ""
+            echo "Commit: \`$GITHUB_SHA\`"
+            echo ""
+            echo "Один або кілька пакетів набору не збираються на locked-каналах."
+            echo "Це не публікація: жодного архіву не експортовано."
+            df -h / || true
+          } > "$BODY"
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
+            -F body=@"$BODY" >/dev/null && echo "причину записано коментарем"

@@ -157,5 +157,45 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
         self.assertIn("#367", self.text)
         self.assertIn("розповсюдження", self.text.lower())
 
+
+class HardwareBuildEvidenceTests(unittest.TestCase):
+    """Building is allowed while #367 is open; exporting a closure is not."""
+
+    WORKFLOW = ROOT / ".github" / "workflows" / "hw-build-evidence.yml"
+
+    def text(self) -> str:
+        return self.WORKFLOW.read_text(encoding="utf-8")
+
+    def test_it_builds_but_never_exports_or_uploads(self) -> None:
+        text = self.text()
+        self.assertIn("guix time-machine -C channels.lock.scm", text)
+        for forbidden in (
+            "guix archive --export \"$store_path\" > ",
+            "actions/upload-artifact",
+            "gh release upload",
+            "actions/deploy-pages",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, text)
+
+    def test_it_records_the_size_that_decides_later_publishing(self) -> None:
+        """The nar size is the arithmetic a publishing decision needs."""
+        self.assertIn("nar size (bytes)", self.text())
+        self.assertIn("archive --export", self.text())
+
+    def test_it_says_in_the_summary_that_nothing_was_published(self) -> None:
+        self.assertIn("publishes nothing", self.text())
+
+    def test_a_failing_package_fails_the_run(self) -> None:
+        text = self.text()
+        self.assertIn("failures=$((failures + 1))", text)
+        self.assertIn('exit 1', text)
+
+    def test_it_is_manual_only_and_needs_no_approval_phrase(self) -> None:
+        """Building locally is not distribution, so it does not need the owner gate."""
+        text = self.text()
+        self.assertIn("workflow_dispatch:", text)
+        self.assertNotIn("owner_approval", text)
+
 if __name__ == "__main__":
     unittest.main()
