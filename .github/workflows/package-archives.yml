@@ -21,6 +21,13 @@ name: WSM package archives
 # GP107, і один запуск має дати цей набір, а не п'ять окремих.
 
 on:
+  # A tag in this namespace is a deliberate act by a person with push access: it names
+  # what is being published and when. It exists because the integration that prepares
+  # these changes cannot call `workflow_dispatch` (no actions:write), and a publication
+  # path that only one account can start is a blocker, not a safeguard.
+  push:
+    tags:
+      - "packages-*"
   workflow_dispatch:
     inputs:
       packages:
@@ -63,7 +70,7 @@ jobs:
           set -euo pipefail
           mkdir -p archives
           : > archives/store-paths.txt
-          for package in ${{ inputs.packages }}; do
+          for package in ${{ inputs.packages || 'wsm-tools' }}; do
             case "$package" in
               *[!A-Za-z0-9._+-]*) echo "refusing odd package name: $package" >&2; exit 1 ;;
             esac
