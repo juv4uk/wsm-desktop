@@ -1,24 +1,21 @@
 ;; SPDX-License-Identifier: LicenseRef-Volnist
 ;;
-;; Cuirass specifications for WSM Desktop.
+;; Cuirass is GNU Guix's native build coordinator. This file is an inert
+;; prototype: do not register it until WSM's owner-signed channel trust
+;; bootstrap (issue #534 / Phase B) and the licensing decision in issue #367
+;; are complete. The live-minimal profile includes wsm-tools, so both jobs
+;; below exercise that package metadata and its resulting artifacts.
 ;;
-;; Cuirass is GNU Guix's own continuous integration server. Its value here is
-;; not "another CI": it builds *inside Guix*, on top of the exact channel lock
-;; the release uses, and its results become substitutes. GitHub Actions builds
-;; the image and boots it in QEMU; Cuirass proves the derivations actually build
-;; from the pinned channels and warms the store for everyone else.
+;; Cuirass builds derivations through guix-daemon. It does not itself publish
+;; substitutes; guix publish is a separate service and is not configured here.
+;; A green job never replaces BIOS/UEFI or installer acceptance in QEMU.
 ;;
-;; What it does NOT do: boot the image. Cuirass has no QEMU acceptance step, so
-;; a green Cuirass job says "the closure builds", never "the medium boots".
-;; docs/CUIRASS.md keeps that boundary explicit.
+;; Do not use --disable-authentication, invent a WSM fingerprint, or register
+;; these specifications against an unauthenticated WSM channel.
 ;;
-;; Register with:
-;;   cuirass register --specifications=ci/cuirass/specs.scm \
-;;                    --database="dbname=cuirass host=/var/run/postgresql"
-;;
-;; The file is a plain list of specifications, as `cuirass register` expects;
-;; the same list is used by the service definition in service.scm.
-
+;; The file is a plain list of specifications for a later authenticated
+;; registration. See docs/CUIRASS.md for the trust, licensing and deployment
+;; gates.
 (list
  ;; The channel's own tool package: the smallest job that fails if the pinned
  ;; channels stop being able to build what we ship.
