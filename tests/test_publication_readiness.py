@@ -105,6 +105,31 @@ class PublicationReadinessTests(unittest.TestCase):
         found = checker.problems(self.root)
         self.assertTrue(any("#586" in item for item in found), found)
 
+    def test_an_owner_waiver_is_reported_not_hidden(self) -> None:
+        """A waiver records who decided; it must not look like a pass."""
+        self.write_package(PACKAGE_OK)
+        (self.root / "systems").mkdir()
+        (self.root / "systems" / "compatibility.scm").write_text(
+            "(use-modules (nongnu packages linux))\n", encoding="utf-8"
+        )
+        (self.root / "etc").mkdir()
+        (self.root / "etc" / "publication-waivers.scm").write_text(
+            '(list (waiver (blocker "firmware-586") (owner "Власник") '
+            '(date "2026-11-28") (decision "беру на себе") (scope "H170")))',
+            encoding="utf-8",
+        )
+        self.assertIn("firmware-586", checker.read_waivers(self.root))
+        # The blocker is still produced; the report decides how to present it.
+        self.assertTrue(any("[firmware-586]" in item for item in checker.problems(self.root)))
+
+    def test_an_incomplete_waiver_is_ignored(self) -> None:
+        """No owner or no date is an intention, not a decision."""
+        (self.root / "etc").mkdir()
+        (self.root / "etc" / "publication-waivers.scm").write_text(
+            '(list (waiver (blocker "firmware-586") (decision "хочу")))', encoding="utf-8"
+        )
+        self.assertEqual(checker.read_waivers(self.root), {})
+
     def test_a_clean_tree_has_no_blockers(self) -> None:
         self.write_package(PACKAGE_OK)
         (self.root / ".guix-authorizations").write_text("(authorizations)\n", encoding="utf-8")

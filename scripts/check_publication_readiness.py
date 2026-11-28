@@ -30,6 +30,7 @@ import sys
 from pathlib import Path
 
 PACKAGE_FILE = Path("wsm") / "packages" / "wsm.scm"
+WAIVERS = Path("etc") / "publication-waivers.scm"
 REPO_LICENCE_MARKER = "LicenseRef-Volnist"
 
 # Кожне визначення пакета в репозиторії, не лише канальне: ліцензійна
@@ -54,6 +55,33 @@ FIRMWARE_PATTERN = re.compile(
     r"nvidia-firmware|linux-firmware|nonguix|nongnu|firmware.*\.bin", re.IGNORECASE
 )
 PLACEHOLDER = re.compile(r"TODO|FIXME|0{32,}|\bplaceholder\b", re.IGNORECASE)
+
+
+def read_waivers(root: Path) -> dict[str, str]:
+    """Blocker id -> "owner, date" for every complete owner decision on record.
+
+    A waiver is not a pass: it records who took the decision and when, so the
+    report can say "waived by the owner" instead of silently dropping the
+    blocker. An incomplete entry is ignored, not honoured.
+    """
+    path = root / WAIVERS
+    if not path.is_file():
+        return {}
+    text = path.read_text(encoding="utf-8")
+    waivers: dict[str, str] = {}
+    for match in re.finditer(
+        r"\(waiver\s*(.*?)\)\s*(?=\(waiver|\)\s*$)", text, re.DOTALL
+    ):
+        body = match.group(1)
+        fields = {
+            key: value
+            for key, value in re.findall(r'\(([a-z]+)\s+"([^"]*)"\)', body)
+        }
+        blocker = fields.get("blocker")
+        if not blocker or not fields.get("owner") or not fields.get("date"):
+            continue
+        waivers[blocker] = f"{fields['owner']}, {fields['date']}"
+    return waivers
 
 
 def declared_licence(text: str) -> str | None:
@@ -91,9 +119,9 @@ def problems(root: Path) -> list[str]:
 
     if not (root / ".guix-authorizations").is_file():
         found.append(
-            "channel has no .guix-authorizations: an unsigned channel may be built "
-            "locally, but it must not be advertised as authenticated or pinned in a "
-            "release lock (see docs/GUIX-CHANNEL.md)"
+            "[channel-unsigned] channel has no .guix-authorizations: an unsigned "
+            "channel may be built locally, but it must not be advertised as "
+            "authenticated or pinned in a release lock (see docs/GUIX-CHANNEL.md)"
         )
 
     for definition in PACKAGE_DEFINITIONS:
@@ -119,7 +147,7 @@ def problems(root: Path) -> list[str]:
             code = line.split(";", 1)[0]
             if FIRMWARE_PATTERN.search(code) or "nongnu" in code:
                 found.append(
-                    f"{definition}:{number} pulls nonfree or firmware: "
+                    f"[firmware-586] {definition}:{number} pulls nonfree or firmware: "
                     f"{code.strip()[:70]} — #586 requires written clearance"
                 )
 
@@ -130,8 +158,8 @@ def problems(root: Path) -> list[str]:
             code = line.split(";", 1)[0]
             if FIRMWARE_PATTERN.search(code):
                 found.append(
-                    f"channels/free.scm:{number} references firmware or nonfree: "
-                    f"{code.strip()[:80]} — #586 requires written clearance"
+                    f"[firmware-586] channels/free.scm:{number} references firmware "
+                    f"or nonfree: {code.strip()[:80]} — #586 requires written clearance"
                 )
 
     return found
@@ -149,15 +177,33 @@ def main(argv: list[str] | None = None) -> int:
     )
     arguments = parser.parse_args(argv)
 
-    found = problems(Path(arguments.root))
-    if not found:
-        print("publication-readiness: no known blockers; the owner's go-ahead is still required")
+    root = Path(arguments.root)
+    found = problems(root)
+    waivers = read_waivers(root)
+
+    blocking: list[str] = []
+    waived: list[str] = []
+    for item in found:
+        identifier = item[1 : item.index("]")] if item.startswith("[") else ""
+        if identifier and identifier in waivers:
+            waived.append(f"{item}  → знято власником ({waivers[identifier]})")
+        else:
+            blocking.append(item)
+
+    if waived:
+        print("\n".join(f"publication-readiness: WAIVED {item}" for item in waived))
+    if not blocking:
+        print(
+            "publication-readiness: no blocking items remain"
+            + ("; some were waived by the owner" if waived else "")
+            + " — the owner's go-ahead is still required to publish"
+        )
         return 0
 
-    print("\n".join(f"publication-readiness: {item}" for item in found), file=sys.stderr)
+    print("\n".join(f"publication-readiness: {item}" for item in blocking), file=sys.stderr)
     print(
         "publication-readiness: NOT PUBLISHABLE — "
-        f"{len(found)} blocker(s) above need an owner decision",
+        f"{len(blocking)} blocker(s) above need an owner decision",
         file=sys.stderr,
     )
     return 0 if arguments.allow_blocked else 1
