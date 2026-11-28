@@ -35,9 +35,13 @@ def write_json(path: Path, value: dict[str, object]) -> None:
 
 
 def build(directory: Path, installer_executed: bool = True) -> None:
+    image_path = directory / "image.iso"
+    image_path.write_bytes(b"iso-image-bytes")
+    iso_sha256 = checker.sha256_of(image_path)
     boot = {
         "boot_confirmed": True,
         "guest_installer_execution": installer_executed,
+        "iso_sha256": iso_sha256,
         "serial_output_tail": "...WSM_LIVE_READY...WSM_INSTALLER_OK...",
     }
     bios_path = directory / "boot-bios.json"
@@ -60,8 +64,8 @@ def build(directory: Path, installer_executed: bool = True) -> None:
         encoding="utf-8",
     )
 
-    image_path = directory / "image.iso"
-    image_path.write_bytes(b"iso-image-bytes")
+    build_log_path = directory / "build.log"
+    build_log_path.write_text("guix system image build completed\\n", encoding="utf-8")
 
     build_path = directory / "build-manifest.json"
     write_json(build_path, {
@@ -72,6 +76,11 @@ def build(directory: Path, installer_executed: bool = True) -> None:
             "sha256": checker.sha256_of(image_path),
         },
         "source": {"commit": "test"},
+        "build": {
+            "log": build_log_path.name,
+            "log_sha256": checker.sha256_of(build_log_path),
+            "log_bytes": build_log_path.stat().st_size,
+        },
         "guix": {
             "resolved_channels_file": channels_path.name,
             "resolved_channels_sha256": checker.sha256_of(channels_path),
@@ -116,6 +125,7 @@ def write_sums(
     names = (
         *image_assets,
         "build-manifest.json",
+        "build.log",
         "release-manifest.json",
         "boot-bios.json",
         "boot-uefi.json",
@@ -272,6 +282,37 @@ class ReleaseReadinessTests(unittest.TestCase):
 
     def test_a_consistent_whole_iso_bundle_is_ready(self) -> None:
         self.assertEqual(checker.problems(self.directory), [])
+
+    def test_build_log_is_a_required_published_asset(self) -> None:
+        (self.directory / "build.log").unlink()
+        found = checker.problems(self.directory)
+        self.assertTrue(any("missing build.log" in item for item in found), found)
+
+    def test_build_log_hash_must_match_builder_manifest(self) -> None:
+        (self.directory / "build.log").write_text("changed transcript\\n", encoding="utf-8")
+        rewrite_checksum(self.directory, "build.log")
+        found = checker.problems(self.directory)
+        self.assertTrue(
+            any("build.log does not match build-manifest build.log_sha256" in item for item in found),
+            found,
+        )
+
+    def test_boot_evidence_must_be_bound_to_the_published_iso(self) -> None:
+        path = self.directory / "boot-bios.json"
+        record = json.loads(path.read_text(encoding="utf-8"))
+        record["iso_sha256"] = "0" * 64
+        write_json(path, record)
+        rewrite_checksum(self.directory, "boot-bios.json")
+        manifest_path = self.directory / "release-manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["boot_evidence"]["bios_sha256"] = checker.sha256_of(path)
+        write_json(manifest_path, manifest)
+        rewrite_checksum(self.directory, "release-manifest.json")
+        found = checker.problems(self.directory)
+        self.assertTrue(
+            any("boot evidence iso_sha256 != release-manifest artifact sha256" in item for item in found),
+            found,
+        )
 
     def test_build_manifest_artifact_filename_must_match_release_manifest(self) -> None:
         build_path = self.directory / "build-manifest.json"
