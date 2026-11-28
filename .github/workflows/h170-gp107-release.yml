@@ -109,7 +109,7 @@ jobs:
           - Store path: $STORE_PATH
           - NAR SHA-256: $NAR_SHA256
           - License metadata: inherited from pinned upstream linux-libre.
-          - No NVIDIA firmware, proprietary driver, Nonguix package, or firmware blob is included.
+          - No NVIDIA binary firmware, proprietary driver, or Compatibility payload is included.
 
           ## Import
 
