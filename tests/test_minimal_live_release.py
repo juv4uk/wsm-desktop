@@ -40,7 +40,10 @@ class MinimalLiveProfileTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertIn(path, package)
         self.assertIn("(propagated-inputs (list python python-jsonschema))", package)
-        self.assertIn('(version "0.1.0-rc3")', package)
+        # The literal used to be pinned here and went stale for three releases.
+        # The rule now lives in tests/test_package_version.py: the package
+        # version must be a prefix of the tag RELEASE-REQUEST.txt asks for.
+        self.assertRegex(package, r'\(version "0\.1\.0-rc[0-9]+"\)')
 
     def test_release_workflow_has_size_and_two_firmware_gates(self) -> None:
         workflow = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
