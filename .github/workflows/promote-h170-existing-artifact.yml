@@ -1,0 +1,190 @@
+# SPDX-License-Identifier: LicenseRef-Volnist
+name: Promote verified H170 Free pack artifact
+
+on:
+  push:
+    branches:
+      - "promote/h170-pack-9409ae9"
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: promote-h170-pack-9409ae9
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Read back, verify and publish existing H170 Free pack
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout promotion workflow
+        uses: actions/checkout@v7
+
+      - name: Download the completed H170 package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: wsm-channel-artifacts
+          run-id: 46120413153
+          github-token: ${{ github.token }}
+          path: artifacts
+
+      - name: Checkout exact source and manifest used by the pack
+        uses: actions/checkout@v7
+        with:
+          ref: 9409ae941eb01958c2c9c653d63ee52ccb9e1422
+          path: source
+          persist-credentials: false
+
+      - name: Verify archive and reconstruct provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y zstd
+
+          SOURCE_COMMIT="9409ae941eb01958c2c9c653d63ee52ccb9e1422"
+          ARCHIVE="h170-free-pack-9409ae9.tar.zst"
+          ARTIFACT_RUN="46120413153"
+          ARTIFACT_ID="15253714288"
+          OUT="$GITHUB_WORKSPACE/artifacts"
+
+          test -s "$OUT/$ARCHIVE"
+          test -s "$OUT/$ARCHIVE.sha256"
+          (
+            cd "$OUT"
+            sha256sum -c "$ARCHIVE.sha256"
+            zstd -t "$ARCHIVE"
+          )
+
+          cp source/channels.lock.scm "$OUT/channels.lock.scm"
+          cp source/drivers/profiles/h170-free-packages.scm "$OUT/h170-free-packages.scm"
+          printf '%s\n' "$SOURCE_COMMIT" > "$OUT/source-commit.txt"
+
+          ARCHIVE_SHA256="$(sha256sum "$OUT/$ARCHIVE" | cut -d ' ' -f1)"
+          CHANNEL_LOCK_SHA256="$(sha256sum "$OUT/channels.lock.scm" | cut -d ' ' -f1)"
+          MANIFEST_SHA256="$(sha256sum "$OUT/h170-free-packages.scm" | cut -d ' ' -f1)"
+
+          cat > "$OUT/PROVENANCE.txt" <<EOF
+          WSM H170 Free Guix pack provenance
+          =================================
+
+          Package archive: $ARCHIVE
+          Archive SHA-256: $ARCHIVE_SHA256
+
+          Build source commit: $SOURCE_COMMIT
+          Build workflow run: $ARTIFACT_RUN
+          Source manifest: drivers/profiles/h170-free-packages.scm
+          Manifest SHA-256: $MANIFEST_SHA256
+          Guix lock: channels.lock.scm
+          Guix lock SHA-256: $CHANNEL_LOCK_SHA256
+          Locked upstream Guix commit: 4e5195be20d9b124df8a8bb69213412236e4668e
+
+          Original GitHub Actions artifact ID: $ARTIFACT_ID
+          Original artifact ZIP SHA-256: 0bc9b2de2a20d9d7f2446e890c0f38519a3b3399ef23231645c093dff4b9c555
+
+          Scope: the fixed 11-root upstream-only H170 Free manifest.
+          This is a self-contained Guix pack, not a signed substitute cache.
+          It excludes WSM-owned tools, Python runtime, Nonguix, proprietary
+          NVIDIA drivers, GP107 firmware, linux-firmware and Intel microcode.
+          Package build evidence is not physical H170/GTX 1050 Ti acceptance.
+          EOF
+
+          cat > "$OUT/RELEASE-NOTES.md" <<EOF
+          # H170 Free Guix package bundle
+
+          This release republishes the verified archive produced by the completed
+          H170 package workflow run $ARTIFACT_RUN. The archive was built from source
+          commit $SOURCE_COMMIT and the pinned official GNU Guix channel.
+
+          - Manifest: `drivers/profiles/h170-free-packages.scm` (11 upstream roots)
+          - Locked Guix commit: `4e5195be20d9b124df8a8bb69213412236e4668e`
+          - Archive: `$ARCHIVE`
+          - Archive SHA-256: `$ARCHIVE_SHA256`
+
+          Verify `SHA256SUMS` before use. Test the compressed archive with
+          `zstd -t $ARCHIVE`.
+
+          This is a package bundle, not a substitute cache. It does not include
+          WSM-owned tools, Python runtime, Nonguix, proprietary NVIDIA drivers,
+          GP107 firmware, linux-firmware or Intel microcode. It does not certify
+          physical boot, Nouveau binding, KMS, 3D/compute or suspend/resume.
+          EOF
+
+          (
+            cd "$OUT"
+            sha256sum "$ARCHIVE" "$ARCHIVE.sha256" PROVENANCE.txt \
+              channels.lock.scm h170-free-packages.scm source-commit.txt \
+              RELEASE-NOTES.md > SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
+
+          echo "H170_ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
+          echo "H170_TAG=h170-free-pack-9409ae9" >> "$GITHUB_ENV"
+          {
+            echo "## H170 Free pack recovered from verified build artifact"
+            echo
+            echo "- Build run: $ARTIFACT_RUN"
+            echo "- Archive SHA-256: $ARCHIVE_SHA256"
+            echo "- Channel lock SHA-256: $CHANNEL_LOCK_SHA256"
+            echo "- Manifest SHA-256: $MANIFEST_SHA256"
+            echo "- zstd integrity: PASS"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create draft release and verify complete read-back
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$GITHUB_WORKSPACE/artifacts"
+          if gh release view "$H170_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Release tag $H170_TAG already exists; refusing to overwrite."
+            exit 1
+          fi
+
+          gh release create "$H170_TAG" \
+            "$OUT/$H170_ARCHIVE" \
+            "$OUT/$H170_ARCHIVE.sha256" \
+            "$OUT/PROVENANCE.txt" \
+            "$OUT/SHA256SUMS" \
+            "$OUT/channels.lock.scm" \
+            "$OUT/h170-free-packages.scm" \
+            "$OUT/source-commit.txt" \
+            "$OUT/RELEASE-NOTES.md" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "9409ae941eb01958c2c9c653d63ee52ccb9e1422" \
+            --title "H170 Free Guix package bundle (9409ae9)" \
+            --notes-file "$OUT/RELEASE-NOTES.md" \
+            --draft --prerelease
+
+          READBACK="$RUNNER_TEMP/h170-readback"
+          mkdir -p "$READBACK"
+          gh release download "$H170_TAG" --repo "$GITHUB_REPOSITORY" --dir "$READBACK"
+          (
+            cd "$READBACK"
+            sha256sum -c SHA256SUMS
+            zstd -t "$H170_ARCHIVE"
+          )
+
+          gh release edit "$H170_TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+          test "$(gh release view "$H170_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')" = "false"
+          {
+            echo
+            echo "### Public H170 Free Release"
+            echo "https://github.com/$GITHUB_REPOSITORY/releases/tag/$H170_TAG"
+            echo "Release read-back SHA-256 and zstd verification: PASS"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report promotion failure
+        if: failure()
+        run: |
+          {
+            echo "## H170 artifact promotion failed"
+            echo "Build artifact source: run 46120413153 / artifact 15253714288"
+            echo "No public H170 Release is claimed unless the final read-back step succeeds."
+          } >> "$GITHUB_STEP_SUMMARY"
