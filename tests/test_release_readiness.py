@@ -327,7 +327,7 @@ class ReleaseReadinessTests(unittest.TestCase):
         rewrite_checksum(self.directory, "release-manifest.json")
         found = checker.problems(self.directory)
         self.assertTrue(
-            any("uefi boot evidence iso_sha256 != release-manifest artifact sha256" in item
+            any("boot-uefi.json boot evidence iso_sha256 != release-manifest artifact sha256" in item
                 for item in found),
             found,
         )
