@@ -248,44 +248,66 @@ bootloader, EFI variables, диски, governor або power controls. Порі�
 
 Канонічний фізичний GPU-harness і його сирі артефакти живуть у
 [juv4uk/gp107-nvidia-re](https://github.com/juv4uk/gp107-nvidia-re); тут їх не
-дублюємо. Цей розділ лише фіксує, що саме з тих доказів WSM має право цитувати,
-і з якими межами.
+дублюємо. Цей розділ фіксує, які саме докази WSM може цитувати та з якими межами.
 
-**Джерело:** `gp107-nvidia-re@62a1296` (28.11.2026), документи `docs/20`–`docs/22`.
+**Джерело:** `gp107-nvidia-re@4d4597069c7fac7e49b2dd63613f06338e347230` (28.11.2026),
+[docs/20](https://github.com/juv4uk/gp107-nvidia-re/blob/4d4597069c7fac7e49b2dd63613f06338e347230/docs/20-reliability-baseline-proprietary.md),
+[docs/21](https://github.com/juv4uk/gp107-nvidia-re/blob/4d4597069c7fac7e49b2dd63613f06338e347230/docs/21-proprietary-performance-matrix.md)
+та [docs/22](https://github.com/juv4uk/gp107-nvidia-re/blob/4d4597069c7fac7e49b2dd63613f06338e347230/docs/22-device-local-transfer-and-compute-phases.md).
+
+### Прийнята зовнішня baseline: proprietary HOST_VISIBLE
 
 | Поле | Значення |
 | --- | --- |
 | GPU | `0000:01:00.0`, `10de:1c82` — GP107, GeForce GTX 1050 Ti |
 | Драйвер / ICD | NVIDIA `580.196.11`, `driverID=4`, `/usr/share/vulkan/icd.d/nvidia_icd.json` |
-| Пам'ять | `HOST_VISIBLE\|HOST_COHERENT`, heap=1 |
-| Повтори | 3 успішні, кожен зі своїм manifest (`MANIFEST-OK files=11`) |
+| Пам'ять | `HOST_VISIBLE|HOST_COHERENT`, heap=1 |
+| Baseline | 3 успішні повтори, кожен зі своїм manifest (`MANIFEST-OK files=11`) |
+| Workgroup × batching matrix | 108 точок, по 3 повтори; той самий HOST_VISIBLE шлях |
 | Boot | пропрієтарний за замовчуванням; відкритий boot не використовувався |
 
-Опубліковані числа (медіана трьох повторів): 4096 елементів — 20 310 ns /
-2,4201 GB/s; 1 Mi — 1 267 551 ns / 9,9269 GB/s; 8 Mi — 10 616 000 ns /
-9,4822 GB/s. Найкращий виміряний `local_size` — 128 для 1 Mi і 32 для 8 Mi;
-на малих workloads помітний overhead подання. Для `DEVICE_LOCAL` compute
-умовний traffic сягає ~90 GB/s, але повний ланцюг staging→compute→readback на
-32 Mi коштує ~52,39 ms проти ~42,58 ms для `HOST_VISIBLE`, тобто дві копії
-з'їдають виграш.
+Медіани прийнятої HOST_VISIBLE baseline (`docs/20`): 4096 елементів —
+20 310 ns / 2,4201 GB/s; 1 Mi — 1 267 551 ns / 9,9269 GB/s; 8 Mi —
+10 616 000 ns / 9,4822 GB/s. Матриця `docs/21` показує workgroup/batching
+залежність і submit overhead; ці результати не є VRAM bandwidth.
 
-**Чого ці числа не доводять — і що з ними не можна робити:**
+### DEVICE_LOCAL результати з docs/22 — HISTORICAL / NOT ACCEPTED
 
-- це **не** сертифікація плати H170, не стан Guix/Linux-libre і не доказ
-  працездатності NVK;
-- це **не** фізична пропускна здатність VRAM або PCIe: «умовний GB/s»
-  рахується з розміру буфера й часу, а не з лічильників пам'яті;
-- порівняння NVK ↔ NVIDIA лишається **незавершеним**: для нього потрібен
+**Ці цифри не входять до прийнятої baseline WSM.** У [docs/22](https://github.com/juv4uk/gp107-nvidia-re/blob/4d4597069c7fac7e49b2dd63613f06338e347230/docs/22-device-local-transfer-and-compute-phases.md)
+сам документ позначає первинні 12/12 DEVICE_LOCAL запусків як
+**`NOT ACCEPTED / EXPLORATORY`**: виміряний бінарник не мав явних Vulkan
+memory dependencies між TRANSFER→COMPUTE→TRANSFER→HOST. Тому його
+correctness/performance висновки не є прийнятими Vulkan-сумісними результатами.
+
+У цьому історичному наборі були записані ~90,46 GB/s умовного DEVICE_LOCAL
+traffic та ~52,39 ms для повного staging→compute→readback ланцюга проти
+~42,58 ms для HOST_VISIBLE. Це лише збережені значення первинного
+неприйнятого бінарника — **не** результат WSM, не оптимізаційний висновок
+і не доказ переваги DEVICE_LOCAL.
+
+У `docs/22` пізніше додано memory barriers для TRANSFER_WRITE→SHADER_READ,
+SHADER_WRITE→TRANSFER_READ та TRANSFER_WRITE→HOST_READ, а також перевірку
+`memoryTypeBits`. Але ці зміни мають статус
+**`CODE-UPDATED, PHYSICAL-RERUN-PENDING`**: виправлений код ще не має
+підтвердженого build, synchronization-validation run або нового фізичного
+повтору. До такого acceptance жодне число з DEVICE_LOCAL таблиць не можна
+підвищувати до baseline.
+
+### Межі доказу
+
+- Це **не** сертифікація плати H170, не стан Guix/Linux-libre і не доказ
+  працездатності NVK; дослідження виконувалось на окремому GP107 Kali/R580 host.
+- Ефективний/умовний GB/s рахується з розміру буфера й часу; це **не**
+  фізична пропускна здатність VRAM або PCIe.
+- Порівняння NVK ↔ NVIDIA лишається **незавершеним**: для нього потрібен
   окремо схвалений власником reboot у відкритий boot і проходження gate
   [gp107 #18](https://github.com/juv4uk/gp107-nvidia-re/issues/18); доти статус
-  NVK — `NOT_RUN`;
-- зіставляти можна лише однакові workloads, версії harness, класи пам'яті,
+  NVK — `NOT_RUN`.
+- Зіставляти можна лише однакові workloads, версії harness, класи пам'яті,
   розміри, кількість повторів і теплові умови; інакше це не порівняння.
 
-Виміряний факт, похідна інтерпретація й неперевірена причинність тут розділені
-навмисно: перше — числа вище, друге — «дві копії з'їдають виграш staging»,
-третє — будь-яке пояснення, чому саме так.
-
+Прийняті HOST_VISIBLE вимірювання, історичні неприйняті DEVICE_LOCAL спостереження,
+похідна інтерпретація й неперевірена причинність розділені навмисно.
 ## Як це міряти далі
 
 Задача [#151](https://github.com/juv4uk/wsm-desktop/issues/151) лишається відкритою: потрібен baseline boot, service startup і типовий workload, знятий на реальному залізі, з однаковими умовами. Доти будь-яке твердження про швидкість — не твердження.
