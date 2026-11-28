@@ -37,12 +37,12 @@ def build_profile(root: Path, *, omit: str | None = None, duplicate: str | None 
         directory = "bin" if index % 2 == 0 else "sbin"
         executable = root / directory / binary
         executable.parent.mkdir(parents=True, exist_ok=True)
-        executable.write_text("#!/bin/sh\\nexit 0\\n", encoding="utf-8")
+        executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
         executable.chmod(0o755)
         if name == duplicate:
             other = root / ("sbin" if directory == "bin" else "bin") / binary
             other.parent.mkdir(parents=True, exist_ok=True)
-            other.write_text("#!/bin/sh\\nexit 0\\n", encoding="utf-8")
+            other.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
             other.chmod(0o755)
     return root
 
