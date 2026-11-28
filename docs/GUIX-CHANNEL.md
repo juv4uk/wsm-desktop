@@ -147,7 +147,7 @@ Bootstrap має бути виконаний власником ключа. Ни
 
 `make check-guix-eval` запускає діагностичну перевірку `channels/wsm.scm` двома шляхами:
 
-1. Звичайний `guix time-machine` без `--disable-authentication` має відхилити WSM channel і показати причину, пов'язану з довірою/introducion/підписом.
+1. Звичайний `guix time-machine` без `--disable-authentication` має відхилити WSM channel і показати причину, пов'язану з довірою/introduction/підписом.
 2. Окремий діагностичний виклик із `--disable-authentication` лише доводить, що Guix може прочитати форму списку каналів та бачить `guix,wsm`. Його результат завжди позначається `WSM_CHANNEL_AUTHENTICATION=NOT_TESTED` і не є релізним доказом.
 
 У `channels.lock.scm` поле `(branch #f)` використовується разом із конкретним `commit` SHA. Для неприкріпленого офіційного Guix у `channels/wsm.scm` треба вказувати реальну гілку `master`: `#f` не є назвою гілки й може зламати оновлення checkout до того, як Guix дійде до перевірки автентифікації.
