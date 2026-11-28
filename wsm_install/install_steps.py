@@ -213,18 +213,49 @@ def plan_steps(
     return steps
 
 
-def backend_command(layout: Layout, system_file: str, target: str = "/mnt") -> list[str]:
-    """The handoff command. This module does not run it, and neither should a UI."""
+def backend_command(
+    layout: Layout,
+    system_file: str,
+    target: str = "/mnt",
+    *,
+    guix_path: str | None = None,
+    lock: str | None = None,
+) -> list[str]:
+    """The handoff command. This module does not run it, and neither should a UI.
+
+    Two optional bindings, both from #645:
+
+    `lock` pins the channel set with `guix time-machine -C <lock> --`, the form the
+    repository already uses for its own image builds (docs/LIVE-ISO.md). Without it
+    the command follows whatever channel the caller's guix has, which is fine for an
+    interactive run and wrong for anything that claims reproducibility.
+
+    `guix_path` is the absolute executable. guix lives in a profile path that differs
+    per system, so the default stays the bare name resolved by the caller — but a
+    path that is *given* must be absolute, because a half-specified path is how a
+    PATH lookup sneaks back into a privileged flow.
+    """
     layout.validate_confirmation()
     if not system_file.endswith(".scm"):
         raise Refused(
             "backend.system-file",
             f"expected a .scm system file, got {system_file!r}",
         )
-    # guix lives in a profile path that differs per system, so it is the one
-    # command allowed to be resolved by the caller - and the caller runs it
-    # interactively, not from a root shell.
-    return ["guix", "system", "init", system_file, target]
+    if guix_path is not None and not guix_path.startswith("/"):
+        raise Refused(
+            "backend.guix-path",
+            f"guix_path must be absolute when given, got {guix_path!r}",
+        )
+    if lock is not None and not lock.endswith(".scm"):
+        raise Refused(
+            "backend.lock",
+            f"expected a .scm channel lock, got {lock!r}",
+        )
+
+    guix = guix_path or "guix"
+    if lock is None:
+        return [guix, "system", "init", system_file, target]
+    return [guix, "time-machine", "-C", lock, "--", "system", "init", system_file, target]
 
 
 def render(steps: list[Step], command: list[str]) -> str:
