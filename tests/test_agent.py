@@ -130,13 +130,13 @@ class PlanTests(unittest.TestCase):
 class ExecutionTests(unittest.TestCase):
     def test_dry_run_validates_and_previews_without_execution_api(self) -> None:
         document = plan(GOOD)
-        steps = validate_plan(document)
+        steps = validate_plan_with_test_profile(document)
         code = run_plan(document, steps, dry_run=True)
         self.assertEqual(code, 0)
 
     def test_real_run_is_refused_before_any_runner_can_be_injected(self) -> None:
         document = plan(GOOD)
-        steps = validate_plan(document)
+        steps = validate_plan_with_test_profile(document)
         with self.assertRaises(AgentError) as caught:
             run_plan(document, steps, dry_run=False)
         self.assertEqual(caught.exception.code, "agent.apply-disabled")
