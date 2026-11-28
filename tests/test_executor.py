@@ -523,5 +523,52 @@ class AdmissionChainTests(unittest.TestCase):
         self.assertEqual(len({step.step_digest for step in report.steps}), len(report.steps))
 
 
+class CoveredStepTests(unittest.TestCase):
+    """A stateless step is covered by a later, verified step that reads the device."""
+
+    def _report(self, steps):
+        return admit(
+            steps,
+            "/dev/nvme0n1",
+            expected_identity=capture(FakeDiskObserver(), "/dev/nvme0n1"),
+            disk_observer=FakeDiskObserver(),
+            observer=FakeObserver(),
+            consent_for=lambda index, step, digest: True,
+        )
+
+    def test_partprobe_is_covered_by_the_step_that_formats_the_partition(self) -> None:
+        plan = [
+            Step(["/usr/sbin/partprobe", "/dev/nvme0n1"], "re-read the table"),
+            Step(["/usr/sbin/mkfs.ext4", "-F", "/dev/nvme0n1p2"], "format root", destructive=True),
+        ]
+        report = self._report(plan)
+        self.assertEqual(report.status, "admitted", report.reason)
+        self.assertEqual(report.steps[0].status, "admitted-covered")
+        self.assertIn("covered by step 2", report.steps[0].reason)
+
+    def test_udevadm_is_covered_by_the_step_that_mounts_the_node(self) -> None:
+        plan = [
+            Step(["/usr/bin/udevadm", "settle"], "wait for nodes"),
+            Step(["/usr/bin/mount", "/dev/nvme0n1p2", "/mnt"], "mount root"),
+        ]
+        report = self._report(plan)
+        self.assertEqual(report.status, "admitted", report.reason)
+        self.assertEqual(report.steps[0].status, "admitted-covered")
+
+    def test_a_stateless_step_with_no_consumer_stays_refused(self) -> None:
+        plan = [Step(["/usr/sbin/partprobe", "/dev/nvme0n1"], "re-read the table")]
+        report = self._report(plan)
+        self.assertEqual(report.status, "refused")
+        self.assertEqual(report.steps[0].status, "refused")
+
+    def test_a_consumer_of_another_disk_does_not_cover(self) -> None:
+        plan = [
+            Step(["/usr/sbin/partprobe", "/dev/nvme0n1"], "re-read the table"),
+            Step(["/usr/bin/mount", "/dev/nvme1n1p2", "/mnt"], "mount elsewhere"),
+        ]
+        report = self._report(plan)
+        self.assertEqual(report.steps[0].status, "refused")
+
+
 if __name__ == "__main__":
     unittest.main()
