@@ -32,6 +32,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Use the GNU Guix project's authenticated Codeberg mirror
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Transport-only rewrite: keep channels.lock.scm commit and introduction.
+          git config --global url."https://codeberg.org/guix/guix.git".insteadOf "https://git.guix.gnu.org/guix.git"
+          echo "Using the canonical GNU Guix Codeberg repository; lock and authentication are unchanged." >> "$GITHUB_STEP_SUMMARY"
+
       # Кожен прогін `guix time-machine` інакше заново витягує checkout каналу.
       # Ключ — сам lock, тому зміна каналу природно інвалідовує кеш, а решта
       # прогонів його перевикористовує. Так робить Guix CI у Bitcoin Core.
