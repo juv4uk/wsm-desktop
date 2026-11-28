@@ -67,7 +67,7 @@ class JobModuleTests(unittest.TestCase):
     def test_it_uses_the_pinned_guix_image_job_api(self) -> None:
         """The Guix lock exports image->job and arguments->systems from gnu ci."""
         self.assertIn(
-            "(#:use-module ((gnu ci) #:select (arguments->systems image->job)))",
+            "#:use-module ((gnu ci) #:select (arguments->systems image->job))",
             self.text,
         )
         self.assertIn("(image->job store image", self.text)
