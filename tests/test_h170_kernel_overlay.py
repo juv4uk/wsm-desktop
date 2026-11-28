@@ -77,6 +77,14 @@ class H170LinuxLibreOverlayTests(unittest.TestCase):
         self.assertNotIn("firmware-nvidia", code)
         self.assertNotIn("nvidia-kernel", code)
 
+    def test_guix_profile_evaluation_uses_authenticated_codeberg_transport(self) -> None:
+        workflow = (
+            ROOT / ".github" / "workflows" / "guix-profile-evaluation.yml"
+        ).read_text(encoding="utf-8")
+        self.assertIn("https://codeberg.org/guix/guix.git", workflow)
+        self.assertIn("https://git.guix.gnu.org/guix.git", workflow)
+        self.assertNotIn("--disable-authentication", workflow)
+
     def test_profile_workflow_evaluates_without_exporting_binary_artifacts(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "guix-profile-evaluation.yml").read_text(
             encoding="utf-8"
