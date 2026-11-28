@@ -3,6 +3,11 @@
 
 from __future__ import annotations
 
+import json
+import os
+import shutil
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -56,6 +61,122 @@ class HonestBoundaryTests(unittest.TestCase):
         self.assertIn("fpjson", self.pas)
         for marker in ("synapse", "superobject", "lazjson"):
             self.assertNotIn(marker, self.pas)
+
+
+@unittest.skipUnless(
+    (shutil.which("fpc") and shutil.which("make")) or os.environ.get("WSM_PROFILE_FPC_BINARY"),
+    "FPC is not installed; native profile reader runtime is not proven locally",
+)
+class RuntimeProfileReaderTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        supplied = os.environ.get("WSM_PROFILE_FPC_BINARY")
+        cls.temporary = None
+        if supplied:
+            candidate = Path(supplied)
+            cls.program = candidate if candidate.is_absolute() else ROOT / candidate
+            if not cls.program.is_file():
+                raise AssertionError(f"FPC profile binary does not exist: {cls.program}")
+            return
+
+        cls.temporary = tempfile.TemporaryDirectory(prefix="wsm-fpc-profile-")
+        build_dir = Path(cls.temporary.name) / "build"
+        completed = subprocess.run(
+            ["make", "-C", str(ROOT / "tools" / "pascal"),
+             f"BUILD_DIR={build_dir}", "wsm-profile"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if completed.returncode != 0:
+            raise AssertionError(
+                "FPC profile build failed.\\n"
+                f"stdout:\\n{completed.stdout}\\nstderr:\\n{completed.stderr}"
+            )
+        cls.program = build_dir / "wsm-profile"
+        if not cls.program.is_file():
+            raise AssertionError("FPC Makefile did not produce wsm-profile")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        if cls.temporary is not None:
+            cls.temporary.cleanup()
+
+    def run_reader(self, document: dict, *, artifact_files: tuple[str, ...] = ()) -> tuple[int, dict]:
+        root = Path(tempfile.mkdtemp(prefix="wsm-profile-case-"))
+        (root / "profile.scm").write_text("(profile test)", encoding="utf-8")
+        for relative in artifact_files:
+            target = root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("functional evidence\\n", encoding="utf-8")
+        evidence = root / "evidence.json"
+        evidence.write_text(json.dumps(document), encoding="utf-8")
+        try:
+            completed = subprocess.run(
+                [str(self.program), str(evidence)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            payload = json.loads(completed.stdout)
+            return completed.returncode, payload
+        finally:
+            shutil.rmtree(root)
+
+    @staticmethod
+    def valid_document() -> dict:
+        return {
+            "schema": "wsm-profile-evidence/2",
+            "profile_source": {"path": "profile.scm"},
+            "verified_functions": [{"name": "boot", "status": "pass"}],
+            "artifacts": [{"path": "artifacts/boot.log"}],
+        }
+
+    def test_valid_bundle_is_accepted_and_digest_boundary_is_explicit(self) -> None:
+        code, payload = self.run_reader(
+            self.valid_document(), artifact_files=("artifacts/boot.log",)
+        )
+        self.assertEqual(code, 0)
+        self.assertIs(payload["ok"], True)
+        self.assertEqual(payload["digest_verification"], "delegated")
+        self.assertEqual(payload["problems"], [])
+
+    def test_traversal_in_profile_source_is_rejected(self) -> None:
+        document = self.valid_document()
+        document["profile_source"]["path"] = "../outside/profile.scm"
+        code, payload = self.run_reader(document, artifact_files=("artifacts/boot.log",))
+        self.assertEqual(code, 5)
+        self.assertIs(payload["ok"], False)
+        self.assertIn("not a safe relative path", payload["problems"][0])
+
+    def test_noncanonical_and_platform_specific_paths_are_rejected(self) -> None:
+        for path in ("./profile.scm", "sub//profile.scm", "sub/profile.scm/",
+                     r"sub\\profile.scm", "C:profile.scm"):
+            with self.subTest(path=path):
+                document = self.valid_document()
+                document["profile_source"]["path"] = path
+                code, payload = self.run_reader(
+                    document, artifact_files=("artifacts/boot.log",)
+                )
+                self.assertEqual(code, 5)
+                self.assertIs(payload["ok"], False)
+
+    def test_missing_artifact_is_rejected(self) -> None:
+        code, payload = self.run_reader(self.valid_document())
+        self.assertEqual(code, 5)
+        self.assertIs(payload["ok"], False)
+        self.assertTrue(any("does not exist" in issue for issue in payload["problems"]))
+
+    def test_bundle_without_a_passing_function_is_rejected(self) -> None:
+        document = self.valid_document()
+        document["verified_functions"] = [{"name": "boot", "status": "not-assessed"}]
+        code, payload = self.run_reader(
+            document, artifact_files=("artifacts/boot.log",)
+        )
+        self.assertEqual(code, 5)
+        self.assertIs(payload["ok"], False)
+        self.assertTrue(any("no function passed" in issue for issue in payload["problems"]))
+
 
 
 if __name__ == "__main__":
