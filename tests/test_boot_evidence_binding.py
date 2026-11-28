@@ -32,12 +32,19 @@ class BootEvidenceBindingTests(unittest.TestCase):
             path.write_bytes(b"\0" * (3 * 1024 * 1024 + 7))
             self.assertEqual(len(sha256_of(path)), 64)
 
-    def test_the_dry_run_reports_the_hash_it_would_use(self) -> None:
+    def test_the_dry_run_reports_the_hash_of_the_exact_iso(self) -> None:
+        import contextlib
+        import io
+
         with tempfile.TemporaryDirectory() as tmp:
             iso = Path(tmp) / "live.iso"
-            iso.write_bytes(b"placeholder")
-            result = main(["--iso", str(iso), "--dry-run"])
+            iso.write_bytes(b"dry-run ISO fixture")
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                result = main(["--iso", str(iso), "--dry-run"])
         self.assertEqual(result, 0)
+        evidence = json.loads(output.getvalue())
+        self.assertEqual(evidence["iso_sha256"], sha256_of(iso))
 
     def test_the_workflow_refuses_evidence_from_another_image(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "release-minimal-live.yml").read_text(encoding="utf-8")
