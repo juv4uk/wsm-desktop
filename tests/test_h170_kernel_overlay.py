@@ -63,6 +63,12 @@ class H170LinuxLibreOverlayTests(unittest.TestCase):
         self.assertNotIn("guix archive --export", workflow)
         self.assertNotIn("guix publish", workflow)
         self.assertNotIn("actions/upload-artifact", workflow)
+        self.assertIn("tests/guix/h170-kernel-module-evaluation.scm", workflow)
+        module_eval_source = (
+            ROOT / "tests" / "guix" / "h170-kernel-module-evaluation.scm"
+        ).read_text(encoding="utf-8")
+        self.assertIn("(wsm packages linux-libre)", module_eval_source)
+        self.assertNotIn("(wsm packages wsm)", module_eval_source)
         data = self._yaml(workflow)
         h170_job = data["jobs"]["build-h170-kernel"]
         self.assertEqual(h170_job["timeout-minutes"], "300")
