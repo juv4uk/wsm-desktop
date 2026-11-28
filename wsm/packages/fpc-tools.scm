@@ -12,7 +12,7 @@
   #:use-module (wsm licenses)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-13)
-  #:export (wsm-hwcheck-fpc wsm-classify-fpc wsm-cpu-isa-fpc))
+  #:export (wsm-hwcheck-fpc wsm-classify-fpc wsm-cpu-isa-fpc wsm-partition-fpc))
 
 ;; Keep the build source narrow and reproducible: LICENSE plus the Pascal
 ;; programs and Makefile only. Python sources, documentation, test fixtures,
@@ -101,5 +101,22 @@ reports the common x86-64 psABI levels. It refuses incomplete processor-block
 evidence, intersects flags instead of trusting CPU 0, and distinguishes
 observed kernel flags from silicon inventory or performance claims. The
 executable is read-only and has no Python runtime dependency.")
+    (supported-systems '("x86_64-linux"))
+    (license wsm-license)))
+
+(define-public wsm-partition-fpc
+  (package
+    (name "wsm-partition-fpc")
+    (version "0.1.0")
+    (source wsm-fpc-source)
+    (build-system gnu-build-system)
+    (arguments (wsm-fpc-arguments "build-partition" "test-partition" "install-partition"))
+    (native-inputs (list fpc))
+    (home-page "https://github.com/juv4uk/wsm-desktop")
+    (synopsis "Read-only Free Pascal disk layout planner")
+    (description
+     "Produces a partition layout plan or refuses with a reason. The executable
+does not invoke sgdisk, open block devices, or write to storage. Commands are
+emitted as data for a separate caller to review and authorize.")
     (supported-systems '("x86_64-linux"))
     (license wsm-license)))
