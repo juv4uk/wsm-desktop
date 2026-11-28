@@ -209,21 +209,24 @@ class ShellSyntaxTests(unittest.TestCase):
 
 
 class InstallerFrontendTests(unittest.TestCase):
-    """The current minimal-live path is CLI/TUI; Calamares is reference-only."""
+    """The universal installer must expose three independent frontend modes."""
 
-    def test_installer_document_matches_the_current_live_path(self) -> None:
+    def test_installer_document_matches_the_three_mode_product_contract(self) -> None:
         text = (ROOT / "docs" / "INSTALLER.md").read_text(encoding="utf-8")
-        self.assertIn("wsm-install-live", text)
-        self.assertIn("Один typed contract, поточний CLI/TUI шлях", text)
-        self.assertIn("Calamares | **deprioritized/reference-only**", text)
-        self.assertNotIn("| Calamares | опційно", text)
+        self.assertIn("Консольний CLI", text)
+        self.assertIn("Псевдографічний TUI", text)
+        self.assertIn("Графічний Calamares", text)
+        self.assertIn("WSM Installer Selector", text)
+        self.assertIn("Основний універсальний Live Installer", text)
+        self.assertIn("Додатковий Minimal Live", text)
 
-    def test_calamares_module_is_marked_optional(self) -> None:
+    def test_calamares_is_the_required_graphical_frontend(self) -> None:
         text = (ROOT / "installer" / "calamares" / "README.md").read_text(encoding="utf-8")
-        self.assertIn("опційний", text.lower())
+        self.assertIn("обов'язковий графічний frontend", text.lower())
+        self.assertIn("третій, графічний режим", text.lower())
 
-    def test_both_frontends_call_the_same_backend(self) -> None:
-        """Two frontends must not mean two implementations of mkfs."""
+    def test_three_frontends_call_the_same_backend_contract(self) -> None:
+        """Three frontends must not mean three implementations of disk writes."""
         module = (ROOT / "installer" / "calamares" / "modules" / "wsm_deploy" / "main.py").read_text(encoding="utf-8")
         self.assertIn("wsm_install.executor", module)
         self.assertIn("wsm_install.install_steps", module)
@@ -256,9 +259,12 @@ class DecisionStatusTests(unittest.TestCase):
         self.assertIn("installation-cd-graphical-calamares.nix", text)
         self.assertIn("proposed", text.lower())
 
-    def test_installer_document_states_that_nothing_is_chosen(self) -> None:
+    def test_installer_document_states_three_required_modes(self) -> None:
         text = (ROOT / "docs" / "INSTALLER.md").read_text(encoding="utf-8")
-        self.assertIn("інсталятор не вибрано", text.lower())
+        self.assertIn("вибір між трьома способами встановлення", text.lower())
+        self.assertIn("графічний calamares", text.lower())
+        self.assertIn("консольний cli", text.lower())
+        self.assertIn("псевдографічний tui", text.lower())
 
 
 class VersionedArtifactTests(unittest.TestCase):
