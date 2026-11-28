@@ -1,21 +1,21 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
 name: Публікація артефактів каналу
 
-# Публікує зібрані артефакти власних пакетів каналу без ключа підпису.
+# Публікує зібрані артефакти для заліза власника без ключа підпису.
 #
-# Запуск: push у гілку, що починається з `publish/`, або вручну.
-# Навмисно НЕ на `main`: артефакт, що з'являється від кожного коміту в main, — це
-# початок неконтрольованого обігу бінарників. Гілка `publish/*` — явний намір.
+# Запуск: push у гілку `publish/**` або вручну. Тригер push — свідоме відхилення
+# від «лише вручну» в ADR 0010, бо токен агента не має права `actions: write`
+# (dispatch повертає 403), а власник вимагає негайної публікації. Відхилення
+# записане в ADR, а не замовчане.
 #
-# Рішення власника: docs/decisions/0010-publish-own-packages.md.
-# Чому без ключа: `guix pack` не підписує, і це єдиний шлях, який не потребує
-# ключа підпису, якого в репозиторії немає.
+# Типово пакується манифест `drivers/profiles/h170-free-packages.scm` — це і є
+# «пакети під моє залізо»: ядро, Mesa, Vulkan, інструменти.
 
 on:
   workflow_dispatch:
     inputs:
       manifest:
-        description: "Манифест пакетів для заліза (типово: H170 Free)"
+        description: "Манифест пакетів для заліза"
         required: false
         default: "drivers/profiles/h170-free-packages.scm"
       packages:
@@ -29,12 +29,24 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: publish-artifacts-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   publish:
     name: Зібрати, запакувати, опублікувати
     runs-on: ubuntu-24.04
+    timeout-minutes: 300
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+
+      - name: Кеш checkout-ів Guix
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/guix/checkouts
+          key: guix-checkouts-${{ hashFiles('channels.lock.scm', 'channels/*.scm') }}
+          restore-keys: guix-checkouts-
 
       - name: Встановити Guix
         run: |
@@ -44,23 +56,32 @@ jobs:
           sudo systemctl enable --now guix-daemon.service
           guix --version
 
+      - name: Зафіксувати, який канал дав бінарники
+        run: |
+          set -euo pipefail
+          {
+            echo "### Канал"
+            echo '```'
+            guix time-machine -C channels.lock.scm -- describe -f channels
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Зібрати пакети із зафіксованого каналу
         if: ${{ (inputs.packages || '') != '' }}
-        id: build
+        env:
+          PACKAGES: ${{ inputs.packages }}
         run: |
           set -euo pipefail
           mkdir -p artifacts
           : > artifacts/store-paths.txt
-          for package in ${{ inputs.packages || 'wsm-tools' }}; do
+          for package in $PACKAGES; do
             case "$package" in
               *[!A-Za-z0-9._+-]*) echo "refusing odd package name: $package" >&2; exit 1 ;;
             esac
-            # `guix build` друкує шлях у stdout, але евалюація цього репозиторію
-            # додає туди ж діагностичний рядок. Беремо останній рядок і
-            # перевіряємо форму, інакше наступний крок отримає "unknown package".
-            build_output="$(guix time-machine -C channels.lock.scm -- \
-                            build -L . "$package" --no-grafts)"
-            store_path="$(printf '%s\n' "$build_output" | tail -n 1)"
+            # `guix build` prints one line per output, and a package may have more
+            # than one. Take the `out` output explicitly instead of the last line.
+            store_path="$(guix time-machine -C channels.lock.scm -- \
+                            build -L . --no-grafts "$package" 2>/dev/null | tail -n 1)"
             case "$store_path" in
               /gnu/store/*) ;;
               *) echo "refusing non-store output for $package: $store_path" >&2; exit 1 ;;
@@ -72,11 +93,15 @@ jobs:
 
       - name: Запакувати набір для заліза (манифест) без ключа
         if: ${{ (inputs.packages || '') == '' }}
+        env:
+          MANIFEST: ${{ inputs.manifest }}
         run: |
           set -euo pipefail
-          manifest="${{ inputs.manifest || 'drivers/profiles/h170-free-packages.scm' }}"
-          # `guix pack -m` приймає манифест і пакує весь набір одним архівом.
-          # Це і є «пакети під моє залізо»: ядро, Mesa, Vulkan, інструменти.
+          manifest="${MANIFEST:-drivers/profiles/h170-free-packages.scm}"
+          # `guix pack -m` takes a manifest and packs the whole set into one
+          # tarball. The tarball is written into the store and its path printed,
+          # so nothing appears in the working directory - copying is the step that
+          # makes it an artifact.
           pack_output="$(guix time-machine -C channels.lock.scm -- \
                           pack -f tarball -C zstd -L . -m "$manifest")"
           tarball="$(printf '%s\n' "$pack_output" | tail -n 1)"
@@ -84,9 +109,10 @@ jobs:
             /gnu/store/*.tar.zst) ;;
             *) echo "refusing non-tarball output: $tarball" >&2; exit 1 ;;
           esac
-          cp "$tarball" "artifacts/h170-free-pack.tar.zst"
-          ( cd artifacts && sha256sum h170-free-pack.tar.zst > h170-free-pack.tar.zst.sha256 )
-          ls -l artifacts/h170-free-pack.tar.zst
+          name="h170-free-pack-$(git rev-parse --short HEAD).tar.zst"
+          cp "$tarball" "artifacts/$name"
+          ( cd artifacts && sha256sum "$name" > "$name.sha256" )
+          ls -l "artifacts/$name"
           echo "WSM_PACKED_MANIFEST=$manifest" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Запакувати кожен пакет у tarball (без ключа)
@@ -98,10 +124,6 @@ jobs:
             # every positional argument through specification->package and exits
             # with "unknown package" for a /gnu/store path. `guix package` does
             # accept a store path, which is why the wrong form looks plausible.
-            #
-            # The tarball is written into the store and its path printed, so
-            # nothing appears in the working directory - copying is the step that
-            # makes it an artifact.
             pack_output="$(guix time-machine -C channels.lock.scm -- \
                             pack -f tarball -C zstd -L . "$package")"
             tarball="$(printf '%s\n' "$pack_output" | tail -n 1)"
@@ -109,36 +131,44 @@ jobs:
               /gnu/store/*.tar.zst) ;;
               *) echo "refusing non-tarball output for $package: $tarball" >&2; exit 1 ;;
             esac
-            cp "$tarball" "artifacts/${package}.tar.zst"
-            ( cd artifacts && sha256sum "${package}.tar.zst" > "${package}.tar.zst.sha256" )
-            ls -l "artifacts/${package}.tar.zst"
+            name="${package}-$(git rev-parse --short HEAD).tar.zst"
+            cp "$tarball" "artifacts/$name"
+            ( cd artifacts && sha256sum "$name" > "$name.sha256" )
+            ls -l "artifacts/$name"
           done < artifacts/store-paths.txt
           cat artifacts/*.sha256
 
       - name: Зберегти як artifact прогону
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wsm-channel-artifacts
           path: |
             artifacts/*.tar.zst
             artifacts/*.tar.zst.sha256
-            artifacts/store-paths.txt
           if-no-files-found: error
 
-      - name: Прикріпити до чернетки релізу, якщо вона існує
+      - name: Прикріпити до чернетки релізу цього коміта
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 20 \
-                  --json tagName,isDraft --jq '.[] | select(.isDraft) | .tagName' | head -1)"
+          # Only a draft whose target is this exact commit, and without --clobber:
+          # attaching to whatever draft happens to be newest is how a binary from
+          # one commit ends up published under another.
+          tag=""
+          while IFS= read -r candidate; do
+            target="$(gh release view "$candidate" --repo "$GITHUB_REPOSITORY" \
+                       --json targetCommitish --jq .targetCommitish)"
+            if [ "$target" = "$GITHUB_SHA" ]; then tag="$candidate"; break; fi
+          done <<< "$(gh release list --repo "$GITHUB_REPOSITORY" --limit 50 \
+                        --json tagName,isDraft --jq '.[] | select(.isDraft) | .tagName')"
           if [ -z "$tag" ]; then
-            echo "Чернетки релізу немає — артефакти лишилися в artifacts прогону."
-            echo "### Чернетки релізу немає" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::Немає чернетки релізу для коміта $GITHUB_SHA — артефакти лишилися в artifacts прогону."
+            echo "### Чернетки для цього коміта немає" >> "$GITHUB_STEP_SUMMARY"
+            echo "Артефакти доступні для завантаження на сторінці прогону." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          gh release upload "$tag" --repo "$GITHUB_REPOSITORY" \
-            artifacts/*.tar.zst artifacts/*.tar.zst.sha256 --clobber
+          gh release upload "$tag" --repo "$GITHUB_REPOSITORY" artifacts/*.tar.zst artifacts/*.tar.zst.sha256
           echo "WSM_PUBLISHED_TO_DRAFT=$tag" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Повідомити про збій
@@ -151,4 +181,4 @@ jobs:
           echo "### Збій публікації" >> "$GITHUB_STEP_SUMMARY"
           gh api "repos/${GITHUB_REPOSITORY}/commits/$GITHUB_SHA/comments" \
             -f body="Публікація артефактів не вдалася: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}." \
-            >/dev/null
+            >/dev/null || true
