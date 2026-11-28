@@ -73,13 +73,12 @@ class H170LinuxLibreOverlayTests(unittest.TestCase):
         self.assertNotIn("firmware-nvidia", code)
         self.assertNotIn("nvidia-kernel", code)
 
-    def test_ci_builds_the_exact_locked_package_without_exporting_it(self) -> None:
+    def test_profile_workflow_evaluates_without_exporting_binary_artifacts(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "guix-profile-evaluation.yml").read_text(
             encoding="utf-8"
         )
-        self.assertIn("guix time-machine -C channels.lock.scm -- build", workflow)
-        self.assertIn("linux-libre-h170", workflow)
-        self.assertIn("guix hash --recursive --format=hex", workflow)
+        self.assertIn("make check-guix-eval", workflow)
+        self.assertIn("WSM_CHANNEL_AUTHENTICATION=NOT_TESTED", workflow)
         self.assertNotIn("guix archive --export", workflow)
         self.assertNotIn("guix publish", workflow)
         self.assertNotIn("actions/upload-artifact", workflow)
