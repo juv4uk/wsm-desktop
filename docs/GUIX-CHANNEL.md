@@ -209,3 +209,10 @@ added here». Це **опис вмісту файлу, а не рішення в
 - [Channel Authentication](https://guix.gnu.org/manual/en/html_node/Channel-Authentication.html)
 - [Specifying Channel Authorizations](https://guix.gnu.org/manual/en/html_node/Specifying-Channel-Authorizations.html)
 - [Invoking guix git authenticate](https://guix.gnu.org/manual/en/html_node/Invoking-guix-git-authenticate.html)
+
+
+## Перший H170 Free package-set
+
+Початкова build-evidence смуга свідомо обмежена двома upstream roots — `linux-libre` і `mesa` — з офіційного `channels.lock.scm`. Маніфест: [`ci/packages/h170-free-core.scm`](../ci/packages/h170-free-core.scm); ефемерний build workflow не експортує NAR, не завантажує Actions artifacts, не створює GitHub Release/Pages і не публікує substitutes. Це лише package/store evidence, не hardware acceptance.
+
+Збірка не включає WSM-owned пакети до рішення #367, NVIDIA firmware до письмового clearance за #586, а також Nonguix/NVIDIA 580 Compatibility path. Для GP107 окремо залишається відомий ризик pinned linux-libre 7.3.5 (#514); успішна збірка не доводить GTX 1050 Ti KMS, 3D чи compute на H170.
