@@ -1,7 +1,7 @@
 ;; SPDX-License-Identifier: LicenseRef-Volnist
 ;;
 ;; Native WSM utilities built with Free Pascal. FPC is a build-time dependency;
-;; neither package propagates the compiler or any Python runtime.
+;; none propagates the compiler or any Python runtime.
 
 (define-module (wsm packages fpc-tools)
   #:use-module (guix packages)
@@ -11,7 +11,7 @@
   #:use-module (wsm licenses)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-13)
-  #:export (wsm-hwcheck-fpc wsm-classify-fpc))
+  #:export (wsm-hwcheck-fpc wsm-classify-fpc wsm-partition-fpc))
 
 (define (fpc-package-arguments make-target executable)
   (list
@@ -73,5 +73,28 @@ The FPC compiler is used only at build time.")
 and emits the diagnostic subsystem summary. It never claims CERTIFIED because
 report v1 has no complete coverage manifest. The FPC compiler is used only at
 build time.")
+    (home-page "https://github.com/juv4uk/wsm-desktop")
+    (license wsm-license)))
+
+
+(define-public wsm-partition-fpc
+  (package
+    (name "wsm-partition-fpc")
+    (version "0.1.1")
+    (source (local-file "../.." "wsm-desktop-source-fpc"
+                        #:recursive? #t
+                        #:select? (lambda (path _stat)
+                                    (not (any (lambda (skip)
+                                                (string-contains path skip))
+                                              '("/.git" "/__pycache__" "/build"))))))
+    (build-system gnu-build-system)
+    (native-inputs (list fpc))
+    (arguments (fpc-package-arguments "wsm-partition" "wsm-partition"))
+    (synopsis "Read-only disk layout planner for WSM Desktop")
+    (description
+     "A native Free Pascal utility that validates an explicitly acknowledged
+whole-disk target and emits a partition layout as JSON. It never invokes
+sgdisk, opens a block device, or writes a partition table. The FPC compiler
+is used only at build time.")
     (home-page "https://github.com/juv4uk/wsm-desktop")
     (license wsm-license)))
