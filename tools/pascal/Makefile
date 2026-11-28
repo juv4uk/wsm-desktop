@@ -61,7 +61,7 @@ test-isa: build-isa
 	"$(ISA_TARGET)" --help >/dev/null
 
 test-partition: build-partition
-	@output="$("$(PARTITION_TARGET)" --disk /dev/sdz --size 20000000000 --firmware uefi --ack /dev/sdz)"; \
+	@output="$($(PARTITION_TARGET) --disk /dev/sdz --size 20000000000 --firmware uefi --ack /dev/sdz)"; \
 	 printf '%s\n' "$output" | grep -F '"executed":false' >/dev/null; \
 	 printf '%s\n' "$output" | grep -F '"typecode":"ef00"' >/dev/null
 	@set +e; "$(PARTITION_TARGET)" --disk /dev/sdz1 --size 20000000000 --firmware uefi --ack /dev/sdz1 >/dev/null 2>&1; status=$?; set -e; test "$status" -eq 10
