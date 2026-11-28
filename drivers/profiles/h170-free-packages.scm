@@ -4,12 +4,13 @@
 ;; This is a build/evidence manifest, not a supported-hardware verdict or a release lock.
 ;; Evaluate only with channels.lock.scm (the official Guix channel).
 ;;
-;; WSM-owned application code is not part of this upstream-only pack.
-;; In particular, `wsm-tools` (currently implemented in Python) remains out of
-;; distribution until the owner ratifies its implementation language.
-;; This keeps the published set independent of the unapproved Python payload.
+;; WSM-owned application code: native Free Pascal tools ARE part of this pack.
+;; The owner ratified the implementation language on 2026-11-28, and the FPC
+;; tools carry no interpreter in their closure - which was the objection to the
+;; Python payload in the first place.
 ;; Deliberately excluded:
-;; - wsm-tools: unresolved effective-license mismatch in #367.
+;; - wsm-tools (the Python implementation): unresolved effective-license
+;;   mismatch in #367, and superseded by the native FPC tools below.
 ;; - linux-firmware, Intel microcode and NVIDIA firmware: firmware/license gates #519/#586.
 ;; - Nonguix and proprietary NVIDIA drivers: Compatibility-only, not Free.
 ;;
@@ -30,4 +31,14 @@
    "ethtool"
    "nvme-cli"
    "smartmontools"
-   "lm-sensors"))
+   "lm-sensors"
+   ;; WSM's own tools, Free Pascal builds. Native binaries: no interpreter
+   ;; enters the closure, which is why they can ship where the Python payload
+   ;; could not.
+   "wsm-hwcheck-fpc"
+   "wsm-classify-fpc"
+   "wsm-cpu-isa-fpc"
+   "wsm-partition-fpc"
+   "wsm-profile-fpc"
+   "wsm-preflight-fpc"
+   "wsm-install-fpc"))

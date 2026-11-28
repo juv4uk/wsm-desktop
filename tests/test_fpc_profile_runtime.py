@@ -49,7 +49,7 @@ class ProfileRuntimeTests(unittest.TestCase):
 
     def test_path_traversal_is_refused_and_json_escaped(self) -> None:
         document = self.valid_document()
-        document["artifacts"] = [{"path": "../bad\"quote"}]
+        document["artifacts"] = [{"path": "nested/../bad\"quote"}]
         result = self.invoke(document)
         self.assertEqual(result.returncode, 5)
         output = json.loads(result.stdout)

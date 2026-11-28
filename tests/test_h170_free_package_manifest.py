@@ -22,6 +22,16 @@ EXPECTED = (
     "nvme-cli",
     "smartmontools",
     "lm-sensors",
+    # WSM's own tools, Free Pascal builds. Added 2026-11-28, when the owner
+    # ratified the implementation language: native binaries carry no
+    # interpreter, which was the objection to the Python payload.
+    "wsm-hwcheck-fpc",
+    "wsm-classify-fpc",
+    "wsm-cpu-isa-fpc",
+    "wsm-partition-fpc",
+    "wsm-profile-fpc",
+    "wsm-preflight-fpc",
+    "wsm-install-fpc",
 )
 
 
