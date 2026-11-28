@@ -604,6 +604,7 @@ def _validate_installer_plan_result(serial: str) -> dict[str, str]:
 def _validate_report(report: dict) -> tuple[int, int]:
     schema_path = ROOT / "schemas" / "hardware-report.schema.json"
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    expected_version = schema["properties"]["schema_version"]["const"]
     validator = Draft202012Validator(schema, format_checker=FormatChecker())
     errors = sorted(
         validator.iter_errors(report),
@@ -614,10 +615,14 @@ def _validate_report(report: dict) -> tuple[int, int]:
             f"{list(error.absolute_path)}: {error.message}"
             for error in errors[:8]
         )
-        raise RuntimeError(f"guest report failed Hardware Evidence Report v1.0.0: {rendered}")
+        raise RuntimeError(
+            f"guest report failed Hardware Evidence Report {expected_version}: {rendered}"
+        )
 
-    if report.get("schema_version") != "1.0.0":
-        raise RuntimeError("guest report did not preserve schema v1.0.0")
+    if report.get("schema_version") != expected_version:
+        raise RuntimeError(
+            f"guest report did not preserve schema v{expected_version}"
+        )
     privacy = report.get("privacy", {})
     if privacy.get("network_requests_performed") is not False:
         raise RuntimeError("guest report network_requests_performed is not false")

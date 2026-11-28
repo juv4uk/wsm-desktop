@@ -21,6 +21,8 @@ import shutil
 from pathlib import Path
 from typing import Any, Callable
 
+from .report_schema import SUPPORTED_VERSIONS
+
 SCHEMA = "wsm-install-preflight/1"
 
 
@@ -142,11 +144,12 @@ def check_report(path: Path | None) -> dict[str, str]:
         document = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         return criterion("report", "fail", f"cannot read {path}: {exc}")
-    if document.get("schema_version") != "1.0.0":
+    if document.get("schema_version") not in SUPPORTED_VERSIONS:
         return criterion(
             "report",
             "fail",
-            f"unexpected report schema {document.get('schema_version')!r}",
+            f"unexpected report schema {document.get('schema_version')!r}; "
+            f"supported: {', '.join(SUPPORTED_VERSIONS)}",
         )
     devices = document.get("devices") or []
     return criterion("report", "pass", f"{len(devices)} device(s) in the report")
