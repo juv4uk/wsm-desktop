@@ -35,6 +35,17 @@
              (eq? (package-license wsm-tools) wsm-license))
   (error "WSM Guix license metadata does not preserve LicenseRef-Volnist"))
 
+;; Every native FPC utility is owner-authored and must inherit the same license.
+(unless (and (package? wsm-hwcheck-fpc)
+             (package? wsm-classify-fpc)
+             (package? wsm-partition-fpc)
+             (package? wsm-profile-fpc)
+             (eq? (package-license wsm-hwcheck-fpc) wsm-license)
+             (eq? (package-license wsm-classify-fpc) wsm-license)
+             (eq? (package-license wsm-partition-fpc) wsm-license)
+             (eq? (package-license wsm-profile-fpc) wsm-license))
+  (error "FPC package family must preserve LicenseRef-Volnist"))
+
 ;; Evaluate the ordinary live profile as well as the standalone channel module.
 (primitive-load "systems/live-iso.scm")
 (unless (and (package? wsm-live-tools)
