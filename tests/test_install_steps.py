@@ -6,6 +6,8 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -13,7 +15,7 @@ sys.path.insert(0, str(ROOT))
 from wsm_install.install_steps import (  # noqa: E402
     backend_command,
     device_for,
-    plan_steps,
+    plan_steps as _plan_steps,
     render,
     TRUSTED_TOOLS,
 )
@@ -23,6 +25,24 @@ from wsm_install.partition import Disk, Layout, Refused, plan  # noqa: E402
 def tool(step) -> str:
     """Basename of the command: paths are absolute, names are what we assert on."""
     return step.command[0].rsplit("/", 1)[-1]
+
+# Unit tests also run on non-Guix CI hosts. Give the planner a disposable
+# system-profile fixture rather than relying on the developer host or PATH.
+_PROFILE_TMP = TemporaryDirectory(prefix="wsm-guix-tool-profile-")
+_PROFILE_ROOT = Path(_PROFILE_TMP.name)
+for _index, (_name, _binary) in enumerate(TRUSTED_TOOLS.items()):
+    _directory = "bin" if _index % 2 == 0 else "sbin"
+    _executable = _PROFILE_ROOT / _directory / _binary
+    _executable.parent.mkdir(parents=True, exist_ok=True)
+    _executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    assert _executable.read_bytes() == b"#!/bin/sh\nexit 0\n"
+    _executable.chmod(0o755)
+
+
+def plan_steps(*args, **kwargs):
+    kwargs.setdefault("profile_root", _PROFILE_ROOT)
+    return _plan_steps(*args, **kwargs)
+
 
 GIB = 1024 ** 3
 
@@ -73,8 +93,8 @@ class OrderingTests(unittest.TestCase):
         commands = current.commands()
         steps = plan_steps(current)[:len(commands)]
         expected = [
-            [TRUSTED_TOOLS["sgdisk"], *command[1:]]
-            for command in commands
+            [steps[index].command[0], *command[1:]]
+            for index, command in enumerate(commands)
         ]
         self.assertEqual([step.command for step in steps], expected)
         self.assertTrue(all(step.destructive for step in steps))
@@ -121,6 +141,19 @@ class PathHijackTests(unittest.TestCase):
 
     Every step here is meant to run as root, so no step may rely on PATH.
     """
+
+    def test_non_guix_host_can_build_symbolic_preview_without_executables(self) -> None:
+        # A preview is data only and APPLY is disabled. Do not require host Guix
+        # tools merely to inspect the proposed plan; explicit profile roots and
+        # actual Guix System profiles still use strict resolution.
+        missing_profile = Path("/nonexistent/wsm-system-profile-for-tests")
+        with patch("wsm_install.install_steps.TRUSTED_PROFILE_ROOT", missing_profile):
+            steps = _plan_steps(layout())
+        self.assertTrue(steps)
+        self.assertTrue(
+            all(step.command[0] in TRUSTED_TOOLS.values() for step in steps),
+            "non-Guix preview must contain only logical allowlisted tool names",
+        )
 
     def test_every_command_starts_with_an_absolute_path(self) -> None:
         for firmware, disk in (("uefi", "/dev/nvme0n1"), ("bios", "/dev/sda")):

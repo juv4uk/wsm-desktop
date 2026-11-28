@@ -125,7 +125,7 @@
                 %base-user-accounts))
 
   ;; Рівно те, що потрібно, щоб дійти до консолі й запустити інсталятор.
-  (packages (append (list wsm-tools)
+  (packages (append (list wsm-tools gptfdisk parted dosfstools)
                     %base-packages))
 
   (services

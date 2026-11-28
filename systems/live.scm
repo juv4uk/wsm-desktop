@@ -73,6 +73,9 @@
   ;; Ті самі служби, що й у цільовому профілі, плюс наші інструменти.
   (packages
    (cons* wsm-tools
+          gptfdisk
+          parted
+          dosfstools
           font-dejavu
           font-liberation
           font-google-noto
