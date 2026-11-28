@@ -2,27 +2,18 @@
 { }
 { wsm-hwcheck-pascal — перший FPC-зріз колектора доказів. }
 { }
-{ Навіщо: wsm_hwcheck/ сьогодні це 2241 рядок Python, і кожен виклик }
-{ платить ~62 мс за старт інтерпретатора, а пакет тягне CPython у closure }
-{ (записано в wsm/packages/wsm.scm: ~226 МБ із 399 МБ паку були збірками }
-{ Python). FPC дає статичний бінарник без libc-залежностей — саме так }
-{ зроблено в gp107-nvidia-re. }
+{ ЦЕ ПЕРШИЙ ЗРІЗ, А НЕ ЗАМІНА Python-колектора. Він охоплює архітектуру, }
+{ kernel release та PCI identity + прямі факти прив'язки драйвера/модуля. }
+{ Діагностика firmware, модулів, ISA, USB, block, DRM і повний report schema }
+{ лишаються поза цим зрізом, доки для кожного блоку не буде паритетного тесту. }
 { }
-{ ЦЕ ПЕРШИЙ ЗРІЗ, А НЕ ЗАМІНА. Він збирає лише блок identity: архітектура, }
-{ ядро, режим завантаження, PCI-пристрої з vendor:device і прив'язаним }
-{ драйвером. Решта звіту (firmware, ISA-контракт, діагностика модулів) }
-{ лишається в Python, доки паритетний тест не доведе, що переносити є сенс. }
+{ Джерела: uname(2), sysfs PCI. Жодних зовнішніх команд, мережі, MMIO, }
+{ завантаження модулів або запису. }
 { }
-{ Статус: НЕ ЗІБРАНО в середовищі, де це писали — там немає fpc. }
-{ Перевіряється tests/test_fpc_collector_parity.py: якщо fpc немає, тест }
-{ позначається skipped і прямо каже, що паритет не доведено. }
+{ У середовищі написання FPC не встановлено. Реальна збірка і runtime parity }
+{ виконуються pinned FPC 3.2.2 у .github/workflows/fpc-build.yml. }
 { }
-{ Збірка: }
-{   fpc -O2 -CX -XX -Xs tools/fpc/wsm_hwcheck.pas }
-{ }
-{ Вивід: ті самі ключі, що їх дає Python-колектор для блоку environment і }
-{ списку pci-пристроїв, у стабільному порядку — щоб паритет можна було }
-{ порівнювати текстом, а не «на око». }
+{ Compile: fpc -O2 -Mobjfpc -Sh tools/fpc/wsm_hwcheck.pas }
 
 program wsm_hwcheck;
 
@@ -33,28 +24,25 @@ uses
 
 const
   SysRoot = '/sys';
-  ProcRoot = '/proc';
-  MaxDevices = 512;
 
 type
   TDevice = record
     Address: string;      { 0000:01:00.0 }
-    Vendor: string;       { 10de }
-    Device: string;       { 1c82 }
-    ClassCode: string;    { 0x030000 }
-    Driver: string;       { nvidia | '' }
-    Module: string;       { nvidia | '' — порожньо, якщо драйвер вбудований }
+    Vendor: string;       { raw sysfs value, e.g. 0x10de }
+    Device: string;       { raw sysfs value, e.g. 0x1c82 }
+    ClassCode: string;    { raw sysfs value, e.g. 0x030200 }
+    Driver: string;       { bound driver basename, if present }
+    Module: string;       { loadable module basename, if present }
   end;
 
 var
-  Devices: array[0..MaxDevices - 1] of TDevice;
-  DeviceCount: Integer = 0;
+  Devices: array of TDevice;
 
 function ReadFirstLine(const Path: string): string;
 var
   Stream: TFileStream;
   Buffer: array[0..1023] of Char;
-  Read: LongInt;
+  ReadCount: LongInt;
 begin
   Result := '';
   if not FileExists(Path) then
@@ -65,10 +53,10 @@ begin
     Exit;
   end;
   try
-    Read := Stream.Read(Buffer, SizeOf(Buffer) - 1);
-    if Read > 0 then
+    ReadCount := Stream.Read(Buffer, SizeOf(Buffer) - 1);
+    if ReadCount > 0 then
     begin
-      Buffer[Read] := #0;
+      Buffer[ReadCount] := #0;
       Result := Trim(string(PChar(@Buffer[0])));
     end;
   finally
@@ -76,13 +64,27 @@ begin
   end;
 end;
 
-{ Драйвер, прив'язаний до пристрою, — це symlink на модуль у sysfs.
-  Читаємо через fpReadLink, а не через shell: жодних зовнішніх команд. }
+procedure ReadSystemIdentity(out Architecture, KernelRelease: string);
+var
+  SystemName: UtsName;
+begin
+  Architecture := 'unknown';
+  KernelRelease := 'unknown';
+  FillChar(SystemName, SizeOf(SystemName), 0);
+  if fpUname(SystemName) <> 0 then
+    Exit;
+  if SystemName.Machine[0] <> #0 then
+    Architecture := StrPas(@SystemName.Machine[0]);
+  if SystemName.Release[0] <> #0 then
+    KernelRelease := StrPas(@SystemName.Release[0]);
+end;
+
+{ A driver binding is a sysfs symlink. fpReadLink reads the link itself and
+  never executes a shell or follows a user-provided command. }
 function ReadDriverLink(const DevicePath: string): string;
 var
   LinkTarget: array[0..1023] of Char;
   Count: LongInt;
-  Base: string;
 begin
   Result := '';
   FillChar(LinkTarget, SizeOf(LinkTarget), 0);
@@ -90,13 +92,11 @@ begin
   if Count <= 0 then
     Exit;
   LinkTarget[Count] := #0;
-  Base := string(PChar(@LinkTarget[0]));
-  Result := ExtractFileName(Base);
+  Result := ExtractFileName(string(PChar(@LinkTarget[0])));
 end;
 
-{ Модуль ядра за прив'язаним драйвером. Порожній результат — не помилка:
-  драйвер може бути вбудований у ядро, і тоді symlink module просто відсутній.
-  Python-колектор фіксує це так само: status=bound без module. }
+{ A built-in driver has no driver/module link. That is not an error and must
+  not be misreported as "driver missing". }
 function ReadModuleLink(const DevicePath: string): string;
 var
   LinkTarget: array[0..1023] of Char;
@@ -111,33 +111,64 @@ begin
   Result := ExtractFileName(string(PChar(@LinkTarget[0])));
 end;
 
+procedure SortPciDevices;
+var
+  Index, InsertAt: Integer;
+  Item: TDevice;
+begin
+  { sysfs enumeration order is not an API. Match Python's sorted(root.iterdir()). }
+  for Index := 1 to High(Devices) do
+  begin
+    Item := Devices[Index];
+    InsertAt := Index - 1;
+    while InsertAt >= 0 do
+    begin
+      if Devices[InsertAt].Address <= Item.Address then
+        Break;
+      Devices[InsertAt + 1] := Devices[InsertAt];
+      Dec(InsertAt);
+    end;
+    Devices[InsertAt + 1] := Item;
+  end;
+end;
+
 procedure ScanPciDevices;
 var
   Dir: TSearchRec;
-  DevicePath, Address: string;
+  DevicePath, Address, VendorId, DeviceId: string;
 begin
-  DeviceCount := 0;
-  if FindFirst(SysRoot + '/bus/pci/devices/*', faDirectory, Dir) <> 0 then
+  SetLength(Devices, 0);
+  { PCI functions under /sys/bus/pci/devices are symlinks to device directories.
+    faAnyFile alone omits symlinks on Unix, so include faSymLink explicitly. }
+  if FindFirst(SysRoot + '/bus/pci/devices/*', faAnyFile or faSymLink, Dir) <> 0 then
     Exit;
   try
     repeat
       if (Dir.Name = '.') or (Dir.Name = '..') then
         Continue;
-      if DeviceCount >= MaxDevices then
-        Break;
       Address := Dir.Name;
       DevicePath := SysRoot + '/bus/pci/devices/' + Address;
-      Devices[DeviceCount].Address := Address;
-      Devices[DeviceCount].Vendor := ReadFirstLine(DevicePath + '/vendor');
-      Devices[DeviceCount].Device := ReadFirstLine(DevicePath + '/device');
-      Devices[DeviceCount].ClassCode := ReadFirstLine(DevicePath + '/class');
-      Devices[DeviceCount].Driver := ReadDriverLink(DevicePath);
-      Devices[DeviceCount].Module := ReadModuleLink(DevicePath);
-      Inc(DeviceCount);
+      if not DirectoryExists(DevicePath) then
+        Continue;
+
+      VendorId := ReadFirstLine(DevicePath + '/vendor');
+      DeviceId := ReadFirstLine(DevicePath + '/device');
+      { Match Python _pci_devices(): ignore entries with neither identity field. }
+      if (VendorId = '') and (DeviceId = '') then
+        Continue;
+
+      SetLength(Devices, Length(Devices) + 1);
+      Devices[High(Devices)].Address := Address;
+      Devices[High(Devices)].Vendor := VendorId;
+      Devices[High(Devices)].Device := DeviceId;
+      Devices[High(Devices)].ClassCode := ReadFirstLine(DevicePath + '/class');
+      Devices[High(Devices)].Driver := ReadDriverLink(DevicePath);
+      Devices[High(Devices)].Module := ReadModuleLink(DevicePath);
     until FindNext(Dir) <> 0;
   finally
     FindClose(Dir);
   end;
+  SortPciDevices;
 end;
 
 function JsonEscape(const Value: string): string;
@@ -166,67 +197,64 @@ begin
   end;
 end;
 
-{ Порядок ключів фіксований: паритетний тест порівнює текст, тому }
-{ «приблизно той самий JSON» тут не годиться. }
+function DriverJson(const Device: TDevice): string;
+begin
+  if Device.Driver = '' then
+    Exit('{"status":"none-known"}');
+
+  Result := '{"status":"bound","bound_driver":"' +
+    JsonEscape(Device.Driver) + '"';
+
+  if Device.Module <> '' then
+    Result := Result + ',"module":"' + JsonEscape(Device.Module) +
+      '","module_loaded":true';
+
+  Result := Result + '}';
+end;
+
 procedure EmitReport;
 var
   Index: Integer;
-  Separator: string;
+  Architecture, KernelRelease, Separator: string;
 begin
+  ReadSystemIdentity(Architecture, KernelRelease);
   WriteLn('{');
   WriteLn('  "collector": "wsm-hwcheck-pascal",');
   WriteLn('  "environment": {');
-  WriteLn('    "architecture": "', JsonEscape(ReadFirstLine(ProcRoot + '/sys/kernel/arch')), '",');
-  WriteLn('    "kernel_release": "', JsonEscape(ReadFirstLine(ProcRoot + '/sys/kernel/osrelease')), '"');
+  WriteLn('    "architecture": "', JsonEscape(Architecture), '",');
+  WriteLn('    "kernel_release": "', JsonEscape(KernelRelease), '"');
   WriteLn('  },');
   WriteLn('  "pci": [');
+
   Separator := '';
-  for Index := 0 to DeviceCount - 1 do
+  for Index := 0 to High(Devices) do
   begin
     WriteLn(Separator, '    {');
     WriteLn('      "address": "', JsonEscape(Devices[Index].Address), '",');
     WriteLn('      "vendor": "', JsonEscape(Devices[Index].Vendor), '",');
     WriteLn('      "device": "', JsonEscape(Devices[Index].Device), '",');
     WriteLn('      "class": "', JsonEscape(Devices[Index].ClassCode), '",');
-    WriteLn('      "driver": {');
-    if Devices[Index].Driver = '' then
-      WriteLn('        "status": "none-known"')
-    else
-    begin
-      if Devices[Index].Module = '' then
-      begin
-        WriteLn('        "status": "bound",');
-        WriteLn('        "bound_driver": "', JsonEscape(Devices[Index].Driver), '"');
-      end
-      else
-      begin
-        WriteLn('        "status": "bound",');
-        WriteLn('        "bound_driver": "', JsonEscape(Devices[Index].Driver), '",');
-        WriteLn('        "module": "', JsonEscape(Devices[Index].Module), '",');
-        WriteLn('        "module_loaded": true');
-      end;
-    end;
-    WriteLn('      }');
+    WriteLn('      "driver": ', DriverJson(Devices[Index]));
     Write('    }');
     Separator := ',' + LineEnding;
   end;
-  if DeviceCount > 0 then
+  if Length(Devices) > 0 then
     WriteLn;
   WriteLn('  ],');
-  WriteLn('  "evidence_level": "read-only sysfs; no MMIO, no module load, no write"');
+  WriteLn('  "evidence_level": "read-only sysfs and uname; no MMIO, no module load, no write"');
   WriteLn('}');
 end;
 
 begin
   if ParamCount > 0 then
   begin
-    if (ParamStr(1) = '--help') or (ParamStr(1) = '-h') then
+    if (ParamCount = 1) and ((ParamStr(1) = '--help') or (ParamStr(1) = '-h')) then
     begin
       WriteLn('wsm-hwcheck-pascal — read-only PCI identity evidence (first FPC slice)');
       WriteLn('usage: wsm-hwcheck-pascal');
       Halt(0);
     end;
-    WriteLn(StdErr, 'wsm-hwcheck-pascal: невідомий аргумент: ', ParamStr(1));
+    WriteLn(StdErr, 'wsm-hwcheck-pascal: невідомий аргумент');
     Halt(2);
   end;
   ScanPciDevices;
