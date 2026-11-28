@@ -43,6 +43,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--plan-output", metavar="PATH", help="write draft plan; stdout is used otherwise")
     parser.add_argument("--quiet", action="store_true", help="suppress human summary")
+    parser.add_argument(
+        "--admission",
+        action="store_true",
+        help="also report what APPLY would require, step by step; writes nothing",
+    )
 
     install = parser.add_argument_group(
         "install path",
@@ -394,6 +399,10 @@ def _run_install(
         print(f"wsm-install: {exc.code}: {exc.message}", file=sys.stderr)
         return 1
 
+    admission = None
+    if args.admission:
+        admission = _admission_report(steps, disk.path)
+
     print(json.dumps(
         {
             "mode": "dry-run",
@@ -403,12 +412,56 @@ def _run_install(
             "filesystem": args.filesystem,
             "steps": [result.as_dict() for result in results],
             "handoff": command,
+            **({"admission": admission} if admission is not None else {}),
         },
         ensure_ascii=False,
         indent=2,
         sort_keys=True,
     ))
     return 0
+
+
+def _admission_report(steps: list, disk_path: str) -> dict:
+    """What APPLY would require, from the real read-only observers.
+
+    No consent is offered here on purpose: a preview is not a prompt, so every
+    destructive step comes back refused with `consent.missing`. That is the honest
+    answer to "what would stop this", and it keeps the report from looking like an
+    approval nobody gave.
+    """
+    from wsm_install.admission import admit
+    from wsm_install.disk_identity import IdentityError, capture
+    from wsm_install.observers import FilesystemObserver, SysfsDiskObserver
+
+    disk_observer = SysfsDiskObserver()
+    try:
+        expected = capture(disk_observer, disk_path)
+    except IdentityError as exc:
+        return {"status": "refused", "reason": f"{exc.code}: {exc.message}", "steps": []}
+
+    report = admit(
+        steps,
+        disk_path,
+        expected_identity=expected,
+        disk_observer=disk_observer,
+        observer=FilesystemObserver(),
+        consent_for=None,
+    )
+    return {
+        "status": report.status,
+        "reason": report.reason,
+        "plan_digest": report.plan_digest,
+        "steps": [
+            {
+                "index": step.index,
+                "destructive": step.destructive,
+                "status": step.status,
+                "reason": step.reason,
+                "step_digest": step.step_digest,
+            }
+            for step in report.steps
+        ],
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
