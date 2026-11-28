@@ -85,7 +85,12 @@ def _read_report() -> tuple[dict | None, bytes | None, str | None]:
 def _deploy(dry_run: bool) -> tuple[str, str] | None:
     """Build a read-only preview. None means preview construction succeeded."""
     from wsm_install.executor import ExecutorError, execute
-    from wsm_install.install_steps import TrustedToolResolutionError, backend_command, plan_steps, render
+    from wsm_install.install_steps import (
+        TrustedToolResolutionError,
+        backend_command,
+        plan_steps,
+        render,
+    )
     from wsm_install.partition import Disk, Refused, plan as plan_layout
 
     report, _raw, error = _read_report()
@@ -134,7 +139,10 @@ def _deploy(dry_run: bool) -> tuple[str, str] | None:
         steps = plan_steps(layout)
         handoff = backend_command(layout, str(_global("wsmSystemFile", "systems/desktop.scm")))
     except TrustedToolResolutionError as exc:
-        return ("WSM installer tools are unavailable", f"{exc.code}: {exc.message}")
+        return (
+            "WSM installer tools are unavailable",
+            f"{exc.code}: {exc.message}",
+        )
     except Refused as exc:
         return ("WSM cannot use this disk", f"{exc.code}: {exc.message}")
 
