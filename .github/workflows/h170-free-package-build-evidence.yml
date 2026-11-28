@@ -72,7 +72,7 @@ jobs:
             esac
             test -e "$store_path"
             output_bytes="$(du -sb "$store_path" | cut -f1)"
-            output_hash="$(guix time-machine -C channels.lock.scm -- hash --recursive --format=hex "$store_path")"
+            output_hash="$(guix time-machine -C channels.lock.scm -- hash --hash=sha256 --recursive --format=hex "$store_path")"
             printf '| %s | %s | %s |\n' "$store_path" "$output_bytes" "$output_hash" >> "$GITHUB_STEP_SUMMARY"
             {
               echo
