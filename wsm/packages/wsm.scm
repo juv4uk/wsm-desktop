@@ -58,13 +58,16 @@
                                           #$(version-major+minor
                                              (package-version python))
                                           "/site-packages"))
-                     (bin (string-append out "/bin")))
+                     (bin (string-append out "/bin"))
+                     (doc (string-append out "/share/doc/wsm-tools")))
                 (copy-recursively "wsm_hwcheck"
                                   (string-append site "/wsm_hwcheck"))
                 (copy-recursively "wsm_install"
                                   (string-append site "/wsm_install"))
                 (copy-recursively "schemas"
                                   (string-append site "/schemas"))
+                (mkdir-p doc)
+                (copy-file "LICENSE" (string-append doc "/LICENSE"))
                 (mkdir-p bin)
                 (copy-file "scripts/wsm-hwcheck.sh"
                            (string-append bin "/wsm-hwcheck"))
