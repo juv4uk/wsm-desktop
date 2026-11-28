@@ -9,6 +9,8 @@
 ;; from this list is a module nobody has checked.
 ;; scripts/check_scheme_module_coverage.py enforces that rule.
 (use-modules (guix packages)
+             (guix store)
+             (srfi srfi-1)
              (gnu ci)
              (gnu services)
              (gnu services cuirass)
@@ -27,20 +29,31 @@
   (error "WSM package module did not export a package record for wsm-tools"))
 
 
-;; Cuirass API check against the exact Guix lock. This imports the custom module
-;; from ci/cuirass/images.scm without registering a jobset or authenticating WSM.
+;; Exercise the real custom-job callback. This lowers the ISO image to a
+;; derivation using the exact pinned Guix API, but does not build the ISO.
+(with-store store
+  (let* ((jobs (cuirass-jobs store '((systems . ("x86_64-linux")))))
+         (job (and (pair? jobs) (car jobs)))
+         (name (and job (assq-ref job #:job-name)))
+         (drv (and job (assq-ref job #:derivation))))
+    (unless (and (= (length jobs) 1)
+                 (equal? name "wsm-live-minimal-image.x86_64-linux")
+                 (string? drv)
+                 (> (string-length drv) 0))
+      (error "Cuirass custom job did not produce the expected ISO derivation"
+             jobs))))
+
+;; Load and instantiate the actual service helper using a harmless empty gexp.
+;; This checks the pinned service type/configuration without registering Cuirass.
+(primitive-load "ci/cuirass/service.scm")
 (define %wsm-cuirass-service-smoke
-  (service cuirass-service-type
-          (cuirass-configuration (specifications #~'()))))
+  (wsm-cuirass-service #~'()))
+(unless (service? %wsm-cuirass-service-smoke)
+  (error "Cuirass service helper did not return a Guix service"))
 
-(unless (and (procedure? arguments->systems)
-             (procedure? image->job)
-             (procedure? cuirass-jobs)
-             (cuirass-configuration? (cuirass-configuration))
-             %wsm-cuirass-service-smoke)
-  (error "Pinned Guix Cuirass API or WSM image-job module is unavailable"))
-
-(display "WSM-CUIRASS-API-EVAL-OK")
+(display "WSM-CUIRASS-IMAGE-JOB-EVAL-OK: ISO derivation generated, not built")
+(newline)
+(display "WSM-CUIRASS-SERVICE-EVAL-OK")
 (newline)
 
 (display "WSM-SOURCE-MODULE-EVAL-OK ")

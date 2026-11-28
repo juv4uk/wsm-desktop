@@ -47,7 +47,7 @@ WSM channel **не автентифікований**: немає owner-signed i
 - image-with-os та iso9660-image з (gnu system image);
 - image->job передає image record у system-image та повертає Cuirass job.
 
-Немає operating-system-image або довільного #:target API. image->job — штатний helper Guix для Cuirass image jobs. Source/API smoke перевіряється разом із make check-guix-eval; фактичний Cuirass instance/build тут ще не запускався.
+Немає operating-system-image або довільного #:target API. image->job — штатний helper Guix для Cuirass image jobs. Pinned Guix smoke викликає custom callback і перевіряє metadata згенерованого ISO derivation, а також створює service object; це не будує ISO, не реєструє jobset і не запускає Cuirass instance. Фактичний Cuirass instance/build тут ще не запускався.
 
 ci/cuirass/service.scm — helper для окремої host OS configuration. Він приймає вже підготовлений specifications gexp, використовує (gnu services cuirass) і не вигадує file path у неіснуючому system profile. Він не підключається до WSM live image.
 
