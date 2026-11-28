@@ -17,7 +17,7 @@
 | Scheme module | Файл | Стан |
 |---|---|---|
 | `(wsm systems performance)` | `wsm/systems/performance.scm` | source-tree evaluation на pinned Guix; authenticated channel lookup потребує окремого Phase B bootstrap |
-| `(wsm packages wsm)` | `wsm/packages/wsm.scm` | package metadata використовує спільний авторський об’єкт `wsm-license` (`LicenseRef-Volnist`, `file://LICENSE`); оцінка збірки й релізу окрема |
+| `(wsm packages wsm)` | `wsm/packages/wsm.scm` | package metadata використовує спільний авторський об’єкт `wsm-license` (`LicenseRef-Volnist`, `file://LICENSE`); рецепт успішно зібрано системним Guix 1.5.0 2026-11-28 (EET), channel lookup/authentication — окремий Phase B |
 
 Не переносити модулі з `wsm/` без необхідності: цей шлях уже відповідає Scheme namespace `(wsm …)`. Файли `systems/*.scm` залишаються machine/release configurations, а не публічним API channel namespace.
 

@@ -2,8 +2,10 @@
 ;;
 ;; WSM Desktop — пакетне визначення власних інструментів для Guix.
 ;;
-;; СТАТУС: не зібрано й не перевірено (у середовищі написання немає Guix).
-;; Перед використанням: guix build -f wsm/packages/wsm.scm
+;; СТАТУС: рецепт успішно оцінено й зібрано системним GNU Guix 1.5.0
+;; 2026-11-28 (EET), з обмеженням -M 2 -c 2:
+;;   guix build -L <checkout> -e '(@ (wsm packages wsm) wsm-tools)'
+;; Канал lookup/authentication окремо залежить від Phase B trust bootstrap.
 ;;
 ;; Пакет ставить модулі wsm_hwcheck і wsm_install у site-packages разом зі
 ;; схемою звіту. Це необхідно, бо wsm_install/cli.py шукає схему відносно
