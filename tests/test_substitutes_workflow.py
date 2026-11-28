@@ -114,6 +114,15 @@ class SubstituteWorkflowTests(unittest.TestCase):
         self.assertIn("SHA256SUMS", self.text)
         self.assertIn("provenance.json", self.text)
 
+    def test_release_is_attested_before_upload_and_read_back_is_verified(self) -> None:
+        attest = self.text.index("Attest the exact NAR and cache metadata")
+        publish = self.text.index("Publish immutable Release assets and verify read-back")
+        self.assertLess(attest, publish)
+        step = self.step("Publish immutable Release assets and verify read-back")
+        self.assertIn('gh release download "$CACHE_TAG"', step["run"])
+        self.assertIn("sha256sum -c SHA256SUMS", step["run"])
+        self.assertIn("sha256sum -c metadata.SHA256SUMS", step["run"])
+
     def test_failure_is_reported_without_claiming_success(self) -> None:
         step = self.step("Report publication failure")
         self.assertIn("failure()", str(step.get("if")))
