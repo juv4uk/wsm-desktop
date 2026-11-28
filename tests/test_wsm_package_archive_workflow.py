@@ -39,7 +39,8 @@ class WsmPackageArchiveWorkflowTests(unittest.TestCase):
 
     def test_pack_is_self_contained_and_does_not_need_a_cache_key(self) -> None:
         build = self.step("Evaluate and build the WSM package pack")["run"]
-        self.assertIn("--format=tarball", build)
+        self.assertIn("--format=tarball -C gzip", build)
+        self.assertIn('output="archives/wsm-tools-${GITHUB_SHA:0:12}.tar.gz"', build)
         self.assertIn("--no-grafts", build)
         self.assertIn("guix time-machine -C channels.lock.scm", build)
         self.assertNotIn("guix archive --export", self.text)
@@ -61,6 +62,7 @@ class WsmPackageArchiveWorkflowTests(unittest.TestCase):
     def test_the_runtime_pack_contains_the_license_text(self) -> None:
         verify = self.step("Verify the pack contains the installed WSM commands")["run"]
         self.assertIn("/share/doc/wsm-tools/LICENSE$", verify)
+        self.assertIn("actions/attest@v4", self.text)
 
     def test_only_an_existing_draft_release_can_receive_the_pack(self) -> None:
         step = self.step("Attach the pack to an existing draft release")
