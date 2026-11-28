@@ -1,14 +1,15 @@
 ;; SPDX-License-Identifier: LicenseRef-Volnist
 ;;
-;; Source-tree Guix API/evaluation compatibility check against the exact
-;; official Guix lock. This does not exercise WSM channel lookup/authentication.
-;; The latter requires the owner's signed introduction and a dedicated lock.
+;; Evaluate WSM Scheme modules and Cuirass API against the exact Guix lock.
 ;;
-;; Every module under wsm/ must be loaded here: this file is the only place
-;; where source modules are evaluated by Guix for real, so a module missing
-;; from this list is a module nobody has checked.
-;; scripts/check_scheme_module_coverage.py enforces that rule.
+;; This lowers the live ISO expression to a derivation but does not build it,
+;; register a jobset, authenticate the remote WSM channel, or start Cuirass.
+
 (use-modules (guix packages)
+             (guix store)
+             (gnu services)
+             (gnu services cuirass)
+             ((ci cuirass images) #:select (cuirass-jobs))
              (wsm systems performance)
              (wsm packages wsm))
 
@@ -16,10 +17,29 @@
              (pair? %wsm-performance-services))
   (error "WSM performance module exported no service definitions"))
 
-;; The channel's own package module: until it is loaded here it was never
-;; evaluated, and its header said so ("не зібрано й не перевірено").
 (unless (package? wsm-tools)
   (error "WSM package module did not export a package record for wsm-tools"))
+
+;; Exercise the actual custom callback and verify the lowered ISO derivation.
+(with-store store
+  (let* ((jobs (cuirass-jobs store '((systems . ("x86_64-linux")))))
+         (job (and (pair? jobs) (car jobs)))
+         (name (and job (assoc-ref job #:job-name)))
+         (drv (and job (assoc-ref job #:derivation))))
+    (unless (and (= (length jobs) 1)
+                 (equal? name "wsm-live-minimal-image.x86_64-linux")
+                 (string? drv)
+                 (> (string-length drv) 0))
+      (error "Cuirass custom job did not produce the expected ISO derivation"
+             jobs))))
+
+;; Load the host fragment from the checkout root. local-file is intentionally
+;; root-relative and the service must use the pinned Cuirass record type.
+(primitive-load "ci/cuirass/service.scm")
+(unless (and (service? wsm-cuirass-service)
+             (cuirass-configuration?
+              (service-value wsm-cuirass-service)))
+  (error "WSM Cuirass service fragment did not construct a pinned service"))
 
 (display "WSM-SOURCE-MODULE-EVAL-OK ")
 (display (length %wsm-performance-services))
@@ -27,4 +47,8 @@
 (display (package-name wsm-tools))
 (display " ")
 (display (package-version wsm-tools))
+(newline)
+(display "WSM-CUIRASS-IMAGE-JOB-EVAL-OK: ISO derivation generated, not built")
+(newline)
+(display "WSM-CUIRASS-SERVICE-EVAL-OK")
 (newline)
