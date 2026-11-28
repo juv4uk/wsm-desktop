@@ -134,9 +134,14 @@
   ;; Це обхід, а не виправлення, і на H170 він не перевірений: жодного
   ;; завантаження не було. Коли буде зафіксовано ядро на виправленні або після
   ;; нього, цей рядок треба прибрати, а не тримати «про всяк випадок».
+  ;; `operating-system-kernel-arguments` takes (os root-device #:key version) at the
+  ;; pinned commit, so the accessor cannot be called with the base OS alone — the
+  ;; locked evaluation refused it with "Wrong number of arguments". The inherited
+  ;; arguments are read from the base record directly and the workaround is appended.
   (kernel-arguments
-   (append '("nouveau.atomic=0")
-           (operating-system-kernel-arguments base-os)))
+   (append (operating-system-kernel-arguments
+            base-os (operating-system-root-device base-os))
+           '("nouveau.atomic=0")))
 
   ;; Відкритий GPU-стек для GP107 — Mesa. У цьому каналі Mesa 26.2.6
   ;; збирається з -Dvulkan-drivers=…,nouveau (тобто з NVK), і саме Mesa дає і
