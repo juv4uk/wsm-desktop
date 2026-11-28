@@ -152,15 +152,20 @@ class ChannelAuthorizationsTests(unittest.TestCase):
             found = checker.problems(self.root, keyring_dir=self.keyring)
         self.assertTrue(any(OTHER_FINGERPRINT in item and "no public .key" in item for item in found), found)
 
-    def test_extra_key_never_authorized_in_history_is_refused(self) -> None:
+    def test_unreferenced_public_key_can_be_staged_without_becoming_authorized(self) -> None:
         self.write_authorizations(GOOD)
-        self.write_key("extra.key", OTHER_FINGERPRINT)
+        self.write_key("owner.key", GOOD_FINGERPRINT)
+        self.write_key("staged-rotation.key", OTHER_FINGERPRINT)
         with (
             patch.object(checker.shutil, "which", return_value="/usr/bin/gpg"),
-            self.patched_gpg([self.gpg_success(OTHER_FINGERPRINT)]),
+            self.patched_gpg([
+                self.gpg_success(GOOD_FINGERPRINT),
+                self.gpg_success(OTHER_FINGERPRINT),
+            ]),
         ):
             found = checker.problems(self.root, keyring_dir=self.keyring)
-        self.assertTrue(any("unauthorized fingerprint" in item for item in found), found)
+        self.assertEqual(found, [])
+        self.assertEqual(checker.historical_authorization_fingerprints(self.root, GOOD), {GOOD_FINGERPRINT})
 
     def test_authorization_file_cannot_be_deleted_after_bootstrap(self) -> None:
         self.commit_authorizations(GOOD, "bootstrap test channel authorizations")
