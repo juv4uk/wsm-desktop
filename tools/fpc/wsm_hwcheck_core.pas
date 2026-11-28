@@ -108,8 +108,10 @@ var
 begin
   Result := '';
   FillChar(Buffer, SizeOf(Buffer), 0);
-  { fpReadLink приймає pchar; AnsiString не конвертується неявно в FPC 3.2.2,
-    тому PChar(Path) обовʼязковий — без нього unit не компілюється. }
+  { fpReadLink приймає pchar. FPC у багатьох випадках вставляє неявне
+    перетворення AnsiString→PChar, але покладатися на це не варто: явне
+    PChar(Path) читається однозначно і не залежить від режиму {$H+} та
+    версії компілятора. }
   Count := fpReadLink(PChar(Path), @Buffer[0], SizeOf(Buffer) - 1);
   if Count <= 0 then
     Exit;
@@ -253,7 +255,12 @@ end;
 function NewBaseDevice(const DeviceId, Category, Bus, Source, Summary,
   ObservedAt: string; Driver: TJSONObject): TJSONObject;
 var
-  Firmware, Tests, Evidence, Recommendations: TJSONData;
+  { Розділено навмисно: TJSONData не має методу Add — він є лише в
+    TJSONObject і TJSONArray. Спільна змінна типу TJSONData робила
+    Evidence.Add(...) помилкою компіляції, і жодне приведення типу
+    цього не лікувало. }
+  Firmware: TJSONObject;
+  Tests, Evidence, Recommendations: TJSONArray;
 begin
   Result := TJSONObject.Create;
   Result.Add('device_id', DeviceId);
@@ -271,9 +278,9 @@ begin
   Result.Add('driver', Driver);
 
   Firmware := TJSONObject.Create;
-  TJSONObject(Firmware).Add('requirement', 'unknown');
-  TJSONObject(Firmware).Add('runtime_status', 'unknown');
-  TJSONObject(Firmware).Add('redistribution_status', 'unknown');
+  Firmware.Add('requirement', 'unknown');
+  Firmware.Add('runtime_status', 'unknown');
+  Firmware.Add('redistribution_status', 'unknown');
   Result.Add('firmware', Firmware);
 
   Tests := TJSONArray.Create;
