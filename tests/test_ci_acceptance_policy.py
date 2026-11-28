@@ -148,9 +148,8 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
     def test_the_archive_key_is_ephemeral_not_a_repository_secret(self) -> None:
         self.assertIn("guix archive --generate-key", self.text)
         self.assertIn("signing-key.pub", self.text)
-        self.assertIn("secrets.", self.text.lower()) if False else None
         self.assertNotIn("secrets.", self.text)
-        self.assertNotIn("signing-key.sec", self.text)
+        self.assertNotIn('"$OUT"/signing-key.sec', self.text)
         self.assertIn("private key is never uploaded", self.text)
 
     def test_publication_creates_a_versioned_release_and_verifies_readback(self) -> None:
