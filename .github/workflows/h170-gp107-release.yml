@@ -110,8 +110,8 @@ jobs:
           tar --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner             -C "$SOURCE_PATH" -cJf "$OUT/linux-libre-h170-source.tar.xz" .
           guix time-machine -C channels.lock.scm -- describe -f channels > "$OUT/resolved-channels.scm"
           cp "$RUNNER_TEMP/channels-lock.sha256" "$OUT/channels-lock.sha256"
-          printf '%s\\n' "$GITHUB_SHA" > "$OUT/wsm-source-commit.txt"
-          printf '%s\\n' "4e5195be20d9b124df8a8bb69213412236e4668e" > "$OUT/guix-channel-commit.txt"
+          echo "$GITHUB_SHA" > "$OUT/wsm-source-commit.txt"
+          echo "4e5195be20d9b124df8a8bb69213412236e4668e" > "$OUT/guix-channel-commit.txt"
           PATCH_SHA256="$(sha256sum wsm/packages/patches/linux-libre-h170-nouveau-atomic.patch | cut -d' ' -f1)"
           export STORE_PATH SOURCE_PATH DERIVATION_PATH PACKAGE_VERSION NAR_SHA256             NAR_ARCHIVE_SHA256 NAR_ARCHIVE_SIZE CLOSURE_COUNT PATCH_SHA256
           python3 - <<'PY'
@@ -145,7 +145,7 @@ jobs:
           PY
           (
             cd "$OUT"
-            sha256sum linux-libre-h170-closure.nar linux-libre-h170-source.tar.xz               signing-key.pub provenance.json closure.paths.txt closure-size.txt               resolved-channels.scm channels-lock.sha256 wsm-source-commit.txt               guix-channel-commit.txt > SHA256SUMS
+          echo "$GITHUB_SHA" > "$OUT/wsm-source-commit.txt"
           )
           {
             echo "## H170 Free Linux-libre package"
@@ -225,7 +225,7 @@ jobs:
             cd "$OUT"
             sha256sum -c SHA256SUMS
           )
-          gh release create "$TAG" "$OUT/linux-libre-h170-closure.nar"             "$OUT/linux-libre-h170-source.tar.xz" "$OUT/signing-key.pub"             "$OUT/provenance.json" "$OUT/closure.paths.txt" "$OUT/closure-size.txt"             "$OUT/resolved-channels.scm" "$OUT/channels-lock.sha256"             "$OUT/wsm-source-commit.txt" "$OUT/guix-channel-commit.txt"             "$OUT/SHA256SUMS" "$OUT/RELEASE-NOTES.md"             --title "H170 Free Linux-libre $PACKAGE_VERSION ($SHORT_SHA)"             --notes-file "$OUT/RELEASE-NOTES.md" --target "$GITHUB_SHA"
+          echo "$GITHUB_SHA" > "$OUT/wsm-source-commit.txt"
           mkdir -p "$RUNNER_TEMP/h170-readback"
           gh release download "$TAG" --dir "$RUNNER_TEMP/h170-readback"
           (
