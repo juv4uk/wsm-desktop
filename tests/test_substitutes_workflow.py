@@ -104,6 +104,10 @@ class SubstituteWorkflowTests(unittest.TestCase):
         self.assertIn("--public-key=/etc/guix/signing-key.pub", step)
         self.assertIn("--private-key=/etc/guix/signing-key.sec", step)
         self.assertIn("narinfo_url", step)
+        self.assertIn("sed -n 's/^URL: //p'", step)
+        self.assertIn('case "$nar_url" in', step)
+        self.assertIn("nar/*)", step)
+        self.assertIn('curl -fsS "http://127.0.0.1:3000/$nar_url"', step)
         self.assertIn("baked", step)
 
     def test_release_assets_and_pages_are_both_deployed(self) -> None:
