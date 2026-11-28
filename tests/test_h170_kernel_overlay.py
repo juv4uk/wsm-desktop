@@ -99,8 +99,14 @@ class H170LinuxLibreOverlayTests(unittest.TestCase):
         self.assertIn('linux-libre-h170-source.tar.xz', workflow)
         self.assertIn('signing-key.pub', workflow)
         self.assertIn('gh release create', workflow)
+        self.assertIn('--draft', workflow)
         self.assertIn('gh release download', workflow)
+        self.assertIn('gh release edit "$TAG" --draft=false', workflow)
         self.assertIn('sha256sum -c SHA256SUMS', workflow)
+        self.assertLess(
+            workflow.index('gh release download'),
+            workflow.index('gh release edit "$TAG" --draft=false'),
+        )
         self.assertIn('> SHA256SUMS', workflow)
         self.assertIn('sha256sum RELEASE-NOTES.md >> SHA256SUMS', workflow)
         self.assertNotIn('secrets.GUIX_SIGNING_KEY', workflow)
