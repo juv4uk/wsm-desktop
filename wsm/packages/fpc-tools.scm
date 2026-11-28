@@ -21,10 +21,10 @@
   (local-file "../.." "wsm-desktop-source-fpc"
               #:recursive? #t
               #:select? (lambda (path _stat)
-                          (or (string=? path "LICENSE")
-                              (string=? path "tools")
-                              (string=? path "tools/pascal")
-                              (string-prefix? "tools/pascal/" path)))))
+                          (or (string-suffix? "/LICENSE" path)
+                              (string-suffix? "/tools" path)
+                              (string-suffix? "/tools/pascal" path)
+                              (string-contains path "/tools/pascal/")))))
 
 (define (wsm-fpc-arguments build-target check-target install-target)
   (list
