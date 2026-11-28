@@ -15,7 +15,7 @@ profiles/hardware/<vendor>/<model>/
   artifacts/
 ```
 
-- `profile.scm` — декларація конфігурації для конкретної машини.
+- `profile.scm` — декларація конфігурації для конкретної машини. Починайте з [`template.scm`](template.scm) для Free/Linux-libre candidate (це не Compatibility перемикач): він містить `ЗАМІНИТИ` у кожному місці, яке треба заповнити з реальної машини, і жодного значення, яке можна залишити за замовчуванням.
 - `evidence.json` — bundle зі звітом `wsm-hwcheck`, перевіреними функціями
   та обмеженнями.
 - `artifacts/` — незмінні raw reports і функціональні logs, адресовані з bundle.

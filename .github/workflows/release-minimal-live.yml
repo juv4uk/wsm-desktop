@@ -4,6 +4,12 @@ on:
     branches: [main]
     paths: ["RELEASE-REQUEST.txt"]
   workflow_dispatch:
+    inputs:
+      publish_prerelease:
+        description: "Explicitly authorize publication of the verified Minimal Live prerelease."
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -59,13 +65,15 @@ jobs:
             exit 1
           fi
           TAG="$(printf '%s' "${REQUEST_TAGS[0]}" | tr -d '[:space:]')"
-          case "$TAG" in
-            0.1.0-rc3-minimal-live|0.1.0-rc4-minimal-live) ;;
-            *)
-              echo "Unsupported Minimal Live tag: $TAG" >&2
-              exit 1
-              ;;
-          esac
+          # A pattern, not an allowlist: the hardcoded list of three tags meant
+          # every new release candidate needed a workflow edit first, and the
+          # build failed 46 seconds in with "Unsupported Minimal Live tag".
+          # The shape is what matters: a release candidate of the minimal live
+          # image. Anything else is still refused.
+          if [[ ! "$TAG" =~ ^0\.1\.0-rc[0-9]+-minimal-live$ ]]; then
+            echo "Unsupported Minimal Live tag: $TAG" >&2
+            exit 1
+          fi
           VERSION="${TAG%-minimal-live}"
           ISO_NAME="WSM-Desktop-${VERSION}-Minimal-Live.iso"
           RELEASE_TITLE="WSM Desktop ${VERSION} — Minimal Live Installer Preview"
@@ -115,12 +123,15 @@ jobs:
           echo "release_dist=$DIST" >> "$GITHUB_ENV"
           echo "release_iso=$ISO_NAME" >> "$GITHUB_ENV"
       - name: BIOS boot acceptance
+        timeout-minutes: 15
         run: |
           set -euo pipefail
           python scripts/qemu_boot_smoke.py --iso "$release_dist/$release_iso" \
-            --firmware bios --boot-marker WSM_LIVE_READY --timeout-seconds 300 \
+            --firmware bios --boot-marker WSM_LIVE_READY \
+            --installer-marker WSM_INSTALLER_OK --timeout-seconds 300 \
             | tee "$release_dist/boot-bios.json"
       - name: UEFI boot acceptance
+        timeout-minutes: 15
         run: |
           set -euo pipefail
           OVMF_DIR=/usr/share/OVMF
@@ -134,7 +145,8 @@ jobs:
           fi
           python scripts/qemu_boot_smoke.py --iso "$release_dist/$release_iso" \
             --firmware uefi --ovmf-code "$OVMF_CODE" --ovmf-vars "$OVMF_VARS" \
-            --boot-marker WSM_LIVE_READY --timeout-seconds 300 \
+            --boot-marker WSM_LIVE_READY \
+            --installer-marker WSM_INSTALLER_OK --timeout-seconds 300 \
             | tee "$release_dist/boot-uefi.json"
       - name: Зберегти діагностику boot smoke
         if: always()
@@ -169,13 +181,27 @@ jobs:
           uefi=json.loads((root/"boot-uefi.json").read_text(encoding="utf-8"))
           if bios.get("boot_confirmed") is not True or uefi.get("boot_confirmed") is not True:
               raise SystemExit("BIOS and UEFI marker checks must both pass")
+          # Boot proves the system starts. It does not prove the image ships a
+          # working installer, which is the whole point of this medium.
+          for name, evidence in (("bios", bios), ("uefi", uefi)):
+              if evidence.get("guest_installer_execution") is not True:
+                  raise SystemExit(f"{name}: installer did not run in the guest")
+          # Bind the evidence to the bytes it came from. Without this the two
+          # JSON files confirm "some image booted", which is not the same claim.
+          iso_sha = artifact["sha256"]
+          for name, evidence in (("bios", bios), ("uefi", uefi)):
+              if evidence.get("iso_sha256") != iso_sha:
+                  raise SystemExit(
+                      f"{name}: boot evidence was produced from a different image"
+                  )
           source=build.get("source",{})
           manifest={"schema":"wsm-live-release/1",
             "release":{"tag":tag,"source_commit":commit,"profile":"systems/live-minimal.scm",
               "locked_guix_channel_commit":source.get("locked_guix_channel_commit"),
               "guix_version":build.get("guix",{}).get("locked_version")},
             "artifact":{"filename":iso_name,"bytes":iso.stat().st_size,"sha256":sha(iso),"maximum_bytes":2147483647},
-            "acceptance":{"bios":"pass","uefi":"pass","marker":"WSM_LIVE_READY"},
+            "acceptance":{"bios":"pass","uefi":"pass","marker":"WSM_LIVE_READY",
+              "installer":"pass","installer_marker":"WSM_INSTALLER_OK"},
             "installer":{"entrypoint":"wsm-install-live","mode":"read-only TUI preview","apply_enabled":False},
             "build_manifest_sha256":sha(bp),
             "boot_evidence":{"bios_sha256":sha(root/"boot-bios.json"),"uefi_sha256":sha(root/"boot-uefi.json")}}
@@ -193,15 +219,18 @@ jobs:
           # previous release shipped as parts with a checksum file.
           # This runs after acceptance and the manifest, which need the whole
           # file - so the image is split only on its way out.
+          # This variable is consumed in this same shell step; GITHUB_ENV only
+          # exposes values to subsequent steps.
+          release_parts=0
           if [ "$SIZE" -gt 2147483647 ]; then
             echo "ISO is $SIZE bytes; publishing as parts"
             split -b 1900M -d -a 3 "$release_dist/$release_iso" \
               "$release_dist/$release_iso.part"
             rm -f "$release_dist/$release_iso"
-            echo "release_parts=1" >> "$GITHUB_ENV"
+            release_parts=1
           else
             echo "ISO is $SIZE bytes; publishing whole"
-            echo "release_parts=0" >> "$GITHUB_ENV"
+            release_parts=0
           fi
           # The checksum manifest and the release manifest were written while
           # the whole image still existed. Once it is split, both must describe
@@ -384,6 +413,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Опублікувати перевірений GitHub pre-release
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true }}
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
@@ -392,6 +422,15 @@ jobs:
           RELEASE_INFO="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,targetCommitish)"
           test "$(jq -r '.isDraft' <<< "$RELEASE_INFO")" = "false"
           test "$(jq -r '.targetCommitish' <<< "$RELEASE_INFO")" = "$GITHUB_SHA"
+      - name: Залишити перевірений prerelease як чернетку
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.publish_prerelease != true }}
+        run: |
+          {
+            echo "### Публікація не виконувалася"
+            echo ""
+            echo "Перевірений prerelease залишено в стані чернетки."
+            echo "Для публікації потрібен окремий workflow_dispatch з publish_prerelease=true."
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Повідомити причину збою
         if: failure()
         env:

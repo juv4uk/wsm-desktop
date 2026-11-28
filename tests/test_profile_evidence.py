@@ -526,6 +526,37 @@ class RepositoryTests(unittest.TestCase):
         ]
         self.assertEqual(strays, [])
 
+class ProfileTemplateTests(unittest.TestCase):
+    """A template is not a profile, but it must still be honest about gaps."""
+
+    def setUp(self) -> None:
+        self.text = (ROOT / "profiles" / "hardware" / "template.scm").read_text(encoding="utf-8")
+
+    def test_template_marks_every_value_that_needs_the_real_machine(self) -> None:
+        self.assertGreaterEqual(self.text.count("ЗАМІНИТИ"), 5)
+
+    def test_template_says_it_is_not_a_profile(self) -> None:
+        self.assertIn("Не є профілем", self.text)
+
+    def test_template_forbids_mixing_gpu_drivers(self) -> None:
+        """Nouveau and the proprietary module in one boot profile is a known trap."""
+        self.assertIn("Не змішуйте nouveau", self.text)
+
+    def test_template_is_free_only_and_not_a_compatibility_toggle(self) -> None:
+        self.assertIn("лише H170 Free candidate", self.text)
+        self.assertIn("(kernel linux-libre)", self.text)
+        self.assertIn("Compatibility — окрема конфігурація", self.text)
+        self.assertNotIn("profile-variant", self.text)
+        self.assertNotIn("nonguix linux", self.text)
+
+    def test_template_points_at_the_evidence_rule(self) -> None:
+        self.assertIn("profiles/hardware/README.md", self.text)
+
+    def test_the_readme_links_the_template(self) -> None:
+        readme = (ROOT / "profiles" / "hardware" / "README.md").read_text(encoding="utf-8")
+        self.assertIn("template.scm", readme)
+
+
 
 if __name__ == "__main__":
     unittest.main()

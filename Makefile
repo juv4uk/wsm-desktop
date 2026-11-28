@@ -6,9 +6,10 @@ GUIX ?= guix
 PRODUCT ?= free
 
 
-.PHONY: check-driver-profiles check check-ci-policy qemu-acceptance-manual check-guix-eval check-compatibility-eval release-gate describe-compatibility-lock build-compatibility-system image-live-compat check-docs check-doc-ownership check-regression-register check-release-info check-artifact-versions check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle check-profiles check-agent check-calamares check-channels check-cli-install check-env-preflight check-evidence-drafter check-executor check-guided check-hygiene check-install-steps check-isa check-journal check-live-acceptance check-makefile check-observation check-partition check-perf-baseline check-boot-profile check-profile-evidence check-profile-match check-profiles-matrix check-release-verdict check-state check-syntax check-tui check-licences image-live-minimal check-temp-paths check-test-registration check-release-assets check-classification check-classification-policy check-readme-stage check-classification-schema check-ci-parity check-scheme-imports check-no-sleep-readiness check-ci-failure-visibility check-tests check-installer-gui-guix
 
-check: check-ci-policy check-docs check-doc-ownership check-regression-register check-release-info check-artifact-versions check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa check-live-acceptance check-profiles-matrix check-perf-baseline check-boot-profile check-profile-evidence check-driver-profiles check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-hygiene check-channels check-executor check-cli-install check-calamares check-guided check-tui check-agent check-journal check-env-preflight check-observation check-licences check-temp-paths check-test-registration check-release-assets check-classification check-classification-policy check-readme-stage check-classification-schema check-ci-parity check-scheme-imports check-no-sleep-readiness check-ci-failure-visibility check-tests
+.PHONY: check-driver-profiles check check-ci-policy qemu-acceptance-manual check-guix-eval check-compatibility-eval release-gate describe-compatibility-lock build-compatibility-system image-live-compat check-docs check-doc-ownership check-regression-register check-release-info check-artifact-versions check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle check-profiles check-agent check-calamares check-channels check-cli-install check-env-preflight check-evidence-drafter check-executor check-tool-closure check-guided check-hygiene check-install-steps check-isa check-journal check-live-acceptance check-makefile check-observation check-partition check-perf-baseline check-boot-profile check-profile-evidence check-profile-match check-profiles-matrix check-release-verdict check-state check-syntax check-tui check-licences image-live-minimal check-temp-paths check-test-registration check-release-assets check-classification check-classification-policy check-readme-stage check-classification-schema check-ci-parity check-scheme-imports check-no-sleep-readiness check-ci-failure-visibility check-tests check-gp107-reference check-channel-artifacts check-release-docs check-channel-contract check-installer-gui-guix
+
+check: check-ci-policy check-docs check-doc-ownership check-regression-register check-release-info check-artifact-versions check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa check-live-acceptance check-profiles-matrix check-perf-baseline check-boot-profile check-profile-evidence check-driver-profiles check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-hygiene check-channels check-executor check-tool-closure check-cli-install check-calamares check-guided check-tui check-agent check-journal check-env-preflight check-observation check-licences check-temp-paths check-test-registration check-release-assets check-classification check-classification-policy check-readme-stage check-classification-schema check-ci-parity check-scheme-imports check-no-sleep-readiness check-ci-failure-visibility check-tests check-gp107-reference check-channel-artifacts check-release-docs check-channel-contract
 
 check-profiles:
 	$(PYTHON) tests/test_system_profiles.py
@@ -19,6 +20,8 @@ check-syntax:
 check-scheme-imports:
 	$(PYTHON) scripts/check_scheme_imports.py
 	$(PYTHON) tests/test_scheme_imports.py
+	$(PYTHON) scripts/check_scheme_module_coverage.py
+	$(PYTHON) tests/test_scheme_module_coverage.py
 
 check-state:
 	$(PYTHON) tests/test_state_ownership.py
@@ -66,6 +69,12 @@ check-install-steps:
 check-executor:
 	$(PYTHON) tests/test_executor.py
 
+# Proves the closure checker's behaviour on throwaway roots. It cannot prove any
+# image: `--root` on this host describes this host, and the image ships no /usr
+# yet. Run `scripts/check_tool_closure.py --root <image root>` for that.
+check-tool-closure:
+	$(PYTHON) scripts/check_tool_closure.py --self-check
+
 check-cli-install:
 	$(PYTHON) tests/test_cli_install.py
 
@@ -102,13 +111,13 @@ check-licences:
 # Manual, needs Guix: evaluates the Scheme without building anything.
 # Not part of `check` on purpose - a contributor without Guix must still pass.
 check-guix-eval:
+	$(GUIX) time-machine -C channels.lock.scm -- repl -L . tests/guix/source-module-evaluation.scm
 	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/minimal.scm --dry-run
 	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/desktop.scm --dry-run
 	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/live.scm --dry-run
 	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/live-minimal.scm --dry-run
 	$(MAKE) check-compatibility-eval
 	$(GUIX) time-machine -C channels.lock.scm -L . -- home -L . build systems/home.scm --dry-run
-	$(MAKE) check-installer-gui-guix
 
 # Compatibility is opt-in and always uses its own authenticated Guix + Nonguix lock.
 # This target resolves the lock and evaluates the full system graph without building it.
@@ -132,6 +141,10 @@ check-hygiene:
 
 release-gate:
 	$(PYTHON) scripts/release_gate.py --product "$(PRODUCT)" $(if $(ISO),--iso "$(ISO)") $(if $(BOOT),--boot)
+
+check-channel-artifacts:
+	$(PYTHON) scripts/check_channel_auth.py .
+	$(PYTHON) tests/test_channel_auth.py
 
 check-channels:
 	$(PYTHON) tests/test_check_channels.py
@@ -259,8 +272,16 @@ check-ci-failure-visibility:
 check-tests:
 	$(PYTHON) -m unittest discover -s tests -p 'test_*.py'
 
-# Validate the real installed optional package, then exercise its controller/QML using pinned Qt.
-# This is technical validation only; the package is not in a live profile and is not public-shippable.
+check-gp107-reference:
+	$(PYTHON) tests/test_gp107_evidence_reference.py
+
+
+check-release-docs:
+	$(PYTHON) tests/test_release_documents_agree.py
+
+check-channel-contract:
+	$(PYTHON) tests/test_channel_contract.py
+
 check-installer-gui-guix:
 	$(GUIX) time-machine -C channels.lock.scm -L . -- build -L . -f wsm/packages/installer.scm
 	$(GUIX) time-machine -C channels.lock.scm -L . -- shell -L . -f wsm/packages/installer.scm -- env -u PYTHONPATH -u PYTHONHOME sh -c 'printenv QML_IMPORT_PATH | grep -q . && printenv QT_PLUGIN_PATH | grep -q . && exec env QT_QPA_PLATFORM=offscreen wsm-installer --smoke-test'

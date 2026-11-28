@@ -15,6 +15,7 @@ from wsm_install.install_steps import (  # noqa: E402
     device_for,
     plan_steps,
     render,
+    TRUSTED_TOOLS,
 )
 from wsm_install.partition import Disk, Layout, Refused, plan  # noqa: E402
 
@@ -59,10 +60,26 @@ class LayoutConsentTests(unittest.TestCase):
 
 class OrderingTests(unittest.TestCase):
     def test_partition_table_is_reread_before_formatting(self) -> None:
-        steps = plan_steps(layout())
+        current = layout()
+        commands = current.commands()
+        steps = plan_steps(current)
         names = [tool(step) for step in steps]
-        self.assertEqual(names[0], "partprobe")
+        self.assertEqual(names[:len(commands)], ["sgdisk"] * len(commands))
+        self.assertEqual(names[len(commands)], "partprobe")
         self.assertLess(names.index("partprobe"), names.index("mkfs.ext4"))
+
+    def test_partition_table_argv_is_complete_and_destructive(self) -> None:
+        current = layout()
+        commands = current.commands()
+        steps = plan_steps(current)[:len(commands)]
+        expected = [
+            [TRUSTED_TOOLS["sgdisk"], *command[1:]]
+            for command in commands
+        ]
+        self.assertEqual([step.command for step in steps], expected)
+        self.assertTrue(all(step.destructive for step in steps))
+        self.assertIn("--zap-all", steps[0].command)
+        self.assertEqual(steps[0].command[-1], current.disk)
 
     def test_root_is_mounted_before_the_esp(self) -> None:
         steps = plan_steps(layout())
@@ -116,7 +133,7 @@ class PathHijackTests(unittest.TestCase):
                     )
 
     def test_no_command_is_a_bare_tool_name(self) -> None:
-        bare = {"partprobe", "udevadm", "mount", "mkdir", "mkfs.ext4", "mkfs.fat"}
+        bare = {"sgdisk", "partprobe", "udevadm", "mount", "mkdir", "mkfs.ext4", "mkfs.fat"}
         for step in plan_steps(layout()):
             self.assertNotIn(step.command[0], bare)
 
@@ -211,6 +228,84 @@ class ForeignDataTests(unittest.TestCase):
             tools & {"efibootmgr", "bootctl", "grub-install", "grub2-install"},
             f"unexpected boot-order tooling: {sorted(tools)}",
         )
+
+
+class ToolPrefixTests(unittest.TestCase):
+    """The plan can bind its tools to the image's own prefixes."""
+
+    def _layout(self):
+        disk = Disk("/dev/nvme0n1", 256 * GIB, has_existing_data=True)
+        return plan(disk, "uefi", acknowledgement="/dev/nvme0n1")
+
+    def _prefixes(self, root: Path, *, skip: str | None = None) -> tuple[str, ...]:
+        bindir = root / "profile" / "bin"
+        bindir.mkdir(parents=True, exist_ok=True)
+        for name in ("sgdisk", "partprobe", "udevadm", "mkfs.ext4", "mkfs.fat", "mount", "mkdir"):
+            if name == skip:
+                continue
+            target = bindir / name
+            target.write_text("#!/bin/sh\n", encoding="utf-8")
+            target.chmod(0o755)
+        return (str(bindir),)
+
+    def test_steps_use_the_resolved_prefix(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as temporary:
+            prefixes = self._prefixes(Path(temporary))
+            steps = plan_steps(self._layout(), tool_prefixes=prefixes)
+            self.assertTrue(all(step.command[0].startswith(prefixes[0]) for step in steps))
+
+    def test_a_missing_tool_is_a_refusal_not_a_fallback(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as temporary:
+            prefixes = self._prefixes(Path(temporary), skip="sgdisk")
+            with self.assertRaises(Refused) as caught:
+                plan_steps(self._layout(), tool_prefixes=prefixes)
+            self.assertEqual(caught.exception.code, "tool.missing")
+
+    def test_without_prefixes_the_table_paths_are_used(self) -> None:
+        steps = plan_steps(self._layout())
+        self.assertTrue(all(step.command[0].startswith("/") for step in steps))
+        self.assertIn(TRUSTED_TOOLS["sgdisk"], [step.command[0] for step in steps])
+
+
+class BackendCommandBindingTests(unittest.TestCase):
+    """The handoff can pin its channel set and must not take a half-specified path."""
+
+    def test_the_default_shape_is_unchanged(self) -> None:
+        command = backend_command(layout(), "systems/desktop.scm")
+        self.assertEqual(command, ["guix", "system", "init", "systems/desktop.scm", "/mnt"])
+
+    def test_a_lock_pins_the_channel_set_through_time_machine(self) -> None:
+        command = backend_command(
+            layout(), "systems/desktop.scm", "/mnt",
+            lock="channels/compatibility.lock.scm",
+        )
+        self.assertEqual(
+            command,
+            [
+                "guix", "time-machine", "-C", "channels/compatibility.lock.scm", "--",
+                "system", "init", "systems/desktop.scm", "/mnt",
+            ],
+        )
+
+    def test_an_absolute_guix_path_is_used_as_given(self) -> None:
+        command = backend_command(
+            layout(), "systems/desktop.scm", guix_path="/run/current-system/profile/bin/guix"
+        )
+        self.assertEqual(command[0], "/run/current-system/profile/bin/guix")
+
+    def test_a_bare_guix_path_is_refused(self) -> None:
+        with self.assertRaises(Refused) as caught:
+            backend_command(layout(), "systems/desktop.scm", guix_path="guix")
+        self.assertEqual(caught.exception.code, "backend.guix-path")
+
+    def test_a_lock_that_is_not_scheme_is_refused(self) -> None:
+        with self.assertRaises(Refused) as caught:
+            backend_command(layout(), "systems/desktop.scm", lock="channels.lock.txt")
+        self.assertEqual(caught.exception.code, "backend.lock")
 
 
 if __name__ == "__main__":

@@ -1,8 +1,10 @@
 # Один непорожній рядок із tag запитує одну збірку; рядки з # є коментарями.
-0.1.0-rc3-minimal-live
-# Повторна RC3-збірка після load-path на обох рівнях і locale import (#439), read-back перевірка assets — #438.
-# Retry Minimal Live after #461: NetworkManager now owns DHCP; the removed Guix dhcp-client-service-type is no longer referenced.
-
-
-
-
+0.1.0-rc6-minimal-live
+# Re-request after #618: the rc6 tag was missing from the workflow allowlist, so the
+# first rc6 build failed in make check before any image was produced.
+# RC6 — перший носій, який доводить не лише завантаження, а й наявність
+# робочого інсталятора: live-профіль друкує WSM_INSTALLER_OK після запуску
+# справжнього entrypoint, а приймання BIOS і UEFI вимагає цей маркер (#613).
+#
+# RC3, RC4 і RC5 лишаються незмінними чернетками; цей запит створює окрему.
+# Пуш-тригер робить лише чернетку; публікація потребує окремого рішення власника.

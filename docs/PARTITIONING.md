@@ -2,7 +2,7 @@
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Статус: **план реалізовано, нічого не виконується**
+- Статус: **GPT/layout та повний read-only CLI preview реалізовано; Guix tool closure не перевірено**
 - Код: [`wsm_install/partition.py`](../wsm_install/partition.py)
 - Тести: `tests/test_partition.py` (17)
 
@@ -23,6 +23,27 @@ GPT має кудись покласти core image.
 
 **Swap-розділу немає навмисно.** Профіль використовує zram, а swap на SSD — це
 класичний спосіб зробити десктоп повільнішим, заявляючи протилежне.
+
+## Повний preview інсталяційного плану
+
+CLI/TUI/JSON preview використовує один список `Step`. Перед `partprobe` він
+містить усі argv з `Layout.commands()`:
+
+1. `sgdisk --zap-all <disk>` — заміна попередньої таблиці розділів;
+2. окрема `sgdisk --new/--typecode/--change-name` операція для кожного
+   розділу обраного layout;
+3. `partprobe` та `udevadm settle`;
+4. форматування root/ESP, монтування root та ESP усередині target;
+5. окремий Guix handoff.
+
+Кожна `sgdisk`-операція має `destructive=true` і пояснення `purpose`.
+Preview не запускає ці argv; `--execute` як і раніше безумовно відхиляється.
+
+**Tool closure ще не підтверджено.** `/usr/sbin/sgdisk` у planner — абсолютний
+кандидатний шлях, але наявність цього executable та інших allowlisted paths у
+pinned Guix live closure/ISO не доведена. До package-closure і QEMU acceptance
+цей стан — `not-assessed`; абсолютний шлях сам по собі не є доказом, що файл
+існує. Не запускати план вручну й не трактувати його як дозвіл на APPLY.
 
 ## Відмови
 

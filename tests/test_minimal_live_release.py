@@ -139,11 +139,16 @@ class MinimalLiveProfileTests(unittest.TestCase):
         lines = (ROOT / "RELEASE-REQUEST.txt").read_text(encoding="utf-8").splitlines()
         requested = [line.split("#", 1)[0].strip() for line in lines]
         tags = [line for line in requested if line]
-        self.assertIn(tags, [["0.1.0-rc3-minimal-live"], ["0.1.0-rc4-minimal-live"]])
+        self.assertEqual(len(tags), 1, tags)
+        # The shape is the rule, not a list of three tags: a new release
+        # candidate must not need a workflow edit before it can be requested.
+        import re
+        self.assertRegex(tags[0], r"^0\.1\.0-rc[0-9]+-minimal-live$")
 
-    def test_release_workflow_derives_iso_name_and_title_from_allowed_tag(self) -> None:
+    def test_release_workflow_derives_iso_name_and_title_from_the_tag_shape(self) -> None:
         workflow = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
-        self.assertIn("0.1.0-rc3-minimal-live|0.1.0-rc4-minimal-live", workflow)
+        self.assertIn(r"^0\.1\.0-rc[0-9]+-minimal-live$", workflow)
+        self.assertNotIn("0.1.0-rc3-minimal-live|0.1.0-rc4-minimal-live", workflow)
         self.assertIn('VERSION="${TAG%-minimal-live}"', workflow)
         self.assertIn('ISO_NAME="WSM-Desktop-${VERSION}-Minimal-Live.iso"', workflow)
         self.assertIn('echo "iso_name=$ISO_NAME" >> "$GITHUB_OUTPUT"', workflow)
@@ -168,6 +173,17 @@ class MinimalLiveProfileTests(unittest.TestCase):
         self.assertIn('test "${#SUBJECTS[@]}" -eq "$EXPECTED_COUNT"', verify_section)
         self.assertIn('test "$VERIFIED_COUNT" -eq "$EXPECTED_COUNT"', verify_section)
         self.assertNotIn('VERIFIED_COUNT" -ge 7', verify_section)
+
+    def test_publication_requires_a_separate_explicit_dispatch_approval(self) -> None:
+        workflow = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
+        self.assertIn("publish_prerelease:", workflow)
+        self.assertIn("default: false", workflow)
+        self.assertIn(
+            "if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true }}",
+            workflow,
+        )
+        self.assertIn("Перевірений prerelease залишено в стані чернетки.", workflow)
+        self.assertIn("окремий workflow_dispatch з publish_prerelease=true", workflow)
 
     def test_release_workflow_requires_exactly_one_non_comment_tag(self) -> None:
         workflow = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
@@ -378,6 +394,17 @@ class SplitChecksumTests(unittest.TestCase):
         self.assertIn("covered = [root / name for name in parts]", self.text)
         self.assertIn("if not split:", self.text)
 
+    def test_split_flag_is_defined_in_the_same_shell_step(self) -> None:
+        """GITHUB_ENV is only visible to later workflow steps, not this Python call."""
+        start = self.text.index("name: Поділити образ на частини")
+        end = self.text.index("name: Створити чернетку релізу", start)
+        section = self.text[start:end]
+        self.assertIn("release_parts=0", section)
+        self.assertIn("release_parts=1", section)
+        self.assertIn('python - "$release_dist" "$release_iso" "$release_parts"', section)
+        self.assertNotIn('echo "release_parts=1" >> "$GITHUB_ENV"', section)
+        self.assertNotIn('echo "release_parts=0" >> "$GITHUB_ENV"', section)
+
 class ReassemblyDocTests(unittest.TestCase):
     """A published artifact nobody can assemble is not published."""
 
@@ -393,6 +420,28 @@ class ReassemblyDocTests(unittest.TestCase):
 
     def test_notes_warn_about_the_device_not_the_partition(self) -> None:
         self.assertIn("/dev/sdX1", self.notes)
+
+class TagPatternTests(unittest.TestCase):
+    """A new release candidate must not need a workflow edit first."""
+
+    def setUp(self) -> None:
+        self.text = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
+
+    def test_tag_is_validated_by_pattern(self) -> None:
+        self.assertIn(r"^0\.1\.0-rc[0-9]+-minimal-live$", self.text)
+
+    def test_no_hardcoded_allowlist_of_tags(self) -> None:
+        """Three literal tags meant rc6 failed 46 seconds in."""
+        for tag in ("0.1.0-rc3-minimal-live", "0.1.0-rc4-minimal-live", "0.1.0-rc5-minimal-live"):
+            self.assertNotIn(f"{tag}|{tag}", self.text)
+
+    def test_pattern_accepts_future_candidates_and_rejects_noise(self) -> None:
+        import re
+        pattern = re.compile(r"^0\.1\.0-rc[0-9]+-minimal-live$")
+        for good in ("0.1.0-rc6-minimal-live", "0.1.0-rc12-minimal-live"):
+            self.assertIsNotNone(pattern.match(good))
+        for bad in ("0.1.0-rc6", "1.0.0-rc1-minimal-live", "0.1.0-rcX-minimal-live"):
+            self.assertIsNone(pattern.match(bad))
 
 
 

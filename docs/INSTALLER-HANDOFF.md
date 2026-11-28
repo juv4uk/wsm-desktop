@@ -22,6 +22,31 @@
 
 **Базовий принцип:** WSM не переписує системні пакетні менеджери, драйверні бази або механізми розгортання. Він повторно використовує upstream-інструменти, нормалізує докази й передає підтриманий намір користувача штатному backend-у.
 
+## 1.1 Взаємодія зі штатним інсталятором GNU Guix
+
+WSM не повинен плутати три різні речі:
+
+- **GNU Guix System guided installer** — інсталяційне середовище Guix із діалоговим текстовим інтерфейсом. У довіднику Guix його історично названо *graphical installer*, але опис прямо визначає його як text-based UI. Він веде користувача через мережу, розмітку, облікові записи та генерацію конфігурації.
+- **`guix system init`** — штатна операція розгортання конфігурації Guix System на підготовлену ціль. Вона належить єдиному Guix backend-у, а не QML frontend-у.
+- **`guix-install.sh`** — окремий shell-інсталятор Guix як пакетного менеджера на вже встановленій GNU/Linux системі. Це не механізм створення WSM System ISO і не точка інтеграції нашого desktop installer-а.
+
+### Поточне рішення WSM
+
+**Не форкати `gnu/installer` і не замінювати upstream Newt UI у першому WSM milestone.** Документований інтерфейс Guix є діалоговим TUI; офіційний user-facing контракт не описує вбудовуваний Qt/QML plugin API. Підтримка власного довготривалого fork-а створила б зайву відповідальність за partitioning, filesystem, account provisioning і bootloader flow — саме ті операції, якими має володіти один Guix backend.
+
+WSM зберігає власний hardware-first frontend та межу `preflight → typed plan → Guix backend`:
+
+1. WSM збирає й перевіряє hardware evidence до показу плану.
+2. Frontend створює typed, reviewable plan і декларацію `operating-system`; текстові поля ніколи не стають shell-командами.
+3. Guix залишається єдиним власником system configuration, filesystem deployment, users/services та bootloader.
+4. Будь-який майбутній запуск системної операції має окремо пройти security gate, QEMU integration та явне підтвердження; поточний GUI preview не викликає `guix system init` і не змінює диски.
+
+### Коли виправлення upstream Guix справді потрібне
+
+Патчити Guix можна лише після відтворюваного дефекту або відсутнього нейтрального extension point, який неможливо реалізувати в WSM adapter-і. Такий патч повинен бути мінімальним, прив'язаним до точного pinned Guix commit, мати upstream-тести та бути поданий upstream; WSM не повинен тихо підтримувати приватний diverged fork. Потенційна upstream-робота — generic machine-readable hardware/evidence handoff або чіткий installer integration hook, але це **дослідницька гіпотеза, не наявний API і не дозвіл змінювати диски**.
+
+Поточні reference-и: [GNU Guix — Guided Graphical Installation](https://guix.gnu.org/manual/en/html_node/Guided-Graphical-Installation.html), [Invoking `guix system`](https://guix.gnu.org/manual/en/html_node/Invoking-guix-system.html) і [GNU Guix — Installation](https://guix.gnu.org/manual/en/html_node/Installation.html).
+
 ## 2. Вхідний контракт: hardware evidence report
 
 Джерело — версійований JSON-звіт із #5, який створює collector із #6.

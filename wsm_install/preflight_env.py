@@ -28,18 +28,36 @@ def criterion(identifier: str, status: str, detail: str) -> dict[str, str]:
     return {"id": identifier, "status": status, "detail": detail}
 
 
-def check_tools(which: Callable[[str], str | None] = shutil.which) -> dict[str, str]:
-    """Every program the install steps call must exist before the first step runs."""
-    from wsm_install.agent import ALLOWED_PROGRAMS
+def check_tools(
+    which: Callable[[str], str | None] = shutil.which,
+    paths: Any = None,
+) -> dict[str, str]:
+    """Every program the install steps call must exist before the first step runs.
 
-    missing = sorted(program for program in ALLOWED_PROGRAMS if which(program) is None)
+    `paths` is the exact list the plan will execute. Pass it whenever the plan was
+    built for an image profile (`plan_steps(tool_prefixes=...)`): checking the FHS
+    names instead would pass on a host that has `/usr/sbin/sgdisk` while the image
+    that runs the install has no `/usr` at all. Defaulting to the tool map's paths
+    keeps the host preview working, and the failure names the owning package so the
+    operator knows which closure entry is missing rather than which string.
+    """
+    from wsm_install.tool_map import EXECUTABLES, package, name_for
+
+    checked = sorted(paths) if paths is not None else sorted(EXECUTABLES)
+    missing = [program for program in checked if which(program) is None]
     if missing:
+        described = []
+        for program in missing:
+            owner = name_for(program)
+            described.append(
+                f"{program} ({package(owner)} missing)" if owner else program
+            )
         return criterion(
             "tools",
             "fail",
-            "missing: " + ", ".join(missing) + " (the install cannot proceed)",
+            "missing: " + ", ".join(described) + " (the install cannot proceed)",
         )
-    return criterion("tools", "pass", f"{len(ALLOWED_PROGRAMS)} programs present")
+    return criterion("tools", "pass", f"{len(checked)} programs present")
 
 
 def check_guix(which: Callable[[str], str | None] = shutil.which) -> dict[str, str]:

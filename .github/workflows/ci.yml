@@ -34,11 +34,23 @@ jobs:
         # the known set without waiting twenty minutes for Guix.
         run: python scripts/check_scheme_imports.py
 
+      - name: Check Scheme module coverage
+        # The Guix evaluation test is the only place source modules are really
+        # loaded. A module missing from it is evaluated by nobody, and the
+        # evaluation keeps passing while covering less.
+        run: python scripts/check_scheme_module_coverage.py
+
+      - name: Test the Scheme module coverage checker
+        run: python tests/test_scheme_module_coverage.py
+
       - name: Check Free channel lock
         run: python scripts/check_channels.py --lock channels.lock.scm --policy free
 
       - name: Check Compatibility channel lock
         run: python scripts/check_channels.py --lock channels/compatibility.lock.scm --policy compatibility
+
+      - name: Report WSM channel bootstrap artifacts
+        run: python scripts/check_channel_auth.py .
 
       # Кожен скрипт, який `make check-*` запускає, мусить запускатися і тут.
       # Інакше перевірка існує лише на машині того, хто її додав, а зелений CI
@@ -46,28 +58,27 @@ jobs:
       - name: Check document ownership
         run: python scripts/check_doc_ownership.py
 
+      # The closure gate: `make check-tool-closure`. This step runs the checker's
+      # own self-check against throwaway roots (pass on a complete root, a named
+      # failure for a missing or non-executable tool, and `--prefix` mode for a
+      # Guix-shaped root with no /usr). It does NOT verify the image: the runner's
+      # filesystem is not the image, and the image ships neither /usr nor these
+      # packages yet. Run `python scripts/check_tool_closure.py --root <image root>`
+      # against a built image for that; the script says so on every pass.
+      - name: Check installer tool closure
+        run: python scripts/check_tool_closure.py --self-check
+
       - name: Check profile evidence
         run: python scripts/check_profile_evidence.py
 
       - name: Check release metadata
         run: python scripts/check_release_info.py
 
-      # Логи задачі GitHub потребують авторизації: без цього кроку агент бачить
-      # лише «Process completed with exit code 1» і витрачає прогін на вгадування.
-      - name: Повідомити причину збою
+      - name: Summarize fast-check failure
         if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          set -uo pipefail
-          BODY=$(mktemp)
           {
-            echo "### fast checks: перевірки не пройшли"
-            echo ""
-            echo "Commit: \`$GITHUB_SHA\`"
-            echo ""
-            echo "Локально те саме відтворюється командою \`make check\`."
-            echo "Нижче — хвіст виводу останніх кроків."
-          } > "$BODY"
-          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
-            -F body=@"$BODY" >/dev/null && echo "причину записано коментарем"
+            echo "### Fast checks failed"
+            echo "The first failing check and its exact output are in the preceding step logs."
+            echo "Reproduce locally with `make check`."
+          } >> "$GITHUB_STEP_SUMMARY"
