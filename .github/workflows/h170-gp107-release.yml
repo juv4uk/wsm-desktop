@@ -2,7 +2,9 @@
 name: Publish H170 GP107 Linux-libre package
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - "publish/h170-gp107/**"
 
 permissions:
   contents: write
@@ -20,19 +22,28 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 300
     steps:
-      - name: Require a manual run from main
+      - name: Require a deliberate release branch based on reviewed main
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" || "$GITHUB_REF" != "refs/heads/main" ]]; then
-            echo "::error::Release is manual-only and must run from main."
+          if [[ "$GITHUB_EVENT_NAME" != "push" ]]; then
+            echo "::error::Release requires an explicit push to a release branch."
             exit 1
           fi
+          case "$GITHUB_REF" in
+            refs/heads/publish/h170-gp107/*) ;;
+            *) echo "::error::Unexpected release ref: $GITHUB_REF"; exit 1 ;;
+          esac
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+            echo "::error::Release source is not present in reviewed main history."
+            exit 1
+          }
 
       - name: Checkout exact source
         uses: actions/checkout@v7
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
       - name: Install the Guix build host
         run: |
@@ -107,6 +118,10 @@ jobs:
           NAR_ARCHIVE_SHA256="$(sha256sum "$OUT/linux-libre-h170-closure.nar" | cut -d' ' -f1)"
           NAR_ARCHIVE_SIZE="$(stat -c '%s' "$OUT/linux-libre-h170-closure.nar")"
           CLOSURE_COUNT="$(wc -l < "$OUT/closure.paths.txt" | tr -d ' ')"
+          if [ "$NAR_ARCHIVE_SIZE" -ge 2000000000 ]; then
+            echo "::error::Recursive NAR exceeds the GitHub Release asset limit; no Release was created."
+            exit 1
+          fi
           tar --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner             -C "$SOURCE_PATH" -cJf "$OUT/linux-libre-h170-source.tar.xz" .
           guix time-machine -C channels.lock.scm -- describe -f channels > "$OUT/resolved-channels.scm"
           cp "$RUNNER_TEMP/channels-lock.sha256" "$OUT/channels-lock.sha256"
