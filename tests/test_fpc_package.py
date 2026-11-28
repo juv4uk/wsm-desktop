@@ -182,7 +182,7 @@ class MakefileAndWorkflowTests(unittest.TestCase):
     def test_fpc_ci_builds_pas_files_and_executes_runtime_parity(self) -> None:
         text = FPC_WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("fp-compiler-3.2.2", text)
-        self.assertIn("make -C tools/pascal all", text)
+        self.assertIn("make -C tools/pascal clean all", text)
         self.assertIn("python3 tests/test_fpc_package.py", text)
         self.assertIn("jsonschema[format]==4.26.0", text)
         self.assertNotIn("git ls-files '*.lpr'", text)
