@@ -50,6 +50,11 @@ jobs:
 
           [[ "$RUN_ID" == "$SOURCE_RUN_ID" ]] || exit 0
           [[ "$WORKFLOW_ID" == "431025036" || "$WORKFLOW_ID" == "431678119" ]] || exit 0
+          case "$WORKFLOW_ID" in
+            431025036) SOURCE_WORKFLOW_NAME="CI" ;;
+            431678119) SOURCE_WORKFLOW_NAME="Guix profile evaluation" ;;
+            *) exit 0 ;;
+          esac
           [[ "$EVENT" == "pull_request" && "$CONCLUSION" == "failure" ]] || exit 0
           [[ "$BASE_REPOSITORY" == "$GITHUB_REPOSITORY" ]] || exit 0
           # Fork PRs are deliberately skipped; this reporter only comments on
