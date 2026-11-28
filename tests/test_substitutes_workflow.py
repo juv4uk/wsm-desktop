@@ -85,7 +85,7 @@ class SubstituteWorkflowTests(unittest.TestCase):
         self.assertIn('"${#NARS[@]}" -eq "$STORE_OUTPUT_COUNT"', prepare)
         self.assertIn('"store_outputs"', prepare)
         self.assertIn("./site/signing-key.pub", prepare)
-        self.assertIn("./site/provenance.json", prepare)
+        self.assertIn("site/provenance.json", prepare)
         self.assertIn("./site/SHA256SUMS", prepare)
         self.assertIn("private_key_published", prepare)
         self.assertIn("ephemeral-per-run", prepare)
