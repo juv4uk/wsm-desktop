@@ -4,8 +4,13 @@
 from __future__ import annotations
 
 import re
+import sys
 import unittest
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+
+import check_scheme_syntax as checker  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 SPECS = ROOT / "ci" / "cuirass" / "specs.scm"
@@ -14,46 +19,17 @@ SERVICE = ROOT / "ci" / "cuirass" / "service.scm"
 DOC = ROOT / "docs" / "CUIRASS.md"
 
 
-def balanced(text: str) -> bool:
-    depth = 0
-    in_string = False
-    escaped = False
-    comment = False
-    for char in text:
-        if char == "\n":
-            comment = False
-            continue
-        if comment:
-            continue
-        if in_string:
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == '"':
-                in_string = False
-            continue
-        if char == ";":
-            comment = True
-            continue
-        if char == '"':
-            in_string = True
-            continue
-        if char == "(":
-            depth += 1
-        elif char == ")":
-            depth -= 1
-            if depth < 0:
-                return False
-    return depth == 0 and not in_string
-
-
 class SpecsTests(unittest.TestCase):
     def setUp(self) -> None:
         self.text = SPECS.read_text(encoding="utf-8")
 
     def test_the_file_is_balanced(self) -> None:
-        self.assertTrue(balanced(self.text))
+        # One implementation of "is this Scheme balanced" lives in
+        # scripts/check_scheme_syntax.py, which the fast checks already run over
+        # every .scm in the tree. A local copy drifted from it once: this helper
+        # counted the paren in a character literal like #\( and reported a
+        # balanced file as broken.
+        checker.scan(SPECS, self.text)
 
     def test_it_is_a_single_list_form(self) -> None:
         code = [line for line in self.text.splitlines()
