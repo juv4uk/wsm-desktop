@@ -128,5 +128,37 @@ class VerdictTests(unittest.TestCase):
         self.assertEqual(result["overall"], "fail")
 
 
+class ExactToolPathTests(unittest.TestCase):
+    """Preflight must check the paths the plan will run, not a host coincidence."""
+
+    def test_the_plan_paths_are_what_gets_checked(self) -> None:
+        plan_paths = ["/run/current-system/profile/sbin/sgdisk", "/usr/bin/mount"]
+        asked: list[str] = []
+
+        def which(name: str):
+            asked.append(name)
+            return name
+
+        result = check_tools(which, paths=plan_paths)
+        self.assertEqual(result["status"], "pass")
+        self.assertEqual(sorted(asked), sorted(plan_paths))
+
+    def test_a_host_tool_does_not_mask_a_missing_image_tool(self) -> None:
+        plan_paths = ["/run/current-system/profile/sbin/sgdisk"]
+        present_on_host = {"/usr/sbin/sgdisk"}
+
+        def which(name: str):
+            return name if name in present_on_host else None
+
+        result = check_tools(which, paths=plan_paths)
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("/run/current-system/profile/sbin/sgdisk", result["detail"])
+
+    def test_the_failure_names_the_owning_package(self) -> None:
+        result = check_tools(lambda name: None, paths=["/usr/sbin/sgdisk"])
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("gptfdisk", result["detail"])
+
+
 if __name__ == "__main__":
     unittest.main()
