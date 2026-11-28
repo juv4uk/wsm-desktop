@@ -6,7 +6,7 @@
 
 FPC ?= fpc
 FPCFLAGS ?= -Mobjfpc -Sh -O2 -vewn
-TARGETS = wsm-hwcheck wsm-classify wsm-partition wsm-profile wsm-preflight
+TARGETS = wsm-hwcheck wsm-classify wsm-partition wsm-profile wsm-preflight wsm-install
 
 all: $(TARGETS)
 
@@ -24,6 +24,9 @@ wsm-profile: wsm_profile.pas
 
 wsm-preflight: wsm_preflight.pas
 	$(FPC) $(FPCFLAGS) -owsw-preflight wsm_preflight.pas
+
+wsm-install: wsm_install.pas
+	$(FPC) $(FPCFLAGS) -owsw-install wsm_install.pas
 
 clean:
 	rm -f $(TARGETS) *.o *.ppu

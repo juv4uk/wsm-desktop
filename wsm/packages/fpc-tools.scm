@@ -25,7 +25,7 @@
   ;; load only when Guix evaluates it.
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-13)
-  #:export (wsm-hwcheck-fpc wsm-classify-fpc wsm-partition-fpc wsm-profile-fpc wsm-preflight-fpc))
+  #:export (wsm-hwcheck-fpc wsm-classify-fpc wsm-partition-fpc wsm-profile-fpc wsm-preflight-fpc wsm-install-fpc))
 
 (define-public wsm-hwcheck-fpc
   (package
@@ -57,7 +57,8 @@
                 (install-file "tools/pascal/wsm-classify" bin)
                 (install-file "tools/pascal/wsm-partition" bin)
                 (install-file "tools/pascal/wsm-profile" bin)
-                (install-file "tools/pascal/wsm-preflight" bin)))))))
+                (install-file "tools/pascal/wsm-preflight" bin)
+                (install-file "tools/pascal/wsm-install" bin)))))))
     (synopsis "Read-only PCI hardware reader for WSM Desktop, built with FPC")
     (description
      "A native binary that reads PCI identity and driver binding from sysfs and
@@ -111,3 +112,13 @@ required programs, guix, root, an unused mount point, the system declaration and
 the instruction set.  The verdict keeps the rule that makes it honest:
 incomplete is not a pass, and the exit code differs between fail and
 incomplete.")))
+
+(define-public wsm-install-fpc
+  (package
+    (inherit wsm-hwcheck-fpc)
+    (name "wsm-install-fpc")
+    (synopsis "Installer frontend for WSM Desktop, built with FPC")
+    (description
+     "Runs the five readers in order and prints a plan.  It executes only its
+sibling binaries, never a shell, and never sgdisk: the layout is a proposal for
+review, and the output says applied:false.")))
