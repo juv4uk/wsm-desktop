@@ -66,7 +66,7 @@ jobs:
           test -d "$SOURCE_PATH"
           test -s "$DERIVATION_PATH"
           PACKAGE_VERSION="${STORE_PATH##*-linux-libre-h170-}"
-          NAR_SHA256="$("${GUIX[@]}" hash --recursive --format=hex "$STORE_PATH")"
+          NAR_SHA256="$(guix time-machine -C channels.lock.scm -- hash --recursive --format=hex "$STORE_PATH")"
           {
             echo "STORE_PATH=$STORE_PATH" >> "$GITHUB_OUTPUT"
             echo "SOURCE_PATH=$SOURCE_PATH" >> "$GITHUB_OUTPUT"
@@ -164,6 +164,48 @@ jobs:
             echo "- Distribution: H170 Free only; no proprietary driver or firmware"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Prepare release notes and final checksums
+        env:
+          STORE_PATH: ${{ steps.build.outputs.STORE_PATH }}
+          PACKAGE_VERSION: ${{ steps.build.outputs.PACKAGE_VERSION }}
+          NAR_SHA256: ${{ steps.build.outputs.NAR_SHA256 }}
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/h170-release"
+          cat > "$OUT/RELEASE-NOTES.md" <<EOF
+          # H170 Free — linux-libre-h170 $PACKAGE_VERSION
+
+          This release contains the recursively exported and Guix-signed store closure for the H170 Free kernel root.
+
+          - Guix lock: 4e5195be20d9b124df8a8bb69213412236e4668e
+          - WSM source commit: $GITHUB_SHA
+          - Store path: $STORE_PATH
+          - Store-root NAR hash: $NAR_SHA256
+          - Package license: inherited unchanged from pinned upstream linux-libre
+          - No NVIDIA firmware, proprietary driver, Nonguix package, or firmware blob is included.
+
+          ## Import the complete closure
+
+          Inspect provenance.json and SHA256SUMS. Authorize the release's public key, then import the self-contained archive:
+
+              sudo guix archive --authorize < signing-key.pub
+              guix archive --import < linux-libre-h170-closure.nar
+
+          Verify the GitHub build provenance for the downloaded archive:
+
+              gh attestation verify linux-libre-h170-closure.nar --repo $GITHUB_REPOSITORY
+
+          The archive includes the complete recursive Guix store closure for this package root. The public key is specific to this release; authorize it only after verifying the provenance and source commit.
+
+          This is package-build and closure evidence, not H170 hardware certification. It does not prove physical boot, Nouveau binding, KMS, 3D/compute, suspend/resume, or firmware loading. GP107 FECS/GPCCS firmware is not included.
+          EOF
+          (
+            cd "$OUT"
+            sha256sum -c SHA256SUMS
+            sha256sum RELEASE-NOTES.md >> SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
+
       - name: Attest the complete release bundle
         uses: actions/attest@v4
         with:
@@ -181,39 +223,10 @@ jobs:
           OUT="$RUNNER_TEMP/h170-release"
           SHORT_SHA="${GITHUB_SHA:0:12}"
           TAG="h170-gp107-linux-libre-${PACKAGE_VERSION}-$SHORT_SHA"
-          NOTES="$OUT/RELEASE-NOTES.md"
-          cat > "$NOTES" <<EOF
-          # H170 Free — linux-libre-h170 $PACKAGE_VERSION
-
-          This release contains the recursively exported and Guix-signed store closure for the H170 Free kernel root.
-
-          - Guix lock: 4e5195be20d9b124df8a8bb69213412236e4668e
-          - WSM source commit: $GITHUB_SHA
-          - Store path: $STORE_PATH
-          - Store-root NAR hash: $NAR_SHA256
-          - Package license: inherited unchanged from pinned upstream linux-libre
-          - No NVIDIA firmware, proprietary driver, Nonguix package, or firmware blob is included.
-
-          ## Import the complete closure
-
-          Inspect provenance.json and SHA256SUMS. Authorize the release's public key, then import the self-contained archive:
-
-              guix archive --authorize < signing-key.pub
-              guix archive --import < linux-libre-h170-closure.nar
-
-          Verify the GitHub build provenance for the downloaded archive:
-
-              gh attestation verify linux-libre-h170-closure.nar --repo $GITHUB_REPOSITORY
-
-          The archive includes the complete recursive Guix store closure for this package root. The public key is specific to this release; authorize it only after verifying the provenance and source commit.
-
-          This is package-build and closure evidence, not H170 hardware certification. It does not prove physical boot, Nouveau binding, KMS, 3D/compute, suspend/resume, or firmware loading. GP107 FECS/GPCCS firmware is not included.
-          EOF
           (
             cd "$OUT"
             sha256sum -c SHA256SUMS
           )
-          sha256sum "$OUT/RELEASE-NOTES.md" >> "$OUT/SHA256SUMS"
           gh release create "$TAG" "$OUT/linux-libre-h170-closure.nar"             "$OUT/linux-libre-h170-source.tar.xz" "$OUT/signing-key.pub"             "$OUT/provenance.json" "$OUT/closure.paths.txt" "$OUT/closure-size.txt"             "$OUT/resolved-channels.scm" "$OUT/channels-lock.sha256"             "$OUT/wsm-source-commit.txt" "$OUT/guix-channel-commit.txt"             "$OUT/SHA256SUMS" "$OUT/RELEASE-NOTES.md"             --title "H170 Free Linux-libre $PACKAGE_VERSION ($SHORT_SHA)"             --notes-file "$OUT/RELEASE-NOTES.md" --target "$GITHUB_SHA"
           mkdir -p "$RUNNER_TEMP/h170-readback"
           gh release download "$TAG" --dir "$RUNNER_TEMP/h170-readback"
