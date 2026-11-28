@@ -29,7 +29,7 @@ Cuirass не публікує власні результати як substitutes
 
 `ci/cuirass/images.scm` створює job для `systems/live-minimal.scm`. Для порівняння саме тих самих derivations мають збігатися точні Guix і WSM source revisions. Оскільки WSM channel зараз стежить за `main`, Cuirass evaluation може описувати інший commit, ніж майбутній релізний lock. Зберігати фактично resolved commit кожної evaluation.
 
-Cuirass custom job використовує модуль `(ci cuirass images)`, що відповідає шляху `ci/cuirass/images.scm`. `derivation->job` надходить із `(gnu ci)`, `%graft?` — із `(guix packages)`, а `assq-ref` — із `(srfi srfi-1)`; pinned Guix evaluation перевіряє ці binding-и, а не лише назву експортованої процедури.
+Cuirass custom job використовує модуль `(ci cuirass images)`, що відповідає шляху `ci/cuirass/images.scm`. Він створює той самий тип `iso9660` образу, що й release workflow, через штатний Guix helper `image->job`, `image` record і `iso9660-image`; helper передає derivation у Cuirass із `#:job-type . image`. `derivation->job` надходить із `(gnu ci)`, `%graft?` — із `(guix packages)`, а `assq-ref` — із `(srfi srfi-1)`. Pinned Guix evaluation викликає `cuirass-jobs`, опускає image derivation до store job record і перевіряє його ім'я та derivation path; це не збирає ISO payload.
 
 ## Запуск Cuirass вручну
 
