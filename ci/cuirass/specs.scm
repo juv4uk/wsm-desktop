@@ -2,26 +2,17 @@
 ;;
 ;; Cuirass specifications for WSM Desktop.
 ;;
-;; Cuirass is GNU Guix's own continuous integration server. Its value here is
-;; not "another CI": it builds *inside Guix*, on top of the exact channel lock
-;; the release uses, and its results become substitutes. GitHub Actions builds
-;; the image and boots it in QEMU; Cuirass proves the derivations actually build
-;; from the pinned channels and warms the store for everyone else.
+;; The official Guix channel is pinned to the release's Guix revision.
+;; The WSM channel intentionally tracks main: this is a development build lane,
+;; NOT an immutable reproduction of a release source tree. Normal channel
+;; authentication remains mandatory; do not register these specs until WSM's
+;; owner-signed Phase B trust bootstrap is complete.
 ;;
-;; What it does NOT do: boot the image. Cuirass has no QEMU acceptance step, so
-;; a green Cuirass job says "the closure builds", never "the medium boots".
-;; docs/CUIRASS.md keeps that boundary explicit.
-;;
-;; Register with:
-;;   cuirass register --specifications=ci/cuirass/specs.scm \
-;;                    --database="dbname=cuirass host=/var/run/postgresql"
-;;
-;; The file is a plain list of specifications, as `cuirass register` expects;
-;; the same list is used by the service definition in service.scm.
+;; Cuirass jobs build derivations. They do not boot the image or publish WSM
+;; substitutes. See docs/CUIRASS.md for those boundaries and the current state.
 
 (list
- ;; The channel's own tool package: the smallest job that fails if the pinned
- ;; channels stop being able to build what we ship.
+ ;; The WSM tool package: a focused package derivation check.
  (specification
   (name "wsm-tools")
   (priority 1)
@@ -42,13 +33,12 @@
           (url "https://github.com/juv4uk/wsm-desktop")
           (branch "main")))))
 
- ;; The live image derivation. Cuirass builds the same expression the release
- ;; workflow builds, so a broken profile shows up here within one poll interval
- ;; instead of after a forty-minute Actions run.
+ ;; The same OS profile and ISO image type used by the release build path.
+ ;; WSM's source revision is the tracked main branch, not a release pin.
  (specification
   (name "wsm-live-minimal-image")
   (priority 1)
-  (build '(custom (wsm ci images)))
+  (build '(custom (ci cuirass images)))
   (channels
    (list (channel
           (name 'guix)
