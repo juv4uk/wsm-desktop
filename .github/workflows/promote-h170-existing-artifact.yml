@@ -9,6 +9,9 @@ on:
 permissions:
   actions: read
   contents: write
+  attestations: write
+  id-token: write
+  artifact-metadata: write
 
 concurrency:
   group: promote-h170-pack-9409ae9
@@ -104,7 +107,7 @@ jobs:
           - Manifest: drivers/profiles/h170-free-packages.scm (11 upstream roots)
           - Locked Guix commit: 4e5195be20d9b124df8a8bb69213412236e4668e
           - Archive: $ARCHIVE
-          - Archive SHA-256: `$ARCHIVE_SHA256`
+          - Archive SHA-256: $ARCHIVE_SHA256
 
           Verify SHA256SUMS before use. Test the compressed archive with
           zstd -t $ARCHIVE.
