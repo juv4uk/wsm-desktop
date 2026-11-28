@@ -1,11 +1,14 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-name: WSM package archives — вимкнено до licensing decision
+name: WSM package archives
 
-# Тут може з'явитися лише ручне створення ephemeral build evidence.
-# Пакет/NAR не можна експортувати в Actions artifacts або draft/public releases,
-# доки власник не вирішить #367 і права на розповсюдження.
+# Fail-closed stub. The previous version accepted arbitrary package names via
+# workflow_dispatch and interpolated them into Bash. Do not export Guix NARs
+# until the fixed H170 allowlist, signing-key custody, source provenance and
+# draft-release policy have all passed review.
 #
-# Поточна версія навмисно не будує, не експортує і не завантажує wsm-tools.
+# The safe upstream-only build/evidence workflow is hw-build-evidence.yml. It
+# is manual-only on main and records derivation/NAR hashes without exporting
+# or uploading package archives.
 
 on:
   workflow_dispatch:
@@ -13,13 +16,17 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: wsm-package-archives
+  cancel-in-progress: false
+
 jobs:
   archive:
     if: ${{ false }}
-    name: Заблоковано до рішення #367
+    name: Disabled pending fixed allowlist and archive-signing decision
     runs-on: ubuntu-24.04
     steps:
-      - name: Fail closed
+      - name: Archive publication is not authorized
         run: |
-          echo "::error::Package archive workflow вимкнено до licensing decision #367."
+          echo "NOT_AUTHORIZED: Guix archive exports are signed and require an explicitly trusted key"
           exit 1
