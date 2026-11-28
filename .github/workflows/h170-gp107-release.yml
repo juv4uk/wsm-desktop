@@ -110,10 +110,8 @@ jobs:
           tar --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner             -C "$SOURCE_PATH" -cJf "$OUT/linux-libre-h170-source.tar.xz" .
           guix time-machine -C channels.lock.scm -- describe -f channels > "$OUT/resolved-channels.scm"
           cp "$RUNNER_TEMP/channels-lock.sha256" "$OUT/channels-lock.sha256"
-          printf '%s
-' "$GITHUB_SHA" > "$OUT/wsm-source-commit.txt"
-          printf '%s
-' "4e5195be20d9b124df8a8bb69213412236e4668e" > "$OUT/guix-channel-commit.txt"
+          printf '%s\\n' "$GITHUB_SHA" > "$OUT/wsm-source-commit.txt"
+          printf '%s\\n' "4e5195be20d9b124df8a8bb69213412236e4668e" > "$OUT/guix-channel-commit.txt"
           PATCH_SHA256="$(sha256sum wsm/packages/patches/linux-libre-h170-nouveau-atomic.patch | cut -d' ' -f1)"
           export STORE_PATH SOURCE_PATH DERIVATION_PATH PACKAGE_VERSION NAR_SHA256             NAR_ARCHIVE_SHA256 NAR_ARCHIVE_SIZE CLOSURE_COUNT PATCH_SHA256
           python3 - <<'PY'
