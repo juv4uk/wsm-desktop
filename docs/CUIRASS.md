@@ -69,3 +69,13 @@ guix shell cuirass -- cuirass web --database="dbname=cuirass host=/var/run/postg
 Це і є причина, чому файли такого роду не можна писати без джерела: кожна з чотирьох помилок дала б збій лише в момент запуску, на машині, де Guix є, — тобто не в того, хто писав.
 
 Це чесний стан: файли описують, як запустити, а не стверджують, що запущено.
+
+## H170 Free package build job
+
+The Cuirass specifications include `h170-free-upstream-packages`. The custom module `ci/cuirass/h170-free-packages.scm` reads the fixed upstream-only manifest `drivers/profiles/h170-free-packages.scm` and creates one Cuirass package derivation job per root for `x86_64-linux`.
+
+The package set is defined and versioned by the pinned official Guix channel. The job resolves derivation metadata; actual package builds are handled by the separate ephemeral GitHub Actions workflow `hw-build-evidence.yml`, which records output NAR hashes and closure sizes in the job summary but does not export or upload NARs.
+
+Neither green derivation evaluation nor a successful ephemeral package build proves GPU driver binding, firmware loading, KMS/3D/compute, ISO boot or native H170 function. The locked Linux-libre 7.3.5 candidate has a documented GP107 Nouveau atomic-init gap; that limitation remains explicit until separately reviewed and resolved.
+
+Do not register the jobset against WSM `main` until owner-controlled Phase B channel authentication has completed. Cuirass service/job execution remains **NOT_RUN**; no PostgreSQL/Cuirass instance is currently deployed. The job does not configure `guix publish`, signing keys, substitutes or release uploads. Those remain governed by #367, #762 and the owner-approved publication decision.
