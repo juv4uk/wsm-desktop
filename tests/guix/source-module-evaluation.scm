@@ -43,8 +43,11 @@
              (eq? (package-license wsm-hwcheck-fpc) wsm-license)
              (eq? (package-license wsm-classify-fpc) wsm-license)
              (memq fpc (package-native-inputs wsm-hwcheck-fpc))
+             (memq fpc (package-native-inputs wsm-classify-fpc))
              (null? (package-inputs wsm-hwcheck-fpc))
-             (null? (package-propagated-inputs wsm-hwcheck-fpc)))
+             (null? (package-propagated-inputs wsm-hwcheck-fpc))
+             (null? (package-inputs wsm-classify-fpc))
+             (null? (package-propagated-inputs wsm-classify-fpc)))
   (error "FPC packages have incorrect license metadata or a runtime compiler dependency"))
 
 ;; Evaluate the ordinary live profile as well as the standalone channel module.
