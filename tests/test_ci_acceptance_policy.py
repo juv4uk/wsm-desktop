@@ -139,22 +139,29 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
         self.job = self.workflow["jobs"]["archive"]
         self.steps = self.job["steps"]
 
-    def step(self, name: str) -> dict:
+    def step(self, step_id: str) -> dict:
         for item in self.steps:
-            if name in item.get("name", ""):
+            if item.get("id") == step_id:
+                return item
+        raise AssertionError(f"workflow step ID not found: {step_id}")
+
+    def named_step(self, name: str) -> dict:
+        for item in self.steps:
+            if item.get("name") == name:
                 return item
         raise AssertionError(f"workflow step not found: {name}")
 
-    def test_publication_is_manual_only(self) -> None:
+    def test_publication_is_manual_only_and_main_only(self) -> None:
         self.assertEqual(set(self.workflow["on"]), {"workflow_dispatch"})
         self.assertNotIn("push:", self.text)
         self.assertNotIn("schedule:", self.text)
         self.assertEqual(self.job["if"], "github.ref == 'refs/heads/main'")
+        self.assertEqual(self.workflow["permissions"]["contents"], "write")
 
     def test_only_the_owner_package_is_packed(self) -> None:
-        build = self.step("Зібрати власний пакет")["run"]
+        build = self.step("build-pack")["run"]
         self.assertIn("wsm-tools", build)
-        self.assertIn("pack --format=tarball", build)
+        self.assertIn("--format=tarball", build)
         self.assertIn("(begin (use-modules (wsm packages wsm)) wsm-tools)", build)
         self.assertIn("--symlink=/opt/wsm/bin=bin", build)
         self.assertIn("-L .", build)
@@ -172,11 +179,11 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
     def test_package_selection_is_not_user_controlled_shell_input(self) -> None:
         self.assertNotIn("inputs.packages", self.text)
         self.assertNotIn("github.event.inputs", self.text)
-        self.assertNotIn("for package in $" + "{{", self.text)
         self.assertNotIn("PACKAGES=", self.text)
+        self.assertNotIn("for package in $", self.text)
 
     def test_guix_pack_uses_the_locked_channel_and_no_signing_key(self) -> None:
-        build = self.step("Зібрати власний пакет")["run"]
+        build = self.step("build-pack")["run"]
         self.assertIn("guix time-machine -C channels.lock.scm", build)
         self.assertNotIn("guix archive", self.text)
         self.assertNotIn("signing-key", self.text)
@@ -184,7 +191,7 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
         self.assertNotIn("secrets.", self.text)
 
     def test_release_is_created_as_draft_only_and_never_published(self) -> None:
-        release = self.step("Створити чернетку релізу")["run"]
+        release = self.named_step("Create a draft release and verify read-back")["run"]
         self.assertIn("gh release create", release)
         self.assertIn("--draft", release)
         self.assertIn('test "$IS_DRAFT" = "true"', release)
@@ -193,19 +200,19 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
         self.assertNotIn("--prerelease", self.text)
 
     def test_pack_contains_the_three_owned_commands(self) -> None:
-        verify = self.step("Перевірити команди в pack")["run"]
+        build = self.step("build-pack")["run"]
         for command in ("wsm-hwcheck", "wsm-install", "wsm-install-live"):
             with self.subTest(command=command):
-                self.assertIn(command, verify)
+                self.assertIn(command, build)
 
     def test_archive_and_provenance_are_verified_after_upload(self) -> None:
-        release = self.step("Створити чернетку релізу")["run"]
+        release = self.named_step("Create a draft release and verify read-back")["run"]
         self.assertIn("gh release download", release)
         self.assertIn("sha256sum -c SHA256SUMS", release)
         self.assertIn("tar -tzf wsm-tools-pack.tar.gz", release)
         self.assertIn("PROVENANCE.txt", self.text)
         self.assertIn("CHANNEL-INPUTS.sha256", self.text)
-        self.assertIn('cp LICENSE "$OUT/LICENSE"', self.text)
+        self.assertIn('cp LICENSE "$OUT/LICENSE"', self.step("build-pack")["run"])
         self.assertIn('"$OUT/LICENSE"', release)
 
     def test_failure_is_reported_without_claiming_success(self) -> None:
@@ -215,6 +222,7 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
             and "commits/$GITHUB_SHA/comments" in item.get("run", "")
         ]
         self.assertEqual(len(failures), 1)
+        self.assertIn("No successful package build or release is claimed", failures[0]["run"])
 
 
 
