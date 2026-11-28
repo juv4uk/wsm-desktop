@@ -33,6 +33,7 @@ from scripts.qemu_boot_smoke import (
     MAX_STDERR_CAPTURE_BYTES,
     build_qemu_command,
     main,
+    sha256_of,
     parse_disk_size_mib,
     run_bounded_process,
     validate_iso,
@@ -203,6 +204,7 @@ class QemuBootSmokeTests(unittest.TestCase):
                 result = main(["--iso", str(iso), "--boot-marker", "WSM-LIVE-READY"])
             self.assertEqual(result, 0)
             payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["iso_sha256"], sha256_of(iso))
             self.assertTrue(payload["boot_confirmed"])
             self.assertTrue(payload["qemu_timed_out"])
             self.assertEqual(payload["serial_output_tail"], "booting\nWSM-LIVE-READY\n")
