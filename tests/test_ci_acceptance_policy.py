@@ -43,6 +43,13 @@ class CiAcceptancePolicyTests(unittest.TestCase):
         self.assertIn("--lock channels.lock.scm --policy free", commands)
         self.assertIn("--lock channels/compatibility.lock.scm --policy compatibility", commands)
 
+    def test_guix_profile_evaluation_uses_authenticated_codeberg_transport(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "guix-profile-evaluation.yml").read_text(encoding="utf-8")
+        self.assertIn("https://codeberg.org/guix/guix.git", workflow)
+        self.assertIn("git.guix.gnu.org/guix.git", workflow)
+        self.assertNotIn("--disable-authentication", workflow)
+        self.assertIn("channels.lock.scm", workflow)
+
     def test_slow_or_environmental_acceptance_is_not_in_hosted_ci(self) -> None:
         forbidden = (
             "qemu-system",
