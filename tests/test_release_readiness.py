@@ -7,11 +7,14 @@ import contextlib
 import importlib.util
 import io
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+from capture_channel_resolution import capture, evidence_document  # noqa: E402
 
 
 def load_checker():
@@ -32,9 +35,15 @@ def write_json(path: Path, value: dict[str, object]) -> None:
 
 
 def build(directory: Path, installer_executed: bool = True) -> None:
+    image_path = directory / "image.iso"
+    image_path.write_bytes(b"iso-image-bytes")
+    iso_sha256 = checker.sha256_of(image_path)
     boot = {
         "boot_confirmed": True,
         "guest_installer_execution": installer_executed,
+        "serial_clean": True,
+        "serial_failure_markers": [],
+        "iso_sha256": iso_sha256,
         "serial_output_tail": "...WSM_LIVE_READY...WSM_INSTALLER_OK...",
     }
     bios_path = directory / "boot-bios.json"
@@ -45,10 +54,20 @@ def build(directory: Path, installer_executed: bool = True) -> None:
     channels_path = directory / "channels.resolved.scm"
     channels_path.write_text("(list (channel (name 'guix)))\n", encoding="utf-8")
     channel_log_path = directory / "channel-resolution.log"
-    channel_log_path.write_bytes(b"")  # A successful resolution may emit no stderr.
+    channel_command = [
+        "/usr/bin/guix", "time-machine", "-C", "/repo/channels.lock.scm",
+        "-L", "/repo", "--", "describe", "-f", "channels",
+    ]
+    channel_log_path.write_text(
+        json.dumps(
+            evidence_document(channel_command, channels_path.read_bytes(), b"", 0),
+            sort_keys=True,
+        ) + "\n",
+        encoding="utf-8",
+    )
 
-    image_path = directory / "image.iso"
-    image_path.write_bytes(b"iso-image-bytes")
+    build_log_path = directory / "build.log"
+    build_log_path.write_text("guix system image build completed\\n", encoding="utf-8")
 
     build_path = directory / "build-manifest.json"
     write_json(build_path, {
@@ -59,6 +78,11 @@ def build(directory: Path, installer_executed: bool = True) -> None:
             "sha256": checker.sha256_of(image_path),
         },
         "source": {"commit": "test"},
+        "build": {
+            "log": build_log_path.name,
+            "log_sha256": checker.sha256_of(build_log_path),
+            "log_bytes": build_log_path.stat().st_size,
+        },
         "guix": {
             "resolved_channels_file": channels_path.name,
             "resolved_channels_sha256": checker.sha256_of(channels_path),
@@ -103,6 +127,7 @@ def write_sums(
     names = (
         *image_assets,
         "build-manifest.json",
+        "build.log",
         "release-manifest.json",
         "boot-bios.json",
         "boot-uefi.json",
@@ -168,6 +193,86 @@ def make_parts(directory: Path, first: bytes = b"iso-", second: bytes = b"image-
     write_sums(directory, image_assets=part_names, extra=("ISO-CHECKSUMS.sha256",))
 
 
+class ChannelResolutionCaptureTests(unittest.TestCase):
+    def test_successful_resolution_with_empty_stderr_is_explicit_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fake_guix = root / "guix"
+            fake_guix.write_text(
+                "#!/bin/sh\necho \"(list (channel (name 'guix)))\"\n",
+                encoding="utf-8",
+            )
+            fake_guix.chmod(0o755)
+            stdout, stderr, status, launch_error = capture([
+                str(fake_guix), "time-machine", "-C", "/repo/channels.lock.scm",
+                "-L", "/repo", "--", "describe", "-f", "channels",
+            ])
+            document = evidence_document(
+                [str(fake_guix), "time-machine", "-C", "/repo/channels.lock.scm",
+                 "-L", "/repo", "--", "describe", "-f", "channels"],
+                stdout, stderr, status, launch_error,
+            )
+            self.assertEqual(status, 0)
+            self.assertIsNone(launch_error)
+            self.assertTrue(stdout)
+            self.assertEqual(document["stderr"]["bytes"], 0)
+            self.assertEqual(document["stderr"]["text"], "")
+            self.assertEqual(document["stderr"]["base64"], "")
+
+    def test_failed_resolution_keeps_its_exit_status_and_stderr(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            fake_guix = Path(temporary) / "guix"
+            fake_guix.write_text(
+                "#!/bin/sh\necho \"channel trust failure\" >&2\nexit 17\n",
+                encoding="utf-8",
+            )
+            fake_guix.chmod(0o755)
+            stdout, stderr, status, launch_error = capture([
+                str(fake_guix), "time-machine", "-C", "/repo/channels.lock.scm",
+                "-L", "/repo", "--", "describe", "-f", "channels",
+            ])
+            self.assertEqual(status, 17)
+            self.assertIsNone(launch_error)
+            self.assertIn(b"channel trust failure", stderr)
+
+    def test_release_checker_rejects_an_empty_resolution_log(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            build(directory)
+            log = directory / "channel-resolution.log"
+            log.write_bytes(b"")
+            manifest_path = directory / "build-manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["guix"]["channel_resolution_log_sha256"] = checker.sha256_of(log)
+            manifest["guix"]["channel_resolution_log_bytes"] = 0
+            write_json(manifest_path, manifest)
+            refresh_after_build_manifest_change(directory)
+            found = checker.problems(directory)
+            self.assertTrue(
+                any("channel-resolution.log" in problem for problem in found), found
+            )
+
+    def test_release_checker_rejects_a_transcript_for_another_command(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            build(directory)
+            log_path = directory / "channel-resolution.log"
+            transcript = json.loads(log_path.read_text(encoding="utf-8"))
+            transcript["command"][1] = "describe"
+            write_json(log_path, transcript)
+            build_manifest_path = directory / "build-manifest.json"
+            build_manifest = json.loads(build_manifest_path.read_text(encoding="utf-8"))
+            build_manifest["guix"]["channel_resolution_log_sha256"] = checker.sha256_of(log_path)
+            build_manifest["guix"]["channel_resolution_log_bytes"] = log_path.stat().st_size
+            write_json(build_manifest_path, build_manifest)
+            refresh_after_build_manifest_change(directory)
+            found = checker.problems(directory)
+            self.assertTrue(
+                any("expected locked Guix describe command" in problem for problem in found),
+                found,
+            )
+
+
 class ReleaseReadinessTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
@@ -179,6 +284,139 @@ class ReleaseReadinessTests(unittest.TestCase):
 
     def test_a_consistent_whole_iso_bundle_is_ready(self) -> None:
         self.assertEqual(checker.problems(self.directory), [])
+
+    def test_build_log_is_a_required_published_asset(self) -> None:
+        (self.directory / "build.log").unlink()
+        found = checker.problems(self.directory)
+        self.assertTrue(any("missing build.log" in item for item in found), found)
+
+    def test_build_log_symlink_is_refused(self) -> None:
+        path = self.directory / "build.log"
+        external = self.directory.parent / "external-build.log"
+        external.write_text("external transcript\\n", encoding="utf-8")
+        path.unlink()
+        path.symlink_to(external)
+        found = checker.problems(self.directory)
+        self.assertTrue(any("build.log must not be a symlink" in item for item in found), found)
+
+    def test_truncated_build_log_is_caught_by_recorded_byte_count(self) -> None:
+        path = self.directory / "build.log"
+        path.write_text("short\\n", encoding="utf-8")
+        build_path = self.directory / "build-manifest.json"
+        build_manifest = json.loads(build_path.read_text(encoding="utf-8"))
+        build_manifest["build"]["log_sha256"] = checker.sha256_of(path)
+        write_json(build_path, build_manifest)
+        refresh_after_build_manifest_change(self.directory)
+        rewrite_checksum(self.directory, "build.log")
+        found = checker.problems(self.directory)
+        self.assertTrue(any("build.log does not match build-manifest build.log_bytes" in item for item in found), found)
+
+    def test_build_log_hash_must_match_builder_manifest(self) -> None:
+        (self.directory / "build.log").write_text("changed transcript\\n", encoding="utf-8")
+        rewrite_checksum(self.directory, "build.log")
+        found = checker.problems(self.directory)
+        self.assertTrue(
+            any("build.log does not match build-manifest build.log_sha256" in item for item in found),
+            found,
+        )
+
+    def test_bios_boot_evidence_without_iso_hash_is_refused(self) -> None:
+        path = self.directory / "boot-bios.json"
+        record = json.loads(path.read_text(encoding="utf-8"))
+        record.pop("iso_sha256")
+        write_json(path, record)
+        rewrite_checksum(self.directory, "boot-bios.json")
+        manifest_path = self.directory / "release-manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["boot_evidence"]["bios_sha256"] = checker.sha256_of(path)
+        write_json(manifest_path, manifest)
+        rewrite_checksum(self.directory, "release-manifest.json")
+        found = checker.problems(self.directory)
+        self.assertTrue(any("boot-bios.json iso_sha256 is missing or malformed" in item for item in found), found)
+
+    def test_uefi_boot_evidence_without_iso_hash_is_refused(self) -> None:
+        path = self.directory / "boot-uefi.json"
+        record = json.loads(path.read_text(encoding="utf-8"))
+        record.pop("iso_sha256")
+        write_json(path, record)
+        rewrite_checksum(self.directory, "boot-uefi.json")
+        manifest_path = self.directory / "release-manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["boot_evidence"]["uefi_sha256"] = checker.sha256_of(path)
+        write_json(manifest_path, manifest)
+        rewrite_checksum(self.directory, "release-manifest.json")
+        found = checker.problems(self.directory)
+        self.assertTrue(any("boot-uefi.json iso_sha256 is missing or malformed" in item for item in found), found)
+
+    def test_boot_evidence_must_be_bound_to_the_published_iso(self) -> None:
+        path = self.directory / "boot-bios.json"
+        record = json.loads(path.read_text(encoding="utf-8"))
+        record["iso_sha256"] = "0" * 64
+        write_json(path, record)
+        rewrite_checksum(self.directory, "boot-bios.json")
+        manifest_path = self.directory / "release-manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["boot_evidence"]["bios_sha256"] = checker.sha256_of(path)
+        write_json(manifest_path, manifest)
+        rewrite_checksum(self.directory, "release-manifest.json")
+        found = checker.problems(self.directory)
+        self.assertTrue(
+            any("boot evidence iso_sha256 != release-manifest artifact sha256" in item for item in found),
+            found,
+        )
+
+    def test_uefi_boot_evidence_must_be_bound_to_the_published_iso(self) -> None:
+        path = self.directory / "boot-uefi.json"
+        record = json.loads(path.read_text(encoding="utf-8"))
+        record["iso_sha256"] = "0" * 64
+        write_json(path, record)
+        rewrite_checksum(self.directory, "boot-uefi.json")
+        manifest_path = self.directory / "release-manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["boot_evidence"]["uefi_sha256"] = checker.sha256_of(path)
+        write_json(manifest_path, manifest)
+        rewrite_checksum(self.directory, "release-manifest.json")
+        found = checker.problems(self.directory)
+        self.assertTrue(
+            any("boot-uefi.json boot evidence iso_sha256 != release-manifest artifact sha256" in item
+                for item in found),
+            found,
+        )
+
+    def test_boot_evidence_without_serial_clean_is_refused(self) -> None:
+        path = self.directory / "boot-bios.json"
+        record = json.loads(path.read_text(encoding="utf-8"))
+        record.pop("serial_clean")
+        write_json(path, record)
+        rewrite_checksum(self.directory, "boot-bios.json")
+        manifest_path = self.directory / "release-manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["boot_evidence"]["bios_sha256"] = checker.sha256_of(path)
+        write_json(manifest_path, manifest)
+        rewrite_checksum(self.directory, "release-manifest.json")
+        found = checker.problems(self.directory)
+        self.assertTrue(
+            any("boot-bios.json has serial_clean false or missing" in item for item in found),
+            found,
+        )
+
+    def test_boot_evidence_with_serial_segfault_is_refused_even_with_markers(self) -> None:
+        path = self.directory / "boot-uefi.json"
+        record = json.loads(path.read_text(encoding="utf-8"))
+        record["serial_failure_markers"] = ["segfault"]
+        record["serial_clean"] = False
+        write_json(path, record)
+        rewrite_checksum(self.directory, "boot-uefi.json")
+        manifest_path = self.directory / "release-manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["boot_evidence"]["uefi_sha256"] = checker.sha256_of(path)
+        write_json(manifest_path, manifest)
+        rewrite_checksum(self.directory, "release-manifest.json")
+        found = checker.problems(self.directory)
+        self.assertTrue(
+            any("boot-uefi.json contains serial failure markers: segfault" in item for item in found),
+            found,
+        )
 
     def test_build_manifest_artifact_filename_must_match_release_manifest(self) -> None:
         build_path = self.directory / "build-manifest.json"

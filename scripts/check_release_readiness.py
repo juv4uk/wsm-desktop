@@ -9,6 +9,8 @@ problem list means the shipped evidence supports the release claims.
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import hashlib
 import json
 import re
@@ -20,6 +22,7 @@ SHA256 = re.compile(r"^[0-9a-f]{64}$")
 REQUIRED = (
     "SHA256SUMS",
     "build-manifest.json",
+    "build.log",
     "release-manifest.json",
     "boot-bios.json",
     "boot-uefi.json",
@@ -85,6 +88,113 @@ def read_json_object(path: Path) -> dict[str, object]:
     return value
 
 
+def channel_resolution_log_problems(directory: Path) -> list[str]:
+    """Validate the Guix transcript, not merely the existence of a log file."""
+    path = directory / "channel-resolution.log"
+    channels_path = directory / "channels.resolved.scm"
+    try:
+        document = read_json_object(path)
+    except (OSError, UnicodeError, ValueError) as error:
+        return [f"invalid channel-resolution.log JSON: {error}"]
+
+    found: list[str] = []
+    if document.get("schema") != "wsm-channel-resolution/1":
+        found.append("channel-resolution.log has an unsupported schema")
+    if document.get("launch_error") is not None:
+        found.append("channel-resolution.log records a Guix launch error")
+
+    command = document.get("command")
+    if (
+        not isinstance(command, list)
+        or len(command) != 10
+        or not all(isinstance(part, str) for part in command)
+    ):
+        found.append("channel-resolution.log command is missing or malformed")
+    else:
+        if (
+            not Path(command[0]).is_absolute()
+            or Path(command[0]).name != "guix"
+            or command[1:3] != ["time-machine", "-C"]
+            or not Path(command[3]).is_absolute()
+            or command[4] != "-L"
+            or not Path(command[5]).is_absolute()
+            or command[6:] != ["--", "describe", "-f", "channels"]
+            or "--disable-authentication" in command
+        ):
+            found.append("channel-resolution.log does not record the expected locked Guix describe command")
+
+    status = document.get("exit_status")
+    if not isinstance(status, int) or isinstance(status, bool) or status != 0:
+        found.append("channel-resolution.log does not record a successful exit status")
+
+    stdout = document.get("stdout")
+    if not isinstance(stdout, dict):
+        found.append("channel-resolution.log stdout evidence is missing or invalid")
+    else:
+        if stdout.get("file") != "channels.resolved.scm":
+            found.append("channel-resolution.log stdout file is not channels.resolved.scm")
+        try:
+            channels_bytes = channels_path.read_bytes()
+        except OSError as error:
+            found.append(f"cannot read channels.resolved.scm for transcript validation: {error}")
+        else:
+            if b"channel authentication disabled" in channels_bytes.lower():
+                found.append("channels.resolved.scm reports disabled channel authentication")
+            stdout_bytes = stdout.get("bytes")
+            if (
+                not isinstance(stdout_bytes, int)
+                or isinstance(stdout_bytes, bool)
+                or stdout_bytes <= 0
+                or stdout_bytes != len(channels_bytes)
+            ):
+                found.append("channel-resolution.log stdout byte count does not match channels.resolved.scm")
+            stdout_digest = stdout.get("sha256")
+            if (
+                not isinstance(stdout_digest, str)
+                or SHA256.fullmatch(stdout_digest) is None
+                or stdout_digest != hashlib.sha256(channels_bytes).hexdigest()
+            ):
+                found.append("channel-resolution.log stdout digest does not match channels.resolved.scm")
+
+    stderr = document.get("stderr")
+    if not isinstance(stderr, dict):
+        found.append("channel-resolution.log stderr evidence is missing or invalid")
+    else:
+        encoded = stderr.get("base64")
+        stderr_text = stderr.get("text")
+        stderr_bytes = stderr.get("bytes")
+        stderr_digest = stderr.get("sha256")
+        try:
+            if not isinstance(encoded, str):
+                raise ValueError("base64 value is not a string")
+            raw_stderr = base64.b64decode(encoded, validate=True)
+        except (binascii.Error, ValueError, TypeError):
+            found.append("channel-resolution.log stderr base64 is malformed")
+        else:
+            if (
+                not isinstance(stderr_bytes, int)
+                or isinstance(stderr_bytes, bool)
+                or stderr_bytes < 0
+                or stderr_bytes != len(raw_stderr)
+            ):
+                found.append("channel-resolution.log stderr byte count is inconsistent")
+            if (
+                not isinstance(stderr_digest, str)
+                or SHA256.fullmatch(stderr_digest) is None
+                or stderr_digest != hashlib.sha256(raw_stderr).hexdigest()
+            ):
+                found.append("channel-resolution.log stderr digest is inconsistent")
+            if (
+                not isinstance(stderr_text, str)
+                or stderr_text != raw_stderr.decode("utf-8", errors="replace")
+            ):
+                found.append("channel-resolution.log stderr text does not match captured bytes")
+            if b"channel authentication disabled" in raw_stderr.lower():
+                found.append("channel-resolution.log reports disabled channel authentication")
+
+    return found
+
+
 def problems(directory: Path, metadata_only: bool = False) -> list[str]:
     """Return every reason the final release bundle is not ready."""
     if directory.is_symlink():
@@ -135,9 +245,34 @@ def problems(directory: Path, metadata_only: bool = False) -> list[str]:
             "channel-resolution.log",
             "channel_resolution_log_sha256",
             "channel_resolution_log_bytes",
-            False,
+            True,
         ),
     )
+    build_section = build_manifest.get("build")
+    if not isinstance(build_section, dict):
+        found.append("build-manifest build section is missing or invalid")
+        build_section = {}
+    build_log_name = build_section.get("log")
+    if build_log_name != "build.log":
+        found.append("build-manifest build.log must be build.log")
+    build_log_sha = build_section.get("log_sha256")
+    if not isinstance(build_log_sha, str) or SHA256.fullmatch(build_log_sha) is None:
+        found.append("build-manifest build.log_sha256 is missing or malformed")
+    else:
+        if sums.get("build.log") != build_log_sha:
+            found.append("build-manifest build.log_sha256 != SHA256SUMS entry for build.log")
+        if (directory / "build.log").is_file() and sha256_of(directory / "build.log") != build_log_sha:
+            found.append("build.log does not match build-manifest build.log_sha256")
+    build_log_bytes = build_section.get("log_bytes")
+    if (
+        not isinstance(build_log_bytes, int)
+        or isinstance(build_log_bytes, bool)
+        or build_log_bytes <= 0
+    ):
+        found.append("build-manifest build.log_bytes is missing or invalid")
+    elif (directory / "build.log").is_file() and (directory / "build.log").stat().st_size != build_log_bytes:
+        found.append("build.log does not match build-manifest build.log_bytes")
+
     for filename_key, expected_name, digest_key, bytes_key, must_be_nonempty in channel_evidence:
         recorded_name = guix.get(filename_key)
         if recorded_name != expected_name:
@@ -169,6 +304,8 @@ def problems(directory: Path, metadata_only: bool = False) -> list[str]:
         or resolution_status != 0
     ):
         found.append("channel resolution did not exit successfully")
+
+    found.extend(channel_resolution_log_problems(directory))
 
     artifact = manifest.get("artifact")
     acceptance = manifest.get("acceptance")
@@ -389,6 +526,21 @@ def problems(directory: Path, metadata_only: bool = False) -> list[str]:
             found.append(f"{name} has boot_confirmed false")
         if record.get("guest_installer_execution") is not True:
             found.append(f"{name} has guest_installer_execution false")
+        if record.get("serial_clean") is not True:
+            found.append(f"{name} has serial_clean false or missing")
+        failure_markers = record.get("serial_failure_markers")
+        if (
+            not isinstance(failure_markers, list)
+            or any(not isinstance(marker, str) or not marker for marker in failure_markers)
+        ):
+            found.append(f"{name} serial_failure_markers is missing or malformed")
+        elif failure_markers:
+            found.append(f"{name} contains serial failure markers: {', '.join(failure_markers)}")
+        boot_iso_sha = record.get("iso_sha256")
+        if not isinstance(boot_iso_sha, str) or SHA256.fullmatch(boot_iso_sha) is None:
+            found.append(f"{name} iso_sha256 is missing or malformed")
+        elif artifact_sha is None or boot_iso_sha != artifact_sha:
+            found.append(f"{name} boot evidence iso_sha256 != release-manifest artifact sha256")
         if marker is not None and marker not in tail:
             found.append(f"{name} never showed {marker}")
         if installer_marker is not None and installer_marker not in tail:
