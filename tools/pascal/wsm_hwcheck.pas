@@ -425,7 +425,8 @@ begin
   SortDevices(Devices);
 
   for I := 0 to Devices.Count - 1 do
-    if BuildDevice(Devices[I], ObservedAt) <> nil then
+    if (ReadTrimmed(Devices[I] + '/vendor') <> '') or
+       (ReadTrimmed(Devices[I] + '/device') <> '') then
     begin
       Found := True;
       Break;
