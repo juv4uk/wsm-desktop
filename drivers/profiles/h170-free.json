@@ -90,7 +90,9 @@
      "name": "Linux Intel MEI / HECI driver",
      "kernel_module": "mei_me",
      "userspace_candidates": [],
-     "package_candidates": [],
+     "package_candidates": [
+      "linux-libre"
+     ],
      "package_resolution": "not-assessed",
      "kernel_config": "module-available",
      "runtime_binding": "unknown",
@@ -221,7 +223,10 @@
      "userspace_candidates": [
       "Mesa Intel userspace"
      ],
-     "package_candidates": [],
+     "package_candidates": [
+      "linux-libre",
+      "mesa"
+     ],
      "package_resolution": "not-assessed",
      "kernel_config": "module-available",
      "runtime_binding": "unknown",
@@ -292,7 +297,10 @@
       "Mesa",
       "NVK (upstream generation range includes Kepler/Pascal; exact 10de:1c82 runtime not assessed)"
      ],
-     "package_candidates": [],
+     "package_candidates": [
+      "linux-libre",
+      "mesa"
+     ],
      "package_resolution": "not-assessed",
      "kernel_config": "module-available",
      "runtime_binding": "unknown",
@@ -410,7 +418,9 @@
      "name": "Linux alx driver",
      "kernel_module": "alx",
      "userspace_candidates": [],
-     "package_candidates": [],
+     "package_candidates": [
+      "linux-libre"
+     ],
      "package_resolution": "not-assessed",
      "kernel_config": "module-available",
      "runtime_binding": "unknown",
@@ -477,7 +487,9 @@
      "name": "Linux NVMe core driver",
      "kernel_module": "nvme",
      "userspace_candidates": [],
-     "package_candidates": [],
+     "package_candidates": [
+      "linux-libre"
+     ],
      "package_resolution": "not-assessed",
      "kernel_config": "built-in",
      "runtime_binding": "unknown",
@@ -536,7 +548,9 @@
      "name": "Linux AHCI/SATA driver",
      "kernel_module": "ahci",
      "userspace_candidates": [],
-     "package_candidates": [],
+     "package_candidates": [
+      "linux-libre"
+     ],
      "package_resolution": "not-assessed",
      "kernel_config": "module-available",
      "runtime_binding": "unknown",
@@ -595,7 +609,9 @@
      "name": "Linux HDA driver",
      "kernel_module": "snd_hda_intel",
      "userspace_candidates": [],
-     "package_candidates": [],
+     "package_candidates": [
+      "linux-libre"
+     ],
      "package_resolution": "not-assessed",
      "kernel_config": "module-available",
      "runtime_binding": "unknown",
