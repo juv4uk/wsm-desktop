@@ -1,24 +1,15 @@
 ;; SPDX-License-Identifier: LicenseRef-Volnist
 ;;
-;; A Cuirass job module: the live image, built by Guix, on the pinned channels.
+;; A Cuirass job module for the WSM Minimal Live ISO.
 ;;
-;; Cuirass calls `cuirass-jobs' with the store and the specification arguments.
-;; The image expression is the same one the release workflow builds, so this is
-;; a second, independent path to the same derivation: if the workflow is green
-;; and Cuirass is red, one of them is lying about the same bytes.
-;;
-;; This module lives under ci/ rather than wsm/ on purpose: wsm/ is the public
-;; channel namespace, and every module there must be loadable by the channel's
-;; evaluation test. A CI helper is not part of the channel's API. Because of that,
-;; its module name must match this path — a channel with no `directory` resolves
-;; (wsm X) to <checkout>/wsm/X.scm, so a `(wsm ci images)` name here would look for
-;; wsm/ci/images.scm and find nothing.
+;; The module name matches this file's path from the WSM channel root.
+;; Cuirass calls cuirass-jobs with the store and specification arguments.
 
 (define-module (ci cuirass images)
-  #:use-module (guix store)
-  #:use-module (guix derivations)
+  #:use-module (gnu ci)
+  #:use-module (gnu image)
   #:use-module (gnu system image)
-  #:use-module (gnu system)
+  #:use-module (ice-9 ftw)
   #:use-module (ice-9 match)
   #:export (cuirass-jobs))
 
@@ -28,24 +19,24 @@
     (#f "x86_64-linux")
     (system system)))
 
+(define (channel-file relative-path)
+  "Resolve RELATIVE-PATH from the checked-out channel in %load-path."
+  (or (search-path %load-path relative-path)
+      (error "cannot find WSM channel file in Guile load path" relative-path)))
+
 (define* (image-jobs store systems #:key (profile "systems/live-minimal.scm"))
-  "One job per system: build the live image expression."
+  "Return Cuirass jobs for the WSM Minimal Live ISO."
   (map (lambda (system)
-         (let* ((name (string->symbol
-                       (string-append "wsm-live-minimal." system)))
-                ;; The profile is read from the checked-out channel, so the job
-                ;; always describes the source revision Cuirass just fetched.
-                (os   (primitive-load profile))
-                (drv  (operating-system-image
-                       os
-                       #:target system)))
-           (derivation->job name drv)))
+         (let ((os (primitive-load (channel-file profile))))
+           ;; image->job is the pinned Guix API. It lowers the image record
+           ;; through system-image, then returns the derivation as a Cuirass job.
+           (image->job store
+                       (image (inherit iso9660-image)
+                              (operating-system os))
+                       #:name "wsm-live-minimal"
+                       #:system system)))
        systems))
 
 (define (cuirass-jobs store arguments)
-  "Register Cuirass jobs for the WSM live image."
-  (define systems
-    (list (arguments->system arguments)))
-  ;; Grafting belongs on the user's machine, not in a build farm.
-  (parameterize ((%graft? #f))
-    (image-jobs store systems)))
+  "Register Cuirass jobs for the WSM Minimal Live ISO."
+  (image-jobs store (list (arguments->system arguments))))
