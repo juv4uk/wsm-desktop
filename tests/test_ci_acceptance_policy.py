@@ -177,8 +177,20 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
         self.assertIn("h170-free-closure.nar", self.text)
         self.assertIn("store-paths.tsv", self.text)
 
+    def test_provenance_records_derivations_and_effective_license_metadata(self) -> None:
+        self.assertIn("build --derivations", self.text)
+        self.assertIn("derivation_path", self.text)
+        self.assertIn('show "$package"', self.text)
+        self.assertIn("license:", self.text)
+        self.assertIn("package-info/*.rec", self.text)
+        self.assertIn("Package metadata", self.text)
+
     def test_archive_import_trust_and_checksums_are_distributed(self) -> None:
         self.assertIn("guix archive --generate-key", self.text)
+        self.assertLess(
+            self.text.index("guix archive --generate-key"),
+            self.text.index("systemctl enable --now guix-daemon.service"),
+        )
         self.assertIn("signing-key.pub", self.text)
         self.assertIn("guix archive --authorize", self.text)
         self.assertIn("guix archive --import", self.text)
