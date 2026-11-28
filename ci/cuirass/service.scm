@@ -1,31 +1,33 @@
 ;; SPDX-License-Identifier: LicenseRef-Volnist
 ;;
-;; Run Cuirass on your own machine, with the WSM specifications.
+;; Cuirass service fragment for a dedicated Guix build host.
 ;;
-;; This is a fragment, not a full operating-system declaration: paste the
-;; `services' entry into the system that should host the build farm. It is
-;; written as a fragment on purpose - a complete system definition would become
-;; a second source of truth for how WSM machines are configured.
+;; This is NOT a complete operating-system declaration and MUST NOT be deployed
+;; until WSM's owner-signed channel authentication and the package/licensing
+;; acceptance in issue #367 are complete.
 ;;
-;; What you get: a web interface on port 8081, a PostgreSQL-backed job history,
-;; and substitutes for anything the jobs build. What you do not get: QEMU boot
-;; acceptance. That stays in the release workflow.
+;; Cuirass schedules derivation builds through guix-daemon. It does not expose
+;; a substitute server; guix publish is a separate service and is intentionally
+;; not configured here.
+;;
+;; Evaluate this fragment from the wsm-desktop repository root so local-file
+;; captures an immutable copy of the specifications in the system closure.
 
-(use-modules (gnu services ci)
-             (gnu services)
-             (guix channels))
+(use-modules (gnu services)
+             (gnu services cuirass)
+             (guix gexp))
 
 (define %wsm-cuirass-specs
-  ;; Loaded from the file so the CLI and the service cannot drift apart.
-  #~(load "/run/current-system/profile/share/wsm/ci/cuirass/specs.scm"))
+  (local-file "ci/cuirass/specs.scm" "wsm-cuirass-specs.scm"))
 
 (define wsm-cuirass-service
   (service cuirass-service-type
            (cuirass-configuration
+            ;; Keep the unauthenticated administration UI on loopback.
+            ;; Use an authenticated TLS reverse proxy for remote administration.
             (host "localhost")
             (port 8081)
-            ;; Substitutes make a build farm useful; without them every job
-            ;; rebuilds its whole closure from source.
-            (use-substitutes? #t)
-            (fallback? #t)
-            (specifications %wsm-cuirass-specs))))
+            ;; The pinned record has no use-substitutes? field. Keep its
+            ;; conservative fallback default and do not configure a cache trust
+            ;; policy here.
+            (specifications #~(load #$%wsm-cuirass-specs)))))
