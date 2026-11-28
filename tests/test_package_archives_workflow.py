@@ -45,7 +45,7 @@ class PackageArchivesWorkflowTests(unittest.TestCase):
     def test_pack_artifact_has_checksums_and_provenance(self) -> None:
         artifact = self.step("Keep the package as a workflow artifact")
         self.assertIn("actions/upload-artifact@v7", artifact["uses"])
-        self.assertEqual(artifact["with"]["retention-days"], "30")
+        self.assertEqual(int(artifact["with"]["retention-days"]), 30)
         build = self.step("Evaluate and build the WSM package pack")["run"]
         self.assertIn("SHA256SUMS", build)
         self.assertIn("PROVENANCE.txt", build)
