@@ -159,14 +159,14 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
 
 
 class HardwareBuildEvidenceTests(unittest.TestCase):
-    """Building is allowed while #367 is open; exporting a closure is not."""
+    """Building is allowed while #367 is open; retaining/distributing a NAR is not."""
 
     WORKFLOW = ROOT / ".github" / "workflows" / "hw-build-evidence.yml"
 
     def text(self) -> str:
         return self.WORKFLOW.read_text(encoding="utf-8")
 
-    def test_it_builds_but_never_exports_or_uploads(self) -> None:
+    def test_it_never_retains_or_uploads_a_nar_file(self) -> None:
         text = self.text()
         self.assertIn("guix time-machine -C channels.lock.scm", text)
         for forbidden in (
@@ -184,10 +184,12 @@ class HardwareBuildEvidenceTests(unittest.TestCase):
         self.assertIn("archive --export", self.text())
         self.assertIn("PACKAGES: ${{ inputs.packages }}", self.text())
         self.assertIn('for package in "${packages[@]}"', self.text())
+        self.assertIn("package list must be a single line", self.text())
+        self.assertIn('""|-*', self.text())
         self.assertNotIn("for package in ${{ inputs.packages }}", self.text())
 
     def test_it_says_in_the_summary_that_nothing_was_published(self) -> None:
-        self.assertIn("publishes nothing", self.text())
+        self.assertIn("NAR stream counted and discarded", self.text())
 
     def test_a_failing_package_fails_the_run(self) -> None:
         text = self.text()
