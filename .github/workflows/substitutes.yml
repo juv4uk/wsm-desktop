@@ -41,6 +41,17 @@ jobs:
       - name: Checkout pinned source inputs
         uses: actions/checkout@v7
 
+      - name: Use the GNU Guix project's authenticated Codeberg mirror
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The GNU Guix maintainers provide this mirror for use when their
+          # primary Git host is unavailable. Git URL rewriting changes only
+          # transport; channels.lock.scm commit and introduction remain exact.
+          git config --global url."https://codeberg.org/guix/guix-mirror".insteadOf "https://git.guix.gnu.org/guix.git"
+          echo "Guix transport mirror: https://codeberg.org/guix/guix-mirror" >> "$GITHUB_STEP_SUMMARY"
+          echo "The lock commit and authenticated channel introduction are unchanged." >> "$GITHUB_STEP_SUMMARY"
+
       - name: Restore or save the pinned Guix checkout cache
         uses: actions/cache@v4
         with:
