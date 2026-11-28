@@ -86,6 +86,14 @@ class SubstituteWorkflowTests(unittest.TestCase):
         self.assertIn("upload-pages-artifact@v3", self.text)
         self.assertIn("releases/download/substitutes", self.text)
 
+    def test_pages_publish_cache_info_and_public_signing_key(self) -> None:
+        step = self.step("Переписати URL")
+        run = step["run"]
+        self.assertIn("http://localhost:3000/nix-cache-info", run)
+        self.assertIn("http://localhost:3000/signing-key.pub", run)
+        self.assertIn("test -s ./site/nix-cache-info", run)
+        self.assertIn("test -s ./site/signing-key.pub", run)
+
 
 class PackageArchiveWorkflowTests(unittest.TestCase):
     def test_package_archive_uses_same_deliberate_tag_namespace(self) -> None:
