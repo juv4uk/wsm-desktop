@@ -107,6 +107,7 @@ jobs:
             test -x build/fpc/wsm_partition
             test -x build/fpc/wsm_profile
             test -x build/fpc/wsm_preflight
+            test -x build/fpc/wsm_install
             echo "::group::Hardware collector schema and PCI parity"
             python3 tests/test_fpc_collector_parity.py || failed=$((failed + 1))
             echo "::endgroup::"
@@ -121,6 +122,8 @@ jobs:
             python3 tests/test_fpc_profile_runtime.py || failed=$((failed + 1))
             python3 tests/test_fpc_preflight.py
             python3 tests/test_fpc_preflight_runtime.py || failed=$((failed + 1))
+            python3 tests/test_fpc_cli.py
+            python3 tests/test_fpc_install_runtime.py || failed=$((failed + 1))
             echo "::endgroup::"
           fi
           ls -l build/fpc || true
@@ -142,6 +145,7 @@ jobs:
 
       - name: Повідомити причину збою
         if: failure()
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
