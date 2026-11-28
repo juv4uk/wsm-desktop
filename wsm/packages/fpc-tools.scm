@@ -25,7 +25,7 @@
   ;; load only when Guix evaluates it.
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-13)
-  #:export (wsm-hwcheck-fpc wsm-classify-fpc))
+  #:export (wsm-hwcheck-fpc wsm-classify-fpc wsm-partition-fpc))
 
 (define-public wsm-hwcheck-fpc
   (package
@@ -54,7 +54,8 @@
               (let* ((out (assoc-ref outputs "out"))
                      (bin (string-append out "/bin")))
                 (install-file "tools/pascal/wsm-hwcheck" bin)
-                (install-file "tools/pascal/wsm-classify" bin)))))))
+                (install-file "tools/pascal/wsm-classify" bin)
+                (install-file "tools/pascal/wsm-partition" bin)))))))
     (synopsis "Read-only PCI hardware reader for WSM Desktop, built with FPC")
     (description
      "A native binary that reads PCI identity and driver binding from sysfs and
@@ -75,3 +76,13 @@ It is the Free Pascal counterpart of the Python classifier, and it keeps the
 same restraint: a subsystem is KNOWN only when every observed device has a
 driver binding or a candidate, a failed function test blocks that, and
 CERTIFIED is never emitted because report v1 has no coverage manifest.")))
+
+(define-public wsm-partition-fpc
+  (package
+    (inherit wsm-hwcheck-fpc)
+    (name "wsm-partition-fpc")
+    (synopsis "Disk layout planner for WSM Desktop, built with FPC")
+    (description
+     "Builds a partition layout or refuses with a reason.  It plans and stops:
+it never runs sgdisk, never opens a block device and never writes.  The sgdisk
+invocations are emitted as data for a caller that holds the consent chain.")))
