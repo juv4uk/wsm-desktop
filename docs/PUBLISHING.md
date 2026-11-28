@@ -56,6 +56,27 @@ guix build -L . -f wsm/packages/wsm.scm
 guix time-machine -C channels.lock.scm -- system -L . build systems/minimal.scm --dry-run
 ```
 
+## Ліцензія: варіант (a) застосовано
+
+`wsm/licenses.scm` визначає `license-ref-volnist` — запис `<license>` із полями
+`name`/`uri`/`comment`, і `wsm/packages/wsm.scm` тепер посилається на нього
+замість `gpl3+`. Це **не** маскування: метадані кажуть те саме, що заголовки
+файлів.
+
+Факти, на яких це тримається:
+
+- Guix **не читає** ліцензію під час збирання — `package-license` це метадані;
+  `guix lint` перевіряє лише, що поле є `<license>` або списком таких, а
+  `guix show` друкує поле `name`.
+- `LicenseRef-Volnist` — синтаксично правильний вираз SPDX (Annex D, `license-ref`),
+  а REUSE вимагає тримати текст у `LICENSES/LicenseRef-Volnist.txt` — він там.
+- Конструктор `license` знову експортовано з `(guix licenses)` лише з червня 2026;
+  на старішому Guix модуль дістає його через `@@`.
+
+Якщо власник вибере варіант (b) — переліцензування — достатньо повернути
+`(license gpl3+)` і прибрати `LICENSES/LicenseRef-Volnist.txt` (REUSE забороняє
+тримати файл ліцензії, під якою не лишилося жодного файлу).
+
 ## Публікація під H170 (Kaby/Skylake)
 
 Скрипт: `scripts/publish-hardware-cache.sh`. Він fail-closed: без названого

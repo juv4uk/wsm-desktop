@@ -82,6 +82,17 @@ fi
 [ "$CPU" = "native" ] && die "--tune=native заборонено для публікації: бінарники
        можуть падати на іншому CPU. Назвіть мікроархітектуру явно."
 
+# Skylake-покоління Pentium/Celeron не має AVX2, і -march=skylake на них падає.
+# Перевіряємо прапорці CPU, а не назву моделі.
+if [ -r /proc/cpuinfo ]; then
+  if ! grep -qw avx2 /proc/cpuinfo; then
+    die "CPU не має AVX2: -march=$CPU дасть illegal instruction. Для такого
+         процесора публікуйте без --tune або з нижчою мікроархітектурою."
+  fi
+else
+  note "WARN: /proc/cpuinfo недоступний, AVX2 не перевірено"
+fi
+
 # --- 4. Що саме публікуємо ---------------------------------------------------
 # Лише Free-профілі. Compatibility тягне nonfree, і політика #586 забороняє
 # його розповсюдження без письмового clearance.
@@ -121,9 +132,26 @@ fi
 # 404. Це не теорія: саме так «кеш ламається сам».
 install -d -m 0755 "$ROOTS_DIR" 2>/dev/null || true
 for package in "${PACKAGES[@]}"; do
-  note "збірка $package з --tune=$CPU"
+  note "збірка $package з --tune=$CPU (тести при tuned-збірці НЕ виконуються —
+       це поведінка Guix, не наша; окремо проганяйте нетестований build для перевірки)"
   guix build -L . --tune="$CPU" --root="$ROOTS_DIR/$package" "$package" \
     || die "збірка $package не вдалася"
+done
+
+# --- 6b. Перевірка, що збірка справді tuned ---------------------------------
+# guix build друкує рядок "tuning <pkg> for CPU <name>" лише для пакетів із
+# властивістю tunable?; для решти --tune — тихий no-op. Тому перевіряємо
+# прапорці у build-лозі, а не сподіваємось.
+for package in "${PACKAGES[@]}"; do
+  if log=$(guix build -L . --tune="$CPU" "$package" --log-file 2>/dev/null) && [ -f "$log" ]; then
+    if grep -q -- "-march=$CPU" "$log"; then
+      note "$package: -march=$CPU підтверджено в build-лозі"
+    else
+      note "WARN: $package зібрано без -march=$CPU — пакет не позначений tunable?, тюнінг не застосовано"
+    fi
+  else
+    note "WARN: build-лог для $package недоступний, тюнінг не підтверджено"
+  fi
 done
 
 # --- 7. Публікація ----------------------------------------------------------
