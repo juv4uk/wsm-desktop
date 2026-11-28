@@ -57,7 +57,7 @@ class ChannelAuthorizationsTests(unittest.TestCase):
         return key
 
     def gpg_success(self, fingerprint: str = FINGERPRINT):
-        output = f"pub:::::::::\\nfpr:::::::::{fingerprint}:\\n"
+        output = f"pub:::::::::\nfpr:::::::::{fingerprint}:\n"
         return subprocess.CompletedProcess(["gpg"], 0, output, "")
 
     def test_absent_authorizations_are_not_bootstrapped(self) -> None:
@@ -97,10 +97,9 @@ class ChannelAuthorizationsTests(unittest.TestCase):
         self.assertTrue(any("invalid" in item or "no full" in item for item in found), found)
 
     def test_fingerprint_in_comment_is_not_authorized(self) -> None:
-        self.write(
-            "(authorizations (version 0) ())\\n"
-            "; ((\\"1234 5678 9ABC DEF0 1234  5678 9ABC DEF0 1234 5678\\"))\\n"
-        )
+        self.write("""(authorizations (version 0) ())
+; (("1234 5678 9ABC DEF0 1234  5678 9ABC DEF0 1234 5678"))
+""")
         found = checker.problems(self.root)
         self.assertTrue(any("lists no full" in item for item in found), found)
 
@@ -138,7 +137,7 @@ class ChannelAuthorizationsTests(unittest.TestCase):
     def test_gpg_output_without_a_fingerprint_is_refused(self) -> None:
         self.write(GOOD)
         self.write_key()
-        success_without_fpr = subprocess.CompletedProcess(["gpg"], 0, "pub:::::::::\\n", "")
+        success_without_fpr = subprocess.CompletedProcess(["gpg"], 0, "pub:::::::::\n", "")
         with (
             patch.object(checker.shutil, "which", return_value="/usr/bin/gpg"),
             patch.object(checker.subprocess, "run", return_value=success_without_fpr),
