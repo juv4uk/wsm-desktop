@@ -85,7 +85,9 @@ class SourceTests(unittest.TestCase):
     def test_report_uses_kernel_identity_and_utc_timestamp(self) -> None:
         self.assertIn("fpUname(SystemName)", self.text)
         self.assertIn("DateTimeToUnix(Now, False)", self.text)
-        self.assertIn("DateTimeToISO8601(UnixToDateTime(Epoch, True), True)", self.text)
+        self.assertIn("FormatDateTime(", self.text)
+        self.assertIn("UnixToDateTime(Epoch, True)", self.text)
+        self.assertIn('T"hh":"nn":"ss"Z"', self.text)
 
     def test_pci_results_are_sorted_and_sensitive_identifiers_are_not_added(self) -> None:
         self.assertIn("SortDevices(Devices)", self.text)
