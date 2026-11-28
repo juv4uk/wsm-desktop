@@ -34,4 +34,4 @@
        (patches
         (append (origin-patches (package-source linux-libre))
                 (list (local-file %h170-nouveau-atomic-patch
-                                  "linux-libre-h170-nouveau-atomic.patch")))))))
+                                  "linux-libre-h170-nouveau-atomic.patch"))))))))

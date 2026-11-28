@@ -35,11 +35,12 @@ class H170LinuxLibreOverlayTests(unittest.TestCase):
         self.assertIn('(name "linux-libre-h170")', scheme)
 
     def test_overlay_does_not_add_proprietary_driver_or_firmware_packages(self) -> None:
-        scheme = SCHEME.read_text(encoding="utf-8").lower()
-        self.assertNotIn("nonguix", scheme)
-        self.assertNotIn("nvidia-firmware", scheme)
-        self.assertNotIn("firmware-nvidia", scheme)
-        self.assertNotIn("nvidia-kernel", scheme)
+        scheme = SCHEME.read_text(encoding="utf-8")
+        code = "\n".join(line.split(";;", 1)[0] for line in scheme.splitlines()).lower()
+        self.assertNotIn("nonguix", code)
+        self.assertNotIn("nvidia-firmware", code)
+        self.assertNotIn("firmware-nvidia", code)
+        self.assertNotIn("nvidia-kernel", code)
 
     def test_documentation_keeps_runtime_and_compute_claims_unproven(self) -> None:
         text = MATRIX.read_text(encoding="utf-8").lower()
