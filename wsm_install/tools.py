@@ -20,11 +20,21 @@ table moves off FHS paths.
 from __future__ import annotations
 
 import os
+from functools import lru_cache
 from typing import Callable, Sequence
 
-from wsm_install.install_steps import TRUSTED_TOOLS
 
-TRUSTED_BASENAMES = frozenset(os.path.basename(path) for path in TRUSTED_TOOLS.values())
+@lru_cache(maxsize=1)
+def trusted_basenames() -> frozenset[str]:
+    """Basenames of the trusted tools.
+
+    Imported lazily: install_steps imports resolve() from this module, so a
+    module-level import here would be circular. The table is a constant, so caching
+    it once is enough.
+    """
+    from wsm_install.install_steps import TRUSTED_TOOLS
+
+    return frozenset(os.path.basename(path) for path in TRUSTED_TOOLS.values())
 
 # Profile directories of a Guix system, then the FHS locations used by the host
 # preview. Order matters: the first prefix that has the tool wins, so a host tool
@@ -50,7 +60,7 @@ def resolve(
     """
     if not isinstance(name, str) or not name or os.sep in name:
         raise ValueError(f"{name!r} is not a bare tool name")
-    if name not in TRUSTED_BASENAMES:
+    if name not in trusted_basenames():
         raise ValueError(f"{name!r} is not a trusted tool")
 
     for prefix in prefixes:
@@ -73,7 +83,7 @@ def is_admissible_path(
     """
     if not isinstance(path, str) or not path.startswith(os.sep):
         return False, f"{path!r} is not an absolute path"
-    if os.path.basename(path) not in TRUSTED_BASENAMES:
+    if os.path.basename(path) not in trusted_basenames():
         return False, f"{os.path.basename(path)!r} is not a trusted tool"
     if os.path.dirname(path) not in set(prefixes):
         return False, f"{os.path.dirname(path)!r} is not one of the allowed tool prefixes"

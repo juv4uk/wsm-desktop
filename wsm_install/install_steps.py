@@ -28,8 +28,9 @@ btrfs and xfs remain future capabilities, not options in the current preview.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Sequence
 
+from wsm_install.tools import resolve
 from wsm_install.partition import Layout, Refused
 
 # Absolute paths for every tool a privileged step runs.
@@ -95,8 +96,18 @@ def plan_steps(
     filesystem: str = "ext4",
     target: str = "/mnt",
     hostname: str | None = None,
+    tool_prefixes: Sequence[str] | None = None,
 ) -> list[Step]:
-    """Build the ordered step list for a layout, or refuse."""
+    """Build the ordered step list for a layout, or refuse.
+
+    `tool_prefixes` selects where the tools are expected to live. Without it the
+    table's FHS paths are used, which is what the host preview has always produced.
+    With it — the image's own profile directories — each tool is resolved there, so a
+    Guix live image, which has no /usr, gets paths that can actually exist. A tool
+    that cannot be resolved is a refusal, not a fallback: silently shipping the FHS
+    path into an image that lacks it is how an installer discovers the problem at
+    the worst possible moment.
+    """
     # A Layout can be passed between modules or reconstructed by another caller.
     # Re-check that exact-disk consent and observed size survived that handoff.
     layout.validate_confirmation()
@@ -110,6 +121,17 @@ def plan_steps(
             "target.unsafe",
             f"target must be an absolute mount point below /, got {target!r}",
         )
+
+    def tool_path(name: str) -> str:
+        if tool_prefixes is None:
+            return TRUSTED_TOOLS[name]
+        resolved = resolve(name, prefixes=tool_prefixes)
+        if resolved is None:
+            raise Refused(
+                "tool.missing",
+                f"{name} was not found in the configured prefixes {list(tool_prefixes)}",
+            )
+        return resolved
 
     root = _partition_by_role(layout, "root")
     esp = None
@@ -141,7 +163,7 @@ def plan_steps(
             )
         partition_table_steps.append(
             Step(
-                [TRUSTED_TOOLS["sgdisk"], *command[1:]],
+                [tool_path("sgdisk"), *command[1:]],
                 purpose,
                 destructive=True,
             )
@@ -149,15 +171,15 @@ def plan_steps(
 
     steps: list[Step] = partition_table_steps + [
         Step(
-            [TRUSTED_TOOLS["partprobe"], layout.disk],
+            [tool_path("partprobe"), layout.disk],
             "re-read the partition table; the kernel does not always notice new partitions",
         ),
         Step(
-            [TRUSTED_TOOLS["udevadm"], "settle"],
+            [tool_path("udevadm"), "settle"],
             "wait for device nodes to appear before touching them",
         ),
         Step(
-            [TRUSTED_TOOLS[FILESYSTEMS[filesystem]["mkfs"]],
+            [tool_path(FILESYSTEMS[filesystem]["mkfs"]),
              *FILESYSTEMS[filesystem]["args"], root_device],
             f"create {filesystem} on the root partition",
             destructive=True,
@@ -168,26 +190,26 @@ def plan_steps(
         esp_device = device_for(layout.disk, esp["number"])
         steps.append(
             Step(
-                [TRUSTED_TOOLS["mkfs.fat"], "-F", "32", esp_device],
+                [tool_path("mkfs.fat"), "-F", "32", esp_device],
                 "format the EFI system partition as FAT32; UEFI firmware reads nothing else",
                 destructive=True,
             )
         )
 
     steps.append(
-        Step([TRUSTED_TOOLS["mount"], root_device, target], f"mount the root filesystem at {target}")
+        Step([tool_path("mount"), root_device, target], f"mount the root filesystem at {target}")
     )
 
     if esp is not None:
         steps.append(
             Step(
-                [TRUSTED_TOOLS["mkdir"], "-p", f"{target}/boot/efi"],
+                [tool_path("mkdir"), "-p", f"{target}/boot/efi"],
                 "create the ESP mount point inside the target",
             )
         )
         steps.append(
             Step(
-                [TRUSTED_TOOLS["mount"], device_for(layout.disk, esp["number"]),
+                [tool_path("mount"), device_for(layout.disk, esp["number"]),
                  f"{target}/boot/efi"],
                 "mount the ESP inside the target tree; outside it the bootloader lands on the live system",
             )
