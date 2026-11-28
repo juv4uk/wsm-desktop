@@ -22,7 +22,7 @@ FPCFLAGS ?= -O2 -Sh -vw
 PROGRAMS = plan-digest schema-vectors plan-vectors
 
 SOURCES = wsm_sha256.pas plan_digest.pas wsmcpufacts.pas wsmsteps.pas \
-          wsmbackend.pas wsmplan.pas wsmplan_vectors.pas \
+          wsmbackend.pas wsmplan.pas wsmplan_vectors.pas wsmtools.pas \
           wsmschema.pas wsmschema_vectors.pas
 
 .PHONY: all check install clean
