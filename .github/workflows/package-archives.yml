@@ -1,0 +1,93 @@
+# SPDX-License-Identifier: LicenseRef-Volnist
+name: WSM package archives
+
+# Builds the channel's packages on the locked channels and keeps the result as a
+# workflow artifact you can download and import by hand:
+#
+#   guix archive --import < wsm-tools.nar
+#
+# What this deliberately is NOT:
+#
+#  * not a substitute server — that needs a signing key, a public URL and a trust
+#    plan, and the decision is still open (#741, #367). Nothing here signs anything;
+#  * not a release asset — attaching binaries to a tag is a distribution decision,
+#    so this workflow only produces artifacts that expire with the run. If you want
+#    them on a release, download and attach them yourself;
+#  * not automatic — `workflow_dispatch` only, no tag or branch trigger, because an
+#    archive that appears without a person asking for it is how unsigned binaries
+#    start circulating.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wsm-package-archives
+  cancel-in-progress: true
+
+jobs:
+  archive:
+    name: Build and archive the channel packages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install Guix
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y guix
+          sudo systemctl enable --now guix-daemon.service
+          guix --version
+
+      - name: Build on the release lock
+        id: build
+        run: |
+          set -euo pipefail
+          # The same lock the release uses: an archive built from other channels is
+          # not the thing the image was built against.
+          store_path="$(guix time-machine -C channels.lock.scm -- \
+                          build -L . wsm-tools --no-grafts)"
+          echo "store_path=$store_path" >> "$GITHUB_OUTPUT"
+          echo "WSM_PACKAGE_STORE_PATH=$store_path" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Export the closure as a nar
+        run: |
+          set -euo pipefail
+          guix archive --export "${{ steps.build.outputs.store_path }}" > wsm-tools.nar
+          sha256sum wsm-tools.nar | tee wsm-tools.nar.sha256
+          ls -l wsm-tools.nar
+          echo "WSM_PACKAGE_NAR_SHA256=$(cut -d' ' -f1 wsm-tools.nar.sha256)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the archive as a workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: wsm-tools-nar
+          path: |
+            wsm-tools.nar
+            wsm-tools.nar.sha256
+          retention-days: 30
+
+      - name: Повідомити причину збою
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          BODY=$(mktemp)
+          {
+            echo "### WSM package archives: збірка не завершилась"
+            echo ""
+            echo "Commit: \`$GITHUB_SHA\`"
+            echo ""
+            echo "Архів не створено. Перевірте збірку на locked-каналах вище."
+            df -h / || true
+          } > "$BODY"
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
+            -F body=@"$BODY" >/dev/null && echo "причину записано коментарем"
