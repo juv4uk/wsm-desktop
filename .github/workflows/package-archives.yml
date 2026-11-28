@@ -75,10 +75,31 @@ jobs:
           OUT="$GITHUB_WORKSPACE/archives"
           mkdir -p "$OUT"
           cp channels.lock.scm "$OUT/channels.lock.scm"
+          cp drivers/profiles/h170-free-packages.scm "$OUT/h170-free-packages.scm"
           guix time-machine -C channels.lock.scm -- describe > "$OUT/guix-channel-description.txt"
-          ( cd "$OUT" && sha256sum channels.lock.scm > channels.lock.sha256 )
+          ( cd "$OUT" && sha256sum channels.lock.scm h170-free-packages.scm > channels-inputs.sha256 )
 
-          PACKAGES=(linux-libre mesa)
+          # Parse the committed Guix manifest as data, not as shell or Scheme code.
+          python3 - <<'PY' > "$OUT/packages.txt"
+          import re
+          from pathlib import Path
+
+          source = Path("drivers/profiles/h170-free-packages.scm").read_text(encoding="utf-8")
+          match = re.search(r"specifications->manifest\\s*'\\((.*?)\\)\\s*\\)", source, re.DOTALL)
+          if match is None:
+              raise SystemExit("H170 Free manifest does not contain specifications->manifest")
+          packages = re.findall(r'"([a-z0-9.+-]+)"', match.group(1))
+          expected = (
+              "linux-libre", "mesa", "vulkan-loader", "vulkan-tools",
+              "pciutils", "usbutils", "alsa-utils", "ethtool",
+              "nvme-cli", "smartmontools", "lm-sensors",
+          )
+          if tuple(packages) != expected:
+              raise SystemExit(f"unexpected H170 Free package manifest: {packages!r}")
+          print("\\n".join(packages))
+          PY
+          mapfile -t PACKAGES < "$OUT/packages.txt"
+          test "${#PACKAGES[@]}" -eq 11
           STORE_PATHS=()
           mkdir -p "$OUT/package-info"
           printf 'package\tstore_path\tderivation_path\tnar_sha256\n' > "$OUT/store-paths.tsv"
@@ -142,7 +163,8 @@ jobs:
             echo "WSM repository: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
             echo "WSM source commit: $GITHUB_SHA"
             echo "Package profile: H170 Free"
-            echo "Package roots: linux-libre, mesa"
+            echo "Package roots:"
+            cat "$OUT/packages.txt"
             echo "Package source: pinned official GNU Guix channel in channels.lock.scm"
             echo "WSM-owned packages: excluded"
             echo "NVIDIA/Intel nonfree firmware and Nonguix: excluded"
@@ -179,16 +201,16 @@ jobs:
               sudo guix archive --authorize < signing-key.pub
               cat h170-free-closure.nar.zst.part-* | zstd -dc | guix archive --import
 
-          The archive contains the recursive closures for the linux-libre and mesa
-          roots. The private signing key was generated on the ephemeral build runner
-          and is not included in this release.
+          The archive contains the recursive closures for all package roots listed
+          in packages.txt and the committed h170-free-packages.scm manifest. The private
+          signing key was generated on the ephemeral build runner and is not included.
           EOF
 
           cat > "$OUT/RELEASE-NOTES.md" <<'EOF'
           # H170 Free Guix package bundle
 
-          This prerelease contains the Guix-built upstream package roots linux-libre
-          and mesa, resolved from the official channel pinned by channels.lock.scm.
+          This prerelease contains the Guix-built 11 upstream package roots listed in
+          h170-free-packages.scm, resolved from the official channel pinned by channels.lock.scm.
           The attached NAR bundle includes their recursive store closure and is signed
           by a one-run Guix daemon key; signing-key.pub is provided for import trust.
           GitHub artifact provenance is attached to the compressed archive parts.
@@ -201,7 +223,7 @@ jobs:
           proprietary NVIDIA driver, or WSM-owned LicenseRef-Volnist package is included.
           GP107 3D/compute and physical H170 runtime are not claimed.
 
-          See IMPORT.md, provenance.txt, store-paths.tsv and SHA256SUMS.
+          See IMPORT.md, provenance.txt, packages.txt, store-paths.tsv and SHA256SUMS.
           EOF
 
           (
@@ -210,7 +232,9 @@ jobs:
               h170-free-closure.nar.zst.part-* \
               signing-key.pub \
               channels.lock.scm \
-              channels.lock.sha256 \
+              h170-free-packages.scm \
+              channels-inputs.sha256 \
+              packages.txt \
               guix-channel-description.txt \
               store-paths.tsv \
               store-closure-size.txt \
@@ -250,7 +274,9 @@ jobs:
             "$OUT"/h170-free-closure.nar.zst.part-* \
             "$OUT/signing-key.pub" \
             "$OUT/channels.lock.scm" \
-            "$OUT/channels.lock.sha256" \
+            "$OUT/h170-free-packages.scm" \
+            "$OUT/channels-inputs.sha256" \
+            "$OUT/packages.txt" \
             "$OUT/guix-channel-description.txt" \
             "$OUT/store-paths.tsv" \
             "$OUT/store-closure-size.txt" \
