@@ -301,5 +301,28 @@ class AdmissionReportTests(unittest.TestCase):
                 self.assertIn("consent", step["reason"])
 
 
+class StartupCostTests(unittest.TestCase):
+    """A tool that runs on a 2 GB live medium must not pay for what it does not use."""
+
+    def test_jsonschema_is_not_imported_for_help(self) -> None:
+        """The validator costs more than the rest of the module together.
+
+        Measured on this project's own machine class: importing jsonschema adds about
+        half a second, and `--help` needs none of it.
+        """
+        import subprocess
+        import sys
+
+        probe = (
+            "import sys, wsm_install.cli; "
+            "print('jsonschema' in sys.modules)"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", probe], capture_output=True, text=True, cwd=str(ROOT)
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "False")
+
+
 if __name__ == "__main__":
     unittest.main()

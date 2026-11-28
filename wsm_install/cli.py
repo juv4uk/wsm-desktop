@@ -12,7 +12,6 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from jsonschema import Draft202012Validator, FormatChecker
 
 from .plan import build_plan, canonical_json, summarize_report
 from .profile import EvidenceUnavailable, load as load_profile_evidence
@@ -498,10 +497,18 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        from jsonschema import Draft202012Validator
+
         Draft202012Validator.check_schema(schema)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
         print(f"wsm-install: cannot load hardware report schema: {exc}", file=sys.stderr)
         return 2
+
+    # jsonschema costs about half a second to import — more than everything else in
+    # this module put together — and `--help`, `--version` and every non-validating
+    # path do not need it. On the machine this installer targets (2 GB, live medium)
+    # that half second is worth not paying.
+    from jsonschema import Draft202012Validator, FormatChecker
 
     validator = Draft202012Validator(schema, format_checker=FormatChecker())
     errors = sorted(validator.iter_errors(report), key=lambda item: list(item.absolute_path))
