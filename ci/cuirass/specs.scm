@@ -55,22 +55,4 @@
   (name 'wsm-live-minimal-image)
   (priority 1)
   (build '(custom (ci cuirass images)))
-<<<<<<< HEAD
   (channels (list %wsm-guix-channel %wsm-channel))))
-=======
-  (channels
-   (list (channel
-          (name 'guix)
-          (url "https://git.guix.gnu.org/guix.git")
-          (branch #f)
-          (commit "4e5195be20d9b124df8a8bb69213412236e4668e")
-          (introduction
-           (make-channel-introduction
-            "9edb3f66fd807b096b48283debdcddccfea34bad"
-            (openpgp-fingerprint
-             "BBB0 2DDF 2CEA F6A8 0D1D  E643 A2A0 6DF2 A33A 54FA"))))
-         (channel
-          (name 'wsm)
-          (url "https://github.com/juv4uk/wsm-desktop")
-          (branch "main"))))))
->>>>>>> origin/main
