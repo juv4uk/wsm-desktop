@@ -139,11 +139,11 @@ class MinimalLiveProfileTests(unittest.TestCase):
         lines = (ROOT / "RELEASE-REQUEST.txt").read_text(encoding="utf-8").splitlines()
         requested = [line.split("#", 1)[0].strip() for line in lines]
         tags = [line for line in requested if line]
-        self.assertIn(tags, [["0.1.0-rc3-minimal-live"], ["0.1.0-rc4-minimal-live"]])
+        self.assertIn(tags, [["0.1.0-rc3-minimal-live"], ["0.1.0-rc4-minimal-live"], ["0.1.0-rc5-minimal-live"]])
 
     def test_release_workflow_derives_iso_name_and_title_from_allowed_tag(self) -> None:
         workflow = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
-        self.assertIn("0.1.0-rc3-minimal-live|0.1.0-rc4-minimal-live", workflow)
+        self.assertIn("0.1.0-rc3-minimal-live|0.1.0-rc4-minimal-live|0.1.0-rc5-minimal-live", workflow)
         self.assertIn('VERSION="${TAG%-minimal-live}"', workflow)
         self.assertIn('ISO_NAME="WSM-Desktop-${VERSION}-Minimal-Live.iso"', workflow)
         self.assertIn('echo "iso_name=$ISO_NAME" >> "$GITHUB_OUTPUT"', workflow)
