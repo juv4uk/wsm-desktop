@@ -1,7 +1,7 @@
 # H170 Free package set
 
 **Status: BUILD-ONLY / NOT-PUBLISHED.** This manifest resolves the package set
-against the exact official Guix revision in \`channels.lock.scm\`. It can be
+against the exact official Guix revision in `channels.lock.scm`. It can be
 used for pinned evaluation and ephemeral CI builds. It is not permission to
 export NARs, upload package binaries, publish substitutes, or claim hardware
 acceptance.
@@ -11,48 +11,48 @@ acceptance.
 - Gigabyte GA-H170-Gaming 3
 - Intel Core i5-6400 (Skylake)
 - Intel HD Graphics 530
-- NVIDIA GeForce GTX 1050 Ti, Pascal GP107, PCI ID \`10de:1c82\`
+- NVIDIA GeForce GTX 1050 Ti, Pascal GP107, PCI ID `10de:1c82`
 - Kingston NVMe, Samsung SATA storage, HDA audio, Killer E2200 Ethernet label
 
 The canonical device facts remain in
-[\`drivers/profiles/h170-free.json\`](../../drivers/profiles/h170-free.json).
+[`drivers/profiles/h170-free.json`](../../drivers/profiles/h170-free.json).
 Unknown PCI IDs and runtime bindings are intentionally not inferred.
 
 ## Included upstream Guix packages
 
-\`h170-free.scm\` is the authoritative Guix manifest. Its explicit roots are:
+`h170-free.scm` is the authoritative Guix manifest. Its explicit roots are:
 
 | Package | Hardware role |
 | --- | --- |
-| \`linux-libre\` | H170 platform kernel; i915, nouveau, alx, NVMe, AHCI and HDA drivers live in the kernel |
-| \`mesa\`, \`mesa-utils\` | Open graphics stack and diagnostics |
-| \`vulkan-loader\`, \`vulkan-tools\` | Vulkan loader and diagnostic tools; not a promise that GP107 Vulkan is functional |
-| \`intel-media-driver\`, \`intel-vaapi-driver\`, \`libva-utils\` | Intel HD 530 media-driver candidates and VA-API diagnostics |
-| \`igt-gpu-tools\` | Intel DRM/GPU diagnostics |
-| \`pciutils\`, \`usbutils\`, \`dmidecode\`, \`lshw\` | Platform inventory |
-| \`nvme-cli\`, \`smartmontools\` | NVMe/SATA diagnostics |
-| \`alsa-utils\` | HDA audio diagnostics |
-| \`util-linux\`, \`e2fsprogs\`, \`parted\`, \`gptfdisk\`, \`dosfstools\` | Storage and filesystem tooling |
-| \`iproute\`, \`iw\`, \`ethtool\` | Wired networking and generic wireless/network diagnostics |
+| `linux-libre` | H170 platform kernel; i915, nouveau, alx, NVMe, AHCI and HDA drivers live in the kernel |
+| `mesa`, `mesa-utils` | Open graphics stack and diagnostics |
+| `vulkan-loader`, `vulkan-tools` | Vulkan loader and diagnostic tools; not a promise that GP107 Vulkan is functional |
+| `intel-media-driver`, `intel-vaapi-driver`, `libva-utils` | Intel HD 530 media-driver candidates and VA-API diagnostics |
+| `igt-gpu-tools` | Intel DRM/GPU diagnostics |
+| `pciutils`, `usbutils`, `dmidecode`, `lshw` | Platform inventory |
+| `nvme-cli`, `smartmontools` | NVMe/SATA diagnostics |
+| `alsa-utils` | HDA audio diagnostics |
+| `util-linux`, `e2fsprogs`, `parted`, `gptfdisk`, `dosfstools` | Storage and filesystem tooling |
+| `iproute`, `iw`, `ethtool` | Wired networking and generic wireless/network diagnostics |
 
 All roots come from the official Guix package modules at
-\`4e5195be20d9b124df8a8bb69213412236e4668e\`; their transitive dependencies
+`4e5195be20d9b124df8a8bb69213412236e4668e`; their transitive dependencies
 are resolved by Guix. This manifest does not copy or fork upstream recipes.
 
 ## Deliberate exclusions
 
-- **\`wsm-tools\` and all WSM-owned package definitions:** excluded until issue
+- **`wsm-tools` and all WSM-owned package definitions:** excluded until issue
   [#367](https://github.com/juv4uk/wsm-desktop/issues/367) resolves the
-  \`LicenseRef-Volnist\` / Guix package metadata mismatch and the owner approves
+  `LicenseRef-Volnist` / Guix package metadata mismatch and the owner approves
   a precise Free distribution model.
-- **NVIDIA / Nouveau firmware and \`linux-firmware\`:** excluded. The GP107 Free
+- **NVIDIA / Nouveau firmware and `linux-firmware`:** excluded. The GP107 Free
   profile marks FECS/GPCCS firmware required for full 3D/compute; issue #586
   records the NVIDIA firmware redistribution condition and prohibits WSM
   redistribution absent written legal clearance.
 - **NVIDIA 580.x proprietary driver:** not resolved as a Guix package and not
-  part of Free. The Compatibility candidate remains separate and unbuilt.
+  part of Free. Compatibility is not part of Free; its candidate remains separate and unbuilt.
 - **No Nonguix input is imported** by this manifest; it uses only
-  \`channels.lock.scm\`, never \`channels/compatibility.lock.scm\`.
+  `channels.lock.scm`, never `channels/compatibility.lock.scm`.
 - Wi-Fi/Bluetooth and other unidentified peripherals: not guessed into the
   hardware set.
 
@@ -68,34 +68,34 @@ are resolved by Guix. This manifest does not copy or fork upstream recipes.
    not prove PCI binding, display modesetting, VA-API, Vulkan, audio playback,
    network traffic, suspend/resume, or native H170 acceptance.
 4. Hardware statuses remain those in the JSON profile. Do not promote
-   \`not-assessed\` / \`unknown\` to \`pass\`.
+   `not-assessed` / `unknown` to `pass`.
 
 ## Build commands
 
 Pinned resolution only:
 
-\`\`\`sh
+```sh
 guix time-machine -C channels.lock.scm -- build \\
   -m ci/packages/h170-free.scm --dry-run --no-grafts
-\`\`\`
+```
 
 Build into the local Guix store (no archive export):
 
-\`\`\`sh
+```sh
 guix time-machine -C channels.lock.scm -- build \\
   -m ci/packages/h170-free.scm --no-grafts
-\`\`\`
+```
 
 The manual GitHub Actions workflow
-[\`h170-free-package-build-evidence.yml\`](../../.github/workflows/h170-free-package-build-evidence.yml)
+[`h170-free-package-build-evidence.yml`](../../.github/workflows/h170-free-package-build-evidence.yml)
 does the same ephemeral build and writes only store-path metadata, recursive
-SHA-256 hashes, and \`guix size\` reports to the workflow summary. It does not
+SHA-256 hashes, and `guix size` reports to the workflow summary. It does not
 upload artifacts, NARs, releases, or substitutes.
 
 ## Publication gate
 
 Binary publication remains disabled by the mainline safety decision
-(\`732bb17b07f359108e179643c9683237a8fe5369\`). Re-enable only after:
+(`732bb17b07f359108e179643c9683237a8fe5369`). Re-enable only after:
 
 - #367: owner-approved licensing and exact package distribution scope;
 - #586: written clearance for any NVIDIA firmware (or no firmware payload);
