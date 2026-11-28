@@ -138,3 +138,30 @@ jobs:
           git add -A
           git commit -q -m "substitute cache for ${GITHUB_REF_NAME:-manual} at ${GITHUB_SHA}"
           git push --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" substitutes
+
+      # The repository requires every workflow to say why it failed: job logs need
+      # authorisation, a commit comment does not. Same shape as the release workflow.
+      - name: Повідомити причину збою
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          BODY=$(mktemp)
+          {
+            echo "### WSM substitute cache: публікацію не завершено"
+            echo ""
+            echo "Commit: \`$GITHUB_SHA\`"
+            echo ""
+            echo "Кеш не опубліковано. Найчастіші причини: немає \`WSM_SUBSTITUTE_SIGNING_KEY\`,"
+            echo "непідписаний narinfo, перевищено ліміт Pages або збірка на locked-каналах не пройшла."
+            echo ""
+            echo "#### вміст кешу"
+            echo '```'
+            ls -la "$WSM_CACHE_DIR" 2>&1 || true
+            du -sh "$WSM_CACHE_DIR" 2>&1 || true
+            echo '```'
+            df -h / || true
+          } > "$BODY"
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
+            -F body=@"$BODY" >/dev/null && echo "причину записано коментарем"
