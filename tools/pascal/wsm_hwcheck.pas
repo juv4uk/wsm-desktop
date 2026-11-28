@@ -168,7 +168,11 @@ begin
   Write(',"category":"', JsonEscape(D.Category), '"');
   Write(',"bus":"pci"');
   Write(',"discovery_status":"discovered"');
-  Write(',"identity":{"vendor_id":"', JsonEscape(D.VendorId), '"');
+  { local_path обовʼязковий: Python кладе його першим полем identity, і саме з
+    нього читається адреса пристрою. Без нього дві реалізації неможливо
+    зіставити за пристроями — і паритетний тест показав саме це. }
+  Write(',"identity":{"local_path":"/bus/pci/devices/', JsonEscape(Name), '",');
+  Write('"vendor_id":"', JsonEscape(D.VendorId), '"');
   Write(',"device_id":"', JsonEscape(D.ProductId), '"');
   if D.SubsystemVendorId <> '' then
     Write(',"subsystem_vendor_id":"', JsonEscape(D.SubsystemVendorId), '"');
