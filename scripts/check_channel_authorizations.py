@@ -222,8 +222,10 @@ def key_file_fingerprints(keyring_dir: Path) -> dict[str, str]:
         raise ValueError(f"KEYRING_CHECK=NOT_RUN: keyring directory does not exist: {keyring_dir}")
 
     key_files = sorted(keyring_dir.rglob("*.key"))
+    # An explicit, existing but empty keyring is a completed check with no
+    # exports; the comparison below will report each missing authorized key.
     if not key_files:
-        raise ValueError(f"KEYRING_CHECK=NOT_RUN: no .key files found in {keyring_dir}")
+        return {}
     if shutil.which("gpg") is None:
         raise ValueError("KEYRING_CHECK=NOT_RUN: gpg is unavailable")
 
