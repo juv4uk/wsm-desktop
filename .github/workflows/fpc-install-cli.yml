@@ -72,7 +72,7 @@ jobs:
       - name: Build the Free Pascal front end
         run: |
           set -euo pipefail
-          guix build -L . -e '(@ (wsm packages wsm-install-fpc) wsm-install-fpc)' > /tmp/fpc-store-path.txt
+            printf '%s\n' "  guix build -L . -e '(@ (wsm packages wsm-install-fpc) wsm-install-fpc)'"
           cat /tmp/fpc-store-path.txt
           printf 'FPC_STORE_PATH=%s\n' "$(tail -n1 /tmp/fpc-store-path.txt)" >> "$GITHUB_ENV"
 
