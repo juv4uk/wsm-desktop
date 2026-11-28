@@ -134,11 +134,28 @@ end;
 function NewReportId: string;
 var
   Index: Integer;
+  RandomBytes: array[0..15] of Byte;
+  Stream: TFileStream;
 begin
-  Randomize;
+  FillChar(RandomBytes, SizeOf(RandomBytes), 0);
+  try
+    Stream := TFileStream.Create('/dev/urandom', fmOpenRead or fmShareDenyNone);
+    try
+      Stream.ReadBuffer(RandomBytes, SizeOf(RandomBytes));
+    finally
+      Stream.Free;
+    end;
+  except
+    { A report ID is not a security token; retain a local-only fallback if
+      the platform has no readable entropy device. }
+    Randomize;
+    for Index := Low(RandomBytes) to High(RandomBytes) do
+      RandomBytes[Index] := Random(256);
+  end;
+
   Result := 'wsm-';
-  for Index := 1 to 16 do
-    Result := Result + IntToHex(Random(256), 2);
+  for Index := Low(RandomBytes) to High(RandomBytes) do
+    Result := Result + IntToHex(RandomBytes[Index], 2);
 end;
 
 function ArchitectureName: string;
@@ -272,21 +289,21 @@ end;
 
 function NormalizeBiosDate(const Value: string): string;
 var
-  MonthPart, DayPart, YearPart: string;
+  MonthValue, DayValue, YearValue: Integer;
+  ParsedDate: TDateTime;
 begin
   Result := '';
   if (Length(Value) <> 10) or (Value[3] <> '/') or (Value[6] <> '/') then
     Exit;
-  MonthPart := Copy(Value, 1, 2);
-  DayPart := Copy(Value, 4, 2);
-  YearPart := Copy(Value, 7, 4);
-  if (StrToIntDef(MonthPart, 0) < 1) or (StrToIntDef(MonthPart, 0) > 12) then
+  if not TryStrToInt(Copy(Value, 1, 2), MonthValue) or
+     not TryStrToInt(Copy(Value, 4, 2), DayValue) or
+     not TryStrToInt(Copy(Value, 7, 4), YearValue) then
     Exit;
-  if (StrToIntDef(DayPart, 0) < 1) or (StrToIntDef(DayPart, 0) > 31) then
+  if (YearValue < 1990) or (YearValue > YearOf(Now) + 1) then
     Exit;
-  if (StrToIntDef(YearPart, 0) < 1990) then
+  if not TryEncodeDate(Word(YearValue), Word(MonthValue), Word(DayValue), ParsedDate) then
     Exit;
-  Result := YearPart + '-' + MonthPart + '-' + DayPart;
+  Result := FormatDateTime('yyyy"-"mm"-"dd', ParsedDate);
 end;
 
 function CollectPlatform(const SysfsRoot: string): TJSONObject;
@@ -320,6 +337,7 @@ function DetectBootMode(const SysfsRoot: string; const Architecture: string;
   out Evidence: string): string;
 var
   DmiRoot: string;
+  DmiIdentityAvailable: Boolean;
 begin
   Evidence := '';
   if DirectoryExists(JoinPath(SysfsRoot, 'firmware/efi')) then
@@ -328,12 +346,17 @@ begin
     Exit('uefi');
   end;
   DmiRoot := JoinPath(SysfsRoot, 'class/dmi/id');
-  if (Architecture = 'x86_64') or (Architecture = 'i686') then
-    if DirectoryExists(DmiRoot) then
-    begin
-      Evidence := 'sysfs:/firmware/efi is absent while x86 DMI identity is present; legacy BIOS/CSM handoff is observed.';
-      Exit('bios');
-    end;
+  DmiIdentityAvailable :=
+    (CleanValue(ReadValue(JoinPath(DmiRoot, 'sys_vendor'))) <> '') or
+    (CleanValue(ReadValue(JoinPath(DmiRoot, 'product_name'))) <> '') or
+    (CleanValue(ReadValue(JoinPath(DmiRoot, 'board_name'))) <> '') or
+    (CleanValue(ReadValue(JoinPath(DmiRoot, 'board_vendor'))) <> '');
+  if ((Architecture = 'x86_64') or (Architecture = 'i686')) and
+     DmiIdentityAvailable then
+  begin
+    Evidence := 'sysfs:/firmware/efi is absent while x86 DMI identity is present; legacy BIOS/CSM handoff is observed.';
+    Exit('bios');
+  end;
   Evidence := 'Neither sysfs:/firmware/efi nor sufficient platform identity is available; boot mode is unknown.';
   Result := 'unknown';
 end;
@@ -398,6 +421,10 @@ begin
   if TextValue = '' then
     Exit;
 
+  Fields[0] := '';
+  Fields[1] := '';
+  Fields[2] := '';
+  Fields[3] := '';
   Lines := TStringList.Create;
   try
     Lines.Text := TextValue;

@@ -8,6 +8,7 @@
   #:use-module (guix build-system gnu)
   #:use-module (guix gexp)
   #:use-module (gnu packages pascal)
+  #:use-module (gnu packages base)
   #:use-module (guix packages)
   #:use-module (wsm licenses)
   #:use-module (srfi srfi-13)
@@ -41,7 +42,7 @@
             (lambda* (#:key outputs #:allow-other-keys)
               (invoke "make" "-f" "tools/fpc/Makefile" "install"
                       (string-append "PREFIX=" (assoc-ref outputs "out")))))))
-    (native-inputs (list fpc))
+    (native-inputs (list fpc gnu-make))
     (home-page "https://github.com/juv4uk/wsm-desktop")
     (synopsis "Native Free Pascal Linux hardware evidence collector")
     (description

@@ -83,7 +83,7 @@ class FpcCollectorTests(unittest.TestCase):
         import jsonschema
 
         schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
-        jsonschema.validate(report, schema)
+        jsonschema.validate(report, schema, format_checker=jsonschema.FormatChecker())
 
     def test_cli_version_and_help(self) -> None:
         version = subprocess.run(
