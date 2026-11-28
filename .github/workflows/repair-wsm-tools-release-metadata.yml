@@ -66,7 +66,7 @@ jobs:
           H170 package publication is independent and continues without this package.
           EOF
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" \
-            --title "WSM tools 0.1.0-rc6 — Verified public pre-release" \
+            --title "WITHDRAWN — WSM tools 0.1.0-rc6 (Draft only)" \
             --notes-file "$RUNNER_TEMP/verified-notes.md" \
             --draft
           test "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')" = "true"
