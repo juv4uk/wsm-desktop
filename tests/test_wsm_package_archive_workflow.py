@@ -58,6 +58,10 @@ class WsmPackageArchiveWorkflowTests(unittest.TestCase):
         self.assertEqual(artifact["with"]["retention-days"], "30")
         self.assertIn("archives/LICENSE", artifact["with"]["path"])
 
+    def test_the_runtime_pack_contains_the_license_text(self) -> None:
+        verify = self.step("Verify the pack contains the installed WSM commands")["run"]
+        self.assertIn("/share/doc/wsm-tools/LICENSE$", verify)
+
     def test_only_an_existing_draft_release_can_receive_the_pack(self) -> None:
         step = self.step("Attach the pack to an existing draft release")
         self.assertIn("inputs.attach_to_draft != ''", step["if"])
