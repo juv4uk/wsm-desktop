@@ -2,8 +2,9 @@
 ;;
 ;; WSM Desktop — пакетне визначення власних інструментів для Guix.
 ;;
-;; СТАТУС: не зібрано й не перевірено (у середовищі написання немає Guix).
-;; Перед використанням: guix build -f wsm/packages/wsm.scm
+;; RC6 було зібрано окремим locked build; RC7 використовує python-minimal
+;; та встановлює точний текст LICENSE у runtime closure.
+;; RC7 публікується лише після Guix evaluation, attestation та read-back.
 ;;
 ;; Пакет ставить модулі wsm_hwcheck і wsm_install у site-packages разом зі
 ;; схемою звіту. Це необхідно, бо wsm_install/cli.py шукає схему відносно
@@ -16,7 +17,6 @@
   #:use-module (guix download)
   #:use-module (guix git-download)
   #:use-module (guix build-system python)
-  #:use-module (gnu packages python)
   #:use-module (gnu packages python-build)
   #:use-module (gnu packages python-xyz)
   #:use-module (guix licenses)
@@ -32,7 +32,7 @@
 (define-public wsm-tools
   (package
     (name "wsm-tools")
-    (version "0.1.0-rc6")
+    (version "0.1.0-rc7")
     ;; Relative paths in local-file are resolved against this file, so "../.."
     ;; is the repository root. select? keeps .git and build output out of the
     ;; store: without it the source would embed the whole git directory, which
@@ -57,15 +57,18 @@
               (let* ((out (assoc-ref outputs "out"))
                      (site (string-append out "/lib/python"
                                           #$(version-major+minor
-                                             (package-version python))
+                                             (package-version python-minimal))
                                           "/site-packages"))
-                     (bin (string-append out "/bin")))
+                     (bin (string-append out "/bin"))
+                     (doc (string-append out "/share/doc/wsm-tools")))
                 (copy-recursively "wsm_hwcheck"
                                   (string-append site "/wsm_hwcheck"))
                 (copy-recursively "wsm_install"
                                   (string-append site "/wsm_install"))
                 (copy-recursively "schemas"
                                   (string-append site "/schemas"))
+                (mkdir-p doc)
+                (copy-file "LICENSE" (string-append doc "/LICENSE"))
                 (mkdir-p bin)
                 (copy-file "scripts/wsm-hwcheck.sh"
                            (string-append bin "/wsm-hwcheck"))
@@ -94,4 +97,6 @@ against a versioned schema, and drafts a diagnostic-only installation plan for
 the GNU Guix backend.  Nothing in this package writes to a block device, invokes
 a system backend, or requires root.")
     (home-page "https://github.com/juv4uk/wsm-desktop")
-    (license gpl3+)))
+    (license (license "ВОЛЬНІСТЬ"
+                      "file://LICENSE"
+                      "LicenseRef-Volnist; see docs/LICENSING.md. source license only; no OSI/FSDG claim."))))

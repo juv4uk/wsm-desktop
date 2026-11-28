@@ -17,7 +17,7 @@
 | Scheme module | Файл | Стан |
 |---|---|---|
 | `(wsm systems performance)` | `wsm/systems/performance.scm` | source-tree evaluation на pinned Guix; authenticated channel lookup потребує окремого Phase B bootstrap |
-| `(wsm packages wsm)` | `wsm/packages/wsm.scm` | package metadata має невирішену ліцензійну суперечність #367; не оголошувати release-ready |
+| `(wsm packages wsm)` | `wsm/packages/wsm.scm` | RC7 recipe використовує `python-minimal`, `LicenseRef-Volnist` / `file://LICENSE` і встановлює LICENSE у runtime; locked build та attestation очікуються до публікації |
 
 Не переносити модулі з `wsm/` без необхідності: цей шлях уже відповідає Scheme namespace `(wsm …)`. Файли `systems/*.scm` залишаються machine/release configurations, а не публічним API channel namespace.
 
@@ -201,7 +201,7 @@ added here». Це **опис вмісту файлу, а не рішення в
 
 ## Ліцензійна межа
 
-Поточний `wsm-tools` package definition має невідповідність metadata до repo license; це відстежує #367. До вирішення не публікувати його як release-ready channel package і не маскувати проблему заміною ліцензійного ідентифікатора. Окремо, merged policy #586 забороняє включення або redistribution NVIDIA GP107 firmware у Free чи Compatibility channel/ISO до письмового owner/legal clearance для exact distribution model. Кожен майбутній пакет має мати коректний origin, hash, build system, inputs і фактичну license metadata.
+Поточний `wsm-tools` описує власний код WSM через `LicenseRef-Volnist` і `file://LICENSE`. Власник прямо дозволив розповсюдження зібраних бінарників власного коду WSM; це не є заявою про OSI/FSDG classification або acceptance upstream Guix. RC7 має вбудовувати точний текст LICENSE у runtime closure, а package/release workflow перевіряє його присутність, SHA-256 і provenance. Окремо, merged policy #586 забороняє включення або redistribution NVIDIA GP107 firmware у Free чи Compatibility channel/ISO до письмового owner/legal clearance для exact distribution model. Кожен сторонній пакет має мати коректний origin, hash, build system, inputs і фактичну license metadata.
 
 ## Джерела
 
