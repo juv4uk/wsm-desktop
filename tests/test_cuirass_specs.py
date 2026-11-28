@@ -119,6 +119,15 @@ class ServiceFragmentTests(unittest.TestCase):
         self.assertIn("(fallback? #t)", self.text)
 
 
+class RepositoryHygieneTests(unittest.TestCase):
+    def test_cuirass_scheme_sources_have_no_merge_conflict_markers(self) -> None:
+        for path in (SPECS, IMAGES, SERVICE):
+            with self.subTest(path=path.relative_to(ROOT)):
+                source = path.read_text(encoding="utf-8")
+                for marker in ("<<<<<<< ", "=======", ">>>>>>> "):
+                    self.assertNotIn(marker, source)
+
+
 class DocumentationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.text = DOC.read_text(encoding="utf-8").lower()
