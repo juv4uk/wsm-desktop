@@ -92,8 +92,8 @@ class H170FreePackageSetTests(unittest.TestCase):
         self.assertIn("permissions:\n  contents: read", text)
         self.assertIn("channels.lock.scm", text)
         self.assertIn("ci/packages/h170-free.scm", text)
-        self.assertIn("guix size --sort=closure", text)
-        self.assertIn("guix hash --recursive", text)
+        self.assertIn("-- size --sort=closure", text)
+        self.assertIn("-- hash --hash=sha256 --recursive", text)
         for forbidden in (
             "actions/upload-artifact", "guix archive --export",
             "gh release upload", "gh release create", "guix publish",
