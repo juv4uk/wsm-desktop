@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -282,6 +283,11 @@ class CompatibilityBuildTargetTests(unittest.TestCase):
     """Make targets must keep Compatibility on its own authenticated lock."""
 
     def make_dry_run(self, target: str) -> str:
+        if shutil.which("make") is None:
+            # The target text can only be read from make itself. Without it the
+            # test would error out with FileNotFoundError, which reads as a
+            # repository defect instead of a missing tool.
+            raise unittest.SkipTest("make is not installed")
         result = subprocess.run(
             ["make", "--no-print-directory", "-n", target],
             cwd=ROOT,
