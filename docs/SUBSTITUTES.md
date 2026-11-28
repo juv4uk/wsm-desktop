@@ -37,7 +37,7 @@
 
 ## Підписний ключ кешу
 
-Кожен запуск створює окрему пару ключів командою `guix archive --generate-key` на тимчасовій GitHub-hosted VM. Це одноразова ідентичність конкретного cache release, а не постійний ключ WSM.
+Кожен запуск створює окрему пару ключів командою `guix archive --generate-key` на тимчасовій GitHub-hosted VM. GitHub Release спершу створюється як Draft: оприлюднення дозволене лише після attestation, завантаження assets назад, SHA-256 перевірок і `zstd -t` для кожного NAR. Це одноразова ідентичність конкретного cache release, а не постійний ключ WSM.
 
 Приватний `/etc/guix/signing-key.sec` використовується лише на runner для підпису NAR; він не записується в артефакти, Release, Pages, репозиторій або журнали. Після завершення job тимчасова VM видаляється. Відкритий `signing-key.pub` публікується разом із NAR, контрольними сумами й `provenance.json`. GitHub artifact attestation додатково пов'язує ці файли з workflow run та вихідним commit. Guix зберігає ключі у `/etc/guix/signing-key.pub` і `/etc/guix/signing-key.sec`; приватний ключ необхідно тримати в секреті. Джерело: [GNU Guix Reference Manual — `guix archive`](https://guix.gnu.org/manual/en/guix.html#Invoking-guix-archive).
 
