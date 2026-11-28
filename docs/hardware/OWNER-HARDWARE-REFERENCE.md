@@ -163,7 +163,7 @@ channel, Linux-libre чи повний склад саме цієї H170 кон�
 ## Актуалізація GP107: pinned-dirfd Pascal parity та BTF evidence (2026-11-28)
 
 Канонічний зовнішній GP107 research snapshot:
-[juv4uk/gp107-nvidia-re @ `67082e3c4ea89d65b4b4b7ceed418870c0a55f40`](https://github.com/juv4uk/gp107-nvidia-re/tree/8255da482af3c404147b5eefcb0ba0caaa43984a).
+[juv4uk/gp107-nvidia-re @ `67082e3c4ea89d65b4b4b7ceed418870c0a55f40`](https://github.com/juv4uk/gp107-nvidia-re/tree/67082e3c4ea89d65b4b4b7ceed418870c0a55f40).
 PR [#54](https://github.com/juv4uk/gp107-nvidia-re/pull/54) закрив production BAR-read шлях до доведення safe offset; [#55](https://github.com/juv4uk/gp107-nvidia-re/pull/55) зробив ASM load leaf private; [#56](https://github.com/juv4uk/gp107-nvidia-re/pull/56) закрив Pascal pinned-dirfd identity gap. Усі три merged; #53 закритий як superseded без merge. Exact-head static runs: #54 `46085676976`, #55 `46085947551`, #56 `46087161680` — success.
 
 - **C11 API:** public `gp107_mmio_read32()` після opt-in, identity, driver-binding, BAR metadata та offset checks повертає `GP107_ERR_SAFE_OFFSET_UNPROVEN=21`. Production C path не відкриває `resource0` contents, не мапить BAR і не читає register. `stat(resource0)` у inventory — лише metadata про розмір.
