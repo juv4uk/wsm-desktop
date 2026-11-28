@@ -133,8 +133,6 @@
            (requirement '(wsm-live-ready wsm-installer-selfcheck))
            (respawn? #f)
            (start #~(lambda ()
-                      (setenv "PATH"
-                              "/run/current-system/profile/bin:/run/current-system/bin:/usr/bin:/bin")
                       (catch #t
                         (lambda ()
                           ;; Той самий python3 і той самий wsm_install, що й у
