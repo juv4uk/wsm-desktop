@@ -116,6 +116,10 @@ class JobModuleTests(unittest.TestCase):
     def test_it_builds_the_release_iso_image_type(self) -> None:
         self.assertIn("(image-with-os iso9660-image", self.text)
         self.assertIn("(image->job store image", self.text)
+        self.assertIn("(search-path %load-path profile)", self.text)
+        self.assertIn("(primitive-load file)", self.text)
+        self.assertIn("(load-channel-profile profile)", self.text)
+        self.assertNotIn('(primitive-load "systems/live-minimal.scm")', self.text)
         self.assertNotIn("efi-disk-image", self.text)
         self.assertNotIn("system-image", self.text)
         self.assertNotIn("derivation->job", self.text)
@@ -124,6 +128,7 @@ class JobModuleTests(unittest.TestCase):
         self.assertIn("(gnu ci)", self.text)
         self.assertIn("(gnu system image)", self.text)
         self.assertIn("(guix packages)", self.text)
+        self.assertIn("(ice-9 ftw)", self.text)
 
     def test_grafting_is_disabled(self) -> None:
         """Grafting is disabled for deterministic build-farm jobs."""
