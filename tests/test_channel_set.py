@@ -14,17 +14,16 @@ class ChannelSetTests(unittest.TestCase):
     def setUp(self) -> None:
         self.text = CHANNEL_SET.read_text(encoding="utf-8")
 
-    def test_the_set_lists_both_channels(self) -> None:
-        self.assertIn("(name 'guix)", self.text)
+    def test_the_set_extends_the_canonical_guix_defaults(self) -> None:
+        """Do not fork/copy the official channel record into this channel set."""
+        self.assertIn("(use-modules (guix channels))", self.text)
+        self.assertIn("%default-channels", self.text)
+        self.assertIn("(cons*", self.text)
+        self.assertNotIn("(name 'guix)", self.text)
         self.assertIn("(name 'wsm)", self.text)
 
     def test_the_wsm_channel_points_at_this_repository(self) -> None:
         self.assertIn("https://github.com/juv4uk/wsm-desktop", self.text)
-
-    def test_the_official_channel_keeps_its_introduction(self) -> None:
-        """Dropping it would silently make the Guix channel unauthenticated too."""
-        self.assertIn("make-channel-introduction", self.text)
-        self.assertIn("9edb3f66fd807b096b48283debdcddccfea34bad", self.text)
 
     def test_the_wsm_channel_has_no_introduction_yet(self) -> None:
         """Claiming one would be a lie; the bootstrap needs the owner's key."""
@@ -32,23 +31,24 @@ class ChannelSetTests(unittest.TestCase):
         self.assertNotIn("make-channel-introduction", wsm_part)
 
     def test_the_file_says_it_is_not_authenticated(self) -> None:
-        self.assertIn("не автентифікований", self.text)
+        self.assertIn("unauthenticated", self.text.lower())
         self.assertIn("--disable-authentication", self.text)
 
-    def test_it_is_a_single_list_form(self) -> None:
-        """The structural checker expects exactly one form, like the lock files."""
-        code = [
+    def test_channel_expression_is_balanced(self) -> None:
+        """The import and channel-set expression must both be complete."""
+        code = "\n".join(
             line for line in self.text.splitlines()
             if line.strip() and not line.strip().startswith(";")
-        ]
-        self.assertTrue(code[0].startswith("(list"))
+        )
         depth = 0
-        for char in "\n".join(code):
+        for char in code:
             if char == "(":
                 depth += 1
             elif char == ")":
                 depth -= 1
+                self.assertGreaterEqual(depth, 0)
         self.assertEqual(depth, 0)
+        self.assertTrue(code.startswith("(use-modules (guix channels))"))
 
 
 if __name__ == "__main__":
