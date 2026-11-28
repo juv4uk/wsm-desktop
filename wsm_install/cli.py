@@ -197,6 +197,23 @@ def _tool_prefixes_for_running_system() -> tuple[str, ...] | None:
     return None
 
 
+def _tool_paths_for_running_system() -> tuple[str, ...] | None:
+    """Return the exact profile paths that both planner and preflight will use."""
+    prefixes = _tool_prefixes_for_running_system()
+    if prefixes is None:
+        return None
+
+    from wsm_install.tool_map import TOOLS
+    from wsm_install.tools import resolve
+
+    # Missing tools still need an expected absolute candidate so preflight fails
+    # against the image profile rather than accidentally finding a host /usr copy.
+    return tuple(
+        resolve(name, prefixes=prefixes) or f"{prefixes[0]}/{name}"
+        for name in TOOLS
+    )
+
+
 def _run_env_check(args: argparse.Namespace) -> int:
     """Check the environment before a disk is touched."""
     from wsm_install.preflight_env import run as run_env_check
@@ -205,6 +222,7 @@ def _run_env_check(args: argparse.Namespace) -> int:
         mount_point=Path(args.mount_point),
         system_file=Path(args.system_file),
         report=Path(args.report) if args.report else None,
+        paths=_tool_paths_for_running_system(),
     )
     print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
     return 1 if result["overall"] == "fail" else 0
