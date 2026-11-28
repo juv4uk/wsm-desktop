@@ -258,10 +258,14 @@ begin
       Continue;
 
     Inc(Count);
-    DeviceId := Str(Device, 'device_id');
+    if Device.IndexOfName('device_id') < 0 then
+      DeviceId := '?'
+    else
+      DeviceId := Str(Device, 'device_id');
     State := EvidenceStateFor(Device);
     DeviceIds.Add(DeviceId);
-    EvidenceStates.Add(DeviceId + '=' + State);
+    { Python evidence_states contains state names only; IDs belong in devices/reasons. }
+    EvidenceStates.Add(State);
     Reasons.Add(DeviceId + ': ' + State);
     AppendFunctionalTests(FunctionalTests, Device);
     DeviceEvidence.Add(DeviceEvidenceFor(Device));
