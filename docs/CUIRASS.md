@@ -20,6 +20,9 @@
 
 Cuirass — не заміна QEMU. Зелений Cuirass job означає лише успішну побудову derivation; він не доводить, що ISO завантажується або що інсталятор працює.
 
+- **Не завантажує образ.** У Cuirass немає кроку QEMU, тому зелений job не означає, що носій стартує в BIOS або UEFI.
+- **Не перевіряє інсталятор.** Маркер `WSM_INSTALLER_OK` друкує гість у QEMU; Cuirass його не створює.
+
 Cuirass сам по собі **не публікує substitutes**. Для цього потрібен окремий `guix publish` service і окреме рішення щодо довіри, доступу й ліцензій. У WSM такої конфігурації зараз немає.
 
 ## Пінування та custom image job
@@ -68,7 +71,7 @@ Custom job використовує `arguments->systems` і `image->job` із `(
 
 У поточному середовищі:
 - pinned Guix evaluation запускається в GitHub Actions;
-- Cuirass daemon, PostgreSQL, registration, evaluation IDs і real builds — **NOT_RUN**;
+- Cuirass daemon, PostgreSQL, registration, evaluation IDs і real builds — **NOT_RUN**; інстанс не запускався.
 - BIOS/UEFI та installer acceptance залишаються за release/QEMU workflow.
 
 Жоден документ або зелений unit test не змінює ці стани автоматично.
