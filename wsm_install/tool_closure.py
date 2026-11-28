@@ -51,7 +51,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from wsm_install.tool_map import TOOLS, package
-from wsm_install.tools import DEFAULT_PREFIXES, resolve
+from wsm_install.tools import DEFAULT_PREFIXES, GUIX_PROFILE_PREFIXES, resolve
 
 PROTOCOL_VERSION = "v1"
 LINE_PREFIX = "WSM_TOOL_CLOSURE"
@@ -250,6 +250,26 @@ def parse(serial_text: str, expected: Sequence[str] | None = None) -> Verdict:
             problems.append(f"{name} is not one of the expected tools")
             row_protocol_error = True
             continue
+
+        if state == STATE_UNRESOLVED:
+            if path != NO_PATH:
+                problems.append(f"{name}: unresolved state must use '-' instead of {path!r}")
+                row_protocol_error = True
+        else:
+            candidate = Path(path) if path else None
+            valid_profile_path = (
+                candidate is not None
+                and candidate.is_absolute()
+                and candidate.name == name
+                and candidate.parent.as_posix() in GUIX_PROFILE_PREFIXES
+            )
+            if not valid_profile_path:
+                problems.append(
+                    f"{name}: {state} requires an absolute {name} path directly under "
+                    f"one of {list(GUIX_PROFILE_PREFIXES)}, got {path!r}"
+                )
+                row_protocol_error = True
+
         reported[name] = {"path": "" if path == NO_PATH else path, "state": state}
 
     if summary_count == 0:
