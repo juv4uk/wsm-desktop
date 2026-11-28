@@ -7,11 +7,13 @@ FPC ?= fpc
 FPCFLAGS ?= -Mobjfpc -Sh -O2 -vewn
 BUILD_DIR ?= build
 
-all: wsm-hwcheck wsm-classify wsm-partition wsm-profile wsm-preflight wsm-install
+all: wsm-hwcheck wsm-classify wsm-cpu-isa wsm-partition wsm-profile wsm-preflight wsm-install
 
 wsm-hwcheck: $(BUILD_DIR)/wsm-hwcheck
 
 wsm-classify: $(BUILD_DIR)/wsm-classify
+
+wsm-cpu-isa: $(BUILD_DIR)/wsm-cpu-isa
 
 wsm-partition: $(BUILD_DIR)/wsm-partition
 
@@ -28,6 +30,10 @@ $(BUILD_DIR)/wsm-hwcheck: wsm_hwcheck.pas
 $(BUILD_DIR)/wsm-classify: wsm_classify.pas
 	mkdir -p $(BUILD_DIR)
 	$(FPC) $(FPCFLAGS) -FE$(BUILD_DIR) -FU$(BUILD_DIR) -o$(BUILD_DIR)/wsm-classify wsm_classify.pas
+
+$(BUILD_DIR)/wsm-cpu-isa: wsm_cpu_isa.pas wsm_cpu_isa_core.pas
+	mkdir -p $(BUILD_DIR)
+	$(FPC) $(FPCFLAGS) -FE$(BUILD_DIR) -FU$(BUILD_DIR) -Fu. -o$(BUILD_DIR)/wsm-cpu-isa wsm_cpu_isa.pas
 
 $(BUILD_DIR)/wsm-partition: wsm_partition.pas
 	mkdir -p $(BUILD_DIR)
@@ -48,4 +54,4 @@ $(BUILD_DIR)/wsm-install: wsm_install.pas
 clean:
 	rm -rf $(BUILD_DIR) *.o *.ppu
 
-.PHONY: all wsm-hwcheck wsm-classify wsm-partition wsm-profile wsm-preflight wsm-install clean
+.PHONY: all wsm-hwcheck wsm-classify wsm-cpu-isa wsm-partition wsm-profile wsm-preflight wsm-install clean
