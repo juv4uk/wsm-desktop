@@ -51,7 +51,7 @@ are resolved by Guix. This manifest does not copy or fork upstream recipes.
   redistribution absent written legal clearance.
 - **NVIDIA 580.x proprietary driver:** not resolved as a Guix package and not
   part of Free. The Compatibility candidate remains separate and unbuilt.
-- **Nonguix:** not imported by this manifest; it uses only
+- **No Nonguix input is imported** by this manifest; it uses only
   \`channels.lock.scm\`, never \`channels/compatibility.lock.scm\`.
 - Wi-Fi/Bluetooth and other unidentified peripherals: not guessed into the
   hardware set.
