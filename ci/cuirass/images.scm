@@ -13,6 +13,7 @@
   #:use-module ((gnu ci) #:select (arguments->systems image->job))
   #:use-module ((gnu system image) #:select (image-with-os iso9660-image))
   #:use-module (ice-9 ftw)
+  #:use-module (srfi srfi-1)
   #:export (cuirass-jobs))
 
 (define %wsm-image-system "x86_64-linux")
