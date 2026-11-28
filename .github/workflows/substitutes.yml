@@ -118,14 +118,18 @@ jobs:
             echo "::error::H170 Free package build failed; no release or Pages deployment was made."
             exit 1
           fi
-          mapfile -t STORE_PATHS < <(grep -E '^/gnu/store/[a-z0-9]{32}-' "$PATHS_FILE")
-          if [ "${#STORE_PATHS[@]}" -lt 11 ]; then
-            echo "::error::Expected at least 11 store outputs for the 11 manifest roots, got ${#STORE_PATHS[@]}"
+          mapfile -t STORE_PATHS < <(grep -E '^/gnu/store/[a-z0-9]{32}-' "$PATHS_FILE" || true)
+          STORE_OUTPUT_COUNT="${#STORE_PATHS[@]}"
+          if [ "$STORE_OUTPUT_COUNT" -lt 11 ]; then
+            echo "::error::Expected at least 11 store outputs for the 11 manifest package specifications, got $STORE_OUTPUT_COUNT"
             cat "$PATHS_FILE" >&2
             exit 1
           fi
           {
             echo "## H170 Free package outputs"
+            echo ""
+            echo "Manifest package specifications: 11."
+            echo "Realized Guix store outputs (including separate lib/doc/bin outputs): $STORE_OUTPUT_COUNT."
             echo ""
             echo "| Store output |"
             echo "| --- |"
@@ -173,46 +177,29 @@ jobs:
             hash="${store_path##*/}"
             hash="${hash%%-*}"
             narinfo_url="http://127.0.0.1:3000/${hash}.narinfo"
-            info_file="$(mktemp)"
             baked=0
             for _ in $(seq 1 180); do
-              if curl -fsS "$narinfo_url" -o "$info_file"; then
-                nar_url="$(sed -n 's/^URL: //p' "$info_file" | head -n 1)"
-                case "$nar_url" in
-                  nar/*) ;;
-                  *)
-                    echo "::error::narinfo for $store_path has no supported NAR URL: $nar_url"
-                    cat "$info_file" >&2
-                    exit 1
-                    ;;
-                esac
-                if curl -fsS "http://127.0.0.1:3000/$nar_url" -o /dev/null; then
-                  baked=1
-                  break
-                fi
+              if curl -fsS "$narinfo_url" -o /dev/null; then
+                baked=1
+                break
               fi
               sleep 5
             done
-            rm -f "$info_file"
             if [ "$baked" -ne 1 ]; then
-              echo "::error::NAR archive baking timed out for $store_path"
+              echo "::error::NAR cache baking timed out for $store_path"
               tail -n 100 "$RUNNER_TEMP/guix-publish.log" >&2 || true
               exit 1
             fi
           done < "$PATHS_FILE"
 
-          EXPECTED_STORE_PATH_COUNT="$(grep -Ec '^/gnu/store/[a-z0-9]{32}-' "$PATHS_FILE")"
+          mapfile -t STORE_PATHS < <(grep -E '^/gnu/store/[a-z0-9]{32}-' "$PATHS_FILE" || true)
+          STORE_OUTPUT_COUNT="${#STORE_PATHS[@]}"
           NAR_COUNT="$(sudo find "$CACHE_DIR/nar" -type f -name '*.nar.zst' | wc -l)"
           INFO_COUNT="$(sudo find "$CACHE_DIR" -maxdepth 1 -type f -name '*.narinfo' | wc -l)"
-          [ "$NAR_COUNT" -eq "$EXPECTED_STORE_PATH_COUNT" ] || {
-            echo "Expected $EXPECTED_STORE_PATH_COUNT NAR archives for the built store outputs, got $NAR_COUNT"
-            exit 1
-          }
-          [ "$INFO_COUNT" -eq "$EXPECTED_STORE_PATH_COUNT" ] || {
-            echo "Expected $EXPECTED_STORE_PATH_COUNT narinfo records for the built store outputs, got $INFO_COUNT"
-            exit 1
-          }
-          echo "Baked $NAR_COUNT signed NAR archives and $INFO_COUNT narinfo records for $EXPECTED_STORE_PATH_COUNT store outputs across 11 manifest package roots." \
+          [ "$STORE_OUTPUT_COUNT" -ge 11 ] || { echo "Expected at least 11 store outputs, got $STORE_OUTPUT_COUNT"; exit 1; }
+          [ "$NAR_COUNT" -eq "$STORE_OUTPUT_COUNT" ] || { echo "Expected $STORE_OUTPUT_COUNT NAR archives, got $NAR_COUNT"; exit 1; }
+          [ "$INFO_COUNT" -eq "$STORE_OUTPUT_COUNT" ] || { echo "Expected $STORE_OUTPUT_COUNT narinfo files, got $INFO_COUNT"; exit 1; }
+          echo "Baked $NAR_COUNT signed NAR archives and $INFO_COUNT narinfo records." \
             | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Prepare immutable Release assets and Pages metadata
@@ -221,7 +208,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          CACHE_TAG="h170-free-cache-${GITHUB_RUN_NUMBER}"
+          CACHE_TAG="h170-free-cache-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}"
           echo "cache_tag=$CACHE_TAG" >> "$GITHUB_OUTPUT"
           mkdir -p site
           BASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${CACHE_TAG}"
@@ -233,12 +220,11 @@ jobs:
           curl -fsS http://127.0.0.1:3000/signing-key.pub -o ./site/signing-key.pub
           touch ./site/.nojekyll
 
+          mapfile -t STORE_PATHS < <(grep -E '^/gnu/store/[a-z0-9]{32}-' "$RUNNER_TEMP/h170-free-store-paths.txt" || true)
+          STORE_OUTPUT_COUNT="${#STORE_PATHS[@]}"
           mapfile -t NARS < <(find /var/cache/guix/h170-free/nar -type f -name '*.nar.zst' | sort)
-          EXPECTED_STORE_PATH_COUNT="$(grep -Ec '^/gnu/store/[a-z0-9]{32}-' "$RUNNER_TEMP/h170-free-store-paths.txt")"
-          [ "${#NARS[@]}" -eq "$EXPECTED_STORE_PATH_COUNT" ] || {
-            echo "Expected $EXPECTED_STORE_PATH_COUNT NAR assets for the built store outputs, got ${#NARS[@]}"
-            exit 1
-          }
+          [ "$STORE_OUTPUT_COUNT" -ge 11 ] || { echo "Expected at least 11 store outputs, got $STORE_OUTPUT_COUNT"; exit 1; }
+          [ "${#NARS[@]}" -eq "$STORE_OUTPUT_COUNT" ] || { echo "Expected $STORE_OUTPUT_COUNT NAR assets, got ${#NARS[@]}"; exit 1; }
           for nar in "${NARS[@]}"; do
             size="$(stat -c '%s' "$nar")"
             [ "$size" -lt 2000000000 ] || {
@@ -252,6 +238,7 @@ jobs:
             ( cd "$(dirname "$nar")" && sha256sum "$(basename "$nar")" ) >> ./site/SHA256SUMS
           done
           export NAR_ASSETS="$(printf '%s\n' "${NARS[@]}")"
+          export STORE_OUTPUT_COUNT
           python3 - <<'PY'
           import hashlib
           import json
@@ -278,6 +265,7 @@ jobs:
               "private_key_published": False,
               "nar_assets": [Path(item).name for item in os.environ["NAR_ASSETS"].splitlines() if item],
               "packages": 11,
+              "store_outputs": int(os.environ["STORE_OUTPUT_COUNT"]),
               "scope": "official upstream H170 Free package manifest only",
           }
           (root / "site/provenance.json").write_text(
@@ -291,10 +279,6 @@ jobs:
             sha256sum signing-key.pub provenance.json > metadata.SHA256SUMS
           )
 
-          gh release create "$CACHE_TAG" \
-            --title "WSM H170 Free substitute cache ${GITHUB_RUN_NUMBER}" \
-            --notes "Pinned H170 Free upstream-only package cache. Source commit: ${GITHUB_SHA}. Signing key is ephemeral to this run; private key is not published. NAR assets are immutable; metadata is deployed separately to Pages."
-          gh release upload "$CACHE_TAG" "${NARS[@]}" ./site/signing-key.pub ./site/SHA256SUMS ./site/provenance.json ./site/metadata.SHA256SUMS
 
       - name: Attest the exact NAR and cache metadata
         uses: actions/attest@v4
@@ -305,6 +289,28 @@ jobs:
             ./site/SHA256SUMS
             ./site/provenance.json
             ./site/metadata.SHA256SUMS
+
+      - name: Publish immutable Release assets and verify read-back
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          CACHE_TAG="h170-free-cache-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}"
+          READBACK_DIR="$RUNNER_TEMP/h170-free-release-readback"
+          gh release create "$CACHE_TAG" --prerelease \
+            --title "WSM H170 Free substitute cache ${GITHUB_RUN_NUMBER}" \
+            --notes "Pinned H170 Free upstream-only package cache. Source commit: ${GITHUB_SHA}. Signing key is ephemeral to this run; private key is not published. NAR assets are immutable; metadata is deployed separately to Pages."
+          gh release upload "$CACHE_TAG" \
+            /var/cache/guix/h170-free/nar/*.nar.zst \
+            ./site/signing-key.pub ./site/SHA256SUMS ./site/provenance.json ./site/metadata.SHA256SUMS
+          mkdir -p "$READBACK_DIR"
+          gh release download "$CACHE_TAG" --dir "$READBACK_DIR"
+          (
+            cd "$READBACK_DIR"
+            sha256sum -c SHA256SUMS
+            sha256sum -c metadata.SHA256SUMS
+          )
+          echo "Release $CACHE_TAG read-back checksum verification passed." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Pages metadata
         uses: actions/upload-pages-artifact@v3
