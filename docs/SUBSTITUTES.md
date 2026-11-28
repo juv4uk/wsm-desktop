@@ -30,7 +30,7 @@ Workflow не завантажує WSM package modules і не бере дові
 - signing-key.pub для одноразового підпису Guix archive;
 - SHA256SUMS та окремий digest зібраного bundle;
 - точний channels.lock.scm, channel description і hash lock-файла;
-- package roots, store paths, recursive NAR hashes та closure-size report;
+- package roots, store paths, `.drv` derivation paths, recursive NAR hashes, raw `guix show` recutils metadata (including effective `license` fields) та closure-size report;
 - provenance.txt та IMPORT.md.
 
 GitHub Actions додає build provenance attestation до кожної частини архіву. На споживацькій машині спочатку потрібно перевірити контрольні суми, свідомо авторизувати ключ цього конкретного релізу, а потім передати з'єднані частини через zstd у guix archive --import. Ключ не слід автоматично авторизувати для майбутніх релізів.
