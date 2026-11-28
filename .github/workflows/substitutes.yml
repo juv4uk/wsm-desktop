@@ -19,11 +19,6 @@ name: Субститути каналу
 
 on:
   workflow_dispatch:
-    inputs:
-      packages:
-        description: "Пакети каналу через пробіл"
-        required: false
-        default: "wsm-tools"
 
 permissions:
   contents: write
@@ -116,13 +111,15 @@ jobs:
       - name: Зібрати пакети каналу
         run: |
           set -euo pipefail
-          PACKAGES="${{ github.event.inputs.packages }}"
-          echo "збираю: $PACKAGES"
-          guix build --no-substitutes $PACKAGES | tee /tmp/store-paths.txt
+          # wsm-tools is defined in this checkout, not in the upstream Guix
+          # package collection. Resolve it from the WSM module using the exact
+          # official Guix revision in channels.lock.scm.
+          guix time-machine -C channels.lock.scm -- build --no-substitutes \
+            -L . -e '(@ (wsm packages wsm) wsm-tools)' | tee /tmp/store-paths.txt
 
       - name: Прогріти кеш
-        # guix publish лінивий: він створює narinfo і nar на запит. Без прогріву
-        # каталог кешу порожній, і публікувати нічого.
+        # guix publish is lazy: fetching only the .narinfo does not guarantee
+        # that its compressed NAR exists in the disk cache for Release upload.
         run: |
           set -euo pipefail
           sudo guix publish --cache=/var/cache/publish --port=3000 --compression=zstd:9 &
@@ -133,9 +130,19 @@ jobs:
           while read -r path; do
             [ -n "$path" ] || continue
             hash=$(basename "$path" | cut -d- -f1)
-            curl -sf "http://localhost:3000/${hash}.narinfo" >/dev/null || true
+            info="$(curl -fsSL "http://localhost:3000/${hash}.narinfo")"
+            archive="$(printf '%s\n' "$info" | sed -n 's/^URL: //p' | head -n1)"
+            case "$archive" in
+              nar/*) ;;
+              *) echo "::error::narinfo не містить допустимого NAR URL: $archive"; exit 1 ;;
+            esac
+            curl -fsSL "http://localhost:3000/${archive}" -o /dev/null
           done < /tmp/store-paths.txt
-          sudo find /var/cache/publish -name '*.narinfo' | wc -l
+          nar_count="$(sudo find /var/cache/publish/nar -type f -name '*.nar.zst' | wc -l)"
+          test "$nar_count" -gt 0 || {
+            echo "::error::після прогріву кеш не містить .nar.zst"; exit 1
+          }
+          echo "cached NAR archives: $nar_count"
 
       - name: Переписати URL на release assets
         run: |
@@ -156,7 +163,13 @@ jobs:
           gh release view substitutes >/dev/null 2>&1 || \
             gh release create substitutes --title "Субститути каналу" \
               --notes "Архіви для статичного кешу субститутів. Метадані — на Pages."
-          sudo find /var/cache/publish/nar -name '*.nar.zst' -size -2000M | while read -r nar; do
+          oversized="$(sudo find /var/cache/publish/nar -type f -name '*.nar.zst' -size +2000M -print)"
+          if [ -n "$oversized" ]; then
+            echo "::error::NAR перевищує ліміт одного GitHub Release asset:"
+            printf '%s\n' "$oversized"
+            exit 1
+          fi
+          sudo find /var/cache/publish/nar -type f -name '*.nar.zst' | while read -r nar; do
             gh release upload substitutes "$nar" --clobber
           done
 
