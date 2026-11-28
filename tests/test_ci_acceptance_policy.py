@@ -226,9 +226,10 @@ class FreePascalBuildTests(unittest.TestCase):
         self.assertIn("Free Pascal refused to compile", self.text)
         self.assertIn("exit 1", self.text)
 
-    def test_it_reports_an_empty_source_tree_without_skipping_existing_pascal_files(self) -> None:
+    def test_an_empty_source_tree_fails_instead_of_reporting_a_false_green(self) -> None:
         self.assertIn("WSM_FPC_SOURCES=0", self.text)
-        self.assertIn("No Pascal sources in the tree", self.text)
+        self.assertIn("::error::No Pascal sources in the tree", self.text)
+        self.assertRegex(self.text, r'if \[ "\$\{#pascal_sources\[@\]\}" -eq 0 \]; then[\s\S]*?exit 1')
 
 
 class PascalSourceContractTests(unittest.TestCase):
