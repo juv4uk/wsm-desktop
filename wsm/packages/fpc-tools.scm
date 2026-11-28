@@ -1,36 +1,23 @@
 ;; SPDX-License-Identifier: LicenseRef-Volnist
 ;;
-;; The FPC edition of the hardware reader.
+;; Native Free Pascal hardware reader.  FPC is a build-time dependency only;
+;; the installed binary does not link to the compiler or Python runtime.
 ;;
-;; Why a second implementation exists: the Python package propagated the full
-;; interpreter, and the published pack carried three separate Python builds
-;; (~226 MB of a 399 MB store). A Free Pascal binary is a single native
-;; executable: no interpreter, no site-packages, no schema library in the
-;; runtime closure.
-;;
-;; The two implementations are not interchangeable, and the split is deliberate:
-;; this one reads PCI identity only. JSON schema validation stays in CI, where
-;; Python already exists — putting a validator in the shipped binary would
-;; reintroduce exactly the dependency this package removes.
+;; Scope is deliberately PCI-only until each additional collector section has
+;; parity tests and the same read-only/evidence contract.
 
 (define-module (wsm packages fpc-tools)
   #:use-module (guix packages)
   #:use-module (guix gexp)
-  #:use-module (guix download)
   #:use-module (guix build-system gnu)
   #:use-module (gnu packages pascal)
-  #:use-module (guix licenses)
-  ;; `any' comes from SRFI-1 and `string-contains' from SRFI-13; the source
-  ;; select? predicate uses both, and without the imports the module fails to
-  ;; load only when Guix evaluates it.
-  #:use-module (srfi srfi-1)
-  #:use-module (srfi srfi-13)
+  #:use-module (wsm licenses)
   #:export (wsm-hwcheck-fpc))
 
 (define-public wsm-hwcheck-fpc
   (package
     (name "wsm-hwcheck-fpc")
-    (version "0.1.0")
+    (version "0.2.0")
     (source (local-file "../.." "wsm-desktop-source-fpc"
                         #:recursive? #t
                         #:select? (lambda (path _stat)
@@ -48,17 +35,18 @@
           (delete 'configure)
           (replace 'build
             (lambda* (#:key make-flags #:allow-other-keys)
-              (apply invoke "make" "-f" "tools/pascal/Makefile" "all" make-flags)))
+              (apply invoke "make" "-C" "tools/pascal" "all" make-flags)))
           (replace 'install
             (lambda* (#:key outputs #:allow-other-keys)
               (let* ((out (assoc-ref outputs "out"))
                      (bin (string-append out "/bin")))
-                (install-file "tools/pascal/wsm-hwcheck" bin)))))))
-    (synopsis "Read-only PCI hardware reader for WSM Desktop, built with FPC")
+                (install-file "tools/pascal/wsm-hwcheck" bin))))))
+    (native-inputs (list fpc))
+    (synopsis "Read-only PCI inventory tool for WSM Desktop")
     (description
-     "A native binary that reads PCI identity and driver binding from sysfs and
-writes a JSON report. It is the Free Pascal counterpart of the Python
-collector: no interpreter or Python library enters the runtime closure.  It
-reads only; it never opens a block device and needs no privileges.")
+     "Reads PCI identity and driver binding from sysfs and emits a
+versioned hardware evidence report.  The tool is a Free Pascal native
+executable.  It performs no writes, module operations, MMIO, network
+requests, or block-device access.  FPC is needed only at build time.")
     (home-page "https://github.com/juv4uk/wsm-desktop")
-    (license license:gpl3+)))
+    (license wsm-license)))
