@@ -4,8 +4,8 @@
 # unauthenticated WSM entry when authentication is left enabled.
 set -euo pipefail
 
-ROOT="$(cd -- "$(dirname -- "\${BASH_SOURCE[0]}")/.." && pwd)"
-GUIX_BIN="\${GUIX:-guix}"
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+GUIX_BIN="${GUIX:-guix}"
 CHANNELS="$ROOT/channels/wsm.scm"
 
 fail() {
