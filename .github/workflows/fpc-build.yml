@@ -53,6 +53,9 @@ jobs:
           test "$(fpc -iV)" = "3.2.2"
           fpc -iV
 
+      - name: Check the Pascal source contract
+        run: python3 scripts/check_pascal_sources.py
+
       - name: Build every program
         run: |
           set -euo pipefail
