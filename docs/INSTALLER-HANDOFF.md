@@ -47,6 +47,33 @@ WSM зберігає власний hardware-first frontend та межу `prefl
 
 Поточні reference-и: [GNU Guix — Guided Graphical Installation](https://guix.gnu.org/manual/en/html_node/Guided-Graphical-Installation.html), [Invoking `guix system`](https://guix.gnu.org/manual/en/html_node/Invoking-guix-system.html) і [GNU Guix — Installation](https://guix.gnu.org/manual/en/html_node/Installation.html).
 
+## 1.2 Перевірена поверхня Guix 1.5.0: installer command не є embedding API
+
+У Guix 1.5.0 є штатний guided installer action:
+
+```sh
+guix system installer --dry-run
+```
+
+Reference manual прямо наводить цей виклик для тестування installer із уже запущеного Guix System. Без `--dry-run` installer потрібно запускати від root; manual окремо попереджає про ризик втрати даних або непрацездатної системи. Тому для WSM це лише QEMU/throwaway-environment дослідження, не команда з frontend і не локальний preflight на H170.
+
+У Guix 1.5.0 також додано `guix-system-installer` executable до installation system profile, щоб користувачі headless console могли запустити upstream guided UI. Це launcher того самого upstream installer, а не machine-readable API для передавання зовнішнього typed plan.
+
+Джерела:
+
+- [GNU Guix 1.5.0 — Invoking `guix system`](https://guix.gnu.org/manual/1.5.0/en/html_node/Invoking-guix-system.html)
+- [GNU Guix 1.5.0 — stable release announcement and installer ISO](https://lists.gnu.org/archive/html/info-gnu/2026-01/msg00004.html)
+- [Upstream change adding `guix-system-installer` to the installation profile](https://www.mail-archive.com/guix-commits%40gnu.org/msg321617.html)
+
+**Що це означає для WSM:**
+
+1. Не форкати `gnu/installer` лише заради власного Qt/QML frontend. Upstream installer має власний діалоговий UX, але перевірені матеріали не описують стабільний API для injection нашого hardware evidence та typed plan.
+2. Зберегти WSM frontend як owner hardware preflight і typed, reviewable plan. Guix лишається єдиним власником системної конфігурації та deployment.
+3. Порівнювати два підтримувані шляхи лише в ізольованому QEMU dry-run: upstream `guix system installer --dry-run` як окремий guided UX та WSM-generated `operating-system` + `guix system init` як backend handoff. Не запускати жоден із них на реальному диску.
+4. До upstream patch повертатися лише тоді, коли QEMU-прототип покаже конкретну відсутню нейтральну точку інтеграції, яку неможливо реалізувати у WSM adapter. Будь-який патч має бути мінімальним, pinned до exact Guix commit, протестованим і поданим upstream; приватний diverged fork не підтримувати.
+
+Цей розділ уточнює рішення 1.1 для Guix 1.5.0. Він не змінює backend execution policy, не додає spawn до installer frontend, не вмикає APPLY і не є дозволом запускати реальну інсталяцію.
+
 ## 2. Вхідний контракт: hardware evidence report
 
 Джерело — версійований JSON-звіт із #5, який створює collector із #6.
