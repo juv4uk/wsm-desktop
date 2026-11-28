@@ -1,99 +1,254 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""A canonical digest for an install plan, so consent and journals can bind to it.
-
-#280 acceptance criterion 1 asks for an immutable/typed plan with a canonical
-digest, and criterion 4 asks that each destructive step's consent be bound to the
-exact command it authorises. Both need the same primitive: a value that changes if
-anything in the plan changes and cannot be made to collide by reordering fields.
-
-The digest is computed over a canonical JSON document — sorted keys, fixed
-separators, no insignificant whitespace — so two plans that differ only in how the
-caller happened to build the list produce the same digest, and two plans that
-differ in a single argument do not.
-
-What this does NOT do: it does not make the plan immutable (Python lists are still
-mutable), and it is not a signature. It is the binding target that a consent record
-and a journal entry can quote; verification of who approved it is a separate
-concern, and pretending a hash proves authorship would repeat the mistake this
-repository already guards against in the ADR provenance gate.
-"""
+"""Pure functions for evidence interpretation and deterministic plan generation."""
 
 from __future__ import annotations
 
 import hashlib
 import json
-from typing import Sequence
-
-from wsm_install.install_steps import Step
-
-SCHEMA = "wsm-install-plan/1"
+from pathlib import Path
+from typing import Any
 
 
-class PlanDigestError(Exception):
-    """A plan that cannot be digested, with a stable code."""
-
-    def __init__(self, code: str, message: str) -> None:
-        super().__init__(f"{code}: {message}")
-        self.code = code
-        self.message = message
+CRITICAL_REQUIRED = {"boot-path", "primary-display", "input"}
+USER_SELECTION_REQUIRED = {"storage-install-target"}
 
 
-def canonical_plan(disk: str, steps: Sequence[Step]) -> dict[str, object]:
-    """Return the canonical document the digest is taken over."""
-    if not isinstance(disk, str) or not disk:
-        raise PlanDigestError("plan.disk", "the plan needs a target disk string")
+def canonical_json(value: Any) -> str:
+    """Serialize JSON deterministically for hashing and reproducible output."""
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
-    if isinstance(steps, (str, bytes)) or not isinstance(steps, Sequence):
-        raise PlanDigestError("plan.steps", "steps must be a sequence of Step values")
-    if not steps:
-        raise PlanDigestError("plan.empty", "a plan with no steps has nothing to bind to")
 
-    rendered: list[dict[str, object]] = []
-    for index, step in enumerate(steps, start=1):
-        if not isinstance(step, Step):
-            raise PlanDigestError("plan.step-type", f"step {index} is not a Step")
-        if not step.command:
-            raise PlanDigestError("plan.command", f"step {index} has an empty argv")
-        if not all(isinstance(argument, str) for argument in step.command):
-            raise PlanDigestError("plan.command", f"step {index} has a non-string argv element")
-        rendered.append(
-            {
-                "argv": list(step.command),
-                "destructive": bool(step.destructive),
-                "purpose": step.purpose,
+def summarize_report(report: dict[str, Any]) -> str:
+    env = report["environment"]
+    devices = report["devices"]
+    discovered = sum(item["discovery_status"] == "discovered" for item in devices)
+    unknown = sum(item["discovery_status"] == "unknown" for item in devices)
+    lines = [
+        f"WSM hardware preflight — report {report['report_id']}",
+        f"Schema: {report['schema_version']} | collected: {report['collected_at']}",
+        f"Environment: {env['architecture']} | kernel {env['kernel_release']} | boot {env['boot_mode']} | virtualization {env['virtualization']}",
+        f"Devices: {len(devices)} total, {discovered} discovered, {unknown} unknown",
+    ]
+    for device in devices:
+        identity = device.get("identity", {})
+        label = identity.get("model") or identity.get("manufacturer") or device["device_id"]
+        test_summary = ", ".join(
+            f"{test['capability']}={test['status']}"
+            for test in device["functional_tests"]
+        ) or "none"
+        evidence = device.get("evidence", [])
+        provenance = (
+            f"source={evidence[0]['source']} @ {evidence[0]['observed_at']} "
+            f"({evidence[0]['confidence']})"
+            if evidence else "source=unknown"
+        )
+        lines.append(
+            f"- {device['category']}: {label}; discovery={device['discovery_status']}; "
+            f"driver={device['driver']['status']}; firmware={device['firmware']['runtime_status']}; "
+            f"tests=[{test_summary}]; {provenance}"
+        )
+    if report.get("warnings"):
+        lines.append("Report warnings: " + "; ".join(report["warnings"]))
+    return "\n".join(lines)
+
+
+def build_plan(
+    report: dict[str, Any],
+    report_bytes: bytes,
+    backend: str,
+    profile_evidence: dict[str, Any] | None = None,
+    profile_evidence_root: Path | None = None,
+) -> tuple[dict[str, Any], list[str], list[str]]:
+    """Build a backend-specific plan without probing or invoking a backend.
+
+    ``profile_evidence`` is the bundle from profiles/hardware/<vendor>/<model>/.
+    When it is supplied but broken, that is a blocker: the machine claims to be
+    verified and the claim does not hold. When it is absent, the plan stays
+    diagnostic-only - absence is not a failure, it is the normal state until
+    someone actually tests the hardware.
+    """
+    if backend != "guix":
+        raise ValueError("unsupported backend; the first WSM preview supports only 'guix'")
+
+    blockers: list[str] = []
+    warnings: list[str] = []
+
+    profile_evidence_provenance: dict[str, str] | None = None
+    if profile_evidence is not None:
+        from wsm_install.profile import EvidenceUnavailable, problems
+
+        if profile_evidence.get("report_id") != report.get("report_id"):
+            blockers.append("hardware profile evidence report_id does not match the current hardware report")
+        if profile_evidence.get("report_schema_version") != report.get("schema_version"):
+            blockers.append("hardware profile evidence report_schema_version does not match the current hardware report")
+        try:
+            evidence_problems = problems(
+                profile_evidence,
+                artifact_root=profile_evidence_root,
+            )
+        except EvidenceUnavailable as exc:
+            evidence_problems = [str(exc)]
+
+        if profile_evidence_root is not None:
+            profile_root = Path(profile_evidence_root)
+            profile_file = profile_root / "profile.scm"
+            if profile_root.is_symlink() or not profile_root.is_dir():
+                evidence_problems.append("profile directory is missing or is a symbolic link")
+            elif profile_file.is_symlink() or not profile_file.is_file():
+                evidence_problems.append("profile directory has no regular profile.scm")
+            elif not evidence_problems:
+                from wsm_install.profile import slug_matches_directory
+
+                evidence_problems.extend(
+                    slug_matches_directory(
+                        profile_evidence,
+                        profile_root,
+                        profile_root.parent.parent,
+                    )
+                )
+
+        raw_artifacts = profile_evidence.get("artifacts")
+        source_reports = (
+            [
+                item for item in raw_artifacts
+                if isinstance(item, dict) and item.get("kind") == "wsm-hwcheck-report"
+            ]
+            if isinstance(raw_artifacts, list) else []
+        )
+        if len(source_reports) != 1:
+            blockers.append(
+                "hardware profile evidence must contain exactly one wsm-hwcheck-report artifact"
+            )
+        elif source_reports[0].get("sha256") != hashlib.sha256(report_bytes).hexdigest():
+            blockers.append(
+                "hardware profile evidence source-report SHA-256 does not match the current report bytes"
+            )
+        # Exact digest equality binds the embedded report byte-for-byte to report_bytes,
+        # including report_id and schema_version, rather than trusting claimed IDs alone.
+
+        for problem in evidence_problems:
+            blockers.append(f"hardware profile evidence is not valid: {problem}")
+        if not blockers:
+            profile_evidence_provenance = {
+                "slug": profile_evidence["profile"]["slug"],
+                "report_id": profile_evidence["report_id"],
+                "report_schema_version": profile_evidence["report_schema_version"],
+                "sha256": hashlib.sha256(canonical_json(profile_evidence).encode("utf-8")).hexdigest(),
             }
+    else:
+        warnings.append(
+            "no verified hardware profile evidence for this machine; "
+            "the plan remains diagnostic-only"
         )
 
-    return {"disk": disk, "schema": SCHEMA, "steps": rendered}
+    for device in report["devices"]:
+        criticality = set(device.get("criticality", []))
+        if criticality & CRITICAL_REQUIRED and device["discovery_status"] in {"unknown", "not-detected"}:
+            blockers.append(
+                f"{device['device_id']}: required critical device discovery is "
+                f"{device['discovery_status']}"
+            )
+        firmware = device["firmware"]
+        if (
+            firmware["requirement"] == "required"
+            and firmware["runtime_status"] in {"missing", "load-error"}
+        ):
+            message = (
+                f"{device['device_id']}: required runtime firmware is "
+                f"{firmware['runtime_status']}"
+            )
+            if criticality & CRITICAL_REQUIRED:
+                blockers.append(message)
+            else:
+                warnings.append(message)
+        if criticality & {"network-installation"} and not any(
+            test.get("status") == "passed"
+            for test in device["functional_tests"]
+            if test.get("capability") in {"network-link", "network-connectivity"}
+        ):
+            warnings.append(
+                f"{device['device_id']}: network installation path is not functionally tested; "
+                "offline installation may be required"
+            )
 
+    for warning in report.get("warnings", []):
+        if warning not in warnings:
+            warnings.append(warning)
 
-def plan_digest(disk: str, steps: Sequence[Step]) -> str:
-    """SHA-256 over the canonical plan document, as lowercase hex."""
-    document = canonical_plan(disk, steps)
-    encoded = json.dumps(
-        document,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
-
-
-def step_digest(disk: str, step: Step, index: int) -> str:
-    """Digest binding one step to the plan it belongs to and to its position.
-
-    Consent for a destructive step quotes this value: the same argv at a different
-    index, or against a different disk, is a different authorisation.
-    """
-    if not isinstance(index, int) or index < 1:
-        raise PlanDigestError("plan.index", "step index must be a positive integer")
-    document = {
-        "disk": disk,
-        "index": index,
-        "schema": SCHEMA,
-        "step": canonical_plan(disk, [step])["steps"][0],
+    observed_roles = {
+        role
+        for device in report["devices"]
+        for role in device.get("criticality", [])
     }
-    encoded = json.dumps(
-        document, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
+    role_coverage = {
+        role: ("observed" if role in observed_roles else "not-collected")
+        for role in sorted(CRITICAL_REQUIRED)
+    }
+    missing_roles = sorted(role for role, state in role_coverage.items() if state != "observed")
+    for role in missing_roles:
+        warnings.append(f"required role {role!r} is not represented in the report; plan remains diagnostic-only")
+    warnings.append(
+        "storage target is not selected by hardware discovery; explicit user selection and immediate identity revalidation are still required"
+    )
+
+    backend_id = "guix-system"
+    plan: dict[str, Any] = {
+        "plan_version": "0.1.0",
+        "plan_mode": "dry-run",
+        "plan_status": "diagnostic-only",
+        "plan_readiness": {
+            "confirmable": False,
+            "missing_required_roles": missing_roles,
+            "role_coverage": role_coverage,
+            "required_user_actions": sorted(USER_SELECTION_REQUIRED),
+        },
+        "backend": {"id": backend_id},
+        "profile_evidence": profile_evidence_provenance,
+        "source_report": {
+            "schema_version": report["schema_version"],
+            "report_id": report["report_id"],
+            "sha256": hashlib.sha256(report_bytes).hexdigest(),
+        },
+        "environment": {
+            "architecture": report["environment"]["architecture"],
+            "kernel_release": report["environment"]["kernel_release"],
+            "boot_mode": report["environment"]["boot_mode"],
+            "virtualization": report["environment"]["virtualization"],
+        },
+        "device_summary": [
+            {
+                "device_id": device["device_id"],
+                "category": device["category"],
+                "criticality": sorted(device.get("criticality", [])),
+                "discovery_status": device["discovery_status"],
+                "driver_status": device["driver"]["status"],
+                "firmware_requirement": device["firmware"]["requirement"],
+                "firmware_runtime_status": device["firmware"]["runtime_status"],
+                "functional_tests": [
+                    {"capability": test["capability"], "status": test["status"]}
+                    for test in device["functional_tests"]
+                ],
+                "evidence_refs": [
+                    {"json_pointer": f"/devices/{device_index}/evidence/{evidence_index}"}
+                    for evidence_index, _ in enumerate(device.get("evidence", []))
+                ],
+                "functional_test_refs": [
+                    {"json_pointer": f"/devices/{device_index}/functional_tests/{test_index}"}
+                    for test_index, _ in enumerate(device["functional_tests"])
+                ],
+            }
+            for device_index, device in enumerate(report["devices"])
+        ],
+        "warnings": warnings,
+        "blockers": blockers,
+        "execution": {
+            "dry_run": True,
+            "plan_confirmable": False,
+            "mutations_authorized": False,
+            "backend_invoked": False,
+            "disk_access_performed": False,
+        },
+    }
+    # Hash canonical plan bytes before adding the digest field.
+    plan["plan_sha256"] = hashlib.sha256(canonical_json(plan).encode("utf-8")).hexdigest()
+    return plan, blockers, warnings

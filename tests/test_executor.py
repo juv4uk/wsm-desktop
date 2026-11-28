@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT))
 
 from wsm_install.executor import ExecutorError, execute  # noqa: E402
 from wsm_install.install_steps import TRUSTED_TOOLS, Step  # noqa: E402
-from wsm_install.plan import PlanDigestError, plan_digest, step_digest  # noqa: E402
+from wsm_install.plan_digest import PlanDigestError, plan_digest, step_digest  # noqa: E402
 from wsm_install.verify import VERIFIERS, verify_step  # noqa: E402
 
 STEPS = [
