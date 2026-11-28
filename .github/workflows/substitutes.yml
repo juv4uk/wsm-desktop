@@ -222,10 +222,10 @@ jobs:
             }
           done
 
-          (
-            cd "$RUNNER_TEMP"
-            sha256sum "${NARS[@]}" > ./site/SHA256SUMS
-          )
+          : > ./site/SHA256SUMS
+          for nar in "${NARS[@]}"; do
+            ( cd "$(dirname "$nar")" && sha256sum "$(basename "$nar")" ) >> ./site/SHA256SUMS
+          done
           export NAR_ASSETS="$(printf '%s\n' "${NARS[@]}")"
           python3 - <<'PY'
           import hashlib
