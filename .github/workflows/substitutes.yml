@@ -1,29 +1,20 @@
-name: Субститути каналу
-
 # SPDX-License-Identifier: LicenseRef-Volnist
-#
-# Публікує зібрані пакети каналу `wsm` як статичний кеш субститутів:
-# архіви — release assets, метадані — gh-pages.
-#
-# ВЛАСНИК ДАВ ДОЗВІЛ 2026-11-28 («починай публікувати гуікс пакети під моє
-# залізо»). Попередня версія цього файлу була заглушкою з `if: false`, що чекала
-# саме цього рішення: тоді не було ні ключа, ні узгодженого endpoint-у.
-#
-# Три речі, які лишаються обовʼязковими після дозволу:
-#   * запуск ЛИШЕ вручну — автопублікація на кожен push не потрібна і дорога;
-#   * ключ підпису тільки із секрету, ніколи з репозиторію;
-#   * без ключа — падіння, а не публікація: непідписаний кеш користувач не
-#     зможе авторизувати, тобто робота була б марною.
-#
-# Деталі схеми: docs/SUBSTITUTES.md
+name: H170 Free Guix substitute cache
+
+# Publish only the fixed, upstream-only H170 Free manifest.
+# No WSM-owned packages, Nonguix, proprietary drivers or firmware are included.
+# Binary outputs go to immutable GitHub Release assets; narinfo metadata goes to Pages.
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/substitutes.yml"
+      - "channels.lock.scm"
+      - "drivers/profiles/h170-free-packages.scm"
+      - "scripts/narinfo_to_release_urls.py"
   workflow_dispatch:
-    inputs:
-      packages:
-        description: "Пакети каналу через пробіл"
-        required: false
-        default: "wsm-tools"
 
 permissions:
   contents: write
@@ -31,50 +22,41 @@ permissions:
   id-token: write
 
 concurrency:
-  group: substitutes
+  group: h170-free-substitutes
   cancel-in-progress: false
 
 jobs:
   publish:
-    name: Зібрати, підписати, опублікувати
+    if: ${{ github.ref == 'refs/heads/main' }}
+    name: Build, sign and publish H170 Free substitutes
     runs-on: ubuntu-24.04
+    timeout-minutes: 240
     environment:
       name: github-pages
       url: ${{ steps.pages.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@v4
 
-      # Офіційний статичний тарбол, а не guix-install.sh. Скрипт не має
-      # --unattended (такого прапорця не існує — він виходить із кодом 1), а
-      # його внутрішній wget проти ftp.gnu.org під `set -eo pipefail` віддає
-      # код 4 (мережевий збій) і валить усю установку.
-      - name: Встановити GNU Guix
+    steps:
+      - name: Checkout pinned source inputs
+        uses: actions/checkout@v7
+
+      - name: Install GNU Guix 1.5.0
         env:
           GUIX_VERSION: "1.5.0"
           GUIX_SHA256: "aa41025489c5061543e9c48873eaa829b900b2da75d40f9648913622f5f47817"
         run: |
           set -euo pipefail
           TARBALL="guix-binary-${GUIX_VERSION}.x86_64-linux.tar.xz"
-          DEST="/tmp/${TARBALL}"
+          DEST="${RUNNER_TEMP}/${TARBALL}"
           PROFILE="/var/guix/profiles/per-user/root/current-guix"
-          for attempt in 1 2 3; do
-            if curl -fsSL --connect-timeout 20 --max-time 900 \
-                     --retry 3 --retry-delay 5 --retry-connrefused \
-                     -o "$DEST" "https://ftp.gnu.org/gnu/guix/${TARBALL}"; then
-              break
-            fi
-            rm -f "$DEST"
-            if [ "$attempt" -eq 3 ]; then
-              echo "::error::не вдалося завантажити ${TARBALL}"; exit 1
-            fi
-            sleep 15
-          done
-          test -s "$DEST" || { echo "::error::порожній тарбол"; exit 1; }
+          curl -fsSL --retry 3 --retry-delay 5 --retry-connrefused \
+            --connect-timeout 20 --max-time 900 \
+            -o "$DEST" "https://ftp.gnu.org/gnu/guix/${TARBALL}"
           echo "${GUIX_SHA256}  ${DEST}" | sha256sum -c -
           sudo tar --extract --strip-components=1 --file "$DEST" -C /
           sudo mkdir -p /root/.config/guix
           sudo ln -sfn "$PROFILE" /root/.config/guix/current
           sudo ln -sfn "$PROFILE/bin/guix" /usr/local/bin/guix
+
           getent group guixbuild >/dev/null || sudo groupadd --system guixbuild
           for i in $(seq -w 1 10); do
             id "guixbuilder$i" >/dev/null 2>&1 || \
@@ -83,101 +65,207 @@ jobs:
           done
           sudo mkdir -p /var/log/guix
           sudo bash -c "nohup $PROFILE/bin/guix-daemon --build-users-group=guixbuild \
-                        >/var/log/guix/daemon.log 2>&1 &"
+            >/var/log/guix/daemon.log 2>&1 &"
           for _ in $(seq 1 60); do
             [ -S /var/guix/daemon-socket/socket ] && break
             sleep 1
           done
           [ -S /var/guix/daemon-socket/socket ] || {
-            sudo tail -n 50 /var/log/guix/daemon.log || true
-            echo "::error::guix-daemon не створив сокет"; exit 1
+            sudo tail -n 80 /var/log/guix/daemon.log || true
+            echo "::error::guix-daemon did not create its socket"
+            exit 1
           }
           sudo chmod 0666 /var/guix/daemon-socket/socket
           echo "$PROFILE/bin" >> "$GITHUB_PATH"
-          guix --version
+          guix --version | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - name: Перевірити ключ підпису
+      - name: Validate owner-controlled substitute signing keys
         env:
-          SIGNING_KEY: ${{ secrets.GUIX_SIGNING_KEY }}
+          GUIX_SIGNING_KEY: ${{ secrets.GUIX_SIGNING_KEY }}
+          GUIX_SIGNING_PUBLIC_KEY: ${{ vars.GUIX_SIGNING_PUBLIC_KEY }}
         run: |
           set -euo pipefail
-          if [ -z "${SIGNING_KEY:-}" ]; then
-            echo "::error::Секрет GUIX_SIGNING_KEY не заданий."
-            echo "Створіть ключ на своїй машині: sudo guix archive --generate-key"
-            echo "Потім: gh secret set GUIX_SIGNING_KEY --repo ${{ github.repository }} < /etc/guix/signing-key.sec"
-            echo "Без ключа кеш буде непідписаним, і користувач не зможе його авторизувати."
+          if [ -z "${GUIX_SIGNING_KEY:-}" ] || [ -z "${GUIX_SIGNING_PUBLIC_KEY:-}" ]; then
+            {
+              echo "::error::Missing GUIX signing key material."
+              echo "Create the key pair on the owner-controlled machine with:"
+              echo "  sudo guix archive --generate-key"
+              echo "Then configure repository secret GUIX_SIGNING_KEY from /etc/guix/signing-key.sec"
+              echo "and repository variable GUIX_SIGNING_PUBLIC_KEY from /etc/guix/signing-key.pub."
+            } | tee -a "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
-          sudo install -d -m 700 /etc/guix
-          printf '%s\n' "$SIGNING_KEY" | sudo tee /etc/guix/signing-key.sec >/dev/null
-          sudo chmod 600 /etc/guix/signing-key.sec
-          echo "ключ встановлено"
+          sudo install -d -m 0700 /etc/guix
+          printf '%s\n' "$GUIX_SIGNING_KEY" | sudo tee /etc/guix/signing-key.sec >/dev/null
+          printf '%s\n' "$GUIX_SIGNING_PUBLIC_KEY" | sudo tee /etc/guix/signing-key.pub >/dev/null
+          sudo chmod 0600 /etc/guix/signing-key.sec
+          sudo chmod 0644 /etc/guix/signing-key.pub
+          echo "Owner-controlled signing key pair was installed; key contents are not logged."
 
-      - name: Зібрати пакети каналу
+      - name: Record pinned Guix channel revision
         run: |
           set -euo pipefail
-          PACKAGES="${{ github.event.inputs.packages }}"
-          echo "збираю: $PACKAGES"
-          guix build --no-substitutes $PACKAGES | tee /tmp/store-paths.txt
+          guix time-machine -C channels.lock.scm -- describe -f channels \
+            | tee "$RUNNER_TEMP/guix-channels.txt" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - name: Прогріти кеш
-        # guix publish лінивий: він створює narinfo і nar на запит. Без прогріву
-        # каталог кешу порожній, і публікувати нічого.
+      - name: Evaluate and build the fixed H170 Free manifest
         run: |
           set -euo pipefail
-          sudo guix publish --cache=/var/cache/publish --port=3000 --compression=zstd:9 &
-          for _ in $(seq 1 30); do
-            curl -sf http://localhost:3000/nix-cache-info >/dev/null && break
+          PATHS_FILE="$RUNNER_TEMP/h170-free-store-paths.txt"
+          LOG_FILE="$RUNNER_TEMP/h170-free-build.log"
+          python3 tests/test_h170_free_package_manifest.py
+          guix time-machine -C channels.lock.scm -- \
+            build --dry-run --no-grafts \
+            --manifest=drivers/profiles/h170-free-packages.scm
+          if ! guix time-machine -C channels.lock.scm -- \
+              build --no-grafts --keep-going \
+              --manifest=drivers/profiles/h170-free-packages.scm \
+              >"$PATHS_FILE" 2>"$LOG_FILE"; then
+            tail -n 160 "$LOG_FILE" >&2 || true
+            echo "::error::H170 Free package build failed; no release or Pages deployment was made."
+            exit 1
+          fi
+          mapfile -t STORE_PATHS < <(grep -E '^/gnu/store/[a-z0-9]{32}-' "$PATHS_FILE")
+          if [ "${#STORE_PATHS[@]}" -ne 11 ]; then
+            echo "::error::Expected 11 package outputs, got ${#STORE_PATHS[@]}"
+            cat "$PATHS_FILE" >&2
+            exit 1
+          fi
+          {
+            echo "## H170 Free package outputs"
+            echo ""
+            echo "| Store output |"
+            echo "| --- |"
+            for store_path in "${STORE_PATHS[@]}"; do
+              echo "| `$(basename "$store_path")` |"
+            done
+            echo ""
+            echo "Input: official Guix only, pinned by channels.lock.scm."
+            echo "Manifest: drivers/profiles/h170-free-packages.scm."
+            echo "No WSM-owned package, Nonguix package, proprietary driver or firmware is in this set."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Bake signed NARs into the local substitute cache
+        run: |
+          set -euo pipefail
+          CACHE_DIR="/var/cache/guix/h170-free"
+          PATHS_FILE="$RUNNER_TEMP/h170-free-store-paths.txt"
+          sudo install -d -m 0755 "$CACHE_DIR"
+          sudo nohup guix publish \
+            --listen=127.0.0.1 \
+            --port=3000 \
+            --compression=zstd:9 \
+            --cache="$CACHE_DIR" \
+            --workers=4 \
+            --ttl=90d \
+            --public-key=/etc/guix/signing-key.pub \
+            --private-key=/etc/guix/signing-key.sec \
+            >"$RUNNER_TEMP/guix-publish.log" 2>&1 &
+          ready=0
+          for _ in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3000/nix-cache-info >/dev/null; then
+              ready=1
+              break
+            fi
             sleep 1
           done
-          while read -r path; do
-            [ -n "$path" ] || continue
-            hash=$(basename "$path" | cut -d- -f1)
-            curl -sf "http://localhost:3000/${hash}.narinfo" >/dev/null || true
-          done < /tmp/store-paths.txt
-          sudo find /var/cache/publish -name '*.narinfo' | wc -l
+          if [ "$ready" -ne 1 ]; then
+            cat "$RUNNER_TEMP/guix-publish.log" >&2 || true
+            echo "::error::guix publish did not start"
+            exit 1
+          fi
 
-      - name: Переписати URL на release assets
-        run: |
-          set -euo pipefail
-          python3 scripts/narinfo_to_release_urls.py \
-            --source /var/cache/publish \
-            --destination ./site \
-            --base-url "https://github.com/${{ github.repository }}/releases/download/substitutes"
-          sudo cp /var/cache/publish/nix-cache-info ./site/ 2>/dev/null || true
-          sudo cp /var/cache/publish/signing-key.pub ./site/ 2>/dev/null || true
-          touch ./site/.nojekyll
+          while IFS= read -r store_path; do
+            [ -n "$store_path" ] || continue
+            hash="${store_path##*/}"
+            hash="${hash%%-*}"
+            narinfo_url="http://127.0.0.1:3000/${hash}.narinfo"
+            baked=0
+            for _ in $(seq 1 180); do
+              if curl -fsS "$narinfo_url" -o /dev/null; then
+                baked=1
+                break
+              fi
+              sleep 5
+            done
+            if [ "$baked" -ne 1 ]; then
+              echo "::error::NAR cache baking timed out for $store_path"
+              tail -n 100 "$RUNNER_TEMP/guix-publish.log" >&2 || true
+              exit 1
+            fi
+          done < "$PATHS_FILE"
 
-      - name: Опублікувати архіви в реліз
+          NAR_COUNT="$(sudo find "$CACHE_DIR/nar" -type f -name '*.nar.zst' | wc -l)"
+          INFO_COUNT="$(sudo find "$CACHE_DIR" -maxdepth 1 -type f -name '*.narinfo' | wc -l)"
+          [ "$NAR_COUNT" -eq 11 ] || { echo "Expected 11 NAR archives, got $NAR_COUNT"; exit 1; }
+          [ "$INFO_COUNT" -eq 11 ] || { echo "Expected 11 narinfo files, got $INFO_COUNT"; exit 1; }
+          echo "Baked $NAR_COUNT signed NAR archives and $INFO_COUNT narinfo records." \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Prepare immutable Release assets and Pages metadata
+        id: prepare
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh release view substitutes >/dev/null 2>&1 || \
-            gh release create substitutes --title "Субститути каналу" \
-              --notes "Архіви для статичного кешу субститутів. Метадані — на Pages."
-          sudo find /var/cache/publish/nar -name '*.nar.zst' -size -2000M | while read -r nar; do
-            gh release upload substitutes "$nar" --clobber
+          CACHE_TAG="h170-free-cache-${GITHUB_RUN_NUMBER}"
+          echo "cache_tag=$CACHE_TAG" >> "$GITHUB_OUTPUT"
+          mkdir -p site
+          BASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${CACHE_TAG}"
+          python3 scripts/narinfo_to_release_urls.py \
+            --source /var/cache/guix/h170-free \
+            --destination ./site \
+            --base-url "$BASE_URL"
+          curl -fsS http://127.0.0.1:3000/nix-cache-info -o ./site/nix-cache-info
+          curl -fsS http://127.0.0.1:3000/signing-key.pub -o ./site/signing-key.pub
+          touch ./site/.nojekyll
+
+          mapfile -t NARS < <(find /var/cache/guix/h170-free/nar -type f -name '*.nar.zst' | sort)
+          [ "${#NARS[@]}" -eq 11 ] || { echo "Expected 11 NAR assets, got ${#NARS[@]}"; exit 1; }
+          for nar in "${NARS[@]}"; do
+            size="$(stat -c '%s' "$nar")"
+            [ "$size" -lt 2000000000 ] || {
+              echo "::error::NAR asset exceeds the 2 GB Release limit: $nar"
+              exit 1
+            }
           done
 
-      - uses: actions/upload-pages-artifact@v3
+          gh release create "$CACHE_TAG" \
+            --title "WSM H170 Free substitute cache ${GITHUB_RUN_NUMBER}" \
+            --notes "Pinned H170 Free upstream-only package cache. Source commit: ${GITHUB_SHA}. NAR assets are immutable; narinfo metadata is deployed separately to GitHub Pages."
+          gh release upload "$CACHE_TAG" "${NARS[@]}"
+
+      - name: Upload Pages metadata
+        uses: actions/upload-pages-artifact@v3
         with:
           path: ./site
 
-      - uses: actions/deploy-pages@v4
+      - name: Deploy Pages metadata
         id: pages
+        uses: actions/deploy-pages@v4
 
-      - name: Повідомити про збій
-        if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Publish summary
+        if: success()
         run: |
-          set -euo pipefail
           {
-            echo "### Публікація субститутів не вдалася"
-            echo "Перша помилка і її точний вивід — у логах попереднього кроку."
-            echo "Найчастіші причини: немає секрету GUIX_SIGNING_KEY, мережевий збій"
-            echo "при завантаженні тарболу Guix, або guix-daemon не створив сокет."
+            echo "## H170 Free substitute cache published"
+            echo ""
+            echo "Release tag: ` ${{ steps.prepare.outputs.cache_tag }} `"
+            echo "Pages URL: ${{ steps.pages.outputs.page_url }}"
+            echo "Source commit: ${GITHUB_SHA}"
+            echo ""
+            echo "Only the fixed upstream-only H170 Free manifest was published."
+            echo "No WSM-owned binaries, Nonguix payload or proprietary firmware was included."
           } >> "$GITHUB_STEP_SUMMARY"
-          gh api "repos/${{ github.repository }}/commits/$GITHUB_SHA/comments" \
-            -f body="Публікація субститутів не вдалася. Причина — у логах прогону." || true
+
+      - name: Report publication failure
+        if: failure()
+        run: |
+          {
+            echo "## H170 Free substitute publication failed"
+            echo ""
+            echo "Check the first failing step above. No success is claimed."
+            echo "If a Release was created before a later Pages failure, its tag is in the workflow logs."
+            echo "A missing or mismatched signing key, pinned Guix evaluation/build failure, NAR bake failure or Pages configuration can cause this run to fail."
+          } >> "$GITHUB_STEP_SUMMARY"
