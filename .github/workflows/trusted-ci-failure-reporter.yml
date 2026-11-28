@@ -4,7 +4,7 @@ name: Trusted CI failure reporter
 # It never checks out the triggering PR or consumes PR-controlled artifacts.
 on:
   workflow_run:
-    workflows: ["CI", "Guix profile evaluation"]
+    workflows: ["CI", "Guix profile evaluation", "Публікація власних пакетів каналу"]
     types: [completed]
 
 permissions: {}

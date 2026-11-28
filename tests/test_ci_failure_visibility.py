@@ -112,7 +112,7 @@ class CiFailureVisibilityTests(unittest.TestCase):
         trigger = (reporter.get("on") or {}).get("workflow_run") or {}
         self.assertEqual(
             trigger.get("workflows"),
-            ["CI", "Guix profile evaluation"],
+            ["CI", "Guix profile evaluation", "Публікація власних пакетів каналу"],
         )
         self.assertEqual(trigger.get("types"), ["completed"])
         self.assertEqual(reporter.get("permissions"), {})
@@ -259,10 +259,14 @@ class CiFailureVisibilityTests(unittest.TestCase):
         )
 
     def test_disabled_distribution_workflows_do_not_need_failure_reporters(self) -> None:
-        for name in ("substitutes.yml", "package-archives.yml"):
-            workflow = WORKFLOWS / name
-            with self.subTest(workflow=name):
-                self.assertTrue(all_jobs_disabled(workflow))
+        """Only the substitute server is still disabled.
+
+        package-archives.yml is active again by the owner's decision (ADR 0007),
+        so it is watched by the trusted reporter like every other live workflow -
+        which is what test_every_live_workflow_is_watched_by_the_reporter checks.
+        """
+        workflow = WORKFLOWS / "substitutes.yml"
+        self.assertTrue(all_jobs_disabled(workflow))
 
 
     def test_scan_finds_all_three_trusted_workflow_files(self) -> None:

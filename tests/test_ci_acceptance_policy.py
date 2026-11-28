@@ -128,34 +128,51 @@ class ReleaseAcceptanceTimeoutTests(unittest.TestCase):
             )
 
 class PackageArchiveWorkflowTests(unittest.TestCase):
-    """Package builds and NAR export stay disabled until issue #367 is resolved."""
+    """Own packages may be published; substitutes still need a key.
+
+    The earlier version of this class required the archive workflow to be disabled
+    outright, which encoded "no distribution without #367" as a code rule. The
+    owner then instructed twice that publishing should start (ADR 0007), so the
+    rule changes: our own package may be packed and attached to a release, while
+    the substitute server stays disabled because no signing key exists.
+
+    The protective intent is kept, not dropped - the forbidden list still blocks
+    anything that would publish substitutes or export a store-path nar.
+    """
 
     WORKFLOW = ROOT / ".github" / "workflows" / "package-archives.yml"
+    SUBSTITUTES = ROOT / ".github" / "workflows" / "substitutes.yml"
 
     def setUp(self) -> None:
         self.text = self.WORKFLOW.read_text(encoding="utf-8")
         self.workflow = yaml.load(self.text, Loader=yaml.BaseLoader)
 
-    def test_workflow_is_manual_only(self) -> None:
-        self.assertEqual(set(self.workflow["on"]), {"workflow_dispatch"})
+    def test_it_is_manual_or_tag_triggered(self) -> None:
+        self.assertEqual(set(self.workflow["on"]), {"workflow_dispatch", "push"})
 
-    def test_package_job_is_explicitly_disabled(self) -> None:
-        self.assertEqual(self.workflow["jobs"]["archive"]["if"], "${{ false }}")
+    def test_it_packs_rather_than_exports_a_store_path(self) -> None:
+        """guix pack needs no signing key; guix archive --export does."""
+        self.assertIn("pack -f tarball", self.text)
+        self.assertNotIn("guix archive --export", self.text)
 
-    def test_no_build_export_or_downloadable_artifact_exists(self) -> None:
+    def test_it_never_publishes_substitutes(self) -> None:
         for forbidden in (
-            "guix build wsm-tools",
-            "guix archive --export",
-            "actions/upload-artifact",
-            "gh release upload",
+            "guix publish",
             "actions/deploy-pages",
+            "narinfo",
         ):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, self.text)
 
-    def test_workflow_records_the_licensing_gate(self) -> None:
+    def test_the_substitute_workflow_stays_disabled(self) -> None:
+        substitutes = self.SUBSTITUTES.read_text(encoding="utf-8")
+        parsed = yaml.load(substitutes, Loader=yaml.BaseLoader)
+        self.assertEqual(parsed["jobs"]["publish"]["if"], "${{ false }}")
+
+    def test_workflow_records_the_decision_and_the_licensing_gate(self) -> None:
         self.assertIn("#367", self.text)
-        self.assertIn("розповсюдження", self.text.lower())
+        self.assertIn("0007-publish-own-packages", self.text)
+
 
 if __name__ == "__main__":
     unittest.main()

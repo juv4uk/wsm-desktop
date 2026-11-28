@@ -1,25 +1,104 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-name: WSM package archives — вимкнено до licensing decision
+name: Публікація власних пакетів каналу
 
-# Тут може з'явитися лише ручне створення ephemeral build evidence.
-# Пакет/NAR не можна експортувати в Actions artifacts або draft/public releases,
-# доки власник не вирішить #367 і права на розповсюдження.
+# Публікуються ЛИШЕ власні пакети каналу (сьогодні це wsm-tools), зібрані з
+# зафіксованого channels.lock.scm, у вигляді архіву `guix pack`.
 #
-# Поточна версія навмисно не будує, не експортує і не завантажує wsm-tools.
+# Чому pack, а не substitutes: `guix pack` не потребує ключа підпису. Ключа в
+# репозиторії немає, і агент не має права його створювати — тому шлях substitutes
+# лишається вимкненим (див. substitutes.yml), а цей дає користувачу архів, який
+# він розпаковує сам.
+#
+# Рішення власника про публікацію: docs/decisions/0007-publish-own-packages.md.
+# Ліцензійна межа: issue #367 — тут публікується лише власний код WSM.
+# Рішення: docs/decisions/0007-publish-own-packages.md (прийнято 2026-11-28).
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Тег релізу, до якого прикріпити архів (порожньо — лише artifact)"
+        required: false
+        default: ""
+  push:
+    tags:
+      - "v*"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  archive:
-    if: ${{ false }}
-    name: Заблоковано до рішення #367
+  pack:
+    name: Зібрати та опублікувати wsm-tools
     runs-on: ubuntu-24.04
     steps:
-      - name: Fail closed
+      - uses: actions/checkout@v4
+
+      - name: Встановити Guix
+        # Той самий спосіб, що в guix-profile-evaluation.yml і release-minimal-live.yml.
+        # wget з git.savannah.gnu.org падає з exit 8 (HTTP-помилка), тому не вживається.
         run: |
-          echo "::error::Package archive workflow вимкнено до licensing decision #367."
-          exit 1
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y guix
+          sudo systemctl enable --now guix-daemon.service
+          guix --version
+
+      - name: Зібрати пакет із зафіксованого каналу
+        id: build
+        run: |
+          set -euo pipefail
+          guix time-machine -C channels.lock.scm -- \
+            build -f wsm/packages/wsm.scm
+          echo "store_path=$(guix time-machine -C channels.lock.scm -- \
+            build -f wsm/packages/wsm.scm)" >> "$GITHUB_OUTPUT"
+
+      - name: Запакувати в архів (без ключа підпису)
+        run: |
+          set -euo pipefail
+          guix time-machine -C channels.lock.scm -- \
+            pack -f tarball -C zstd -L . wsm-tools
+          archive="$(ls -1 *.tar.zst | head -1)"
+          echo "WSM_PACK=$archive" >> "$GITHUB_ENV"
+          sha256sum "$archive" | tee "$archive.sha256"
+          ls -l "$archive"
+
+      - name: Зберегти як artifact завжди
+        uses: actions/upload-artifact@v4
+        with:
+          name: wsm-tools-pack
+          path: |
+            *.tar.zst
+            *.tar.zst.sha256
+          if-no-files-found: error
+
+      - name: Прикріпити до релізу, якщо тег заданий
+        if: ${{ inputs.release_tag != '' || startsWith(github.ref, 'refs/tags/v') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag != '' && inputs.release_tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --title "WSM packages $RELEASE_TAG" \
+              --notes "Власні пакети каналу WSM, зібрані з channels.lock.scm. Архів не підписаний: розпакуйте його самі. Substitute-сервер не використовується, доки власник не створив ключ підпису."
+          fi
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            "$WSM_PACK" "$WSM_PACK.sha256" --clobber
+
+      - name: Повідомити про збій
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          echo "::error::Публікацію пакетів зупинено. Дивіться крок вище."
+          echo "### Збій публікації" >> "$GITHUB_STEP_SUMMARY"
+          echo "Збирання або публікація не завершилися. Архів не опубліковано." >> "$GITHUB_STEP_SUMMARY"
+          # A tag build has no pull request to comment on, so the cause is left on
+          # the commit itself - the rule in this repository is that a failure must
+          # leave a readable cause, not that it must be a PR comment.
+          gh api "repos/${GITHUB_REPOSITORY}/commits/$GITHUB_SHA/comments" \
+            -f body="Публікація пакетів не вдалася. Дивіться лог прогону ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}." \
+            >/dev/null
