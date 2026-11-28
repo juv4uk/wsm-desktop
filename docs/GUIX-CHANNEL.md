@@ -162,6 +162,12 @@ git log --format="%G? %GK" -40 origin/main
 
 Після introduction кожен commit у каналі має бути підписаний авторизованим ключем. Не використовувати непідписані GitHub-generated merge commits у захищеній історії; узгодити signed fast-forward/rebase workflow та правила GitHub перед вмиканням channel release. Не використовувати `--disable-authentication` для acceptance.
 
+## Публікація зібраних пакетів
+
+Власник дав вказівку почати публікацію пакетів для свого заліза. План, обидва
+шляхи (Releases без ключа і substitute-сервер з ключем) та те, що потрібно від
+власника — у [`PUBLISHING.md`](PUBLISHING.md).
+
 ## Відкрите питання: substitute-сервер
 
 У `channels.lock.scm` стоїть рядок «no substitute server and no signing key are
