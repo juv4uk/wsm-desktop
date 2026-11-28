@@ -11,6 +11,7 @@
 (use-modules (guix packages)
              (guix store)
              (gnu services)
+             (ice-9 ftw)
              (srfi srfi-1)
              (ci cuirass images)
              (wsm systems performance)
@@ -36,8 +37,15 @@
 ;; Invoke the actual Cuirass custom entry point with the argument shape Cuirass
 ;; passes (plural 'systems). This lowers the ISO image derivation through Guix's
 ;; image->job helper and checks the resulting job record without building it.
+;; Simulate a worker whose process CWD is outside the checkout: the profile must
+;; be found through the absolute channel checkout added to Guile's load path.
+(define %original-directory (getcwd))
+(define %wsm-channel-root (canonicalize-path "."))
+(set! %load-path (cons %wsm-channel-root %load-path))
+(chdir "/tmp")
 (define cuirass-image-jobs
   (cuirass-jobs (open-connection) '((systems . ("x86_64-linux")))))
+(chdir %wsm-channel-root)
 (unless (and (list? cuirass-image-jobs)
              (= (length cuirass-image-jobs) 1))
   (error "Cuirass image job did not honor the requested systems list"))
