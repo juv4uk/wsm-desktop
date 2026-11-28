@@ -1,320 +1,126 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-name: H170 Free Guix package publication
-
-# Publishes only the fixed upstream H170 Free roots. WSM-owned packages and
-# nonfree firmware are intentionally outside this archive.
+name: WSM package archives
+# ADR 0010: лише власний пакет, ручний запуск, чернетка релізу, без ключа.
 on:
-  push:
-    branches:
-      - "main"
-    tags:
-      - "packages-h170-free-*"
-    paths:
-      - ".github/workflows/package-archives.yml"
-      - "channels.lock.scm"
-      - "drivers/profiles/h170-free-packages.scm"
   workflow_dispatch:
-
 permissions:
   contents: write
-  id-token: write
-  attestations: write
-  artifact-metadata: write
-
 concurrency:
-  group: h170-free-package-publication
+  group: wsm-package-archives
   cancel-in-progress: false
-
 jobs:
   archive:
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/packages-h170-free-')
-    name: Build, attest and publish the H170 Free package closure
+    if: github.ref == 'refs/heads/main'
+    name: Зібрати та запакувати wsm-tools
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     steps:
-      - name: Checkout exact source
+      - name: Отримати точний коміт
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-
-      - name: Validate the publication ref
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          REF: ${{ github.ref }}
-          SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          git fetch origin main --no-tags
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            test "$REF" = "refs/heads/main" || {
-              echo "manual publication is allowed only from main" >&2
-              exit 1
-            }
-          elif [ "$EVENT_NAME" = "push" ] && [ "$REF" = "refs/heads/main" ]; then
-            git merge-base --is-ancestor "$SHA" origin/main || {
-              echo "main publication commit is not reachable from origin/main" >&2
-              exit 1
-            }
-          elif [[ "$REF" == refs/tags/packages-h170-free-* ]]; then
-            git merge-base --is-ancestor "$SHA" origin/main || {
-              echo "publication tag must point to a commit reachable from main" >&2
-              exit 1
-            }
-          else
-            echo "unsupported publication ref: $REF" >&2
-            exit 1
-          fi
-
-      - name: Install Guix, prepare the ephemeral archive key, and start the daemon
+      - name: Встановити Guix
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y guix zstd
-          sudo systemctl stop guix-daemon.service || true
-          sudo install -d -m 700 /etc/guix
-          if ! sudo test -s /etc/guix/signing-key.sec || ! sudo test -s /etc/guix/signing-key.pub; then
-            sudo guix archive --generate-key
-          fi
-          sudo test -s /etc/guix/signing-key.sec
-          sudo test -s /etc/guix/signing-key.pub
+          sudo apt-get install -y guix
           sudo systemctl enable --now guix-daemon.service
           guix --version
-
-      - name: Build the fixed H170 Free roots on the official lock
+      - name: Зібрати власний пакет і його залежності через guix pack
         run: |
           set -euo pipefail
           OUT="$GITHUB_WORKSPACE/archives"
           mkdir -p "$OUT"
           cp channels.lock.scm "$OUT/channels.lock.scm"
-          cp drivers/profiles/h170-free-packages.scm "$OUT/h170-free-packages.scm"
+          cp wsm/packages/wsm.scm "$OUT/wsm-package-definition.scm"
           guix time-machine -C channels.lock.scm -- describe > "$OUT/guix-channel-description.txt"
-          ( cd "$OUT" && sha256sum channels.lock.scm h170-free-packages.scm > channels-inputs.sha256 )
+          ( cd "$OUT" && sha256sum channels.lock.scm wsm-package-definition.scm > CHANNEL-INPUTS.sha256 )
 
-          # Parse the committed Guix manifest as data, not as shell or Scheme code.
-          python3 - <<'PY' > "$OUT/packages.txt"
-          import re
-          from pathlib import Path
+          PACK_LOG="$OUT/guix-pack.stdout"
+          PACK_ERR="$OUT/guix-pack.stderr"
+          guix time-machine -C channels.lock.scm -- \
+            pack --format=tarball --no-grafts -L . wsm-tools \
+            > "$PACK_LOG" 2> "$PACK_ERR"
+          PACK_PATH="$(grep -E '^/gnu/store/[^[:space:]]+-pack\.tar\.gz$' "$PACK_LOG" | tail -n 1)"
+          if [ -z "$PACK_PATH" ] || [ ! -f "$PACK_PATH" ]; then
+            echo "Не вдалося визначити створений guix pack tarball." >&2
+            cat "$PACK_LOG" "$PACK_ERR" >&2
+            exit 1
+          fi
 
-          source = Path("drivers/profiles/h170-free-packages.scm").read_text(encoding="utf-8")
-          match = re.search(r"specifications->manifest\s*'\((.*?)\)\s*\)", source, re.DOTALL)
-          if match is None:
-              raise SystemExit("H170 Free manifest does not contain specifications->manifest")
-          packages = re.findall(r'"([a-z0-9.+-]+)"', match.group(1))
-          expected = (
-              "linux-libre", "mesa", "vulkan-loader", "vulkan-tools",
-              "pciutils", "usbutils", "alsa-utils", "ethtool",
-              "nvme-cli", "smartmontools", "lm-sensors",
-          )
-          if tuple(packages) != expected:
-              raise SystemExit(f"unexpected H170 Free package manifest: {packages!r}")
-          print("\n".join(packages))
-          PY
-          mapfile -t PACKAGES < "$OUT/packages.txt"
-          test "${#PACKAGES[@]}" -eq 11
-          STORE_PATHS=()
-          printf 'package\tstore_path\tderivation_path\tnar_sha256\n' > "$OUT/store-paths.tsv"
-
-          for package in "${PACKAGES[@]}"; do
-            package_info="$OUT/$package.package-info.rec"
-            guix time-machine -C channels.lock.scm -- show "$package" > "$package_info"
-            grep -Eq '^name:[[:space:]]+' "$package_info"
-            grep -Eq '^license:[[:space:]]+[^[:space:]]' "$package_info"
-
-            derivation_path="$(guix time-machine -C channels.lock.scm -- build --derivations --no-grafts "$package")"
-            case "$derivation_path" in
-              /gnu/store/*.drv) ;;
-              *) echo "unexpected derivation path for $package: $derivation_path" >&2; exit 1 ;;
-            esac
-
-            store_path="$(guix time-machine -C channels.lock.scm -- build --no-grafts "$package")"
-            case "$store_path" in
-              /gnu/store/*) ;;
-              *) echo "unexpected store path for $package: $store_path" >&2; exit 1 ;;
-            esac
-            STORE_PATHS+=("$store_path")
-            nar_sha256="$(guix time-machine -C channels.lock.scm -- hash --recursive --format=hex "$store_path")"
-            printf '%s\t%s\t%s\t%s\n' "$package" "$store_path" "$derivation_path" "$nar_sha256" >> "$OUT/store-paths.tsv"
-          done
-
-          guix time-machine -C channels.lock.scm -- size "${STORE_PATHS[@]}" > "$OUT/store-closure-size.txt"
+          cp "$PACK_PATH" "$OUT/wsm-tools-pack.tar.gz"
+          tar -tzf "$OUT/wsm-tools-pack.tar.gz" >/dev/null
           {
-            echo "## H170 Free package build"
+            echo "Пакет: wsm-tools"
+            echo "Тип: власний пакет каналу WSM"
+            echo "Формат: guix pack tarball з runtime dependencies"
+            echo "Вихідний коміт: $GITHUB_SHA"
+            echo "Репозиторій: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
+            echo "Guix: pinned channels.lock.scm"
+            echo "Package definition: wsm/packages/wsm.scm"
+            echo "Pack store path: $PACK_PATH"
+            echo "Підписний ключ і substitute-сервер: не використовуються"
             echo ""
-            echo "Roots: all 11 packages in the committed H170 Free manifest (official Guix channel only)"
-            echo ""
-            cat "$OUT/store-paths.tsv"
-            echo ""
-            cat "$OUT/store-closure-size.txt"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Generate an ephemeral Guix archive key and export the recursive closure
-        run: |
-          set -euo pipefail
-          OUT="$GITHUB_WORKSPACE/archives"
-          sudo test -s /etc/guix/signing-key.sec
-          sudo test -s /etc/guix/signing-key.pub
-          sudo install -m 0644 /etc/guix/signing-key.pub "$OUT/signing-key.pub"
-
-          mapfile -t STORE_PATHS < <(cut -f2 "$OUT/store-paths.tsv" | tail -n +2)
-          test "${#STORE_PATHS[@]}" -eq 11
-          guix time-machine -C channels.lock.scm -- archive --export --recursive "${STORE_PATHS[@]}" > "$OUT/h170-free-closure.nar"
-          test -s "$OUT/h170-free-closure.nar"
-
-          zstd -T0 -19 --rm "$OUT/h170-free-closure.nar"
-          split -b 1800M -d -a 3 \
-            "$OUT/h170-free-closure.nar.zst" \
-            "$OUT/h170-free-closure.nar.zst.part-"
-          rm "$OUT/h170-free-closure.nar.zst"
-
-          cat "$OUT"/h170-free-closure.nar.zst.part-* | sha256sum | awk '{print $1}' > "$OUT/bundle.sha256"
-          cat "$OUT"/h170-free-closure.nar.zst.part-* | wc -c | tr -d ' ' > "$OUT/bundle.size-bytes"
-
-          {
-            echo "WSM repository: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
-            echo "WSM source commit: $GITHUB_SHA"
-            echo "Package profile: H170 Free"
-            echo "Package roots:"
-            cat "$OUT/packages.txt"
-            echo "Package source: pinned official GNU Guix channel in channels.lock.scm"
-            echo "WSM-owned packages: excluded"
-            echo "NVIDIA/Intel nonfree firmware and Nonguix: excluded"
-            echo "Guix archive signature: ephemeral runner daemon key; public key is signing-key.pub"
-            echo "Recursive closure bundle SHA-256: $(cat "$OUT/bundle.sha256")"
-            echo "Compressed bundle size (bytes): $(cat "$OUT/bundle.size-bytes")"
-            echo ""
-            echo "Pinned Guix channel description:"
             cat "$OUT/guix-channel-description.txt"
-            echo ""
-            echo "Package store paths, derivations and recursive NAR hashes:"
-            cat "$OUT/store-paths.tsv"
-            echo ""
-            echo "Pinned Guix package metadata (including effective license fields):"
-            for package in "${PACKAGES[@]}"; do
-              echo "#### $package"
-              cat "$OUT/$package.package-info.rec"
-            done
-            echo ""
-            echo "Store and closure size:"
-            cat "$OUT/store-closure-size.txt"
-          } > "$OUT/provenance.txt"
-
-          cat > "$OUT/IMPORT.md" <<'EOF'
-          # Import the H170 Free Guix package closure
-
-          Verify all downloaded assets first:
-
-              sha256sum -c SHA256SUMS
-
-          Authorize the one-run public key included as signing-key.pub, then import
-          the signed archive bundle:
-
-              sudo guix archive --authorize < signing-key.pub
-              cat h170-free-closure.nar.zst.part-* | zstd -dc | guix archive --import
-
-          The archive contains the recursive closures for all package roots listed
-          in packages.txt and the committed h170-free-packages.scm manifest. The private
-          signing key was generated on the ephemeral build runner and is not included.
-          EOF
-
-          cat > "$OUT/RELEASE-NOTES.md" <<'EOF'
-          # H170 Free Guix package bundle
-
-          This prerelease contains the Guix-built 11 upstream package roots listed in
-          h170-free-packages.scm, resolved from the official channel pinned by channels.lock.scm.
-          The attached NAR bundle includes their recursive store closure and is signed
-          by a one-run Guix daemon key; signing-key.pub is provided for import trust.
-          GitHub artifact provenance is attached to the compressed archive parts.
-
-          This is package build and closure evidence, not H170 hardware certification.
-          The current pinned linux-libre candidate has a known GP107 Nouveau atomic-KMS
-          regression window. The separate linux-libre-h170 backport is not included
-          until its own exact-lock evaluation and full package build pass.
-          No NVIDIA FECS/GPCCS firmware, Intel nonfree firmware or microcode, Nonguix,
-          proprietary NVIDIA driver, or WSM-owned LicenseRef-Volnist package is included.
-          GP107 3D/compute and physical H170 runtime are not claimed.
-
-          See IMPORT.md, provenance.txt, packages.txt, store-paths.tsv and SHA256SUMS.
-          EOF
-
+          } > "$OUT/PROVENANCE.txt"
           (
             cd "$OUT"
-            sha256sum \
-              h170-free-closure.nar.zst.part-* \
-              signing-key.pub \
-              channels.lock.scm \
-              h170-free-packages.scm \
-              channels-inputs.sha256 \
-              packages.txt \
-              guix-channel-description.txt \
-              store-paths.tsv \
-              store-closure-size.txt \
-              bundle.sha256 \
-              bundle.size-bytes \
-              provenance.txt \
-              IMPORT.md \
-              *.package-info.rec \
-              > SHA256SUMS
+            sha256sum wsm-tools-pack.tar.gz channels.lock.scm \
+              wsm-package-definition.scm CHANNEL-INPUTS.sha256 \
+              guix-channel-description.txt PROVENANCE.txt > SHA256SUMS
           )
+          cat > "$OUT/RELEASE-NOTES.md" <<'EOF'
+          # WSM Guix package — draft
 
-      - name: Generate GitHub build provenance
-        uses: actions/attest@v4
-        with:
-          subject-path: archives/h170-free-closure.nar.zst.part-*
-
-      - name: Publish a versioned prerelease and verify its read-back
+          This draft contains the WSM-owned wsm-tools package packed with its runtime
+          dependencies by the pinned GNU Guix channel lock. It is not a substitute
+          cache and does not contain third-party kernel, Mesa, Nonguix, or firmware
+          packages. The release remains a draft and is not publicly published.
+          See PROVENANCE.txt and SHA256SUMS before using the archive.
+          EOF
+          {
+            echo "## Артефакт wsm-tools"
+            echo "Створено Guix pack tarball; реліз буде створено як Draft."
+            echo "Пакетний набір: лише wsm-tools."
+            cat "$OUT/PROVENANCE.txt"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Створити чернетку релізу й перевірити завантажені файли
         env:
           GH_TOKEN: ${{ github.token }}
-          REF: ${{ github.ref }}
           SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           OUT="$GITHUB_WORKSPACE/archives"
-          if [[ "$REF" == refs/tags/* ]]; then
-            RELEASE_TAG="${REF#refs/tags/}"
-          else
-            RELEASE_TAG="h170-free-${SHA:0:12}"
-          fi
-          git check-ref-format "refs/tags/$RELEASE_TAG"
+          RELEASE_TAG="wsm-tools-draft-${GITHUB_RUN_NUMBER}"
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "refusing to overwrite an existing release: $RELEASE_TAG" >&2
+            echo "Відмовляюся перезаписувати наявний реліз $RELEASE_TAG" >&2
             exit 1
           fi
-
           gh release create "$RELEASE_TAG" \
-            "$OUT"/h170-free-closure.nar.zst.part-* \
-            "$OUT/signing-key.pub" \
+            "$OUT/wsm-tools-pack.tar.gz" \
             "$OUT/channels.lock.scm" \
-            "$OUT/h170-free-packages.scm" \
-            "$OUT/channels-inputs.sha256" \
-            "$OUT/packages.txt" \
+            "$OUT/wsm-package-definition.scm" \
+            "$OUT/CHANNEL-INPUTS.sha256" \
             "$OUT/guix-channel-description.txt" \
-            "$OUT/store-paths.tsv" \
-            "$OUT/store-closure-size.txt" \
-            "$OUT"/*.package-info.rec \
-            "$OUT/bundle.sha256" \
-            "$OUT/bundle.size-bytes" \
-            "$OUT/provenance.txt" \
-            "$OUT/IMPORT.md" \
+            "$OUT/PROVENANCE.txt" \
             "$OUT/SHA256SUMS" \
-            --title "H170 Free Guix packages ($RELEASE_TAG)" \
+            --title "WSM wsm-tools (draft ${GITHUB_RUN_NUMBER})" \
             --notes-file "$OUT/RELEASE-NOTES.md" \
-            --prerelease \
+            --draft \
             --target "$SHA"
-
-          READBACK="$RUNNER_TEMP/h170-free-readback"
+          IS_DRAFT="$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')"
+          test "$IS_DRAFT" = "true"
+          READBACK="$RUNNER_TEMP/wsm-tools-readback"
           mkdir -p "$READBACK"
           gh release download "$RELEASE_TAG" --dir "$READBACK"
           (
             cd "$READBACK"
             sha256sum -c SHA256SUMS
-            ACTUAL_BUNDLE_SHA="$(cat h170-free-closure.nar.zst.part-* | sha256sum | awk '{print $1}')"
-            EXPECTED_BUNDLE_SHA="$(cat bundle.sha256)"
-            test "$ACTUAL_BUNDLE_SHA" = "$EXPECTED_BUNDLE_SHA"
-            cat h170-free-closure.nar.zst.part-* | zstd -dc > /dev/null
+            tar -tzf wsm-tools-pack.tar.gz >/dev/null
           )
-          echo "Published and verified prerelease: $RELEASE_TAG" | tee -a "$GITHUB_STEP_SUMMARY"
-
-      - name: Report publication failure
+          echo "Чернетку $RELEASE_TAG створено й перевірено. Вона залишається Draft." \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Повідомити причину збою
         if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
@@ -322,15 +128,12 @@ jobs:
           set -uo pipefail
           BODY="$(mktemp)"
           {
-            echo "### H170 Free Guix package publication failed"
+            echo "### WSM package archives: збірку не завершено"
             echo ""
             echo "Commit: $GITHUB_SHA"
             echo ""
-            echo "No successful publication is claimed. Inspect the exact failed workflow step."
-            echo ""
-            echo "#### available archive files"
+            echo "Реліз не оголошується успішним. Перевір перший помилковий крок workflow."
             ls -lah archives 2>&1 || true
-            echo ""
             df -h / || true
           } > "$BODY"
           gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
