@@ -1,11 +1,12 @@
 ;; SPDX-License-Identifier: LicenseRef-Volnist
 ;;
 ;; H170 Free package roots from the pinned official Guix channel.
-;; This manifest contains only upstream Guix packages; it intentionally excludes
-;; WSM-owned tools, Nonguix, proprietary NVIDIA drivers and nonfree firmware.
+;; This manifest contains only upstream Guix package roots; WSM-owned tools and
+;; nonfree driver/firmware payloads are deliberately outside this package set.
 ;; The WSM-owned linux-libre-h170 kernel overlay is built and released separately.
 (specifications->manifest
- '("mesa"
+ '(
+   "mesa"
    "vulkan-loader"
    "vulkan-tools"
    "pciutils"
