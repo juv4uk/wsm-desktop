@@ -11,21 +11,27 @@
 ;; and substitutes for anything the jobs build. What you do not get: QEMU boot
 ;; acceptance. That stays in the release workflow.
 
-(use-modules (gnu services ci)
+(use-modules (gnu services cuirass)
              (gnu services)
-             (guix channels))
+             (guix channels)
+             (guix gexp))
+
+(define %wsm-cuirass-specs-file
+  ;; Capture the adjacent specs file in the store. Do not rely on an
+  ;; unprovided /run/current-system/profile/share/wsm path.
+  (local-file "specs.scm" "wsm-cuirass-specs.scm"))
 
 (define %wsm-cuirass-specs
-  ;; Loaded from the file so the CLI and the service cannot drift apart.
-  #~(load "/run/current-system/profile/share/wsm/ci/cuirass/specs.scm"))
+  ;; The CLI and service use the same source file.
+  #~(load #$%wsm-cuirass-specs-file))
 
 (define wsm-cuirass-service
   (service cuirass-service-type
            (cuirass-configuration
             (host "localhost")
             (port 8081)
-            ;; Substitutes make a build farm useful; without them every job
-            ;; rebuilds its whole closure from source.
-            (use-substitutes? #t)
+            ;; Dependency substitutes are controlled by the Guix daemon.
+            ;; This local-daemon service does not publish its own outputs;
+            ;; that needs separate remote workers and guix-publish configuration.
             (fallback? #t)
             (specifications %wsm-cuirass-specs))))
