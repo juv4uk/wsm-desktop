@@ -91,3 +91,11 @@ Python collector remains the shipped implementation until the parity check
 against the same synthetic sysfs fixtures passes.")
     (home-page "https://github.com/juv4uk/wsm-desktop")
     (license wsm-license)))
+
+;; `guix build -f FILE' uses the value of the file's LAST expression, and
+;; `define-public' returns #<unspecified>. Naming the package here is what makes
+;;     guix build -L . -f wsm/packages/wsm-hwcheck-fpc-slice.scm
+;; work at all: without it the build fails with "#<unspecified>: not something we
+;; can build". The line is inert when the file is loaded as a module by
+;; tests/guix/source-module-evaluation.scm.
+wsm-hwcheck-fpc-slice
