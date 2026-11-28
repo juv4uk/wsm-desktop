@@ -43,7 +43,7 @@ class HonestBoundaryTests(unittest.TestCase):
 
     def test_digest_verification_is_declared_as_delegated(self) -> None:
         """Shipping an unverified SHA-256 would be worse than delegating."""
-        self.assertIn('"digest_verification":"delegated"', self.pas)
+        self.assertIn("Output.Add('digest_verification', 'delegated')", self.pas)
 
     def test_it_never_writes_or_executes(self) -> None:
         for forbidden in ("Rewrite(", "fpOpen", "ExecuteProcess", "popen", "Shell("):
