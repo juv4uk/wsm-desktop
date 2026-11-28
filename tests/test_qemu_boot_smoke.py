@@ -228,7 +228,7 @@ class QemuBootSmokeTests(unittest.TestCase):
             captured = BoundedProcessResult(
                 returncode=None,
                 timed_out=True,
-                stdout_tail=b"init[1]: segfault at 3fff00\\nWSM-LIVE-READY\\n",
+                stdout_tail=b"init[1]: segfault at 3fff00\nWSM-LIVE-READY\n",
                 stderr_tail=b"",
                 stdout_bytes_seen=48,
                 stderr_bytes_seen=0,
@@ -301,10 +301,10 @@ class QemuBootSmokeTests(unittest.TestCase):
 
     def test_bounded_capture_detects_serial_segfault_split_across_reads(self) -> None:
         child = (
-            "import os, time\\n"
-            "os.write(1, b'init[1]: segf')\\n"
-            "time.sleep(0.05)\\n"
-            "os.write(1, b'ault at 3fff00\\nWSM_LIVE_READY\\n' + b'X' * 200000)\\n"
+            "import os, time\n"
+            "os.write(1, b'init[1]: segf')\n"
+            "time.sleep(0.05)\n"
+            "os.write(1, b'ault at 3fff00\nWSM_LIVE_READY\n' + b'X' * 200000)\n"
         )
         result = run_bounded_process(
             [sys.executable, "-c", child],
