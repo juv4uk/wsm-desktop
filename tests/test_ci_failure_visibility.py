@@ -50,6 +50,8 @@ def inline_failure_reporter(workflow: Path) -> bool:
     )
 
 
+
+
 def inline_step_summary_reporter(workflow: Path) -> bool:
     """A read-only failure summary is visible without a GitHub write token."""
     return any(
@@ -57,7 +59,6 @@ def inline_step_summary_reporter(workflow: Path) -> bool:
         and "GITHUB_STEP_SUMMARY" in str(step.get("run", ""))
         for step in steps_of(workflow)
     )
-
 
 def exact_open_main_prs(
     candidates: list[dict],
@@ -273,9 +274,12 @@ class CiFailureVisibilityTests(unittest.TestCase):
         self.assertTrue(inline_step_summary_reporter(workflow))
         self.assertFalse(inline_failure_reporter(workflow))
 
-
     def test_disabled_distribution_workflows_do_not_need_failure_reporters(self) -> None:
-        for name in ("substitutes.yml", "package-archives.yml"):
+        # `substitutes.yml` left this set on 2026-11-28, when the owner approved
+        # publication: it is now an enabled workflow and carries its own inline
+        # failure reporter, which `test_other_workflows_keep_their_existing_failure_reporting`
+        # enforces.
+        for name in ("package-archives.yml",):
             workflow = WORKFLOWS / name
             with self.subTest(workflow=name):
                 self.assertTrue(all_jobs_disabled(workflow))
