@@ -1,22 +1,14 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""Point narinfo files at NAR archives hosted as release assets.
+"""Rewrite Guix narinfo URLs to immutable GitHub Release NAR assets.
 
-Why this exists: a static substitute cache needs two halves with very different
-size profiles.
+For the pinned Guix 1.5 publish implementation, a gzip cache stores each NAR
+as <cache>/gzip/<store-basename>.nar while the narinfo URL is
+nar/gzip/<store-basename>.  This tool flattens the small narinfo files for a
+Pages metadata site and points each URL at the matching Release asset named
+<store-basename>.nar.
 
-  * the metadata - `nix-cache-info', `*.narinfo', `signing-key.pub' - is a few
-    kilobytes per store item and changes often;
-  * the archives - `nar/*.nar.zst' - are tens to hundreds of megabytes and never
-    change once published.
-
-Putting both on GitHub Pages hits the 1 GiB site limit with a single desktop
-closure. Putting both in git hits the 100 MiB per-file limit. So: archives go to
-release assets, metadata goes to Pages, and the narinfo's `URL:' field is
-rewritten to point at the asset.
-
-The signature survives the rewrite because Guix signs a fingerprint of the store
-path, the NAR hash, the NAR size and the references - the `URL:' is not part of
-it. Rewriting it is therefore safe; rewriting `NarHash:' would not be.
+Only the URL value may change.  All other bytes, including every field covered
+by the Guix narinfo signature, are preserved exactly.
 """
 
 from __future__ import annotations
@@ -26,54 +18,83 @@ import re
 import sys
 from pathlib import Path
 
-URL_LINE = re.compile(r"^URL:\s*(\S+)\s*$", re.M)
-SIGNED_FIELDS = ("NarHash:", "NarSize:", "References:")
+URL_LINE = re.compile(
+    r"^URL:(?P<before>\s*)(?P<value>\S+)(?P<after>\s*)$",
+    re.MULTILINE,
+)
+NAR_SUFFIX = ".nar"
 
 
-def rewrite_url(text: str, base_url: str, keep_path: bool = False) -> str:
-    """Replace the `URL:' value with BASE_URL joined to the archive name."""
-    match = URL_LINE.search(text)
-    if match is None:
-        raise ValueError("narinfo has no URL: field")
-    original = match.group(1)
-    name = original.rsplit("/", 1)[-1]
-    target = f"{base_url.rstrip('/')}/{name}" if not keep_path else f"{base_url.rstrip('/')}/{original}"
-    return URL_LINE.sub(f"URL: {target}", text, count=1)
+def _url_value_span(text: str) -> tuple[int, int, str]:
+    matches = list(URL_LINE.finditer(text))
+    if len(matches) != 1:
+        raise ValueError(
+            f"expected exactly one URL: field, found {len(matches)}"
+        )
+    match = matches[0]
+    return match.start("value"), match.end("value"), match.group("value")
 
 
-def signed_fingerprint_fields(text: str) -> tuple[str, ...]:
-    """The fields that must not change, for a caller that wants to assert it."""
-    found = []
-    for line in text.splitlines():
-        for field in SIGNED_FIELDS:
-            if line.startswith(field):
-                found.append(line)
-    return tuple(found)
+def _without_url_value(text: str) -> str:
+    start, end, _ = _url_value_span(text)
+    return text[:start] + "<URL>" + text[end:]
 
 
-def convert_directory(source: Path, destination: Path, base_url: str) -> list[Path]:
-    """Rewrite every `*.narinfo' in SOURCE into DESTINATION."""
+def rewrite_url(text: str, base_url: str) -> str:
+    """Point one Guix narinfo at its matching GitHub Release asset."""
+    start, end, original = _url_value_span(text)
+    basename = original.rsplit("/", 1)[-1]
+    if not basename or basename in {".", ".."}:
+        raise ValueError("narinfo URL has no usable NAR basename")
+
+    target = f"{base_url.rstrip('/')}/{basename}{NAR_SUFFIX}"
+    rewritten = text[:start] + target + text[end:]
+
+    # Guard the whole document, not a hand-maintained subset of signed fields.
+    if _without_url_value(text) != _without_url_value(rewritten):
+        raise ValueError("rewriting URL changed narinfo content outside URL")
+    return rewritten
+
+
+def convert_directory(
+    source: Path, destination: Path, base_url: str
+) -> list[Path]:
+    """Flatten nested Guix cache .narinfo files into DESTINATION."""
+    narinfos = sorted(source.rglob("*.narinfo"))
+    if not narinfos:
+        raise ValueError(f"no .narinfo files found under {source}")
+
+    rewritten: dict[str, str] = {}
+    for narinfo in narinfos:
+        content = narinfo.read_text(encoding="utf-8")
+        converted = rewrite_url(content, base_url)
+        name = narinfo.name
+        previous = rewritten.get(name)
+        if previous is not None and previous != converted:
+            raise ValueError(f"conflicting duplicate narinfo basename: {name}")
+        rewritten[name] = converted
+
     destination.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
-    for narinfo in sorted(source.rglob("*.narinfo")):
-        before = narinfo.read_text(encoding="utf-8")
-        after = rewrite_url(before, base_url)
-        if signed_fingerprint_fields(before) != signed_fingerprint_fields(after):
-            raise ValueError(f"refusing to rewrite signed fields of {narinfo.name}")
-        target = destination / narinfo.name
-        target.write_text(after, encoding="utf-8")
+    for name, content in sorted(rewritten.items()):
+        target = destination / name
+        target.write_text(content, encoding="utf-8")
         written.append(target)
     return written
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="narinfo-to-release-urls", description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        prog="narinfo-to-release-urls",
+        description=__doc__.splitlines()[0],
+    )
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--destination", type=Path, required=True)
-    parser.add_argument("--base-url", required=True,
-                        help="e.g. https://github.com/OWNER/REPO/releases/download/substitutes")
-    parser.add_argument("--keep-path", action="store_true",
-                        help="keep the nar/ prefix in the URL")
+    parser.add_argument(
+        "--base-url",
+        required=True,
+        help="GitHub Release asset base URL, e.g. https://github.com/OWNER/REPO/releases/download/TAG",
+    )
     args = parser.parse_args(argv)
 
     try:
