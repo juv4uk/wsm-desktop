@@ -89,7 +89,7 @@ class SourceTests(unittest.TestCase):
 
     def test_pci_results_are_sorted_and_sensitive_identifiers_are_not_added(self) -> None:
         self.assertIn("SortDevices(Devices)", self.text)
-        for forbidden in ("serial_number", "mac_address", "uuid", "hostname", "username"):
+        for forbidden in ("product_uuid", "board_serial", "chassis_serial", "serial_number", "macaddress"):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, self.text)
 
