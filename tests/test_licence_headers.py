@@ -72,9 +72,15 @@ class LicenceHeaderTests(unittest.TestCase):
 
     def test_wsm_guix_packages_use_the_owner_license_object(self) -> None:
         module = (ROOT / "wsm" / "licenses.scm").read_text(encoding="utf-8")
-        self.assertIn('(license "ВОЛЬНІСТЬ"', module)
-        self.assertIn('"file://LICENSE"', module)
-        self.assertIn("LicenseRef-Volnist", module)
+        # Guix does not export the <license> constructor, so this module calls
+        # it through `(@ (guix licenses) license)`.  The behavioral assertion is
+        # tests/guix/compatibility-license-evaluation.scm, which evaluates
+        # license-name and license-uri; here we only stop a silent substitution
+        # of the owner's literal metadata with a different license.
+        self.assertRegex(module, r"\((?:@ \(guix licenses\) )?license\b")
+        for fragment in ('"ВОЛЬНІСТЬ"', '"file://LICENSE"', "LicenseRef-Volnist"):
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, module)
         self.assertTrue((ROOT / "LICENSE").is_file())
 
         for relative in (
