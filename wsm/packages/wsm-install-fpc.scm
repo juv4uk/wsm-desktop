@@ -21,6 +21,7 @@
   #:use-module (guix packages)
   #:use-module (guix gexp)
   #:use-module (guix build-system gnu)
+  #:use-module (guix licenses)
   #:use-module (gnu packages pascal)
   #:use-module (wsm licenses)
   ;; `any' is from SRFI-1 and `string-contains' from SRFI-13; select? uses both
