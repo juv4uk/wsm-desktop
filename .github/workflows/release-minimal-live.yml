@@ -119,6 +119,7 @@ jobs:
           SIZE="$(stat -c '%s' "$DIST/$ISO_NAME")"
           echo "ISO size: $SIZE bytes ($(( SIZE / 1048576 )) MiB)"
           cp "$WSM_ISO_DIR/manifest.json" "$DIST/build-manifest.json"
+          cp "$WSM_ISO_DIR/build.log" "$DIST/build.log"
           cp "$WSM_ISO_DIR/channels.resolved.scm" "$DIST/channels.resolved.scm"
           cp "$WSM_ISO_DIR/channel-resolution.log" "$DIST/channel-resolution.log"
           # The builder's source commit must be the workflow's exact checkout,
@@ -225,7 +226,7 @@ jobs:
             "boot_evidence":{"bios_sha256":sha(root/"boot-bios.json"),"uefi_sha256":sha(root/"boot-uefi.json")}}
           (root/"release-manifest.json").write_text(json.dumps(manifest,ensure_ascii=False,indent=2,sort_keys=True)+"\n",encoding="utf-8")
           files=[iso,bp,root/"release-manifest.json",root/"boot-bios.json",root/"boot-uefi.json",
-                 root/"channels.resolved.scm",root/"channel-resolution.log"]
+                 root/"build.log",root/"channels.resolved.scm",root/"channel-resolution.log"]
           (root/"SHA256SUMS").write_text("".join(f"{sha(p)}  {p.name}\n" for p in files),encoding="utf-8")
           PY
           (cd "$release_dist" && sha256sum -c SHA256SUMS)
@@ -290,7 +291,7 @@ jobs:
           if not split:
               covered.append(root / iso_name)
           covered += [root / "build-manifest.json", manifest_path,
-                      root / "boot-bios.json", root / "boot-uefi.json",
+                      root / "boot-bios.json", root / "boot-uefi.json", root / "build.log",
                       root / "channels.resolved.scm", root / "channel-resolution.log"]
           if split:
               sidecar = root / "ISO-CHECKSUMS.sha256"
@@ -331,6 +332,7 @@ jobs:
           ASSETS+=(
             "$release_dist/SHA256SUMS"
             "$release_dist/build-manifest.json"
+            "$release_dist/build.log"
             "$release_dist/release-manifest.json"
             "$release_dist/boot-bios.json"
             "$release_dist/boot-uefi.json"
