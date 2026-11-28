@@ -21,6 +21,23 @@
 
 Не переносити модулі з `wsm/` без необхідності: цей шлях уже відповідає Scheme namespace `(wsm …)`. Файли `systems/*.scm` залишаються machine/release configurations, а не публічним API channel namespace.
 
+### Чому канал має власний self-build
+
+Стандартний збирач каналів Guix компілює **кожен** `.scm` під коренем checkout і очікує, що файл оголошує модуль, який відповідає його шляху. У WSM корінь містить конфігурації без `define-module` (`channels.lock.scm`, `systems/*.scm`, `ci/cuirass/*.scm`), тому звичайний `guix pull` каналу падає ще до компіляції пакетів: `no code for module (channels.lock)`. Варіант `(directory "wsm")` не підходить: він прибирає префікс `wsm` з імен модулів і ламає публічний API `(wsm packages wsm)`.
+
+Тому [`build-aux/build-self.scm`](../build-aux/build-self.scm) компілює лише модулі під `wsm/`, залишаючи корінь checkout module root. Це дозволяє одночасно зберегти `(wsm …)` namespace, відносні `local-file "../.."` у рецептах і звичайний `-L .` для source-tree перевірок.
+
+### Виміряні перевірки 2026-11-28 (EET)
+
+Системний GNU Guix 1.5.0, обмеження `-M 2 -c 2`, локальний checkout:
+
+- `guix build -L <checkout> -e '(@ (wsm packages wsm) wsm-tools)'` — успішно, output `/gnu/store/vxhyad24yj0cp7c9xlfmd8b3yzf5c1k3-wsm-tools-0.1.0-rc6`;
+- `guix package -L <checkout> -p <isolated-profile> -e '(@ (wsm packages wsm) wsm-tools)'` — успішно, `wsm-hwcheck 0.3.0` запущено з профілю й повернуло read-only JSON report;
+- `guix repl -q -L <checkout> tests/guix/source-module-evaluation.scm` — `WSM-SOURCE-MODULE-EVAL-OK 3 services, channel package: wsm-tools 0.1.0-rc6`;
+- поточний channel test (`guix time-machine -C …`) перевіряє вже сам self-build і лишається окремим gate від автентифікації.
+
+Ці результати не означають authenticated channel, завантаження пакета як release input або hardware acceptance.
+
 ## Перший реліз: тільки H170
 
 Release target — одна конкретна платформа власника:
@@ -173,8 +190,10 @@ added here». Це **опис вмісту файлу, а не рішення в
 
 1. чи потрібен власний substitute-сервер узагалі (GitHub Pages / Releases / R2);
 2. хто володіє приватним ключем підпису і де він зберігається;
-3. чи вкладається розмір closure `wsm-tools` у ліміти хостингу — його **ніколи не
-   вимірювали**, бо пакет жодного разу не збирався.
+3. чи вкладається розмір closure `wsm-tools` у ліміти хостингу. Пакет
+   зібрано 2026-11-28 (EET), `guix size` показує **452.3 MiB** для
+   `/gnu/store/vxhyad24yj0cp7c9xlfmd8b3yzf5c1k3-wsm-tools-0.1.0-rc6`; це
+   вимірювання не є рішенням про публікацію.
 
 Доки на ці три питання немає відповіді, будь-який workflow для substitutes буде
 передчасним.
