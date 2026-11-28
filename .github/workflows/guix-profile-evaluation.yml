@@ -64,7 +64,7 @@ jobs:
           echo "## H170 GP107 kernel package build" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           df -h "$GITHUB_WORKSPACE" | tee -a "$GITHUB_STEP_SUMMARY"
-          STORE_PATH="$(guix time-machine -C channels.lock.scm -- build -L "$GITHUB_WORKSPACE" --no-grafts linux-libre-h170)"
+          STORE_PATH="$(guix time-machine -C channels.lock.scm -- build -L "$GITHUB_WORKSPACE" --no-grafts --expression='(@ (wsm packages linux-libre) linux-libre-h170)')"
           test -d "$STORE_PATH"
           NAR_SHA256="$(guix hash --recursive --format=hex "$STORE_PATH")"
           {
