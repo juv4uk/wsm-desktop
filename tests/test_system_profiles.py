@@ -151,7 +151,7 @@ class DesktopProfileTests(unittest.TestCase):
         self.assertIn("(gnu system locale)", self.text)
 
     def test_free_profile_does_not_reference_nonguix(self) -> None:
-        for name in ("desktop.scm", "live.scm"):
+        for name in ("desktop.scm", "live.scm", "h170.scm"):
             with self.subTest(profile=name):
                 code = re.sub(r"(?m);.*$", "", profile(name)).lower()
                 self.assertNotIn("nonguix", code)
@@ -852,6 +852,172 @@ class TrustedToolClosureTests(unittest.TestCase):
                 self.assertIn("(gnu packages disk)", _SCHEME_MASKER(profile(image)))
 
 
+
+
+H170 = "h170.scm"
+EVIDENCE_LINE = re.compile(r"(?m)^;;[ \t]+evidence:\s*(\S+)\s*<-\s*(.+?)\s*$")
+EVIDENCE_CONFIG_LINE = re.compile(r"(?m)^;;[ \t]+evidence-config:\s*(\S+)\s*<-\s*(.+?)\s*$")
+CITATION = re.compile(r"^(.+):(\d+)$")
+
+
+def without_comments(text: str) -> str:
+    """Code only: whole-line comments dropped, comment tails cut off."""
+    kept: list[str] = []
+    for line in text.splitlines():
+        if line.strip().startswith(";"):
+            continue
+        kept.append(line.split(";", 1)[0])
+    return "\n".join(kept)
+
+
+def cited_evidence(text: str, pattern: re.Pattern[str]) -> dict[str, list[str]]:
+    """Name -> the sources the file claims for it."""
+    found: dict[str, list[str]] = {}
+    for name, citations in pattern.findall(text):
+        found[name] = [item.strip() for item in citations.split(",") if item.strip()]
+    return found
+
+
+class H170SystemDefinitionTests(unittest.TestCase):
+    """The H170 definition must stay honest and evaluable, not merely present.
+
+    Issue #514 asks for a hardware-specific Linux-libre profile for the owner's
+    machine. No native Linux report exists for that machine yet, so the file may
+    not be presented as certified, and every package name in it has to stay tied
+    to a source that names it — a name invented here breaks the locked
+    evaluation with `unbound variable`, which is how `gptfdisk` once got in.
+    """
+
+    def setUp(self) -> None:
+        self.text = profile(H170)
+        self.code = without_comments(self.text)
+
+    def package_names(self) -> list[str]:
+        """Package variables this definition actually pulls in: kernel + packages."""
+        names: list[str] = []
+        kernel = re.search(r"\(kernel\s+([a-z][\w+.-]*)\)", self.code)
+        self.assertIsNotNone(kernel, "the definition must name its kernel")
+        names.append(kernel.group(1))
+        packages = re.search(r"\(packages\s+\(cons\*\s+(.*?)\)", self.code, re.DOTALL)
+        self.assertIsNotNone(packages, "the definition must add packages with cons*")
+        # The inherited list is an accessor call, not a package name.
+        head = packages.group(1).split("(operating-system-packages")[0]
+        names.extend(re.findall(r"(?<![\w-])([a-z][\w+.-]*)(?![\w-])", head))
+        return [name for name in names if name != "cons*"]
+
+    def assert_citation_names(self, citation: str, name: str) -> None:
+        """A citation is evidence only while the cited line still names the thing."""
+        match = CITATION.match(citation)
+        self.assertIsNotNone(match, f"citation {citation!r} is not <path>:<line>")
+        path = ROOT / match.group(1)
+        self.assertTrue(path.is_file(), f"cited source {citation!r} does not exist")
+        lines = path.read_text(encoding="utf-8").splitlines()
+        number = int(match.group(2))
+        self.assertLessEqual(
+            number, len(lines), f"{citation}: the file is shorter than the cited line"
+        )
+        self.assertIn(
+            name.lower(),
+            lines[number - 1].lower(),
+            f"{citation} does not mention {name!r}; the citation no longer supports it",
+        )
+
+    def test_the_definition_exists_and_reads_as_complete_forms(self) -> None:
+        self.assertTrue((SYSTEMS / H170).is_file(), f"systems/{H170} is missing")
+        forms = read_forms(self.text)
+        self.assertTrue(
+            any(form.lstrip().startswith("(operating-system") for form in forms),
+            "the file must declare an operating-system",
+        )
+
+    def test_it_inherits_the_desktop_definition_instead_of_duplicating_it(self) -> None:
+        """A copy of desktop.scm would drift; the load is the whole point."""
+        self.assertIn('"/desktop.scm"', self.code)
+        self.assertIn("current-filename", self.code)
+        self.assertIn("(inherit base-os)", self.code)
+
+    def test_it_does_not_redeclare_what_desktop_scm_already_owns(self) -> None:
+        for field in (
+            "bootloader",
+            "file-systems",
+            "users",
+            "locale-definitions",
+            "keyboard-layout",
+            "services",
+            "plasma-desktop-service-type",
+            "sddm-service-type",
+            "cups-service-type",
+            "bluetooth-service-type",
+            "%wsm-performance-services",
+        ):
+            with self.subTest(field=field):
+                self.assertNotIn(field, self.code)
+
+    def test_every_package_name_is_justified_by_a_cited_source(self) -> None:
+        justified = cited_evidence(self.text, EVIDENCE_LINE)
+        self.assertEqual(
+            set(justified),
+            set(self.package_names()),
+            "each package variable needs one `evidence:` line, and no evidence "
+            "line may outlive the name it documents",
+        )
+        for name, citations in justified.items():
+            with self.subTest(package=name):
+                self.assertTrue(citations, f"{name}: no source cited")
+                for citation in citations:
+                    self.assert_citation_names(citation, name)
+
+    def test_machine_specific_kernel_settings_cite_their_source(self) -> None:
+        justified = cited_evidence(self.text, EVIDENCE_CONFIG_LINE)
+        self.assertEqual(set(justified), {"nvme", "nouveau.atomic=0"})
+        for setting, citations in justified.items():
+            with self.subTest(setting=setting):
+                self.assertIn(setting, self.code, f"{setting} is cited but not used")
+                for citation in citations:
+                    self.assert_citation_names(citation, setting)
+
+    def test_the_file_says_it_is_not_verified_on_hardware(self) -> None:
+        self.assertIn("NOT VERIFIED ON HARDWARE", self.text)
+        self.assertIn("не перевірено на залізі", self.text.lower())
+        # A reader who stops after the header must still know it.
+        head = "\n".join(self.text.splitlines()[:40])
+        self.assertIn("NOT VERIFIED ON HARDWARE", head)
+
+    def test_it_makes_no_certification_or_verification_claim(self) -> None:
+        lowered = self.text.lower()
+        for claim in (
+            "tested on hardware",
+            "verified on this hardware",
+            "certified",
+            "guaranteed",
+            "evaluated successfully",
+            "builds successfully",
+        ):
+            with self.subTest(claim=claim):
+                self.assertNotIn(claim, lowered)
+
+    def test_the_definition_stays_free(self) -> None:
+        """Free closure: no nonfree firmware, no proprietary driver, no Nonguix."""
+        for forbidden in (
+            "linux-firmware",
+            "nvidia",
+            "nongnu",
+            "nonguix",
+            "intel-microcode",
+            "wsm-gp107.modconfig",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, self.code.lower())
+
+    def test_the_definition_is_registered_for_guix_evaluation(self) -> None:
+        """A profile nobody evaluates is a file, not a profile."""
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        self.assertIn("systems/h170.scm --dry-run", makefile)
+
+    def test_the_checks_are_not_vacuous(self) -> None:
+        self.assertGreaterEqual(len(self.package_names()), 2)
+        self.assertTrue(cited_evidence(self.text, EVIDENCE_LINE))
+        self.assertTrue(cited_evidence(self.text, EVIDENCE_CONFIG_LINE))
 
 
 if __name__ == "__main__":
