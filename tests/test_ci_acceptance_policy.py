@@ -173,10 +173,16 @@ class HardwareBuildEvidenceTests(unittest.TestCase):
         self.assertNotIn("inputs.packages", text)
         self.assertNotIn("PACKAGES:", text)
 
-    def test_it_runs_on_pr_and_manual_dispatch_only(self) -> None:
+    def test_it_is_manual_only_and_guarded_to_main(self) -> None:
         text = self.text()
-        self.assertIn("pull_request:", text)
-        self.assertIn("workflow_dispatch:", text)
+        workflow = yaml.load(text, Loader=yaml.BaseLoader)
+        self.assertEqual(set(workflow["on"]), {"workflow_dispatch"})
+        self.assertEqual(
+            workflow["jobs"]["build"]["if"],
+            "${{ github.ref == 'refs/heads/main' }}",
+        )
+        self.assertFalse(workflow["concurrency"]["cancel-in-progress"])
+        self.assertNotIn("pull_request:", text)
         self.assertNotIn("schedule:", text)
         self.assertNotIn("push:", text)
 
@@ -194,7 +200,11 @@ class HardwareBuildEvidenceTests(unittest.TestCase):
 
     def test_it_records_nar_hashes_and_closure_sizes(self) -> None:
         text = self.text()
-        self.assertIn("guix hash --recursive --format=hex", text)
+        self.assertIn(
+            "guix time-machine -C channels.lock.scm -- hash --recursive --format=hex",
+            text,
+        )
+        self.assertIn("guix time-machine -C channels.lock.scm -- describe", text)
         self.assertIn("guix time-machine -C channels.lock.scm -- size", text)
 
     def test_it_fails_when_the_expected_package_outputs_are_missing(self) -> None:
