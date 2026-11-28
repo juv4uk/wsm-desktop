@@ -53,9 +53,10 @@ jobs:
           test -f "$store_path"
           output="archives/wsm-tools-${GITHUB_SHA:0:12}.tar.gz"
           cp -- "$store_path" "$output"
+          cp -- LICENSE archives/LICENSE
           (
             cd archives
-            sha256sum "$(basename "$output")" > SHA256SUMS
+            sha256sum "$(basename "$output")" LICENSE > SHA256SUMS
           )
           guix time-machine -C channels.lock.scm -- describe -f channels \
             > archives/guix-channels.txt
@@ -67,6 +68,8 @@ jobs:
             echo "Pack: $(basename "$output")"
             echo "SHA-256: $(cut -d ' ' -f1 archives/SHA256SUMS)"
             echo "Package metadata license: LicenseRef-Volnist (file://LICENSE)"
+            echo "The exact LICENSE text is attached separately beside the runtime pack."
+            echo "No OSI or GNU FSDG classification is claimed."
             echo "Pack includes the package runtime closure; it is not a Guix substitute cache."
           } > archives/PROVENANCE.txt
           echo "pack_path=$output" >> "$GITHUB_OUTPUT"
@@ -86,6 +89,7 @@ jobs:
           name: wsm-tools-pack-${{ github.sha }}
           path: |
             archives/*.tar.gz
+            archives/LICENSE
             archives/SHA256SUMS
             archives/guix-channels.txt
             archives/PROVENANCE.txt
@@ -111,7 +115,7 @@ jobs:
             echo "refusing: $TAG is not a draft release" >&2
             exit 1
           fi
-          gh release upload "$TAG" archives/*.tar.gz archives/SHA256SUMS \
+          gh release upload "$TAG" archives/*.tar.gz archives/LICENSE archives/SHA256SUMS \
             archives/guix-channels.txt archives/PROVENANCE.txt --clobber
           echo "WSM_PACKAGE_ATTACHED_TO=$TAG" | tee -a "$GITHUB_STEP_SUMMARY"
 
