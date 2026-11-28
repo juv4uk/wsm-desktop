@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import unittest
 
 import yaml
@@ -169,11 +170,11 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
     def test_the_package_roots_come_from_the_fixed_h170_manifest(self) -> None:
         manifest_path = ROOT / "drivers" / "profiles" / "h170-free-packages.scm"
         manifest = manifest_path.read_text(encoding="utf-8")
-        packages = [
-            line.strip()[1:-1]
-            for line in manifest.splitlines()
-            if line.strip().startswith('"') and line.strip().endswith('"')
-        ]
+        match = re.search(
+            r"specifications->manifest\s*'\((.*?)\)\)", manifest, re.DOTALL
+        )
+        self.assertIsNotNone(match, "H170 Free manifest form was not found")
+        packages = re.findall(r'"([a-z0-9.+-]+)"', match.group(1))
         expected = [
             "linux-libre",
             "mesa",
