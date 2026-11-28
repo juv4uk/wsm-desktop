@@ -34,6 +34,11 @@ type
     exact wording is not part of any contract, only the fact of the refusal. }
   EWsmJsonError = class(Exception);
 
+  { FPC rejects an anonymous `array of Integer` as a function result type:
+  it needs a named type, and the error it gives ("Type identifier expected")
+  points at the keyword rather than at the cause. }
+  TWsmIntegerArray = array of Integer;
+
   TWsmJson = class
   private
     FKind: TWsmJsonKind;
@@ -42,7 +47,7 @@ type
     FNames: array of string;
     FValues: array of TWsmJson;
     function RenderAt(ASpacesPerLevel, ALevel: Integer): string;
-    function SortedMemberOrder: array of Integer;
+    function SortedMemberOrder: TWsmIntegerArray;
   public
     constructor Create(AKind: TWsmJsonKind);
     destructor Destroy; override;
@@ -368,7 +373,7 @@ begin
   end;
 end;
 
-function TWsmJson.SortedMemberOrder: array of Integer;
+function TWsmJson.SortedMemberOrder: TWsmIntegerArray;
 var
   Index, Scan, Holds: Integer;
 begin
@@ -393,7 +398,7 @@ end;
 function TWsmJson.RenderAt(ASpacesPerLevel, ALevel: Integer): string;
 var
   Index: Integer;
-  Order: array of Integer;
+  Order: TWsmIntegerArray;
   Pad, Inner: string;
   First: Boolean;
 begin
