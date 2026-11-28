@@ -9,6 +9,7 @@
   #:use-module (guix gexp)
   #:use-module (guix build-system gnu)
   #:use-module (gnu packages pascal)
+  #:use-module (gnu packages base)
   #:use-module (wsm licenses)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-13)
@@ -75,6 +76,15 @@ The compiler is a build-time input only."))
 never claims CERTIFIED because the report does not carry a complete coverage
 manifest. The compiler is a build-time input only."))
 
+(define-public wsm-cpu-isa-fpc
+  (make-fpc-reader
+   "wsm-cpu-isa-fpc" "wsm-cpu-isa" "wsm-cpu-isa"
+   "Common x86-64 ISA evidence from every logical processor"
+   "Reads Linux procfs CPU flags from every logical processor and reports the
+common x86-64 psABI levels. Incomplete processor evidence is refused. This is
+kernel-exposed capability evidence, not silicon inventory, benchmarking, or
+a driver compatibility verdict."))
+
 (define-public wsm-partition-fpc
   (make-fpc-reader
    "wsm-partition-fpc" "wsm-partition" "wsm-partition"
@@ -127,7 +137,8 @@ It distinguishes a failure from an incomplete check and performs no writes."))
                 ("wsm-hwcheck-fpc" . "wsm-hwcheck")
                 ("wsm-classify-fpc" . "wsm-classify")
                 ("wsm-partition-fpc" . "wsm-partition")
-                ("wsm-profile-fpc" . "wsm-profile")))))))))
+                ("wsm-profile-fpc" . "wsm-profile")
+                ("wsm-cpu-isa-fpc" . "wsm-cpu-isa"))))))))))
 
 (define-public wsm-install-fpc
   (package
@@ -136,7 +147,8 @@ It distinguishes a failure from an incomplete check and performs no writes."))
     (source fpc-source)
     (build-system gnu-build-system)
     (native-inputs (list fpc))
-    (inputs (list wsm-preflight-fpc
+    (inputs (list wsm-cpu-isa-fpc
+                  wsm-preflight-fpc
                   wsm-hwcheck-fpc
                   wsm-classify-fpc
                   wsm-partition-fpc
@@ -145,7 +157,7 @@ It distinguishes a failure from an incomplete check and performs no writes."))
     (synopsis "Installer frontend with separate native readers for WSM Desktop")
     (description
      "Runs the WSM preflight, hardware, classification and partition readers
-in order. The five reader packages are explicit runtime inputs and are exposed
+in order. The six reader packages are explicit runtime inputs and are exposed
 beside the frontend through symlinks. The partition planner only emits a plan
 and never writes a disk.")
     (home-page "https://github.com/juv4uk/wsm-desktop")
