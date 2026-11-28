@@ -146,7 +146,8 @@ jobs:
           set -euo pipefail
           python scripts/qemu_boot_smoke.py --iso "$release_dist/$release_iso" \
             --firmware bios --boot-marker WSM_LIVE_READY \
-            --installer-marker WSM_INSTALLER_OK --timeout-seconds 300 \
+            --installer-marker WSM_INSTALLER_OK \
+            --tool-closure-marker WSM_TOOL_CLOSURE --timeout-seconds 300 \
             | tee "$release_dist/boot-bios.json"
       - name: UEFI boot acceptance
         timeout-minutes: 15
@@ -164,7 +165,8 @@ jobs:
           python scripts/qemu_boot_smoke.py --iso "$release_dist/$release_iso" \
             --firmware uefi --ovmf-code "$OVMF_CODE" --ovmf-vars "$OVMF_VARS" \
             --boot-marker WSM_LIVE_READY \
-            --installer-marker WSM_INSTALLER_OK --timeout-seconds 300 \
+            --installer-marker WSM_INSTALLER_OK \
+            --tool-closure-marker WSM_TOOL_CLOSURE --timeout-seconds 300 \
             | tee "$release_dist/boot-uefi.json"
       - name: Зберегти діагностику boot smoke
         if: always()
@@ -204,6 +206,16 @@ jobs:
           for name, evidence in (("bios", bios), ("uefi", uefi)):
               if evidence.get("guest_installer_execution") is not True:
                   raise SystemExit(f"{name}: installer did not run in the guest")
+          # #645: the guest must also prove that the tools the installer will
+          # run exist in the system that booted. A boot marker says the system
+          # started; it says nothing about a single executable in it.
+          for name, evidence in (("bios", bios), ("uefi", uefi)):
+              closure = evidence.get("tool_closure") or {}
+              if closure.get("status") != "pass":
+                  raise SystemExit(
+                      f"{name}: the guest did not prove the installer tools exist: "
+                      + "; ".join(closure.get("problems") or ["no report"])
+                  )
           # Bind the evidence to the bytes it came from. Without this the two
           # JSON files confirm "some image booted", which is not the same claim.
           iso_sha = artifact["sha256"]
@@ -219,7 +231,8 @@ jobs:
               "guix_version":build.get("guix",{}).get("locked_version")},
             "artifact":{"filename":iso_name,"bytes":iso.stat().st_size,"sha256":sha(iso),"maximum_bytes":2147483647},
             "acceptance":{"bios":"pass","uefi":"pass","marker":"WSM_LIVE_READY",
-              "installer":"pass","installer_marker":"WSM_INSTALLER_OK"},
+              "installer":"pass","installer_marker":"WSM_INSTALLER_OK",
+              "tool_closure":"pass","tool_closure_marker":"WSM_TOOL_CLOSURE"},
             "installer":{"entrypoint":"wsm-install-live","mode":"read-only TUI preview","apply_enabled":False},
             "build_manifest_sha256":sha(bp),
             "boot_evidence":{"bios_sha256":sha(root/"boot-bios.json"),"uefi_sha256":sha(root/"boot-uefi.json")}}

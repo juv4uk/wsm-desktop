@@ -77,8 +77,6 @@
                       ;; decides whether the installer can start at all. shepherd
                       ;; does not guarantee the system profile on PATH, and a
                       ;; missing python3 would look like a broken installer.
-                      (setenv "PATH"
-                              "/run/current-system/profile/bin:/run/current-system/bin:/usr/bin:/bin")
                       (define (announce text)
                         (catch #t
                           (lambda ()
@@ -102,6 +100,11 @@
                         (catch #t
                           (lambda () (zero? (apply system* command)))
                           (lambda _ #f)))
+                       ;; The installer wrapper uses `python3` by name. This
+                       ;; PATH belongs to this selfcheck process only; the new
+                       ;; tool-closure probe invokes Python by absolute path.
+                       (setenv "PATH"
+                               "/run/current-system/profile/bin:/run/current-system/bin:/usr/bin:/bin")
                       (cond
                        ((not (ok? "/run/current-system/profile/bin/wsm-install" "--help"))
                         (announce "WSM_INSTALLER_FAIL:exit"))
@@ -112,6 +115,40 @@
                                     "wsm_install.profile")))
                         (announce "WSM_INSTALLER_FAIL:imports"))
                        (else (announce "WSM_INSTALLER_OK")))
+                      #t))
+           (stop #~(const #t))))))
+
+;; Маркер tool closure (#645). Завантаження доводить, що система стартувала;
+;; воно не доводить, що інструменти, які запускатиме інсталятор, існують у цій
+;; системі й є виконуваними. Перевірка каталогу на хості цього не доводить:
+;; каталог — не завантажена система.
+;;
+;; Служба запускає wsm_install.tool_closure з того самого образу, що містить
+;; інсталятор, і друкує по рядку на кожен allowlisted інструмент у
+;; /dev/console. Перевірка read-only: stat і access, без mount, без розділів,
+;; без запису на носій — гість не чіпає нічого, крім власного образу.
+;;
+;; Порядок навмисний: спершу готовність системи, потім інсталятор, і лише потім
+;; те, що інсталятор збирається запускати.
+(define wsm-tool-closure-probe
+  (simple-service 'wsm-tool-closure shepherd-root-service-type
+    (list (shepherd-service
+           (documentation "Report on the serial console whether the installer tools exist here.")
+           (provision '(wsm-tool-closure))
+           (requirement '(wsm-live-ready wsm-installer-selfcheck))
+           (respawn? #f)
+           (start #~(lambda ()
+                      (catch #t
+                        (lambda ()
+                          ;; Той самий python3 і той самий wsm_install, що й у
+                          ;; selfcheck інсталятора: перевірка мусить говорити про
+                          ;; образ, а не про щось інше на PATH.
+                          (system* "/run/current-system/profile/bin/python3" "-m"
+                                   "wsm_install.tool_closure"
+                                   "--console" "/dev/console"
+                                   "--prefix" "/run/current-system/profile/bin"
+                                   "--prefix" "/run/current-system/profile/sbin"))
+                        (lambda _ #f))
                       #t))
            (stop #~(const #t))))))
 
@@ -153,6 +190,7 @@
    (modify-services
     (append (list
              wsm-installer-selfcheck
+             wsm-tool-closure-probe
              wsm-live-ready-marker
              (service network-manager-service-type)
              (service wpa-supplicant-service-type))

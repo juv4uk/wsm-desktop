@@ -6,6 +6,7 @@ from __future__ import annotations
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,6 +19,8 @@ from wsm_install.preflight_env import (  # noqa: E402
     check_root,
     check_system_file,
     check_tools,
+    criterion,
+    run,
     verdict,
 )
 
@@ -130,6 +133,30 @@ class VerdictTests(unittest.TestCase):
 
 class ExactToolPathTests(unittest.TestCase):
     """Preflight must check the paths the plan will run, not a host coincidence."""
+
+    def test_full_preflight_forwards_the_same_paths_to_tool_check(self) -> None:
+        paths = ("/run/current-system/profile/sbin/sgdisk",)
+        observed: list[tuple[str, ...] | None] = []
+
+        def tools(which, paths=None):
+            observed.append(tuple(paths) if paths is not None else None)
+            return criterion("tools", "pass", "profile path is executable")
+
+        def ok(identifier: str):
+            return lambda *args, **kwargs: criterion(identifier, "pass", "")
+
+        with (
+            mock.patch("wsm_install.preflight_env.check_tools", side_effect=tools),
+            unittest.mock.patch("wsm_install.preflight_env.check_guix", side_effect=ok("guix")),
+            unittest.mock.patch("wsm_install.preflight_env.check_root", side_effect=ok("root")),
+            unittest.mock.patch("wsm_install.preflight_env.check_mount_point", side_effect=ok("mount")),
+            unittest.mock.patch("wsm_install.preflight_env.check_system_file", side_effect=ok("system")),
+            unittest.mock.patch("wsm_install.preflight_env.check_report", side_effect=ok("report")),
+            unittest.mock.patch("wsm_install.preflight_env.check_isa", side_effect=ok("isa")),
+        ):
+            result = run(paths=paths)
+        self.assertEqual(result["overall"], "pass")
+        self.assertEqual(observed, [paths])
 
     def test_the_plan_paths_are_what_gets_checked(self) -> None:
         plan_paths = ["/run/current-system/profile/sbin/sgdisk", "/usr/bin/mount"]

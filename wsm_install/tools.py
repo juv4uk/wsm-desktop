@@ -36,15 +36,15 @@ def trusted_basenames() -> frozenset[str]:
 
     return frozenset(os.path.basename(path) for path in TRUSTED_TOOLS.values())
 
-# Profile directories of a Guix system, then the FHS locations used by the host
-# preview. Order matters: the first prefix that has the tool wins, so a host tool
-# can never shadow the image's own.
-DEFAULT_PREFIXES: tuple[str, ...] = (
+# The live Guix image and its guest-side tool-closure probe share these
+# exact profile prefixes. The FHS suffix is for host-only read-only previews.
+GUIX_PROFILE_PREFIXES: tuple[str, ...] = (
     "/run/current-system/profile/bin",
     "/run/current-system/profile/sbin",
-    "/usr/bin",
-    "/usr/sbin",
 )
+FHS_PREVIEW_PREFIXES: tuple[str, ...] = ("/usr/bin", "/usr/sbin")
+# Profile directories first: a host tool can never shadow the image's own.
+DEFAULT_PREFIXES: tuple[str, ...] = GUIX_PROFILE_PREFIXES + FHS_PREVIEW_PREFIXES
 
 
 def resolve(

@@ -47,8 +47,9 @@ def package(name: str) -> str:
 
 
 def name_for(path: str) -> str | None:
-    """Reverse lookup: the logical name for an executable path, if it is known."""
+    """Reverse lookup by FHS path or by basename under an explicit Guix prefix."""
+    basename = path.rsplit("/", 1)[-1]
     for name, spec in TOOLS.items():
-        if spec["executable"] == path:
+        if spec["executable"] == path or spec["executable"].rsplit("/", 1)[-1] == basename:
             return name
     return None

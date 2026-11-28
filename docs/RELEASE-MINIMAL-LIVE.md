@@ -41,6 +41,11 @@ WSM TUI та після завершення видаляє тимчасові �
 - **BIOS/UEFI marker smoke** через `scripts/qemu_boot_smoke.py` перевіряє,
   що ISO доходить до `WSM_LIVE_READY`. Він не перевіряє інтерактивне
   перемикання розкладки, шрифт чи TUI.
+- **Tool closure у завантаженій системі (#645)** — той самий прогін додатково
+  вимагає, щоб гість надрукував `WSM_TOOL_CLOSURE` по рядку на кожен allowlisted
+  інструмент інсталятора і щоб усі вони існували та були виконуваними.
+  Відсутній інструмент валить boot acceptance (код 5), а не лишається
+  непоміченим. Це не перевірка argv, версій чи походження інструментів.
 - **`make qemu-acceptance-manual`** запускає generic Linux guest,
   hwcheck/install preflight і CXL acceptance. Він не завантажує
   `systems/live-minimal.scm` як ISO й не є доказом роботи цього TTY user journey.

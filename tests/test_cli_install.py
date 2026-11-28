@@ -3,12 +3,17 @@
 
 from __future__ import annotations
 
+import argparse
+import contextlib
+import io
 import json
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))  # Make direct test-file execution resolve the project package.
@@ -30,6 +35,68 @@ def run_cli(*extra: str, backend: str = "guix") -> subprocess.CompletedProcess:
 
 
 class InstallModeTests(unittest.TestCase):
+    def test_running_guix_system_selects_its_profile_prefixes_only(self) -> None:
+        from wsm_install.cli import _tool_prefixes_for_running_system
+        from wsm_install.tools import GUIX_PROFILE_PREFIXES
+
+        with patch.object(Path, "is_dir", side_effect=[False, True]):
+            self.assertEqual(_tool_prefixes_for_running_system(), GUIX_PROFILE_PREFIXES)
+        with patch.object(Path, "is_dir", side_effect=[False, False]):
+            self.assertIsNone(_tool_prefixes_for_running_system())
+
+    def test_env_check_receives_the_same_guix_tool_paths_as_the_planner(self) -> None:
+        from wsm_install import cli
+
+        paths = ("/run/current-system/profile/sbin/sgdisk",)
+        args = argparse.Namespace(
+            mount_point="/mnt",
+            system_file=Path("systems/desktop.scm"),
+            report=None,
+        )
+        output = io.StringIO()
+        with (
+            patch("wsm_install.cli._tool_paths_for_running_system", return_value=paths),
+            patch("wsm_install.preflight_env.run", return_value={"overall": "pass"}) as env_run,
+            contextlib.redirect_stdout(output),
+        ):
+            result = cli._run_env_check(args)
+        self.assertEqual(result, 0)
+        self.assertEqual(env_run.call_args.kwargs["paths"], paths)
+
+    def test_install_planner_receives_the_guix_profile_prefixes(self) -> None:
+        from wsm_install import cli
+        from wsm_install.tools import GUIX_PROFILE_PREFIXES
+
+        args = argparse.Namespace(
+            execute=False,
+            target_disk="/dev/nvme0n1",
+            target_size_bytes=256 * GIB,
+            acknowledge_disk="/dev/nvme0n1",
+            firmware="uefi",
+            filesystem="ext4",
+            mount_point="/mnt",
+            system_file=Path("systems/desktop.scm"),
+            backend="guix",
+            write_plan=None,
+            quiet=True,
+            admission=False,
+        )
+        layout = object()
+        with (
+            patch("wsm_install.cli.build_plan", return_value=(None, [], [])),
+            patch("wsm_install.cli._tool_prefixes_for_running_system", return_value=GUIX_PROFILE_PREFIXES),
+            patch("wsm_install.partition.Disk", return_value=SimpleNamespace(path="/dev/nvme0n1")),
+            patch("wsm_install.partition.plan", return_value=layout),
+            patch("wsm_install.install_steps.plan_steps", return_value=[]) as plan_steps,
+            patch("wsm_install.install_steps.backend_command", return_value=["guix"]),
+            patch("wsm_install.executor.execute", return_value=[]),
+        ):
+            result = cli._run_install(args, {}, b"{}")
+        self.assertEqual(result, 0)
+        plan_steps.assert_called_once_with(
+            layout, "ext4", "/mnt", tool_prefixes=GUIX_PROFILE_PREFIXES
+        )
+
     def test_deferred_backends_are_rejected_by_cli(self) -> None:
         for backend in ("nix", "nixos"):
             with self.subTest(backend=backend):
