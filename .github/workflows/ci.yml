@@ -63,13 +63,7 @@ jobs:
           fetch-depth: 1
 
       - name: Check WSM channel authorizations
-        shell: bash
-        run: |
-          if test -f .guix-authorizations; then
-            python scripts/check_channel_authorizations.py . --keyring-dir .channel-keyring
-          else
-            python scripts/check_channel_authorizations.py .
-          fi
+        run: python scripts/check_channel_authorizations.py . --keyring-dir .channel-keyring
 
       # Кожен скрипт, який `make check-*` запускає, мусить запускатися і тут.
       # Інакше перевірка існує лише на машині того, хто її додав, а зелений CI
