@@ -105,6 +105,7 @@ jobs:
           MANIFEST: ${{ inputs.manifest }}
         run: |
           set -euo pipefail
+          mkdir -p artifacts
           manifest="${MANIFEST:-drivers/profiles/h170-free-packages.scm}"
           # `guix pack -m` takes a manifest and packs the whole set into one
           # tarball. The tarball is written into the store and its path printed,
