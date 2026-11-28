@@ -12,7 +12,7 @@
   #:use-module (wsm licenses)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-13)
-  #:export (wsm-hwcheck-fpc wsm-classify-fpc))
+  #:export (wsm-hwcheck-fpc wsm-classify-fpc wsm-cpu-isa-fpc))
 
 (define wsm-fpc-source
   (local-file "../.." "wsm-desktop-source-fpc"
@@ -78,5 +78,25 @@ modules, update firmware, or modify target devices.")
 evidence states. A subsystem is KNOWN only when every observed device has a
 bound driver or a candidate and no functional test failed. CERTIFIED remains
 zero because the current report has no complete coverage manifest.")
+    (supported-systems '("x86_64-linux"))
+    (license wsm-license)))
+
+
+(define-public wsm-cpu-isa-fpc
+  (package
+    (name "wsm-cpu-isa-fpc")
+    (version "0.1.2")
+    (source wsm-fpc-source)
+    (build-system gnu-build-system)
+    (arguments (wsm-fpc-arguments "build-isa" "test-isa" "install-isa"))
+    (native-inputs (list fpc))
+    (home-page "https://github.com/juv4uk/wsm-desktop")
+    (synopsis "Conservative x86-64 ISA evidence from all logical processors")
+    (description
+     "Reads the Linux procfs CPU flags exposed for every logical processor and
+reports the common x86-64 psABI levels. It refuses incomplete processor-block
+evidence, intersects flags instead of trusting CPU 0, and distinguishes
+observed kernel flags from silicon inventory or performance claims. The
+executable is read-only and has no Python runtime dependency.")
     (supported-systems '("x86_64-linux"))
     (license wsm-license)))
