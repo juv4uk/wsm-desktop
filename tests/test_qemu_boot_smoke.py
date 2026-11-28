@@ -404,7 +404,7 @@ class GuestReportParsingTests(unittest.TestCase):
         self.assertEqual(verdict.problems, ())
 
     def test_a_missing_summary_is_a_failure(self) -> None:
-        report = "\\n".join(
+        report = "\n".join(
             line for line in closure_lines().splitlines()
             if not line.startswith(SUMMARY_PREFIX)
         )
@@ -413,7 +413,7 @@ class GuestReportParsingTests(unittest.TestCase):
         self.assertTrue(any("summary" in problem for problem in verdict.problems))
 
     def test_a_duplicate_summary_is_a_failure(self) -> None:
-        report = closure_lines() + closure_lines().splitlines()[-1] + "\\n"
+        report = closure_lines() + closure_lines().splitlines()[-1] + "\n"
         verdict = parse(report)
         self.assertEqual(verdict.status, "fail")
         self.assertTrue(any("more than once" in problem for problem in verdict.problems))
@@ -446,6 +446,34 @@ class GuestReportParsingTests(unittest.TestCase):
         verdict = parse(non_ok_rows_but_pass_summary)
         self.assertEqual(verdict.status, "fail")
         self.assertTrue(any("summary verdict" in problem for problem in verdict.problems))
+
+    def test_ok_rows_require_an_absolute_path_under_a_guix_profile_prefix(self) -> None:
+        original = f"|sgdisk|{PROFILE}/sgdisk|ok"
+        invalid_paths = (
+            "-",
+            "sgdisk",
+            "/tmp/sgdisk",
+            "/usr/sbin/sgdisk",
+            "/run/current-system/profile/bin/not-sgdisk",
+        )
+        for path in invalid_paths:
+            with self.subTest(path=path):
+                report = closure_lines().replace(original, f"|sgdisk|{path}|ok")
+                verdict = parse(report)
+                self.assertEqual(verdict.status, "fail")
+                self.assertTrue(
+                    any("requires an absolute" in problem for problem in verdict.problems),
+                    verdict.problems,
+                )
+
+    def test_unresolved_rows_must_not_claim_a_path(self) -> None:
+        report = closure_lines({"sgdisk": STATE_UNRESOLVED})
+        verdict = parse(report)
+        self.assertEqual(verdict.status, "fail")
+        self.assertTrue(
+            any("unresolved state must use '-'" in problem for problem in verdict.problems),
+            verdict.problems,
+        )
 
     def test_a_missing_tool_is_a_failure_that_names_it(self) -> None:
         text = "\n".join(
