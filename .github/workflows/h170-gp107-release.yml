@@ -18,7 +18,9 @@ permissions:
   artifact-metadata: write
 
 concurrency:
-  group: h170-gp107-release
+  # Keep a stale experimental branch from occupying the authoritative main lane.
+  # Each ref gets an independent slot; main reruns still serialize with main reruns.
+  group: h170-gp107-release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
