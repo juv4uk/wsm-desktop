@@ -383,7 +383,7 @@ begin
   for Index := 1 to Length(Text) do
   begin
     Current := Text[Index];
-    if not ((Current in ['A', 'Z']) or (Current in ['a', 'z']) or
+    if not ((Current in ['A'..'Z']) or (Current in ['a'..'z']) or
             (Current in ['0'..'9']) or (Current = '_') or (Current = '-')) then
       Exit(False);
   end;
@@ -405,7 +405,7 @@ begin
   for Index := Start to Start + 3 do
   begin
     Current := Text[Index];
-    if not ((Current in ['0'..'9']) or (Current in ['a', 'f']) or (Current in ['A', 'F'])) then
+    if not ((Current in ['0'..'9']) or (Current in ['a'..'f']) or (Current in ['A'..'F'])) then
       Exit(False);
   end;
   Result := True;
