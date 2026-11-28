@@ -48,7 +48,7 @@
  (specification
   (name "wsm-live-minimal-image")
   (priority 1)
-  (build '(custom (wsm ci images)))
+  (build '(custom (ci cuirass images)))
   (channels
    (list (channel
           (name 'guix)

@@ -95,7 +95,7 @@ class JobModuleTests(unittest.TestCase):
     def test_the_module_is_outside_the_channel_namespace(self) -> None:
         """wsm/ is the channel API; a CI helper is not part of it."""
         self.assertFalse((ROOT / "wsm" / "ci").exists())
-        self.assertIn("(wsm ci images)", self.text)
+        self.assertIn("(ci cuirass images)", self.text)
 
 
 class ServiceFragmentTests(unittest.TestCase):
@@ -115,6 +115,37 @@ class DocumentationTests(unittest.TestCase):
     def test_the_document_admits_the_instance_never_ran(self) -> None:
         text = DOC.read_text(encoding="utf-8")
         self.assertIn("інстанс не запускався", text.lower())
+
+
+class JobModulePathTests(unittest.TestCase):
+    """A custom job's module name must match its path under the channel root.
+
+    A channel declared without `directory` resolves `(name sub module)` to
+    <checkout>/<name>/sub/module.scm. A job module that declares a name its path
+    cannot produce fails at load time, not at build time — and a spec that only
+    checked for the string would not notice.
+    """
+
+    def test_the_module_name_matches_the_file_path(self) -> None:
+        module = ROOT / "ci" / "cuirass" / "images.scm"
+        declared = None
+        for line in module.read_text(encoding="utf-8").splitlines():
+            if line.startswith("(define-module "):
+                declared = line.split("(define-module ", 1)[1].strip()
+                break
+        self.assertIsNotNone(declared, "images.scm declares no module")
+        relative = module.relative_to(ROOT).with_suffix("")
+        expected = "(" + " ".join(relative.parts) + ")"
+        self.assertEqual(declared, expected)
+
+    def test_the_specification_asks_for_the_name_the_file_declares(self) -> None:
+        spec = (ROOT / "ci" / "cuirass" / "specs.scm").read_text(encoding="utf-8")
+        module = (ROOT / "ci" / "cuirass" / "images.scm").read_text(encoding="utf-8")
+        for line in module.splitlines():
+            if line.startswith("(define-module "):
+                declared = line.split("(define-module ", 1)[1].strip()
+                break
+        self.assertIn(f"(custom {declared})", spec)
 
 
 if __name__ == "__main__":
