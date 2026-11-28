@@ -18,8 +18,6 @@ on:
 
 permissions:
   contents: read
-  # Коментар до коміту з причиною збою — див. docs/ECOSYSTEM-PRINCIPLES.md.
-  pull-requests: read
 
 concurrency:
   group: guix-profile-evaluation-${{ github.event.pull_request.number || github.ref }}
@@ -58,6 +56,15 @@ jobs:
           make check-guix-eval
           echo "WSM_CHANNEL_AUTHENTICATION=NOT_TESTED" | tee -a "$GITHUB_STEP_SUMMARY"
 
+      - name: Summarize Guix evaluation failure
+        if: failure()
+        run: |
+          {
+            echo "### Guix profile evaluation failed"
+            echo "The first failing command and its exact output are in the preceding step logs."
+            echo "WSM_CHANNEL_AUTHENTICATION=NOT_TESTED"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Save Guix checkout cache
         if: success() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
         uses: actions/cache/save@v4
@@ -65,21 +72,34 @@ jobs:
           path: ~/.cache/guix/checkouts
           key: ${{ steps.guix-checkouts.outputs.cache-primary-key }}
 
-      - name: Повідомити причину збою
-        if: failure()
+
+  report-failure:
+    name: Report Guix evaluation failure
+    needs: evaluate-locked-profiles
+    if: failure() && github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    # This isolated job runs no checkout, Scheme code, or third-party action.
+    # Only the reporter receives the narrow issue-comment permission.
+    permissions:
+      issues: write
+    steps:
+      - name: Повідомити причину збою в PR
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          set -uo pipefail
+          set -euo pipefail
           BODY=$(mktemp)
+          trap 'rm -f "$BODY"' EXIT
           {
             echo "### Guix profile evaluation: оцінювання не завершилось"
             echo ""
-            echo "Commit: \`$GITHUB_SHA\`"
+            echo "Commit: $GITHUB_SHA"
+            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
             echo ""
-            echo "Логи задачі потребують авторизації, тому причина лишається тут."
-            echo "Найчастіші причини: модуль не імпортовано, локальний load-path,"
-            echo "невідповідність API pinned Guix."
+            echo "Логи evaluation job доступні в цьому workflow run."
+            echo "Перевірте першу команду Guix, що завершилася ненульовим кодом,"
+            echo "і exact pinned WSM/Guix revisions."
           } > "$BODY"
-          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
-            -F body=@"$BODY" >/dev/null && echo "причину записано коментарем"
+          gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+            -F body=@"$BODY" >/dev/null || { echo "::warning::Could not publish Guix evaluation failure comment"; echo "Failure comment could not be posted; inspect this workflow run logs." >> "$GITHUB_STEP_SUMMARY"; }
