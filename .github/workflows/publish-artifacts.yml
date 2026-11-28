@@ -31,7 +31,7 @@ permissions:
 
 concurrency:
   group: publish-artifacts-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   publish:
@@ -40,6 +40,14 @@ jobs:
     timeout-minutes: 300
     steps:
       - uses: actions/checkout@v7
+
+      - name: Use the GNU Guix project's authenticated Codeberg mirror
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Transport-only rewrite: keep the pinned lock and channel authentication unchanged.
+          git config --global url."https://codeberg.org/guix/guix.git".insteadOf "https://git.guix.gnu.org/guix.git"
+          echo "GNU Guix channel fetches use authenticated Codeberg transport; lock and introduction remain unchanged." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Кеш checkout-ів Guix
         uses: actions/cache@v4
@@ -111,8 +119,32 @@ jobs:
           esac
           name="h170-free-pack-$(git rev-parse --short HEAD).tar.zst"
           cp "$tarball" "artifacts/$name"
+          PACK_SHA256="$(sha256sum "artifacts/$name" | cut -d ' ' -f1)"
+          PACK_SIZE="$(stat -c '%s' "artifacts/$name")"
+          [ "$PACK_SIZE" -lt 2000000000 ] || {
+            echo "::error::H170 pack exceeds GitHub's per-asset release limit; no Release will be created."
+            exit 1
+          }
           ( cd artifacts && sha256sum "$name" > "$name.sha256" )
-          ls -l "artifacts/$name"
+          {
+            echo "Package set: H170 Free manifest"
+            echo "Source commit: $GITHUB_SHA"
+            echo "Guix version: $(guix --version | head -n1)"
+            echo "Channel lock SHA-256: $(sha256sum channels.lock.scm | cut -d ' ' -f1)"
+            echo "Manifest: $manifest"
+            echo "Manifest SHA-256: $(sha256sum "$manifest" | cut -d ' ' -f1)"
+            echo "Pack file: $name"
+            echo "Pack SHA-256: $PACK_SHA256"
+            echo "Pack size bytes: $PACK_SIZE"
+            echo "Scope: upstream GNU Guix Free package manifest only; excludes WSM-owned tools, Nonguix, proprietary NVIDIA driver, firmware and Intel microcode."
+            echo "Artifact type: self-contained Guix pack tarball; not a signed substitute cache."
+          } > artifacts/PROVENANCE.txt
+          (
+            cd artifacts
+            sha256sum "$name" PROVENANCE.txt > SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
+          ls -lh "artifacts/$name"
           echo "WSM_PACKED_MANIFEST=$manifest" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Запакувати кожен пакет у tarball (без ключа)
@@ -147,29 +179,65 @@ jobs:
             artifacts/*.tar.zst.sha256
           if-no-files-found: error
 
-      - name: Прикріпити до чернетки релізу цього коміта
+      - name: Створити, перевірити й опублікувати окремий H170 Free реліз
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          # Only a draft whose target is this exact commit, and without --clobber:
-          # attaching to whatever draft happens to be newest is how a binary from
-          # one commit ends up published under another.
-          tag=""
-          while IFS= read -r candidate; do
-            target="$(gh release view "$candidate" --repo "$GITHUB_REPOSITORY" \
-                       --json targetCommitish --jq .targetCommitish)"
-            if [ "$target" = "$GITHUB_SHA" ]; then tag="$candidate"; break; fi
-          done <<< "$(gh release list --repo "$GITHUB_REPOSITORY" --limit 50 \
-                        --json tagName,isDraft --jq '.[] | select(.isDraft) | .tagName')"
-          if [ -z "$tag" ]; then
-            echo "::warning::Немає чернетки релізу для коміта $GITHUB_SHA — артефакти лишилися в artifacts прогону."
-            echo "### Чернетки для цього коміта немає" >> "$GITHUB_STEP_SUMMARY"
-            echo "Артефакти доступні для завантаження на сторінці прогону." >> "$GITHUB_STEP_SUMMARY"
-            exit 0
+          SHORT_SHA="${GITHUB_SHA:0:12}"
+          TAG="h170-free-pack-${SHORT_SHA}"
+          NAME="h170-free-pack-${SHORT_SHA}.tar.zst"
+          OUT="$GITHUB_WORKSPACE/artifacts"
+          NOTES="$OUT/RELEASE-NOTES.md"
+          test -s "$OUT/$NAME"
+          test -s "$OUT/PROVENANCE.txt"
+          (
+            cd "$OUT"
+            sha256sum -c SHA256SUMS
+            zstd -t "$NAME"
+          )
+          cat > "$NOTES" <<EOF
+          # H170 Free Guix manifest package set
+
+          Self-contained Guix pack of the fixed upstream-only H170 Free manifest.
+
+          - Source commit: $GITHUB_SHA
+          - Guix channel lock SHA-256: $(sha256sum channels.lock.scm | cut -d ' ' -f1)
+          - Package manifest: drivers/profiles/h170-free-packages.scm
+          - Archive SHA-256: $(sha256sum "$OUT/$NAME" | cut -d ' ' -f1)
+
+          This archive is a package bundle, not a substitute cache. It does not
+          include WSM-owned tools, Nonguix, proprietary NVIDIA drivers, GP107
+          firmware, linux-firmware, or Intel microcode. Kernel/GPU runtime and
+          physical H170/GTX 1050 Ti compatibility are not certified by this build.
+          EOF
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Release tag $TAG already exists; refusing to overwrite."
+            exit 1
           fi
-          gh release upload "$tag" --repo "$GITHUB_REPOSITORY" artifacts/*.tar.zst artifacts/*.tar.zst.sha256
-          echo "WSM_PUBLISHED_TO_DRAFT=$tag" >> "$GITHUB_STEP_SUMMARY"
+          gh release create "$TAG" \
+            "$OUT/$NAME" "$OUT/$NAME.sha256" "$OUT/PROVENANCE.txt" "$OUT/SHA256SUMS" "$NOTES" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "H170 Free Guix manifest pack ($SHORT_SHA)" \
+            --notes-file "$NOTES" \
+            --draft --prerelease
+
+          READBACK="$RUNNER_TEMP/h170-free-pack-readback"
+          mkdir -p "$READBACK"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$READBACK"
+          (
+            cd "$READBACK"
+            sha256sum -c SHA256SUMS
+            zstd -t "$NAME"
+            test -s PROVENANCE.txt
+          )
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+          {
+            echo "### Public H170 Free manifest package release"
+            echo "Release: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$TAG"
+            echo "Read-back SHA-256 and zstd integrity: PASS"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Повідомити про збій
         if: failure()
