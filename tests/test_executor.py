@@ -21,6 +21,7 @@ import importlib.util  # noqa: E402
 import tempfile  # noqa: E402
 
 from wsm_install.admission import admit  # noqa: E402
+from wsm_install.tools import is_admissible_path, resolve  # noqa: E402
 from wsm_install.disk_identity import (  # noqa: E402
     DiskIdentity,
     IdentityError,
@@ -633,6 +634,49 @@ class ToolClosureTests(unittest.TestCase):
             self.assertEqual(module.main(["--list"]), 0)
         lines = [line for line in buffer.getvalue().splitlines() if line.strip()]
         self.assertEqual(len(lines), len(TRUSTED_TOOLS))
+
+
+class ToolResolutionTests(unittest.TestCase):
+    """Tools resolve against explicit prefixes, never against PATH."""
+
+    def test_the_first_prefix_that_has_the_tool_wins(self) -> None:
+        found = resolve(
+            "sgdisk",
+            prefixes=("/run/current-system/profile/sbin", "/usr/sbin"),
+            exists=lambda path: path.endswith("sgdisk"),
+        )
+        self.assertEqual(found, "/run/current-system/profile/sbin/sgdisk")
+
+    def test_a_missing_tool_resolves_to_none(self) -> None:
+        self.assertIsNone(resolve("sgdisk", prefixes=("/usr/sbin",), exists=lambda _: False))
+
+    def test_a_bare_name_is_required(self) -> None:
+        for bad in ("", "sgdisk ", "/usr/sbin/sgdisk", "sbin/sgdisk"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                resolve(bad, prefixes=("/usr/sbin",), exists=lambda _: True)
+
+    def test_an_untrusted_name_is_refused(self) -> None:
+        with self.assertRaises(ValueError):
+            resolve("sh", prefixes=("/usr/bin",), exists=lambda _: True)
+
+    def test_a_path_in_an_allowed_prefix_is_admissible(self) -> None:
+        ok, reason = is_admissible_path("/run/current-system/profile/bin/mount")
+        self.assertTrue(ok, reason)
+
+    def test_a_trusted_basename_outside_the_prefixes_is_not_admissible(self) -> None:
+        ok, reason = is_admissible_path("/tmp/mount")
+        self.assertFalse(ok)
+        self.assertIn("prefix", reason)
+
+    def test_an_untrusted_basename_in_an_allowed_prefix_is_not_admissible(self) -> None:
+        ok, reason = is_admissible_path("/usr/bin/sh")
+        self.assertFalse(ok)
+        self.assertIn("not a trusted tool", reason)
+
+    def test_traversal_out_of_a_prefix_is_not_admissible(self) -> None:
+        ok, reason = is_admissible_path("/usr/sbin/../tmp/sgdisk")
+        self.assertFalse(ok)
+        self.assertIn("prefix", reason)
 
 
 if __name__ == "__main__":
