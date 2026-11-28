@@ -66,12 +66,15 @@ class PackageTests(unittest.TestCase):
     def test_it_installs_both_native_tools_and_keeps_fpc_build_only(self) -> None:
         self.assertIn("(name \"wsm-hwcheck-fpc\")", self.text)
         self.assertIn("(name \"wsm-classify-fpc\")", self.text)
+        self.assertIn("(name \"wsm-cpu-isa-fpc\")", self.text)
         self.assertIn("(native-inputs (list fpc))", self.text)
         self.assertIn("(license wsm-license)", self.text)
         self.assertIn("build-hwcheck", self.text)
         self.assertIn("build-classify", self.text)
         self.assertIn("install-hwcheck", self.text)
         self.assertIn("install-classify", self.text)
+        self.assertIn("build-isa", self.text)
+        self.assertIn("install-isa", self.text)
 
 
 class MakefileTests(unittest.TestCase):
@@ -81,8 +84,10 @@ class MakefileTests(unittest.TestCase):
         self.assertIn("-Sh", text)
         self.assertIn("$(BUILD_DIR)/wsm-hwcheck", text)
         self.assertIn("$(BUILD_DIR)/wsm-classify", text)
+        self.assertIn("$(BUILD_DIR)/wsm-cpu-isa", text)
         self.assertIn("install-hwcheck", text)
         self.assertIn("install-classify", text)
+        self.assertIn("install-isa", text)
         self.assertNotIn("-owsw-", text)
 
 
