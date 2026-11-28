@@ -48,6 +48,7 @@ class H170LinuxLibreOverlayTests(unittest.TestCase):
         )
         self.assertIn("guix time-machine -C channels.lock.scm -- build", workflow)
         self.assertIn("linux-libre-h170", workflow)
+        self.assertIn("--expression='(@ (wsm packages linux-libre) linux-libre-h170)'", workflow)
         self.assertIn("guix hash --recursive --format=hex", workflow)
         self.assertNotIn("guix archive --export", workflow)
         self.assertNotIn("guix publish", workflow)
@@ -58,6 +59,9 @@ class H170LinuxLibreOverlayTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn('publish/h170-gp107/**', workflow)
+        self.assertIn('fetch-depth: 0', workflow)
+        self.assertIn('git merge-base --is-ancestor "$GITHUB_SHA" origin/main', workflow)
+        self.assertIn("--expression='(@ (wsm packages linux-libre) linux-libre-h170)'", workflow)
         self.assertIn('channels.lock.scm', workflow)
         self.assertIn('linux-libre-h170', workflow)
         self.assertIn('guix archive --generate-key', workflow)
