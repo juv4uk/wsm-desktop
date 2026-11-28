@@ -680,11 +680,25 @@ class ToolClosureWiringTests(unittest.TestCase):
         self.workflow = (
             ROOT / ".github" / "workflows" / "release-minimal-live.yml"
         ).read_text(encoding="utf-8")
+        self.cli = (ROOT / "wsm_install" / "cli.py").read_text(encoding="utf-8")
+        self.tool_paths = (ROOT / "wsm_install" / "tools.py").read_text(encoding="utf-8")
 
     def test_the_image_runs_the_probe_from_its_own_profile(self) -> None:
         self.assertIn("wsm_install.tool_closure", self.profile)
         self.assertIn('"--console" "/dev/console"', self.profile)
         self.assertIn("/run/current-system/profile/bin/python3", self.profile)
+
+    def test_the_planner_and_guest_probe_share_guix_profile_prefixes(self) -> None:
+        self.assertIn("GUIX_PROFILE_PREFIXES", self.tool_paths)
+        self.assertIn("tool_prefixes=_tool_prefixes_for_running_system()", self.cli)
+        self.assertIn('"/run/current-system/profile/bin"', self.profile)
+        self.assertIn('"/run/current-system/profile/sbin"', self.profile)
+
+    def test_the_read_only_probe_does_not_mutate_the_shared_path(self) -> None:
+        section = self.profile[
+            self.profile.index("wsm-tool-closure-probe") : self.profile.index("(operating-system")
+        ]
+        self.assertNotIn('setenv "PATH"', section)
 
     def test_the_probe_runs_after_the_live_and_installer_markers(self) -> None:
         """A tool report before the system is up would describe something else."""
