@@ -155,11 +155,11 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
         self.assertIn("git merge-base --is-ancestor", self.text)
         self.assertIn("cancel-in-progress: false", self.text)
 
-    def test_the_package_roots_are_fixed_and_upstream_only(self) -> None:
-        self.assertIn("h170-free-packages.scm", self.text)
-        self.assertIn('test "${#PACKAGES[@]}" -eq 11', self.text)
-        self.assertIn('test "${#STORE_PATHS[@]}" -eq 11', self.text)
-        self.assertIn('for package in "${PACKAGES[@]}"; do', self.text)
+    def test_the_package_roots_come_from_the_fixed_h170_manifest(self) -> None:
+        self.assertIn("drivers/profiles/h170-free-packages.scm", self.text)
+        self.assertIn("expected = (", self.text)
+        self.assertIn("test \${#PACKAGES[@]} -eq 11", self.text)
+        self.assertIn('mapfile -t PACKAGES < "$OUT/packages.txt"', self.text)
         for forbidden in (
             "wsm-tools",
             "wsm-live-tools",
@@ -185,7 +185,7 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
         self.assertIn("derivation_path", self.text)
         self.assertIn('show "$package"', self.text)
         self.assertIn("license:", self.text)
-        self.assertIn("package-info/*.rec", self.text)
+        self.assertIn("*.package-info.rec", self.text)
         self.assertIn("Pinned Guix package metadata", self.text)
 
     def test_archive_import_trust_and_checksums_are_distributed(self) -> None:
