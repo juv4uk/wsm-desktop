@@ -261,13 +261,25 @@ bootloader, EFI variables, диски, governor або power controls. Порі�
 | Повтори | 3 успішні, кожен зі своїм manifest (`MANIFEST-OK files=11`) |
 | Boot | пропрієтарний за замовчуванням; відкритий boot не використовувався |
 
-Опубліковані числа (медіана трьох повторів): 4096 елементів — 20 310 ns /
-2,4201 GB/s; 1 Mi — 1 267 551 ns / 9,9269 GB/s; 8 Mi — 10 616 000 ns /
-9,4822 GB/s. Найкращий виміряний `local_size` — 128 для 1 Mi і 32 для 8 Mi;
-на малих workloads помітний overhead подання. Для `DEVICE_LOCAL` compute
-умовний traffic сягає ~90 GB/s, але повний ланцюг staging→compute→readback на
-32 Mi коштує ~52,39 ms проти ~42,58 ms для `HOST_VISIBLE`, тобто дві копії
-з'їдають виграш.
+**Прийнята HOST_VISIBLE baseline з docs/20 (медіана трьох повторів):**
+4096 елементів — 20 310 ns / 2,4201 GB/s; 1 Mi — 1 267 551 ns /
+9,9269 GB/s; 8 Mi — 10 616 000 ns / 9,4822 GB/s. Матриця docs/21 містить
+108 runtime-proven NVIDIA points; найкращий виміряний local_size — 128
+для 1 Mi і 32 для 8 Mi, на малих workloads помітний submit overhead.
+
+**Окремо: [GP107 docs/22](https://github.com/juv4uk/gp107-nvidia-re/blob/62a129608b57ca3d6cde1ca6d9beda0ba03130c5/docs/22-device-local-transfer-and-compute-phases.md) —
+HISTORICAL / NOT ACCEPTED / EXPLORATORY.** Значення DEVICE_LOCAL
+(~90,46 GB/s умовного compute traffic; повний staging→compute→readback
+ланцюг ~52,39 ms проти ~42,58 ms для HOST_VISIBLE) отримані первинним
+бінарником **без явних Vulkan memory dependencies**
+TRANSFER→COMPUTE→TRANSFER→HOST. Їх залишено лише як історичне свідчення
+поведінки того бінарника; correctness і performance висновки не є прийнятими
+Vulkan-результатами й **не є WSM baseline або підтвердженою оптимізаційною
+перевагою**. У джерело пізніше додано barriers і перевірку memoryTypeBits,
+але статус залишається **CODE-UPDATED, PHYSICAL-RERUN-PENDING**: виправлений
+бінарник ще не зібраний і не перевірений фізичним повтором із synchronization
+validation. Не використовувати старі числа для NVK A/B чи тверджень про
+продуктивність VRAM/PCIe.
 
 **Чого ці числа не доводять — і що з ними не можна робити:**
 
@@ -282,9 +294,11 @@ bootloader, EFI variables, диски, governor або power controls. Порі�
 - зіставляти можна лише однакові workloads, версії harness, класи пам'яті,
   розміри, кількість повторів і теплові умови; інакше це не порівняння.
 
-Виміряний факт, похідна інтерпретація й неперевірена причинність тут розділені
-навмисно: перше — числа вище, друге — «дві копії з'їдають виграш staging»,
-третє — будь-яке пояснення, чому саме так.
+Виміряні й прийняті факти тут обмежені HOST_VISIBLE результатами docs/20–21.
+docs/22 збережено окремо як неприйняте історичне спостереження; фраза про те,
+що дві копії з'їдають виграш staging, є лише інтерпретацією того старого запуску,
+а не прийнятим performance висновком. Будь-яке пояснення причинності лишається
+неперевіреним.
 
 ## Як це міряти далі
 
