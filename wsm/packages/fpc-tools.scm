@@ -22,10 +22,10 @@
                               (string=? path "tools/pascal")
                               (string-prefix? "tools/pascal/" path)))))
 
-(define (make-wsm-fpc-tool package-name build-target test-target install-target synopsis description)
+(define (make-wsm-fpc-tool package-name package-version build-target test-target install-target synopsis description)
   (package
     (name package-name)
-    (version "0.2.0")
+    (version package-version)
     (source (wsm-fpc-source))
     (build-system gnu-build-system)
     (arguments
@@ -54,6 +54,7 @@
 (define-public wsm-hwcheck-fpc
   (make-wsm-fpc-tool
    "wsm-hwcheck-fpc"
+   "0.1.0"
    "build-wsm-hwcheck"
    "test-wsm-hwcheck"
    "install-wsm-hwcheck"
@@ -67,6 +68,7 @@ is used only while building the executable."))
 (define-public wsm-classify-fpc
   (make-wsm-fpc-tool
    "wsm-classify-fpc"
+   "0.2.0"
    "build-wsm-classify"
    "test-wsm-classify"
    "install-wsm-classify"
