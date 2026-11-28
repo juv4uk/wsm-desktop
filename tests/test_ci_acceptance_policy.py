@@ -181,7 +181,7 @@ class HardwareBuildEvidenceTests(unittest.TestCase):
             workflow["jobs"]["build"]["if"],
             "${{ github.ref == 'refs/heads/main' }}",
         )
-        self.assertFalse(workflow["concurrency"]["cancel-in-progress"])
+        self.assertEqual(workflow["concurrency"]["cancel-in-progress"], "false")
         self.assertNotIn("pull_request:", text)
         self.assertNotIn("schedule:", text)
         self.assertNotIn("push:", text)
