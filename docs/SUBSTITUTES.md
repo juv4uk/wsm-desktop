@@ -30,7 +30,7 @@
 
 ## Що не входить до цього потоку
 
-- `wsm-tools`, `wsm-live-tools` та Compatibility live tools не входять до публічного кешу, доки не вирішено issue [#367](https://github.com/juv4uk/wsm-desktop/issues/367). Цей issue **не** блокує upstream-only набір.
+- Цей кеш є H170 Free upstream-only набором: `wsm-tools`, `wsm-live-tools` та Compatibility live tools до нього не входять незалежно від власної ліцензії WSM. Їхні Guix metadata тепер правильно відображають `LicenseRef-Volnist`; окремий WSM-owned package/channel шлях потребує власних build, closure, trust та release evidence. Це не змінює склад upstream-only набору й не затримує його публікацію.
 - Прошивка NVIDIA GP107 виключена. Тому issue [#586](https://github.com/juv4uk/wsm-desktop/issues/586) не є передумовою для цього набору.
 - Phase B автентифікації WSM-каналу окремий від цього кешу: результати збираються з офіційного Guix lock, а не з WSM-owned модулів каналу. Phase B лишається обов'язковою перед тим, як просити користувачів довіряти або фіксувати віддалені ревізії WSM-owned каналу, наприклад майбутній пакет `linux-libre-h170`.
 - Nouveau atomic-KMS overlay у PR [#767](https://github.com/juv4uk/wsm-desktop/pull/767) — окремий кандидат. Він має пройти Scheme evaluation на точному lock і повну збірку ядра, перш ніж потрапити до майбутнього маніфесту кешу.

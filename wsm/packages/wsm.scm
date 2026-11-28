@@ -19,7 +19,7 @@
   #:use-module (gnu packages python)
   #:use-module (gnu packages python-build)
   #:use-module (gnu packages python-xyz)
-  #:use-module (guix licenses)
+  #:use-module (wsm licenses)
   ;; version-major+minor lives here; without it the module fails to load.
   #:use-module (guix utils)
   ;; `any` comes from SRFI-1 and `string-contains` from SRFI-13. Both are used
@@ -94,4 +94,4 @@ against a versioned schema, and drafts a diagnostic-only installation plan for
 the GNU Guix backend.  Nothing in this package writes to a block device, invokes
 a system backend, or requires root.")
     (home-page "https://github.com/juv4uk/wsm-desktop")
-    (license gpl3+)))
+    (license wsm-license)))

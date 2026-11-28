@@ -26,7 +26,7 @@
              (gnu packages screen)
              (guix build-system trivial)
              (guix gexp)
-             ((guix licenses) #:prefix license:)
+             (wsm licenses)
              (guix packages)
              (srfi srfi-1))
 (use-service-modules base desktop sddm networking xorg)
@@ -106,7 +106,7 @@
     (home-page "https://github.com/juv4uk/wsm-desktop")
     (synopsis "WSM live preflight tools and Plasma launcher")
     (description "Read-only hardware report, diagnostic-only Guix plan and desktop launcher.")
-    (license license:gpl3+)))
+    (license wsm-license)))
 
 ;; Приймання образу — це маркер у послідовній консолі, а не «збірка повернула
 ;; нуль». Перевірено на опублікованому ISO: у ньому маркера не було, бо цей

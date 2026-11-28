@@ -44,7 +44,7 @@
              (gnu packages xorg)
              (guix build-system trivial)
              (guix gexp)
-             ((guix licenses) #:prefix license:)
+             (wsm licenses)
              (guix packages)
              (guix utils)
              (srfi srfi-1)
@@ -128,7 +128,7 @@
     (home-page "https://github.com/juv4uk/wsm-desktop")
     (synopsis "WSM live preflight tools and Plasma launcher")
     (description "Read-only hardware report, diagnostic-only Guix plan and desktop launcher.")
-    (license license:gpl3+)))
+    (license wsm-license)))
 
 ;; Приймання однакове для всіх образів: маркер у послідовній консолі.
 (define wsm-live-ready-marker
