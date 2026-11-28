@@ -31,7 +31,7 @@ class ContractParityTests(unittest.TestCase):
 
     def test_certified_stays_at_zero(self) -> None:
         """A summary that could say CERTIFIED would authorise a plan it cannot support."""
-        self.assertIn('"CERTIFIED":0', self.pas)
+        self.assertIn("Counts.Add('certified', 0)", self.pas)
         self.assertNotIn("LevelCertified", self.pas)
 
     def test_a_passed_test_never_promotes_a_subsystem(self) -> None:
