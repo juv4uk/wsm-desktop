@@ -1,11 +1,11 @@
 ;; SPDX-License-Identifier: LicenseRef-Volnist
 ;;
-;; A Cuirass job module: the live image, built by Guix, on the pinned channels.
+;; A Cuirass job module: the live ISO, built by Guix on the pinned channels.
 ;;
 ;; Cuirass calls `cuirass-jobs' with the store and the specification arguments.
-;; The image expression is the same one the release workflow builds, so this is
-;; a second, independent path to the same derivation: if the workflow is green
-;; and Cuirass is red, one of them is lying about the same bytes.
+;; Reuse Guix's own image->job helper so image derivation construction follows
+;; the same supported path as upstream Guix CI. The release uses
+;; --image-type=iso9660, represented here by iso9660-image.
 ;;
 ;; This module lives under ci/ rather than wsm/ on purpose: wsm/ is the public
 ;; channel namespace, and every module there must be loadable by the channel's
@@ -18,6 +18,7 @@
   #:use-module (guix store)
   #:use-module (guix packages)
   #:use-module (gnu ci)
+  #:use-module (gnu image)
   #:use-module (gnu system image)
   #:use-module (gnu system)
   #:use-module (ice-9 match)
@@ -31,18 +32,16 @@
     (system system)))
 
 (define* (image-jobs store systems #:key (profile "systems/live-minimal.scm"))
-  "One job per system: build the live image expression."
-  (map (lambda (system)
-         (let* ((name (string->symbol
-                       (string-append "wsm-live-minimal." system)))
-                ;; The profile is read from the checked-out channel, so the job
-                ;; always describes the source revision Cuirass just fetched.
-                (os   (primitive-load profile))
-                (drv  (operating-system-image
-                       os
-                       #:target system)))
-           (derivation->job name drv)))
-       systems))
+  "One job per system: build the live ISO with Guix's supported image helper."
+  ;; Load once from the checked-out WSM channel revision Cuirass evaluated.
+  (let ((os (primitive-load profile)))
+    (map (lambda (system)
+           (image->job store
+                       (image (inherit iso9660-image)
+                              (operating-system os))
+                       #:name "wsm-live-minimal"
+                       #:system system))
+         systems)))
 
 (define (cuirass-jobs store arguments)
   "Register Cuirass jobs for the WSM live image."
