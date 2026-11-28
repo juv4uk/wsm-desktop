@@ -467,8 +467,18 @@ class GuestReportParsingTests(unittest.TestCase):
                     verdict.problems,
                 )
 
-    def test_unresolved_rows_must_not_claim_a_path(self) -> None:
+    def test_an_unresolved_tool_uses_the_sentinel_and_fails_the_tool_verdict(self) -> None:
         report = closure_lines({"sgdisk": STATE_UNRESOLVED})
+        verdict = parse(report)
+        self.assertEqual(verdict.status, "fail")
+        self.assertIn("sgdisk", verdict.missing)
+        self.assertTrue(any("sgdisk: unresolved at no path" in problem for problem in verdict.problems))
+        self.assertFalse(any("unresolved state must use '-'" in problem for problem in verdict.problems))
+
+    def test_an_unresolved_row_with_a_path_is_a_protocol_error(self) -> None:
+        report = closure_lines({"sgdisk": STATE_UNRESOLVED}).replace(
+            "|sgdisk|-|unresolved", "|sgdisk|/tmp/sgdisk|unresolved"
+        )
         verdict = parse(report)
         self.assertEqual(verdict.status, "fail")
         self.assertTrue(
