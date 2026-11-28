@@ -2,55 +2,88 @@
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Статус: **конфігурація готова, інстанс не запускався**
-- Файли: [`ci/cuirass/specs.scm`](../ci/cuirass/specs.scm), [`ci/cuirass/images.scm`](../ci/cuirass/images.scm), [`ci/cuirass/service.scm`](../ci/cuirass/service.scm)
+- Статус: **NOT_RUN** — конфігурація ще не зареєстрована; Cuirass instance та жоден Cuirass job не запускалися.
+- Перевірка в CI: pinned Guix оцінює custom job до ISO derivation і будує сервісний об'єкт; це не запуск Cuirass scheduler і не побудова ISO.
+- Файли: [специфікації](../ci/cuirass/specs.scm), [image job](../ci/cuirass/images.scm), [фрагмент сервісу](../ci/cuirass/service.scm).
 
-## Навіщо другий конвеєр
+## Навіщо Cuirass
 
-Cuirass — це власний CI GNU Guix. Він не замінює GitHub Actions і не дублює його: вони доводять різні речі.
+Cuirass — Guix-native CI, який обчислює й збирає derivations зі специфікацій каналів. Він доповнює GitHub Actions, але не замінює релізне приймання.
 
-| Що | Хто доводить |
+| Що доводимо | Джерело доказу |
 | --- | --- |
-| Образ збирається з зафіксованих каналів | **обидва** — і Cuirass, і workflow |
-| Образ завантажується в BIOS і UEFI | **тільки** workflow (QEMU) |
-| Інсталятор у носії запускається | **тільки** workflow |
-| Заміни доступні іншим | **тільки** Cuirass |
+| wsm-tools та Minimal Live ISO derivation обчислюються під pinned Guix | pinned Guix profile-evaluation workflow |
+| Cuirass scheduler зареєстрував jobset і будує derivations | окремий реальний Cuirass instance/job run |
+| ISO завантажується в BIOS і UEFI | QEMU acceptance у release workflow |
+| Інсталятор стартує в завантаженому гості, а його інструменти доступні | serial/tool-closure докази з QEMU guest |
+| Фізичні можливості H170/GP107 працюють | окремі native-hardware свідчення |
 
-Третій рядок — причина існування Cuirass. Він збирає **всередині Guix** і віддає результати як substitutes, тобто наступна збірка не переробляє той самий closure з нуля.
+Зелена Guix evaluation не означає, що Cuirass instance працює, а зелений Cuirass build не доводить boot, роботу інсталятора чи функціональність фізичного обладнання.
 
-## Дві незалежні дороги до тих самих байтів
+## Точність каналів і відтворюваність
 
-`ci/cuirass/images.scm` будує `operating-system-image` з `systems/live-minimal.scm` — те саме, що будує `scripts/build_iso.sh`.
+- Офіційний Guix у специфікаціях закріплений на commit 4e5195be20d9b124df8a8bb69213412236e4668e, який використано у channels.lock.scm.
+- WSM channel у цих development specs відстежує main. Його commit змінюється між evaluations, тому це **не незмінний WSM source pin** і **не відтворення релізної пари каналів**.
+- Для кожного реального Cuirass evaluation зберігайте фактичні resolved commits Guix і WSM. Release manifest має окремо фіксувати точні commits, що побудували конкретний артефакт.
 
-Це навмисна надлишковість: якщо workflow зелений, а Cuirass червоний (або навпаки), одна з двох доріг бреше про ті самі байти. Розбіжність видно одразу, а не через місяць.
+Custom job у ci/cuirass/images.scm відповідає pinned Guix API:
+- (gnu ci) надає arguments->systems та image->job;
+- (gnu system image) надає image-with-os та iso9660-image;
+- (ci cuirass images) відповідає розташуванню ci/cuirass/images.scm;
+- systems/live-minimal.scm знаходиться в %load-path перевіреного WSM channel checkout;
+- job обмежено x86_64-linux, архітектурою першого WSM release target.
 
-## Запуск
+image->job створює job metadata і lower-ить image до derivation через store. Guix smoke перевіряє появу очікуваного derivation, але не запускає саму побудову ISO. Не називайте цю перевірку build PASS.
 
-```sh
-sudo -u postgres createdb cuirass
+## Автентифікація: WSM Phase B — prerequisite
 
-guix shell cuirass postgresql -- \
-  cuirass register --specifications=ci/cuirass/specs.scm \
-                   --database="dbname=cuirass host=/var/run/postgresql" \
-                   --interval=300
+**Не реєструйте production Cuirass jobset проти WSM channel, доки owner-controlled Phase B не завершено.** Потрібні .guix-authorizations, signed introduction/history та публічна keyring-гілка. Після цього звичайний guix git authenticate має успішно перевірити WSM channel.
 
-guix shell cuirass -- cuirass web --database="dbname=cuirass host=/var/run/postgresql"
-```
+- Не вимикати автентифікацію через --disable-authentication.
+- Не створювати або не вгадувати fingerprint, introduction commit, keyring чи підпис.
+- Не вважати структурні validators доказом криптографічної довіри.
+- Не включати неавтентифікований WSM channel у production release lock.
 
-Веб-інтерфейс — `http://localhost:8081`.
+Після завершення Phase B власник може окремо зареєструвати specs на build host, пересвідчитися в authenticated checkout, збереженні resolved commits, появі обох jobs та реальній збірці package й image derivations. До цього моменту реальний Cuirass instance/job status залишається **NOT_RUN**.
 
-Як сервіс — фрагмент у [`service.scm`](../ci/cuirass/service.scm), який вставляється в `services` хост-системи. Це фрагмент, а не повна декларація: повна стала б другою правдою про те, як налаштовані машини WSM.
+## Сервіс, доступ і substitutes
 
-## Що це **не** доводить
+ci/cuirass/service.scm — фрагмент для окремого Guix build host, а не повна система WSM. Він:
+- імпортує сервіс із (gnu services cuirass) — саме цей модуль містить pinned cuirass-service-type;
+- передає специфікацію через local-file "specs.scm", тому не залежить від неіснуючого /run/current-system/profile/share/... шляху;
+- прив'язує вебінтерфейс до localhost:8081;
+- використовує дійсне поле fallback?; у pinned cuirass-configuration **немає** поля use-substitutes?.
 
-- **Не завантажує образ.** У Cuirass немає кроку QEMU, тому зелений job означає «closure збирається», а не «носій стартує».
-- **Не перевіряє інсталятор.** Маркер `WSM_INSTALLER_OK` друкує гостя, а гостя тут немає.
-- **Не замінює приймання.** Вердикт релізу формується з BIOS/UEFI-свідчень, яких Cuirass не створює.
+Поведінка substitute lookup визначається конфігурацією Guix daemon і дозволеними довіреними серверами. Локальний Cuirass scheduler сам по собі **не публікує** власні результати для інших машин. Для розповсюдження build outputs потрібна окрема архітектура Cuirass remote server/workers або незалежного substitute server, ключі підпису, client trust, мережеві ACL та політика доступу.
 
-Тому в матриці вище й стоїть «тільки workflow»: спокуса назвати зелений Cuirass доказом завантаження — саме та підміна, від якої проєкт застерігає.
+Публікацію WSM outputs тут навмисно не налаштовано. Issue #367 містить невирішену суперечність щодо ліцензування wsm-tools (метадані пакета GPL-3+ проти LicenseRef-Volnist у репозиторії). Не запускати guix publish, не роздавати WSM substitutes і не створювати signing keys до owner-approved ліцензійного й операційного рішення.
 
-## Стан
+Адміністративний вебінтерфейс залишати на loopback. Віддалений доступ, коли він буде потрібен, потребує окремого автентифікованого reverse proxy і контрольованої мережевої політики.
 
-Конфігурація написана й перевірена структурно (тести в `tests/test_cuirass_specs.py`). **Інстанс не запускався**: у середовищі розробки немає ні Guix, ні PostgreSQL.
+## Запуск після Phase B
 
-Це чесний стан: файли описують, як запустити, а не стверджують, що запущено.
+Лише на окремому Guix host після завершення owner-signed trust bootstrap і перевірки звичайної authentication:
+
+    sudo -u postgres createdb cuirass
+
+    guix shell cuirass postgresql -- \
+      cuirass register --specifications=ci/cuirass/specs.scm \
+                       --database="dbname=cuirass host=/var/run/postgresql" \
+                       --interval=300
+
+    guix shell cuirass -- \
+      cuirass web --database="dbname=cuirass host=/var/run/postgresql" \
+                  --port=8081 --listen=localhost
+
+Не вважати ці команди виконаними: у поточному стані це інструкція для owner-controlled host bootstrap, не runtime evidence.
+
+## Межі acceptance
+
+Cuirass:
+- обчислює та будує Guix derivations, коли instance справді працює;
+- не завантажує ISO в BIOS/UEFI;
+- не запускає WSM_INSTALLER_OK у QEMU guest;
+- не створює native H170/GP107 hardware evidence;
+- не замінює release manifest, QEMU BIOS/UEFI acceptance та перевірку походження артефактів.
+
+**Поточний стан: NOT_RUN** для реєстрації/побудови Cuirass, ISO build у Cuirass, QEMU BIOS/UEFI та фізичного H170/GP107. Ці статуси змінюються тільки після отримання відповідних logs і артефактів, а не після проходження текстових тестів.
