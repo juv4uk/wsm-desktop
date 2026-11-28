@@ -78,7 +78,7 @@ jobs:
             echo "NAR SHA-256: ${{ steps.build.outputs.NAR_SHA256 }}"
             echo "Package: linux-libre-h170"
             echo "License metadata: inherited unchanged from pinned upstream linux-libre"
-            echo "Firmware policy: no NVIDIA firmware, proprietary driver, or Nonguix input"
+            echo "Firmware policy: no NVIDIA firmware, proprietary driver, or nonfree driver payload"
           } > "$OUT/provenance.txt"
           (
             cd "$OUT"
