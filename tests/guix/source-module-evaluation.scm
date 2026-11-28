@@ -9,6 +9,8 @@
 ;; from this list is a module nobody has checked.
 ;; scripts/check_scheme_module_coverage.py enforces that rule.
 (use-modules (guix packages)
+             (gnu services)
+             (ci cuirass images)
              (wsm systems performance)
              (wsm packages wsm))
 
@@ -27,4 +29,23 @@
 (display (package-name wsm-tools))
 (display " ")
 (display (package-version wsm-tools))
+(newline)
+
+;; The custom job body contains Guix CI helpers that are not evaluated simply
+;; by importing the module. Resolve the exact bindings used by its first run.
+(define cuirass-images-module (resolve-module '(ci cuirass images)))
+(unless (procedure? (module-ref cuirass-images-module 'derivation->job))
+  (error "Cuirass job module lacks the derivation->job binding from (gnu ci)"))
+(unless (procedure? (module-ref cuirass-images-module '%graft?))
+  (error "Cuirass job module lacks the %graft? parameter"))
+(unless (procedure? (module-ref cuirass-images-module 'assq-ref))
+  (error "Cuirass job module lacks the assq-ref binding"))
+
+;; Load the service fragment as a real Guix configuration to catch renamed
+;; service modules/fields and validate its adjacent local-file reference.
+(primitive-load "ci/cuirass/service.scm")
+(unless (service? wsm-cuirass-service)
+  (error "Cuirass service fragment did not define a Guix service"))
+
+(display "WSM-CUIRASS-SERVICE-EVAL-OK")
 (newline)
