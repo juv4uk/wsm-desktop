@@ -2,26 +2,20 @@
 ;;
 ;; Cuirass specifications for WSM Desktop.
 ;;
-;; Cuirass is GNU Guix's own continuous integration server. Its value here is
-;; not "another CI": it builds *inside Guix*, on top of the exact channel lock
-;; the release uses, and its results become substitutes. GitHub Actions builds
-;; the image and boots it in QEMU; Cuirass proves the derivations actually build
-;; from the pinned channels and warms the store for everyone else.
+;; The official Guix channel is pinned to the same Guix commit as the free
+;; release lock. The WSM channel intentionally tracks main as a development
+;; lane; its resolved commit is therefore different from a release's immutable
+;; WSM source pin and must be recorded for each evaluation.
 ;;
-;; What it does NOT do: boot the image. Cuirass has no QEMU acceptance step, so
-;; a green Cuirass job says "the closure builds", never "the medium boots".
-;; docs/CUIRASS.md keeps that boundary explicit.
+;; Keep normal channel authentication enabled. Do not register this jobset until
+;; owner-controlled WSM channel Phase B has been completed and verified with
+;; guix git authenticate. These specs are not proof of channel trust.
 ;;
-;; Register with:
-;;   cuirass register --specifications=ci/cuirass/specs.scm \
-;;                    --database="dbname=cuirass host=/var/run/postgresql"
-;;
-;; The file is a plain list of specifications, as `cuirass register` expects;
-;; the same list is used by the service definition in service.scm.
+;; Cuirass builds derivations. It does not boot images, run the installer, or
+;; publish WSM outputs as substitutes. See docs/CUIRASS.md for the boundaries.
 
 (list
- ;; The channel's own tool package: the smallest job that fails if the pinned
- ;; channels stop being able to build what we ship.
+ ;; The channel's own tool package: a focused package derivation check.
  (specification
   (name "wsm-tools")
   (priority 1)
@@ -42,9 +36,8 @@
           (url "https://github.com/juv4uk/wsm-desktop")
           (branch "main")))))
 
- ;; The live image derivation. Cuirass builds the same expression the release
- ;; workflow builds, so a broken profile shows up here within one poll interval
- ;; instead of after a forty-minute Actions run.
+ ;; The same live-minimal system profile used by scripts/build_iso.sh.
+ ;; This is a rolling development job, not an immutable release reproduction.
  (specification
   (name "wsm-live-minimal-image")
   (priority 1)
