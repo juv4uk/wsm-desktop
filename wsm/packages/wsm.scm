@@ -31,7 +31,7 @@
 (define-public wsm-tools
   (package
     (name "wsm-tools")
-    (version "0.1.0-rc3")
+    (version "0.1.0-rc6")
     ;; Relative paths in local-file are resolved against this file, so "../.."
     ;; is the repository root. select? keeps .git and build output out of the
     ;; store: without it the source would embed the whole git directory, which
