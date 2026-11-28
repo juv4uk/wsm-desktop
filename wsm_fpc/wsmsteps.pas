@@ -28,6 +28,9 @@ type
 function DeviceFor(const Disk: string; Number: Integer): string;
 function ValidateStep(const Argv: array of string; const Purpose: string): TStepError;
 function StepErrorCode(Error: TStepError): string;
+function Render(const Steps: array of string; const Purposes: array of string;
+                const Destructive: array of Boolean;
+                const Command: array of string): string;
 
 implementation
 
@@ -64,6 +67,35 @@ begin
     seEmptyArgv: Result := 'plan.command';
     seStepType: Result := 'plan.step-type';
   end;
+end;
+
+{ The human-readable plan. The first line is not decoration: the file exists to be
+  read before anything runs, and every destructive step is marked in it. }
+function Render(const Steps: array of string; const Purposes: array of string;
+                const Destructive: array of Boolean;
+                const Command: array of string): string;
+var
+  I: Integer;
+  Marker, Joined: string;
+begin
+  Result := '# NOT EXECUTED - review every line before running anything' + LineEnding
+          + LineEnding;
+  for I := 0 to High(Steps) do
+  begin
+    if Destructive[I] then Marker := 'DESTRUCTIVE' else Marker := 'safe';
+    Result := Result + '# [' + Marker + '] ' + Purposes[I] + LineEnding;
+    Result := Result + Steps[I] + LineEnding;
+    Result := Result + LineEnding;
+  end;
+  Result := Result + '# handoff to the backend' + LineEnding;
+  { No String.Join in FPC's objfpc mode - joined by hand. }
+  Joined := '';
+  for I := 0 to High(Command) do
+  begin
+    if I > 0 then Joined := Joined + ' ';
+    Joined := Joined + Command[I];
+  end;
+  Result := Result + Joined + LineEnding;
 end;
 
 end.
