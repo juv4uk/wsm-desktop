@@ -203,6 +203,18 @@ jobs:
           EOF
           (
             cd "$OUT"
+            sha256sum \\
+              linux-libre-h170-closure.nar \\
+              linux-libre-h170-source.tar.xz \\
+              signing-key.pub \\
+              provenance.json \\
+              closure.paths.txt \\
+              closure-size.txt \\
+              resolved-channels.scm \\
+              channels-lock.sha256 \\
+              wsm-source-commit.txt \\
+              guix-channel-commit.txt \\
+              > SHA256SUMS
             sha256sum -c SHA256SUMS
             sha256sum RELEASE-NOTES.md >> SHA256SUMS
             sha256sum -c SHA256SUMS
