@@ -34,6 +34,7 @@
              (gnu services sddm)
              (gnu packages fonts)
              (gnu packages kde-plasma)
+             (gnu packages disk)
              (wsm packages wsm))
 
 ;; Завантажуємо сусідній файл за абсолютним шляхом, а не через include з
@@ -73,6 +74,9 @@
   ;; Ті самі служби, що й у цільовому профілі, плюс наші інструменти.
   (packages
    (cons* wsm-tools
+          gptfdisk
+          parted
+          dosfstools
           font-dejavu
           font-liberation
           font-google-noto
