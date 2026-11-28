@@ -760,13 +760,22 @@ def mentions(package: str, text: str) -> bool:
 
 
 def commented_provider(package: str, provider: str, text: str) -> bool:
-    """A base-package dependency must be documented on the same comment line."""
-    return any(
-        line.lstrip().startswith(";")
-        and provider in line
-        and mentions(package, line)
-        for line in text.splitlines()
-    )
+    """A base-package dependency must be documented in one contiguous comment block."""
+    block: list[str] = []
+
+    def matches() -> bool:
+        comment = "\\n".join(block)
+        return bool(block) and provider in comment and mentions(package, comment)
+
+    for line in text.splitlines():
+        stripped = line.lstrip()
+        if stripped.startswith(";"):
+            block.append(stripped.lstrip(";").strip())
+            continue
+        if matches():
+            return True
+        block = []
+    return matches()
 
 
 def closure_gaps(tools: dict[str, str], source: str, label: str) -> list[str]:
@@ -785,6 +794,21 @@ def closure_gaps(tools: dict[str, str], source: str, label: str) -> list[str]:
 
 class TrustedToolClosureTests(unittest.TestCase):
     """Both supported live systems must declare the packages that own tool_map entries."""
+
+    def test_base_package_reason_may_span_one_contiguous_comment_block(self) -> None:
+        source = (
+            ";; coreutils supplies mkdir in the live profile\\n"
+            ";; pinned Guix base set: %base-packages-utils\\n"
+        )
+        self.assertTrue(commented_provider("coreutils", "%base-packages-utils", source))
+
+    def test_base_package_reason_must_not_be_borrowed_from_another_block(self) -> None:
+        source = (
+            ";; coreutils supplies mkdir in the live profile\\n"
+            "\\n"
+            ";; %base-packages-utils is used elsewhere\\n"
+        )
+        self.assertFalse(commented_provider("coreutils", "%base-packages-utils", source))
 
     def test_every_tool_package_is_declared_by_both_live_images(self) -> None:
         tools = tools_from_map()
