@@ -1,11 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""A module nobody evaluates is a module nobody has checked.
-
-The Guix evaluation test covered ``(wsm systems performance)`` only, so
-``(wsm packages wsm)`` - the channel's own package module - was never loaded by
-Guix at all. These tests pin the coverage rule and prove the checker is red
-without it.
-"""
+"""The Scheme module coverage checker must distinguish code from comments and strings."""
 
 from __future__ import annotations
 
@@ -55,11 +49,10 @@ class CoverageTest(unittest.TestCase):
     def tearDown(self) -> None:
         self._tmp.cleanup()
 
-    def write_eval(self, text: str) -> None:
-        (self.root / "tests" / "guix" / "source-module-evaluation.scm").write_text(text)
+    def write_eval(self, content: str) -> None:
+        (self.root / "tests" / "guix" / "source-module-evaluation.scm").write_text(content)
 
     def test_unevaluated_module_is_reported(self) -> None:
-        """The regression this file exists for: the channel module was skipped."""
         self.write_eval(EVAL_ONE)
         problems = check(self.root)
         self.assertEqual(len(problems), 1)
@@ -75,7 +68,6 @@ class CoverageTest(unittest.TestCase):
         self.assertIn("missing evaluation test", problems[0])
 
     def test_module_name_comes_from_the_file_not_the_path(self) -> None:
-        """A file whose define-module disagrees with its path is still tracked."""
         (self.root / "wsm" / "packages" / "wsm.scm").write_text(
             PACKAGE_MODULE.replace("(wsm packages wsm)", "(wsm packages renamed)")
         )
@@ -83,6 +75,52 @@ class CoverageTest(unittest.TestCase):
         problems = check(self.root)
         self.assertEqual(len(problems), 1)
         self.assertIn("wsm packages renamed", problems[0])
+
+    def test_line_comment_cannot_fake_an_import(self) -> None:
+        self.write_eval("; (use-modules (wsm packages wsm))\n" + EVAL_ONE)
+        problems = check(self.root)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("wsm packages wsm", problems[0])
+
+    def test_block_comment_cannot_fake_import_or_module(self) -> None:
+        self.write_eval("#| (use-modules (wsm packages wsm)) |#\n" + EVAL_ONE)
+        (self.root / "wsm" / "commented.scm").write_text(
+            "#| (define-module (wsm fake module)) |#\n"
+            "; (define-module (wsm another fake))\n"
+        )
+        problems = check(self.root)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("wsm packages wsm", problems[0])
+        self.assertNotIn("wsm fake module", " ".join(problems))
+
+    def test_nested_block_comments_are_ignored(self) -> None:
+        self.write_eval(
+            "#| outer #| nested (use-modules (wsm packages wsm)) |# end |#\n"
+            + EVAL_ONE
+        )
+        self.assertEqual(len(check(self.root)), 1)
+
+    def test_parentheses_and_escaped_quotes_in_strings_are_ignored(self) -> None:
+        self.write_eval(
+            EVAL_BOTH
+            + '(display "not a form: ) (use-modules (wsm fake)) and quote: \\"")\n'
+        )
+        self.assertEqual(check(self.root), [])
+
+    def test_scheme_character_literals_do_not_change_parenthesis_balance(self) -> None:
+        self.write_eval('(display #\\))\n' + '(display #\\;)\n' + EVAL_BOTH)
+        self.assertEqual(check(self.root), [])
+
+    def test_duplicate_module_declarations_are_reported(self) -> None:
+        (self.root / "wsm" / "packages" / "duplicate.scm").write_text(
+            "(define-module (wsm packages wsm))\n"
+        )
+        self.write_eval(EVAL_BOTH)
+        problems = check(self.root)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("duplicate Scheme module", problems[0])
+        self.assertIn("wsm/packages/wsm.scm", problems[0])
+        self.assertIn("wsm/packages/duplicate.scm", problems[0])
 
     def test_repository_tree_is_fully_covered(self) -> None:
         self.assertEqual(check(ROOT), [], "wsm/ modules missing from the Guix evaluation test")
