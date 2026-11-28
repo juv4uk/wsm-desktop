@@ -236,3 +236,37 @@ package/hash. Зовнішній GP107 test host не замінює H170.
 - **Profile pass**: усі попередні рівні підтверджені саме для заявленого профілю (Free або Compatibility), а manifest зберігає provenance.
 
 Поки ці критерії не виконані, H170 profile залишається draft, а невідомі стани не підвищуються.
+
+## 11. Поза-GPU firmware-блоби: статичний інвентар (GP107 відкладено)
+
+Зріз: `main@b7c6be06239dc4567cfb954e9c6882278458170a`. Цей розділ фіксує лише невідео залежності вашої H170-машини. GP107/GPU блоби свідомо не розглядаються тут і переносяться в окремий етап. Статус рядків нижче — source/license evidence; він не доводить наявність файлу в Guix closure, initrd/rootfs, runtime load або фізичну функцію на цій платі.
+
+| Компонент | Блоб / шлях | Статус для H170 Free | Що доведено з джерел | Що лишається `not-assessed` / `unknown` |
+| --- | --- | --- | --- | --- |
+| Intel Core i5-6400, CPUID `0x506E3` | `kernel/x86/microcode/GenuineIntel.bin` — optional OS early update | `optional`, `nonfree`, не входить у Free closure | BIOS F22e вже містить мікрокод `0xC2` (2017-11-16); Windows пізніше повідомляв `0xD6` (2019-10-03). Linux може стартувати на BIOS-версії `0xC2`; пінений kernel config має `CONFIG_MICROCODE=y` і вимикає late-load. Ліцензія Intel допускає бінарне поширення без модифікації й забороняє RE/disassembly | наявність package у точному Guix closure/initrd, фактичну Linux-версію після boot, застосовність оновлення до цього CPU |
+| Intel HD Graphics 530 (Skylake i915) | Skylake DMC (та окремо GuC/HuC) | `optional`, `nonfree` (`LICENSE.i915`), не входить у Free closure | DMC потрібен для DMC-backed runtime power management; без нього upstream вимикає runtime PM, але базова графіка є окремим шляхом. GuC/HuC — окремі workload-specific capabilities | package presence, module binding, `/dev/dri`, фактичний runtime-PM стан і display/KMS на цій H170 |
+| Intel ME/CSME | Pre-OS firmware у BIOS/SPI, ME `11.8.50.3425` | не host-loadable, поза Guix host closure | Це не Linux driver firmware; працює до ОС. Не дублювати ME region/raw dumps | жодних нових дампів, RE чи оновлень ME у цій роботі не виконувалося |
+| Killer Ethernet (Windows label E2200) | немає host firmware blob у перевіреному alx шляху | `not-required`, точний PCI ID `unknown` | У перевіреному open-source шляху alx немає `request_firmware`/`MODULE_FIRMWARE`; початковий Windows-підпис пристрою не дає PCI ID | точний PCI ID/revision і Linux binding на цій платі |
+| HDA / Realtek | стандартний codec-шлях не потребує vendor blob; `snd-hda-patch-loader` — лише optional user-supplied patch | `not-required`, exact codec ID `unknown` | Kernel HD-audio docs описують базовий шлях без vendor firmware; patch loader є окремою опцією, не baseline dependency | фактичний codec ID (ALC1150 — лише board-spec), UCM, playback/capture |
+| SATA/AHCI та Samsung/NVMe | generic `ahci` / `nvme` host drivers не запитують host firmware | `not-required`, device-internal firmware окремо | Внутрішня прошивка дисків є device-managed і не є host-loadable Guix dependency | версії firmware дисків, SMART/health і будь-які write tests |
+| USB / xHCI | Intel PCH xHCI — зовнішня firmware не потрібна; Renesas loader не стосується цієї плати | `not-required` для Intel шляху | Pinned kernel config і xHCI source не показують зовнішній firmware запит для Intel контролера | перелік периферійних пристроїв, port topology і функційні transfer tests |
+
+### Відповідність до рекомендацій #171
+
+У #171 зафіксовано «Черговість реверсу» (коментар `2026-11-27T23:26:09Z`):
+
+- **P0** — ідентифікація конкретних H170 компонентів і нативний Linux binding;
+- **P1** — GP107 Nouveau firmware dependency map (exact kernel-requested names, WHENCE `File/RawFile/Link`, symlink targets, license, initrd/rootfs);
+- **P2** — FIFO channel/runlist/non-stall correlation;
+- глибше декодування R580 UVM/RM — відкласти.
+
+Оскільки GPU відкладено, P1 і P2 тут не виконуються. Для невідео-пристроїв coordinator-рішення в тому самому issue (`2026-11-28T02:35:52Z`) прямо каже: «No WSM-owned reverse engineering or generic driver pack indicated» — тобто потрібен read-only native H170 inventory, а не реверс бінарників. Цей розділ фіксує лише source/license інвентар; **P0 залишається NOT_RUN** і потребує окремого owner-approved запуску на реальній машині, а не емуляції в WSL/QEMU.
+
+Спільні межі цього інвентарю:
+
+- жодні бінарні blobs, firmware образи, ключі або дампи до репозиторію не додаються;
+- статуси `live_rootfs`, `initrd`, `installed_rootfs`, `runtime_load` і `functional_validation` у `drivers/profiles/h170-free.json` лишаються `not-assessed`/`not-run`, доки не буде окремого native H170 `wsm-hwcheck` report;
+- Nonfree Intel firmware/pkg не входить у Free closure; Compatibility/ліцензійні рішення ведуться окремо за #171 і чинним release gate;
+- тут не виконувалися GPU enumeration, CUDA/NVML, RM/UVM/D3DKMT ioctl, MMIO, firmware update, reboot, tag або release; GP107 залишається відкладеним.
+
+Джерела вже наведені вище в §2–§4 і в [h170-free.json](../../drivers/profiles/h170-free.json); цей розділ лише збирає їх у поза-GPU інвентар, а не додає нову hardware чи runtime сертифікацію.
