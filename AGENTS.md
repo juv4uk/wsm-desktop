@@ -39,7 +39,7 @@
 
 Порядок обов'язковий: каталог профілю не створюють, доки немає звіту `wsm-hwcheck` з native Linux.
 
-1. Завантажити саму машину в native Linux (не Windows/WSL) і зібрати read-only звіт: `python3 -m wsm_hwcheck --output ./hwcheck-report.json` ([docs/hardware/HWCHECK.md](docs/hardware/HWCHECK.md)).
+1. Завантажити саму машину в native Linux (не Windows/WSL) і зібрати read-only звіт: `python3 -m wsm_hwcheck --output ./hwcheck-report.json` ([docs/hardware/HWCHECK.md](docs/hardware/HWCHECK.md)). Порядок кроків, перевірка звіту до виходу з Linux і те, які `unknown` прийнятні саме для цієї плати — [docs/hardware/OWNER-HARDWARE-REFERENCE.md](docs/hardware/OWNER-HARDWARE-REFERENCE.md), розділ «Runbook».
 2. Лише після цього створити `profiles/hardware/gigabyte/ga-h170-gaming3/` з `profile.scm` на основі `profiles/hardware/template.scm`.
 3. `python3 scripts/draft_profile_evidence.py --report hwcheck-report.json --vendor GIGABYTE --model "GA-H170-Gaming 3" --slug gigabyte/ga-h170-gaming3 --out profiles/hardware/gigabyte/ga-h170-gaming3/evidence.json` (`scripts/draft_profile_evidence.py`). Генератор не створює `profile.scm`, не ставить `pass` і не перезаписує наявні файли.
 4. Додати functional-test logs у `artifacts/` і заповнити `verified_functions`, `known_limitations` та непорожній `not_assessed`.

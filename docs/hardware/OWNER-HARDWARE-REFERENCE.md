@@ -188,3 +188,150 @@ PR [#54](https://github.com/juv4uk/gp107-nvidia-re/pull/54) закрив product
 - GP107 [docs/20–21](https://github.com/juv4uk/gp107-nvidia-re/tree/62a129608b57ca3d6cde1ca6d9beda0ba03130c5/docs) залишаються NVIDIA R580-only HOST_VISIBLE/HOST_COHERENT baseline та матрицею 108 точок на зовнішньому host, не NVK A/B і не H170 performance baseline. [docs/22](https://github.com/juv4uk/gp107-nvidia-re/blob/62a129608b57ca3d6cde1ca6d9beda0ba03130c5/docs/22-device-local-transfer-and-compute-phases.md) має оновлений code із memory dependencies та `memoryTypeBits`, але build, synchronization validation і фізичний rerun ще не прийняті; історичні DEVICE_LOCAL цифри — **EXPLORATORY / NOT ACCEPTED**.
 - Для WSM це лише зовнішня GP107 software/source evidence. Вона не підвищує H170 `runtime_binding`, firmware presence, KMS/display, functional validation, package resolution або Free/Compatibility profile verdicts. Потрібен native Linux `wsm-hwcheck` report на самій GA-H170-Gaming 3 та точна звірка встановленого kernel/module/firmware closure.
 
+
+## Runbook: native Linux звіт `wsm-hwcheck` для цієї машини
+
+- Статус розділу: **процедура для власника; доказом стає лише отриманий файл звіту, а не цей текст**
+- Власники контракту: [HWCHECK.md](HWCHECK.md) (що збирає колектор) і [REPORT-FORMAT.md](REPORT-FORMAT.md) (формат і семантика `unknown`)
+- Мета: **один** прогін на фізичній машині дає **один** файл, з якого `scripts/draft_profile_evidence.py` будує `evidence.json` без другої перезагрузки в Linux
+- Чого цей прогін не робить: не створює каталог профілю, не ставить жодного `pass`, не доводить, що графіка, мережа, звук або suspend працюють
+
+### 1. Що мусить бути у файлі
+
+Значення нижче — це поля звіту й те, що на цій платі має бути в них. Джерело істини — власний прогін; Windows/WSL-довідка вище не є доказом жодного з цих полів.
+
+| Поле звіту | Очікування на GA-H170-Gaming 3 | Навіщо це потрібно профілю |
+| --- | --- | --- |
+| `schema_version` | `1.1.0` | `draft_profile_evidence.py` записує його в `report_schema_version` |
+| `report_id` | `wsm-` + 24 hex-символи, випадковий на кожен прогін | `report_id` у bundle; без нього чернетка не створюється |
+| `collected_at` | ISO-8601 UTC | з нього береться `verified_on` |
+| `environment.architecture` | `x86_64` | перевірка, що звіт із цієї машини |
+| `environment.kernel_release` | ядро live-середовища або встановленої системи | доказ анулюється, коли змінюється ядро |
+| `environment.boot_mode` | `uefi` | профіль заявляється для UEFI |
+| `environment.boot_mode_evidence` | непорожній рядок про `/sys/firmware/efi` | показує, на чому саме зроблено висновок |
+| `environment.platform.board_name` | `GA-H170-Gaming 3-CF` (DMI `board_name`; `product_name` = `GA-H170-Gaming 3`) | ідентичність плати |
+| `environment.platform.bios_version` / `bios_date` | те, що повернув DMI цього прогону | доказ анулюється, коли змінюється firmware |
+| `devices[]` з `category: gpu` | **два** записи: `identity.vendor_id` `0x8086` / `device_id` `0x1912` (Intel HD 530) і `0x10de` / **`0x1c82`** (GTX 1050 Ti) | `hardware_signature.pci_ids` для матчера |
+| `devices[]` GPU: `driver.status` | `bound` (є `bound_driver`), `none-known` (symlink драйвера відсутній) або `available-only` | головне питання сертифікації GPU |
+| `devices[]` з `category: cpu` | `cpu.microcode`, `stepping`, `model_number`, `logical_processors` | доказ анулюється, коли змінюється мікрокод |
+| `privacy.network_upload_performed` / `network_requests_performed` / `sensitive_identifiers_included` | `false` / `false` / `false` | звіт лишається локальним |
+
+Ідентифікатори PCI колектор пише в sysfs-формі з префіксом (`"0x1c82"`), а підпис профілю — без нього (`10de:1c82`). Це не розбіжність: `wsm_install/profile_match.py` нормалізує обидві форми.
+
+### 2. Перед завантаженням у Linux
+
+На машині з мережею (Windows достатньо) підготувати дерево репозиторію на USB:
+
+```sh
+git clone --depth 1 https://github.com/juv4uk/wsm-desktop.git
+```
+
+Скопіювати теку `wsm-desktop` цілком на флешку. На самій H170 мережа не потрібна: колектор не робить жодного мережевого запиту (`privacy.network_requests_performed: false`, у `wsm_hwcheck/` немає мережевих викликів), і сторонніх залежностей часу виконання він не має. `jsonschema[format]` з `requirements-install.txt` потрібен лише для кроку перевірки схеми (п. 4, крок 5): на live ISO він уже в образі, на встановленій системі його треба мати заздалегідь, бо без мережі `pip install` не спрацює.
+
+Підготувати на флешці порожню теку для звіту. Більше нічого не пишеться: збирач read-only і дисків не торкається.
+
+### 3. Live ISO чи встановлена система
+
+| | Live ISO | Встановлена система |
+| --- | --- | --- |
+| Що запускати | `wsm-hwcheck` з `/bin` — обгортка над `python3 -m wsm_hwcheck` (`systems/live-iso.scm`) | `python3 -m wsm_hwcheck` з кореня скопійованого дерева |
+| Дерево репозиторію | уже в образі | з USB |
+| `pci.ids` | найімовірніше відсутній: назви не з'являться, `vendor_id`/`device_id` лишаться | залежить від дистрибутива; перевірити `collectors[]` |
+| `modules.alias` / `modules.dep` / `modules.builtin` | можуть бути відсутні або неповні (squashfs) → більше `unknown` | є `/lib/modules/$(uname -r)/` |
+| Журнал ядра (`journalctl`/`dmesg`) | може бути недоступним без прав → `firmware.runtime_status: unknown` | те саме |
+| Куди лягає звіт | `/tmp` — це RAM: **скопіювати на USB до перезавантаження** | будь-де на диску |
+| `jsonschema[format]` для перевірки схеми | у образі | поставити заздалегідь |
+
+Обидва варіанти дають native Linux звіт: контракт вимагає native Linux, а не встановлену систему. Live ISO достатньо для інвентаризації; встановлена система дає більше фактів (індекси модулів, журнал ядра). Обирається **один** прогін і **один** файл — змішувати два прогони не можна, у кожного свій `report_id`.
+
+### 4. Порядок команд
+
+З кореня дерева `wsm-desktop` (на live ISO — з будь-якого каталогу, бо `wsm-hwcheck` уже в `PATH`):
+
+1. `cd wsm-desktop`
+2. `python3 -m wsm_hwcheck --version` → мусить бути `wsm-hwcheck 0.3.0`. Інша версія означає, що дерево не з `main`; тоді звіт може не містити полів 1.1.0.
+3. `python3 -m wsm_hwcheck --output ./hwcheck-report.json`
+   (на live ISO: `wsm-hwcheck --output /tmp/wsm-hwcheck.json`)
+   Код виходу 0 і непорожній файл. Без `--output` JSON друкується в stdout і у файл не потрапляє.
+4. `python3 -m wsm_hwcheck.isa --report ./hwcheck-report.json > wsm-cpu-isa.json`
+   Рівень `wsm-cpu-isa/1` для поля `isa_level` у bundle плюс крос-перевірка, що звіт справді з цієї машини (`cross_check.report_id`, попередження, якщо архітектура інша). Артефактом bundle цей файл бути не може: `artifacts[].kind` має закритий перелік `wsm-hwcheck-report` / `functional-test-log` (`schemas/profile-evidence.schema.json`). Зберігати його як робочий матеріал поруч зі звітом.
+5. `python3 -m wsm_install --preflight --report ./hwcheck-report.json --backend guix --dry-run --classify`
+   (на live ISO: `wsm-install --preflight --report /tmp/wsm-hwcheck.json --backend guix --dry-run --classify`)
+   Код 0 — схема валідна. Код 2 — помилка схеми або читання файлу, звіт не годиться. Це той самий валідатор і той самий вибір схеми за оголошеною версією, що й у `scripts/draft_profile_evidence.py`, тому успіх тут означає, що чернетку bundle не заблокують на схемі.
+   **Не читати вивід `--classify` як оцінку машини:** у свіжому звіті всі підсистеми будуть `unknown`, бо `functional_tests` порожній. Це нормально і не є помилкою схеми.
+   Ця перевірка не вимагає extras `jsonschema[format]`; якщо пізніше `scripts/draft_profile_evidence.py` відмовить із «format validation is unavailable … install jsonschema[format]», це прогалина середовища (без extras перевірка `format` мовчки не виконується), а не дефект звіту: поставити `requirements-install.txt`, повторити перевірку схеми — звіт збирати заново не потрібно.
+6. `sha256sum ./hwcheck-report.json` — записати результат.
+7. Скопіювати `hwcheck-report.json` і `wsm-cpu-isa.json` на USB **до** виходу з Linux.
+
+### 5. Що перевірити на машині, поки ще не вийшов з Linux
+
+- `grep -n '"boot_mode"' ./hwcheck-report.json` → `"boot_mode": "uefi"` і змістовний `boot_mode_evidence`
+- `grep -n '0x1c82' ./hwcheck-report.json` → рівно один запис GPU з `"vendor_id": "0x10de"` і `"device_id": "0x1c82"`
+- `grep -n '"category": "gpu"' ./hwcheck-report.json` → два записи GPU (Intel `0x1912` і NVIDIA `0x1c82`)
+- `grep -n '"board_name"' ./hwcheck-report.json` → `GA-H170-Gaming 3-CF`
+- `grep -n 'wsm-pci-ids-database' -A2 ./hwcheck-report.json` → `"available": true` або `false` (див. п. 6, обидва прийнятні)
+- `grep -n '"warnings"' -A8 ./hwcheck-report.json` → прочитати кожен рядок і зрозуміти, чому він там
+- крок 5 з п. 4 завершився з кодом 0
+- `sha256sum` записано, файл на USB відкривається і його розмір не 0
+
+Якщо хоч один пункт не сходиться — це та сама перезагрузка в Linux, яку дешевше повторити зараз, ніж після повернення у Windows.
+
+### 6. `unknown`: коли це прийнятно, а коли прогін треба повторити
+
+`unknown` — це штатна відповідь, а не поломка: контракт прямо забороняє перетворювати відсутнє джерело на відмову. Але є факти, без яких профіль не створити.
+
+**Прийнятно, повторювати не треба:**
+
+| Що видно у звіті | Чому це нормально |
+| --- | --- |
+| `wsm-pci-ids-database: available false` + warning про назви | немає локального `pci.ids`: `vendor_id`/`device_id` лишаються, назви моделей відсутні. Матчер профілю працює на парах `vendor:device`, не на назвах |
+| `firmware.runtime_status: unknown` у GPU/NIC | ядро не повідомило про firmware саме цього пристрою, або журнал ядра недоступний. Наявність blob'а звіт не вигадує |
+| `gpu.drm_cards` у `unavailable` | для цієї PCI-функції немає DRM-вузла (напр. драйвер не прив'язаний). `boot_vga` при цьому все одно записаний |
+| `gpu.pci_link.max_speed` / `max_width` у `unavailable` | sysfs не віддав максимальні значення; поточні записані |
+| `cpu.microcode` у `unavailable` | ні `/proc/cpuinfo`, ні `/sys/.../microcode/version` не дали ревізії |
+| `network.interfaces: []` | драйвер не прив'язаний, тому немає інтерфейсу, чий sysfs-зв'язок веде до цієї функції |
+| `storage.transport` у `unavailable` | предки block-пристрою в sysfs не дали шину |
+| `identity.revision: "x.x"` у платі | це DMI-заглушка Gigabyte; ревізія плати лишається `unknown`, як і записано у статусі цього документа |
+| `environment.virtualization: "unknown"` | на bare metal це нормально: колектор називає гіпервізор лише тоді, коли має доказ, а `none-detected` не вигадує |
+| `wsm-current-boot-kernel-log: available false` | журнал закритий правами або недоступний; наслідок — `firmware.runtime_status: unknown`, що прийнятно |
+
+**Прогін треба повторити, якщо:**
+
+| Ознака | Що це означає |
+| --- | --- |
+| `environment.boot_mode: "unknown"` | немає ні `/sys/firmware/efi`, ні x86 DMI — це не та машина й не те середовище (контейнер, обмежена оболонка, чужий root) |
+| `environment.virtualization` = `kvm` / `qemu` / `vmware` / `hyper-v` / `xen` | звіт знято у віртуальній машині; для профілю фізичної H170 він непридатний |
+| немає запису GPU з `0x1c82` | карта вимкнена у firmware, в іншому слоті або не ініціалізувалась; без цієї пари `hardware_signature` не скласти |
+| `devices` порожній або без `cpu`/`motherboard` | читання sysfs/procfs не відбулося |
+| `board_name` відсутній або не `GA-H170-Gaming 3…` | звіт з іншої машини |
+| перевірка схеми (п. 4, крок 5) повернула 2 | файл обрізаний або змінений; зібрати заново |
+| `report_id` або `collected_at` відсутні | звіт не від цього колектора |
+| `python3 -m wsm_hwcheck --version` не `0.3.0` | дерево не з `main`; полів 1.1.0 може не бути |
+| файл редагували, переформатували або перезберегли після збору | SHA-256 у bundle рахується з точних байтів; такий файл уже не той, що зібрано |
+
+Повторний прогін створює **новий** `report_id`. Bundle прив'язується до одного звіту, тому не можна взяти `report_id` з першого прогону, а факти — з другого.
+
+### 7. Чого звіт не може містити і чому
+
+- **Firmware blob'ів, які ядро не повідомило.** Звіт фіксує `firmware.runtime_status` і `kernel_log_evidence`, а не вміст blob'ів. Для цієї плати це принципово: GP107 GR FECS/GPCCS, i915 DMC і Intel CPU microcode — невільні компоненти, і WSM не включає й не перерозповсюджує їх (див. [матрицю firmware](H170-FIRMWARE-MATRIX.md)). Відсутність рядка в журналі дає `unknown`, а не `missing`: «не спостерігали» і «немає» — різні твердження.
+- **MAC-адрес, серійних номерів, UUID, імені хоста, імені користувача, IP-адрес, WWN.** Їх виключає профіль приватності strict-local; `privacy.redactions_applied` перелічує категорії. Тому в записі мережі є PCI-ідентичність і назви інтерфейсів, але немає `address`.
+- **Таблиці розділів, типів файлових систем і записів завантажувача.** Колектор обіцяє не торкатися блокових пристроїв, тому ці факти збираються іншими засобами й іншими доказами.
+- **Ідентичності монітора з EDID і зв'язку «конектор → GPU».** Це окрема робота (#18); запис `display` містить стан конектора й заявлені режими, і це не доказ, що режим проходить через фактичний шлях GPU → конектор → кабель → монітор.
+- **Результатів функціональних тестів.** `functional_tests` лишається `[]`; інвентаризація не доводить, що HDMI, звук, мережа або suspend працюють. Саме тому bundle вимагає окремих `functional-test-log` артефактів.
+- **Рівня ISA.** Він навмисно не дублюється у звіті, а живе в окремому контракті `wsm-cpu-isa/1` — тому крок 4 у п. 4 обов'язковий.
+
+### 8. Що передати назад
+
+1. Точні байти `hwcheck-report.json` — не перезберігати, не форматувати, не «виправити» жодне поле: SHA-256 цього файлу входить у bundle.
+2. `sha256sum` цього файлу.
+3. `report_id`, `schema_version`, `collected_at`, `environment.kernel_release`.
+4. Вивід `wsm-cpu-isa.json`.
+5. Текст виводу перевірки схеми (крок 5) з кодом виходу.
+6. Перелік `collectors[]` зі `available: false` і всі рядки `warnings`, які були на екрані.
+7. Одне речення: live ISO чи встановлена система, і версія `wsm-hwcheck`.
+
+### 9. Що робиться далі — не в цьому прогоні
+
+Каталог `profiles/hardware/gigabyte/ga-h170-gaming3/` цим runbook не створюється: спершу звіт, потім каталог із `profile.scm` на основі `profiles/hardware/template.scm`, потім `scripts/draft_profile_evidence.py`, потім окремі функціональні тести з логами в `artifacts/` і `scripts/check_profile_evidence.py`. Порядок і команди — [AGENTS.md](../../AGENTS.md), розділ 3; контракт — [HARDWARE-PROFILE-EVIDENCE.md](../HARDWARE-PROFILE-EVIDENCE.md).
+
+Один прогін достатній для чернетки: генератор читає зі звіту рівно `report_id`, `schema_version`, `collected_at`, `devices[].category`, пари PCI з `identity`, `discovery_status`, `firmware.runtime_status`, `functional_tests` і `warnings`. Усі ці поля збираються за один запуск, тому другої перезагрузки в Linux для `evidence.json` не потрібно — потрібні лише функціональні тести, які виконуються в тому ж завантаженні або пізніше.
