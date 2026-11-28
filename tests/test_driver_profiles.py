@@ -211,6 +211,38 @@ class DriverProfileManifestTests(unittest.TestCase):
         self.assertEqual(nvidia["source_license"], "unknown")
         self.assertEqual(compat_gpu["functional_validation"]["status"], "not-run")
 
+    def test_free_profile_names_locked_upstream_package_candidates_without_claiming_resolution(self) -> None:
+        expected = {
+            ("intel-mei-heci", "mei-me"): ["linux-libre"],
+            ("intel-hd-530", "i915-mesa"): ["linux-libre", "mesa"],
+            ("nvidia-gtx-1050-ti", "nouveau-pascal"): ["linux-libre", "mesa"],
+            ("killer-e2200", "alx-e2200"): ["linux-libre"],
+            ("kingston-nv2", "nvme-controller"): ["linux-libre"],
+            ("samsung-sata", "ahci-controller"): ["linux-libre"],
+            ("hda-audio", "snd-hda-intel"): ["linux-libre"],
+        }
+        seen = set()
+        allowed_packages = {"linux-libre", "mesa"}
+
+        for device in self.free["devices"]:
+            for candidate in device["driver_candidates"]:
+                key = (device["device_id"], candidate["candidate_id"])
+                with self.subTest(device=key[0], candidate=key[1]):
+                    self.assertIn(key, expected)
+                    self.assertEqual(candidate["package_candidates"], expected[key])
+                    self.assertTrue(set(candidate["package_candidates"]) <= allowed_packages)
+                    self.assertEqual(candidate["package_resolution"], "not-assessed")
+                    self.assertEqual(candidate["runtime_binding"], "unknown")
+                    seen.add(key)
+
+            firmware = device["firmware"]
+            if firmware["redistribution"] in {"nonfree", "mixed"}:
+                self.assertEqual(firmware["package_candidates"], [])
+                self.assertEqual(firmware["package_resolution"], "not-assessed")
+
+        self.assertEqual(seen, set(expected))
+
+
     def test_pinned_linux_libre_kernel_config_exposes_h170_drivers(self) -> None:
         self.assertEqual(self.free["kernel"]["version"], "7.3.5")
         self.assertEqual(self.free["kernel"]["configuration_status"], "available")

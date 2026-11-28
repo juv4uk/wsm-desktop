@@ -1,85 +1,57 @@
-# Субститути WSM: статичний кеш без сервера
+# Субститути WSM — технічний прототип, публікацію вимкнено
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Статус: **скрипт і схема готові, публікація не запускалася**
-- Ключ підпису: **не створений** — його мусить створити власник
-- Скрипт: [`scripts/narinfo_to_release_urls.py`](../scripts/narinfo_to_release_urls.py)
+- Стан: **NOT_AUTHORIZED / NOT_PUBLISHED**
+- Workflow публікації: **вимкнений fail-closed guard**
+- Package/NAR export: **вимкнений до licensing decision #367**
+- Підписний ключ: **не створений і не збережений у CI**
+- Cuirass: **окремий build coordinator; не є автоматичним substitute server**
 
-## Задача
+## Що є в репозиторії
 
-Користувач має отримувати зібрані пакети каналу `wsm` як substitutes, а не збирати їх із джерел. Для цього потрібен сервер, який віддає формат Nix binary cache: `nix-cache-info`, `*.narinfo`, `nar/*.nar.zst`, `signing-key.pub`.
+`scripts/narinfo_to_release_urls.py` — локальний конвертер URL у Guix narinfo. Він не створює ключі, не підписує дані, не збирає package closures і не публікує архіви.
 
-Тримаємо його без окремого хоста.
+`.github/workflows/substitutes.yml` та `.github/workflows/package-archives.yml` тимчасово залишені як вимкнені декларації наміру. Обидва мають `if: ${{ false }}`, ручний тригер без автоматичного push-тригера, read-only permissions і не виконують жодної build/export/deploy дії.
 
-## Чому не «все в gh-pages» і не «все в git»
+## Рішення, яких бракує
 
-Дві половини кешу мають різний профіль розміру:
+**1. Ліцензія та право на розповсюдження — issue #367.**
 
-| Половина | Розмір | Змінюється |
-| --- | --- | --- |
-| метадані (`nix-cache-info`, `*.narinfo`, ключ) | кілобайти на запис | часто |
-| архіви (`nar/*.nar.zst`) | десятки–сотні МБ | ніколи після публікації |
+Потрібне окреме рішення власника щодо суперечності між repository license declaration та Guix package metadata, а також щодо права розповсюджувати отримані package outputs/NARs. Поки issue #367 відкрите, не запускайте package archive workflow, не прикріплюйте NAR до Releases/Actions artifacts і не вмикайте substitute workflow.
 
-- **Усе в gh-pages** упирається в ліміт сайту **1 ГБ**: один closure з Qt/Plasma його перевищує.
-- **Усе в git** упирається в **100 МБ на файл** — це ліміт Git і GitHub, а не Pages.
-- **`git push --force`** не повертає місце: старі обʼєкти лишаються в репозиторії до збирання сміття на боці GitHub. Він зменшує розмір checkout-у, не сховища.
+**2. Channel trust — issue #534 / Phase B.**
 
-## Схема
+Потрібні owner-signed introduction/history, `.guix-authorizations`, публічний keyring та успішна перевірка звичайним `guix git authenticate` consumer. Не використовуйте `--disable-authentication`, вигаданий fingerprint або рухому гілку як production source.
 
-```
-архіви  → GitHub Release asset (до 2 ГБ на файл)
-метадані → гілка gh-pages (кілобайти)
-```
+**3. Endpoint і ключ.**
 
-`scripts/narinfo_to_release_urls.py` переписує поле `URL:` у кожному `.narinfo` так, щоб воно вказувало на release asset.
+Власник має зафіксувати українською в ADR:
+- точні URLs metadata та NAR assets;
+- хто генерує і зберігає private key, де він використовується, хто має доступ;
+- ротацію, відкликання та процедуру компрометації;
+- дозволений trigger (manual/tag/release) та хто його запускає;
+- retention, доступність, ліміти й процес видалення старих assets.
 
-**Підпис від цього не ламається.** Guix підписує відбиток із шляху в store, `NarHash`, `NarSize` і `References` — поля `URL` у ньому немає. Тому переписати `URL` безпечно, а `NarHash` — ні. Скрипт це перевіряє й відмовляється писати файл, якщо змінився хоч один підписаний рядок.
+GitHub Releases та Pages були названі допустимими hosting families, але це не затверджує конкретний endpoint, signing key custody або право розповсюджувати WSM builds.
 
-## Порядок
+## Поточна схема — лише варіант для майбутнього рішення
 
-```sh
-# 1. ключ підпису — створює ВЛАСНИК, не агент
-sudo guix archive --generate-key
+Можлива архітектура після owner approval: підписані Guix narinfo як metadata + NAR archives як окремі immutable assets. Вона не повинна запускатися автоматично від push у `main`.
 
-# 2. зібрати пакети каналу
-guix build wsm-tools --no-substitutes
+Підпис Guix narinfo охоплює ідентичність store object (StorePath, NarHash, NarSize, References та Deriver, якщо присутній), а транспортний URL можна переписати лише якщо це підтверджено конкретним pinned Guix форматом і тестами. Converter має зберігати всі підписані поля байт-у-байт та відмовлятися від неоднозначних/multi-URL форматів, які він не підтримує.
 
-# 3. прогріти кеш: guix publish лінивий і не створює файли сам
-guix publish --cache=/var/cache/publish --port=3000 &
-for path in $(guix build wsm-tools --no-substitutes); do
-  hash=$(basename "$path" | cut -d- -f1)
-  curl -sf "http://localhost:3000/$hash.narinfo" > /dev/null
-done
+До окремої перевірки pinned Guix не припускайте, що compression layout, ім'я NAR asset, location `signing-key.pub` або cache warm-up збігаються з поточним upstream manual.
 
-# 4. переписати URL на release assets
-python3 scripts/narinfo_to_release_urls.py \
-  --source /var/cache/publish --destination ./site \
-  --base-url "https://github.com/juv4uk/wsm-desktop/releases/download/substitutes"
+## Що дозволено робити до рішення
 
-# 5. викласти ./site у gh-pages, архіви — у реліз
-```
+- статично перевіряти Scheme/Python код, YAML і тестові fixtures;
+- звіряти очікуваний формат із pinned Guix source;
+- складати release manifest без package output binaries;
+- документувати trust, ownership, provenance та acceptance gates.
 
-Крок 3 — неочевидний: `guix publish` генерує `.narinfo` і `.nar` **на запит**, тому без прогріву каталог кешу порожній.
+Не створюйте signing keys, не додавайте secrets, не запускайте package build/export, не створюйте GitHub Release assets, не викладайте Pages metadata і не вмикайте workflow guards до явного owner approval українською.
 
-## Для користувача
+## Статус
 
-```sh
-wget https://juv4uk.github.io/wsm-desktop/signing-key.pub -O wsm.pub
-sudo guix archive --authorize < wsm.pub
-
-guix build wsm-tools \
-  --substitute-urls="https://juv4uk.github.io/wsm-desktop https://ci.guix.gnu.org"
-```
-
-Офіційний `ci.guix.gnu.org` лишається в списку: наш кеш покриває тільки пакети каналу.
-
-## Що тут не вирішено
-
-- **Ключ не створений.** Агент не має генерувати ключ підпису від імені власника — це рівносильно підписуванню чужих бінарників його імʼям.
-- **Публікація не запускалася.** У середовищі немає Guix, тому перевірено лише переписування URL
-  і структуру workflow, а не весь ланцюг.
-- **Ключ у секреті.** Workflow `.github/workflows/substitutes.yml` бере `GUIX_SIGNING_KEY` із секретів
-  репозиторію і падає з поясненням, якщо його немає. Непідписаний кеш користувач не зможе
-  авторизувати, тому публікувати його було б марною роботою.
-- **Політика GitHub Pages** дозволяє статичний хостинг, але не «bulk hosting». Метадані кешу — це кілобайти й нормальне використання; архіви навмисно винесені в релізи, щоб не наближатися до межі.
+Жоден substitute cache не опублікований цією роботою. Наявність workflow чи конвертера не означає, що канал автентифіковано, package build пройшов або бінарний output дозволено розповсюджувати.
