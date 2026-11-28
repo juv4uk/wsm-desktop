@@ -87,6 +87,7 @@ class JobModuleTests(unittest.TestCase):
 
     def test_it_builds_the_same_profile_the_release_builds(self) -> None:
         self.assertIn("systems/live-minimal.scm", self.text)
+        self.assertIn("#:use-module (gnu ci)", self.text)
 
     def test_grafting_is_disabled(self) -> None:
         """Grafting belongs on the user's machine, not in a build farm."""
