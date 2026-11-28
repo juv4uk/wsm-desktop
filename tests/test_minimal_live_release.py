@@ -139,20 +139,16 @@ class MinimalLiveProfileTests(unittest.TestCase):
         lines = (ROOT / "RELEASE-REQUEST.txt").read_text(encoding="utf-8").splitlines()
         requested = [line.split("#", 1)[0].strip() for line in lines]
         tags = [line for line in requested if line]
-        allowed = [
-            ["0.1.0-rc3-minimal-live"],
-            ["0.1.0-rc4-minimal-live"],
-            ["0.1.0-rc5-minimal-live"],
-            ["0.1.0-rc6-minimal-live"],
-        ]
-        self.assertIn(tags, allowed)
+        self.assertEqual(len(tags), 1, tags)
+        # The shape is the rule, not a list of three tags: a new release
+        # candidate must not need a workflow edit before it can be requested.
+        import re
+        self.assertRegex(tags[0], r"^0\.1\.0-rc[0-9]+-minimal-live$")
 
-    def test_release_workflow_derives_iso_name_and_title_from_allowed_tag(self) -> None:
+    def test_release_workflow_derives_iso_name_and_title_from_the_tag_shape(self) -> None:
         workflow = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
-        self.assertIn(
-            "0.1.0-rc3-minimal-live|0.1.0-rc4-minimal-live|0.1.0-rc5-minimal-live|0.1.0-rc6-minimal-live",
-            workflow,
-        )
+        self.assertIn(r"^0\.1\.0-rc[0-9]+-minimal-live$", workflow)
+        self.assertNotIn("0.1.0-rc3-minimal-live|0.1.0-rc4-minimal-live", workflow)
         self.assertIn('VERSION="${TAG%-minimal-live}"', workflow)
         self.assertIn('ISO_NAME="WSM-Desktop-${VERSION}-Minimal-Live.iso"', workflow)
         self.assertIn('echo "iso_name=$ISO_NAME" >> "$GITHUB_OUTPUT"', workflow)
@@ -424,6 +420,28 @@ class ReassemblyDocTests(unittest.TestCase):
 
     def test_notes_warn_about_the_device_not_the_partition(self) -> None:
         self.assertIn("/dev/sdX1", self.notes)
+
+class TagPatternTests(unittest.TestCase):
+    """A new release candidate must not need a workflow edit first."""
+
+    def setUp(self) -> None:
+        self.text = (ROOT / ".github/workflows/release-minimal-live.yml").read_text(encoding="utf-8")
+
+    def test_tag_is_validated_by_pattern(self) -> None:
+        self.assertIn(r"^0\.1\.0-rc[0-9]+-minimal-live$", self.text)
+
+    def test_no_hardcoded_allowlist_of_tags(self) -> None:
+        """Three literal tags meant rc6 failed 46 seconds in."""
+        for tag in ("0.1.0-rc3-minimal-live", "0.1.0-rc4-minimal-live", "0.1.0-rc5-minimal-live"):
+            self.assertNotIn(f"{tag}|{tag}", self.text)
+
+    def test_pattern_accepts_future_candidates_and_rejects_noise(self) -> None:
+        import re
+        pattern = re.compile(r"^0\.1\.0-rc[0-9]+-minimal-live$")
+        for good in ("0.1.0-rc6-minimal-live", "0.1.0-rc12-minimal-live"):
+            self.assertIsNotNone(pattern.match(good))
+        for bad in ("0.1.0-rc6", "1.0.0-rc1-minimal-live", "0.1.0-rcX-minimal-live"):
+            self.assertIsNone(pattern.match(bad))
 
 
 
