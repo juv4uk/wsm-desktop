@@ -53,7 +53,7 @@ class WsmPackageArchiveWorkflowTests(unittest.TestCase):
         self.assertIn("PROVENANCE.txt", build)
         artifact = self.step("Keep the package as a workflow artifact")
         self.assertIn("actions/upload-artifact@v7", artifact["uses"])
-        self.assertIn("retention-days: 30", str(artifact["with"]))
+        self.assertEqual(artifact["with"]["retention-days"], "30")
 
     def test_only_an_existing_draft_release_can_receive_the_pack(self) -> None:
         step = self.step("Attach the pack to an existing draft release")
