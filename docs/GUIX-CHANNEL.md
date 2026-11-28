@@ -43,21 +43,22 @@ Release target — одна конкретна платформа власник
 
 Compatibility — це окрема родина профілів, а не один змішаний набір драйверів. Кожен варіант має власний system definition, closure, release evidence та чітко визначений активний GPU driver. У межах одного boot profile не завантажувати Nouveau і proprietary NVIDIA kernel driver одночасно.
 
-#### Nouveau + nonfree GP107 firmware
+#### Nouveau + GP107 firmware — RESEARCH ONLY / NOT SHIPPABLE
 
-Цей варіант зберігає відкритий kernel/userspace stack Nouveau + Mesa/NVK, але явно додає потрібні NVIDIA GP107 firmware blobs із linux-firmware. Це не Free-профіль: для GP107 GR 3D/compute потрібні FECS/GPCCS та пов'язаний набір firmware, який має окремі vendor license terms.
+Цей технічний варіант описує відкритий kernel/userspace stack Nouveau + Mesa/NVK із зовнішньою GP107 firmware. Він залишається **дослідницьким кандидатом**, а не дозволеним WSM Compatibility package/profile. GP107 docs/39 — source-only карта FECS/GPCCS, ACR, SEC2 та NVDEC paths; вона не доводить boot request/load, точний runtime file set або Guix closure.
 
-- Не переносити nonfree firmware до H170 Free.
-- Linux-libre Free profile не є автоматично придатною основою для цього варіанту; потрібно окремо вибрати й перевірити kernel package/configuration, який може завантажувати зовнішні firmware.
-- Перевірити exact GP107 file set, WHENCE entries, усі symlink targets, SHA-256, provenance, license files, redistributability, package closure та presence в live rootfs, initrd й installed rootfs.
-- Не додавати весь linux-firmware набором «на всяк випадок». Власний subset допустимий лише після доказу повного dependency set і ліцензійної повноти.
-- Не вважати успішний Kali/NVK compute witness доказом роботи цього Guix Compatibility closure.
+LICENCE.nvidia §2.1.2 містить умову щодо використання firmware на ОС, що розповсюджуються під OSI-approved open-source license, незмінених binaries та копії ліцензії. Саме opt-in позначення Compatibility не підтверджує виконання цієї умови; WSM LicenseRef-Volnist і #367 потребують окремого owner/legal рішення. Згідно з прийнятим release gate #586, до письмового clearance для конкретної distribution model **WSM не включає й не перерозповсюджує NVIDIA GP107 firmware ані в Free, ані в Compatibility channel/ISO**.
+
+- Не додавати firmware blobs, subset packages, downloader, package assets або копії до репозиторію чи release.
+- Не заявляти цей варіант як доступний для встановлення, build-ready чи shippable.
+- Не трактувати сторонній Kali/NVK compute witness як доказ package closure, firmware provenance, Guix runtime або H170 acceptance.
+- Повернутися до оцінки розповсюдження лише після письмового clearance для конкретної ОС/ліцензійної моделі та окремих closure/runtime acceptance gates.
 
 #### Proprietary NVIDIA 580.x
 
 Це інший, взаємовиключний boot path: proprietary NVIDIA kernel modules/userspace для Pascal та їхній власний firmware stack.
 
-- NVIDIA 580.x — кандидатна гілка для Pascal, не release-ready package.
+- NVIDIA 580.x — лише окремий дослідницький кандидат для Pascal, не package для WSM channel/ISO і не release-ready. Будь-яке використання/розповсюдження потребує окремого owner/legal clearance за EULA та перевірки всіх модифікацій package recipe.
 - У pinned Nonguix recipe nvidia-firmware-580 є GSP firmware для proprietary NVIDIA driver; це **не** Nouveau FECS/GPCCS firmware. Для Nouveau потрібен окремий linux-firmware path.
 - Потрібні точна версія/source archive, kernel ABI build, module signing/runtime binding, userspace closure, firmware provenance й redistribution review.
 - Перевіряти також ELF patching/relocation у package recipe проти умов NVIDIA EULA; не публікувати відповідні binary artifacts, доки ліцензійний review не завершено.
@@ -93,14 +94,46 @@ Wi-Fi, Bluetooth, Thunderbolt, webcam та інша неінвентаризов
 
 Наявність `.guix-channel` сама по собі **не** робить канал authenticated. У репозиторії ще немає підтвердженого WSM `.guix-authorizations`, signed introduction commit і публічного keyring branch. Тому зараз не можна рекламувати WSM channel як криптографічно автентифікований або включати його до production release lock.
 
-Bootstrap має бути виконаний власником ключа:
+Bootstrap має бути виконаний власником ключа. Нижче — точний формат і порядок локальної операції; placeholders не можна копіювати як готові значення.
 
-1. Вибрати/підтвердити OpenPGP signing key і перевірити його повний fingerprint локально. Приватний ключ ніколи не передавати в репозиторій або чат.
-2. Створити `.guix-authorizations` із цим fingerprint.
-3. Додати експортований **публічний** ключ як `.key` до окремої orphan-гілки `keyring`.
-4. Зробити підписаний OpenPGP Git commit, який уперше додає `.guix-authorizations`; саме він стає introduction commit.
-5. Перевірити історію командою `guix git authenticate <commit> <fingerprint>`, потім виконати реальний `guix time-machine` із WSM channel та звичайною authentication.
-6. Опублікувати introduction commit і fingerprint у цьому документі та в release notes.
+1. Перевірити локальні secret keys та повний fingerprint, включно з signing subkey:
+   ```sh
+   gpg --list-secret-keys --keyid-format=long --with-subkey-fingerprint
+   ```
+   Вибрати ключ, яким реально підписуватиметься introduction commit. Перевірити його повний fingerprint локально; короткий key ID не підходить.
+2. Створити `.guix-authorizations` у форматі Guix. Для одного owner key структура така:
+   ```scheme
+   (authorizations
+    (version 0)
+    (("FULL OPENPGP FINGERPRINT WITH SPACES"
+      (name "WSM channel owner"))))
+   ```
+   Замінити placeholder на повний fingerprint ключа з попереднього кроку. Це публічна інформація; приватний ключ ніколи не передавати в репозиторій або чат.
+3. Експортувати **лише публічний** ключ у файл із розширенням `.key`. Перевірити fingerprint:
+   ```sh
+   FPR='FULL OPENPGP FINGERPRINT WITH SPACES'
+   KEY_NAME="$(printf '%s' "$FPR" | tr -d ' ')"
+   gpg --armor --export "$FPR" > "/tmp/$KEY_NAME.key"
+   gpg --show-keys --with-fingerprint "/tmp/$KEY_NAME.key"
+   ```
+4. Додати цей `.key` до окремої orphan-гілки `keyring` (рекомендовано саме orphan branch), запушити її та перевірити, що GitHub містить лише публічні ключі у `.key`-файлах. Не додавати приватні keyring exports, GPG home, revocation certificates або інші секрети.
+5. Повернутися до авторитетної WSM гілки, перевірити чистий worktree і створити **підписаний** commit, який уперше додає `.guix-authorizations`:
+   ```sh
+   git status --short
+   git add .guix-authorizations
+   git -c user.signingkey="$FPR" commit -S -m "security(guix): introduce channel authorizations"
+   INTRO="$(git rev-parse HEAD)"
+   ```
+   Не використовувати GitHub web editor, REST contents API або непідписаний PR merge для introduction commit: вони не виконують owner-local OpenPGP signing.
+6. Перевірити локальну історію та keyring:
+   ```sh
+   git log -1 --show-signature --format=fuller "$INTRO"
+   guix git authenticate "$INTRO" "$FPR"
+   ```
+   Переконатися, що команда завершилася з exit code 0 без `--disable-authentication`, і перевірити звичайний `guix time-machine` consumer на окремому тимчасовому channels file.
+7. Лише після успішної перевірки опублікувати introduction commit і fingerprint у цьому документі та release notes, а точний WSM commit внести в окремі release locks.
+
+**Критична властивість історії:** кожен commit після introduction має бути підписаний ключем, дозволеним у `.guix-authorizations` його батьківського commit. Merge commit має бути підписаний ключем, дозволеним в обох батьківських гілках. Тому до Phase B слід узгодити signed fast-forward/rebase workflow; звичайний GitHub-generated merge commit не можна автоматично вважати authenticated. Не вмикати branch protection / required authentication, доки owner не перевірив повний шлях на тестовій гілці.
 
 Після introduction кожен commit у каналі має бути підписаний авторизованим ключем. Не використовувати непідписані GitHub-generated merge commits у захищеній історії; узгодити signed fast-forward/rebase workflow та правила GitHub перед вмиканням channel release. Не використовувати `--disable-authentication` для acceptance.
 
@@ -126,7 +159,7 @@ Bootstrap має бути виконаний власником ключа:
 
 ## Ліцензійна межа
 
-Поточний `wsm-tools` package definition має невідповідність metadata до repo license; це відстежує #367. До вирішення не публікувати його як release-ready channel package і не маскувати проблему заміною ліцензійного ідентифікатора. Кожен майбутній пакет має мати коректний origin, hash, build system, inputs і фактичну license metadata.
+Поточний `wsm-tools` package definition має невідповідність metadata до repo license; це відстежує #367. До вирішення не публікувати його як release-ready channel package і не маскувати проблему заміною ліцензійного ідентифікатора. Окремо, merged policy #586 забороняє включення або redistribution NVIDIA GP107 firmware у Free чи Compatibility channel/ISO до письмового owner/legal clearance для exact distribution model. Кожен майбутній пакет має мати коректний origin, hash, build system, inputs і фактичну license metadata.
 
 ## Джерела
 
