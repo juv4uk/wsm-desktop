@@ -37,12 +37,16 @@ or non-executable tool, and a pass in `--prefix` mode for a Guix-shaped root wit
 no `/usr`. It proves the *checker* works. It proves nothing about any image, and
 it says so on every run.
 
-The image check itself is still not a release gate, on purpose. `TRUSTED_TOOLS`
-uses FHS paths (`/usr/sbin/sgdisk`), the minimal live image ships neither
-`/usr` nor those packages yet, and `scripts/build_iso.sh` produces an ISO without
-leaving a system profile root behind. Failing a release build over that would be
-the wrong signal for a known open item: the paths have to move into the closure
-first. Until then, run this by hand against the built image:
+This script still does not check an image as part of `make check`, on purpose: it
+needs a root to point at, and `scripts/build_iso.sh` produces an ISO without
+leaving a system profile root behind. Checking the *running* system is now the
+boot harness's job (#645): `systems/live-minimal.scm` runs
+`python3 -m wsm_install.tool_closure` in the guest after `WSM_LIVE_READY`, and
+`scripts/qemu_boot_smoke.py --tool-closure-marker WSM_TOOL_CLOSURE` turns its
+answer into a verdict that fails the boot acceptance. Both use the same rule,
+which lives in `wsm_install.tool_closure`, so the two cannot drift apart.
+
+To check a mounted image by hand:
 
     python3 scripts/check_tool_closure.py --root /mnt/image \\
         --prefix /run/current-system/profile/bin \\
@@ -54,7 +58,6 @@ from __future__ import annotations
 import argparse
 import contextlib
 import io
-import os
 import sys
 import tempfile
 from pathlib import Path
@@ -65,6 +68,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from wsm_install.install_steps import TRUSTED_TOOLS  # noqa: E402
+from wsm_install.tool_closure import tool_problem  # noqa: E402
 from wsm_install.tool_map import package  # noqa: E402
 from wsm_install.tools import resolve  # noqa: E402
 
@@ -74,16 +78,13 @@ def _problem(name: str, root: Path, path: str) -> list[tuple[str, str]]:
 
     Every message names the Guix package that owns the tool, because the answer to
     a missing path is "add this package to the image closure", not "create a file".
+
+    The rule itself lives in `wsm_install.tool_closure`, because the same question
+    is now asked from inside a booted guest (#645) and two implementations of
+    "usable" would eventually disagree.
     """
-    owner = package(name)
-    candidate = root / path.lstrip("/")
-    if not candidate.exists():
-        return [(name, f"{path} does not exist under {root} (owned by package {owner})")]
-    if not candidate.is_file():
-        return [(name, f"{path} is not a regular file under {root} (owned by package {owner})")]
-    if not os.access(candidate, os.X_OK):
-        return [(name, f"{path} is not executable under {root} (owned by package {owner})")]
-    return []
+    problem = tool_problem(name, root, path)
+    return [] if problem is None else [(name, problem)]
 
 
 def check(root: Path, prefixes: Sequence[str] | None = None) -> list[tuple[str, str]]:

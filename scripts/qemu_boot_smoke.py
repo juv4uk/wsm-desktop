@@ -4,6 +4,16 @@
 This is a boot smoke test only. It does not claim that wsm-install ran inside
 the guest; that requires a guest image containing the CLI and a defined
 guest-side invocation channel.
+
+It can, however, read an answer the guest prints about itself. With
+``--tool-closure-marker`` the harness looks in the captured serial stream for
+the lines ``wsm_install.tool_closure`` emits inside the booted system — one per
+allowlisted installer tool, naming its resolved path and whether it is a
+regular executable file — and records the verdict in the evidence JSON as
+``tool_closure``. A missing or non-executable tool then fails the boot
+acceptance with exit code 5 instead of leaving a boot marker standing in for a
+claim it never made. Without the flag the evidence says ``not-checked`` and no
+verdict is implied.
 """
 
 from __future__ import annotations
@@ -23,6 +33,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from wsm_install.tool_closure import (  # noqa: E402
+    STATUS_FAIL,
+    not_checked as not_checked_tool_closure,
+    parse as parse_tool_closure,
+)
+
 
 DISK_SIZE_RE = re.compile(r"^([1-9][0-9]*)(M|G|T)$", re.IGNORECASE)
 MIN_DISK_MIB = 256
@@ -33,6 +53,11 @@ MIN_CPUS = 1
 MAX_CPUS = 16
 MIN_TIMEOUT_SECONDS = 1
 MAX_TIMEOUT_SECONDS = 30 * 60
+
+# Exit codes. 5 exists so that a boot which started but cannot prove its
+# installer tools is distinguishable from a boot that never happened.
+EXIT_BOOT_NOT_CONFIRMED = 4
+EXIT_TOOL_CLOSURE_FAILED = 5
 
 # Keep capture bounded independently of the JSON presentation tail.
 MAX_SERIAL_CAPTURE_BYTES = 1024 * 1024
@@ -270,6 +295,22 @@ def validate_limits(timeout_seconds: int, memory_mib: int, cpus: int, disk_size:
     parse_disk_size_mib(disk_size)
 
 
+def tool_closure_evidence(serial: str, marker: str | None) -> dict[str, Any]:
+    """The evidence value for the installer tools, as the guest reported them.
+
+    `marker` is the caller opt-in. Without it the evidence says `not-checked` and
+    claims nothing. With it, an empty report is a failure: a guest that said
+    nothing has not proved anything, and silence must not read as success.
+    """
+    if not marker:
+        return not_checked_tool_closure(None)
+    verdict = parse_tool_closure(serial)
+    evidence = verdict.as_dict()
+    evidence["marker"] = marker
+    evidence["guest_reported"] = verdict.reported_lines > 0
+    return evidence
+
+
 def validate_iso(path: Path) -> Path:
     """Accept only an existing regular ISO file, never a device or directory."""
     if path.is_symlink():
@@ -388,6 +429,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--tool-closure-marker",
+        help=(
+            "read the guest's own report on the installer's tools out of the serial "
+            "stream and fail the boot if any tool is missing or not executable; "
+            "pass WSM_TOOL_CLOSURE for the marker wsm_install.tool_closure prints"
+        ),
+    )
+    parser.add_argument(
         "--boot-marker",
         help="literal text that must appear on the serial console to confirm boot",
     )
@@ -492,6 +541,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "private-copy-of-vars-template" if args.firmware == "uefi" else None
                 ),
                 "guest_installer_execution": False,
+                "tool_closure": not_checked_tool_closure(args.tool_closure_marker),
             }, sort_keys=True, indent=2))
             return 0
 
@@ -526,6 +576,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         serial = captured.stdout_tail.decode("utf-8", errors="replace")
         qemu_error = captured.stderr_tail.decode("utf-8", errors="replace").strip() or None
         marker_seen = captured.marker_seen
+        # Parsed from the whole retained serial tail, not from the shortened
+        # presentation tail below: the report is a machine contract, and losing
+        # it to a display limit would turn a real observation into a failure.
+        tool_closure = tool_closure_evidence(serial, args.tool_closure_marker)
         result = {
             "mode": "qemu-boot-smoke",
             "iso": str(iso),
@@ -551,15 +605,32 @@ def main(argv: Sequence[str] | None = None) -> int:
             # True only when the guest itself printed the installer marker.
             # Boot evidence alone must never be reported as installer evidence.
             "guest_installer_execution": captured.second_marker_seen,
+            # The guest's own answer about the tools the installer will run.
+            # "not-checked" when the caller did not ask; never a pass by default.
+            "tool_closure": tool_closure,
         }
         print(json.dumps(result, sort_keys=True, indent=2))
-        if marker_seen:
-            return 0
-        if not args.boot_marker:
-            print("qemu-boot-smoke: boot not confirmed; provide --boot-marker from the guest serial console", file=sys.stderr)
-        else:
-            print("qemu-boot-smoke: configured boot marker was not observed", file=sys.stderr)
-        return 4
+        if not marker_seen:
+            if not args.boot_marker:
+                print("qemu-boot-smoke: boot not confirmed; provide --boot-marker from the guest serial console", file=sys.stderr)
+            else:
+                print("qemu-boot-smoke: configured boot marker was not observed", file=sys.stderr)
+            return EXIT_BOOT_NOT_CONFIRMED
+        if tool_closure["status"] == STATUS_FAIL:
+            print(
+                "qemu-boot-smoke: the booted guest did not prove the installer's tools "
+                f"exist and are executable: {'; '.join(tool_closure['problems'])}",
+                file=sys.stderr,
+            )
+            return EXIT_TOOL_CLOSURE_FAILED
+        if not args.tool_closure_marker:
+            print(
+                "qemu-boot-smoke: NOTE boot alone does not prove the installer's tools "
+                "exist in the image; pass --tool-closure-marker WSM_TOOL_CLOSURE to "
+                "have the guest report them",
+                file=sys.stderr,
+            )
+        return 0
 
 
 if __name__ == "__main__":
