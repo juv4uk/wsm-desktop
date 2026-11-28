@@ -58,7 +58,8 @@ jobs:
           [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 0
           [[ -n "$HEAD_BRANCH" ]] || exit 0
 
-          HEAD_FILTER="$(jq -rn --arg value "$GITHUB_REPOSITORY:$HEAD_BRANCH" '$value | @uri')"
+          REPOSITORY_OWNER="${GITHUB_REPOSITORY%%/*}"
+          HEAD_FILTER="$(jq -rn --arg value "$REPOSITORY_OWNER:$HEAD_BRANCH" '$value | @uri')"
           PRS_JSON="$(gh api "repos/$GITHUB_REPOSITORY/pulls?state=all&head=$HEAD_FILTER&base=main")"
           PR_NUMBER="$(jq -r --arg sha "$HEAD_SHA" '[.[] | select(.head.sha == $sha and .base.ref == "main") | .number] | unique | if length == 1 then .[0] else empty end' <<< "$PRS_JSON")"
           [[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || { echo "no unique PR matched source run"; exit 0; }
