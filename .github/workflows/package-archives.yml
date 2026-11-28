@@ -102,12 +102,25 @@ jobs:
           retention-days: 30
 
       - name: Attach the archives to a draft release
-        if: inputs.attach_to_draft != ''
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.attach_to_draft }}
+          REQUESTED: ${{ inputs.attach_to_draft }}
         run: |
           set -euo pipefail
+          # A tag push carries no inputs, so the target is resolved here: the newest
+          # draft release. That is what makes one pushed tag enough to put the archives
+          # in front of a person — the alternative was a second manual step nobody
+          # remembers, which is how an archive ends up in a run nobody looks at.
+          TAG="${REQUESTED:-}"
+          if [ -z "$TAG" ]; then
+            TAG="$(gh release list --limit 30 --json tagName,isDraft \
+                     --jq '[.[] | select(.isDraft)][0].tagName // ""')"
+          fi
+          if [ -z "$TAG" ]; then
+            echo "no draft release to attach to; the archives stay in the run artifact" >&2
+            echo "WSM_PACKAGE_ATTACHED_TO=none" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           is_draft="$(gh release view "$TAG" --json isDraft --jq '.isDraft')"
           if [ "$is_draft" != "true" ]; then
             echo "refusing: $TAG is not a draft release" >&2
