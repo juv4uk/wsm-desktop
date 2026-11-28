@@ -44,7 +44,7 @@
             (lambda* (#:key outputs make-flags #:allow-other-keys)
               (apply invoke "make" "-f" "tools/pascal/Makefile" "install"
                      (string-append "PREFIX=" (assoc-ref outputs "out"))
-                     make-flags)))))
+                     make-flags))))))
     (native-inputs (list fpc))
     (home-page "https://github.com/juv4uk/wsm-desktop")
     (synopsis "Native Free Pascal hardware evidence tools for WSM Desktop")
