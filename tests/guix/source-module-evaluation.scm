@@ -9,6 +9,7 @@
 ;; from this list is a module nobody has checked.
 ;; scripts/check_scheme_module_coverage.py enforces that rule.
 (use-modules (guix packages)
+             (guix licenses)
              (wsm systems performance)
              (wsm packages wsm))
 
@@ -20,6 +21,12 @@
 ;; evaluated, and its header said so ("не зібрано й не перевірено").
 (unless (package? wsm-tools)
   (error "WSM package module did not export a package record for wsm-tools"))
+
+(let ((license (package-license wsm-tools)))
+  (unless (and (license? license)
+               (string=? (license-name license) "ВОЛЬНІСТЬ")
+               (string=? (license-uri license) "file://LICENSE"))
+    (error "wsm-tools license metadata does not match LicenseRef-Volnist")))
 
 (display "WSM-SOURCE-MODULE-EVAL-OK ")
 (display (length %wsm-performance-services))
