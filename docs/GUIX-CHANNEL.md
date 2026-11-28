@@ -3,6 +3,7 @@
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
 - Канонічне завдання: [#534](https://github.com/juv4uk/wsm-desktop/issues/534).
+- Субститути для пакетів каналу: [SUBSTITUTES.md](SUBSTITUTES.md) — статичний кеш без окремого хоста.
 - Збірка каналу всередині Guix: [CUIRASS.md](CUIRASS.md) — окремий конвеєр, який дає substitutes і ловить поломку профілю до прогону Actions.
 - Перший hardware target: [H170 firmware matrix](hardware/H170-FIRMWARE-MATRIX.md), [Free manifest](../drivers/profiles/h170-free.json), [Compatibility manifest](../drivers/profiles/h170-compatibility.json).
 - Стан документа: channel skeleton; криптографічний trust bootstrap ще не виконано.
