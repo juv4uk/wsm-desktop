@@ -63,7 +63,7 @@ def nonfree_module_imports(root: Path) -> dict[str, str]:
     for path in sorted(root.rglob("*.scm")):
         code = mask_scheme_non_code(path.read_text(encoding="utf-8"))
         if NONFREE_MODULE.search(code):
-            offenders[path.relative_to(ROOT).as_posix()] = NONFREE_MODULE.pattern
+            offenders[path.relative_to(root).as_posix()] = NONFREE_MODULE.pattern
     return offenders
 
 
