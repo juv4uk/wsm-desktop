@@ -1,8 +1,8 @@
 ;; SPDX-License-Identifier: LicenseRef-Volnist
 ;;
-;; Native Free Pascal hardware evidence collector and conservative classifier.
-;; Each Guix package installs only its own executable. FPC is a native/build
-;; input; no compiler, Python runtime or propagated dependency enters runtime.
+;; Native Free Pascal packages for WSM evidence and installer tooling.
+;; Each package installs one executable. The compiler and FCL are build inputs;
+;; Python, tests and generated outputs are not part of the installed closure.
 
 (define-module (wsm packages fpc-tools)
   #:use-module (guix packages)
@@ -10,13 +10,16 @@
   #:use-module (guix build-system gnu)
   #:use-module (gnu packages pascal)
   #:use-module (wsm licenses)
-  #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-13)
-  #:export (wsm-hwcheck-fpc wsm-classify-fpc wsm-cpu-isa-fpc wsm-partition-fpc))
+  #:export (wsm-hwcheck-fpc
+            wsm-classify-fpc
+            wsm-cpu-isa-fpc
+            wsm-partition-fpc
+            wsm-profile-fpc
+            wsm-preflight-fpc))
 
-;; Keep the build source narrow and reproducible: LICENSE plus the Pascal
-;; programs and Makefile only. Python sources, documentation, test fixtures,
-;; generated files and the Git checkout never enter this source object.
+;; Guix passes absolute entry paths to select? for recursive local-file sources.
+;; Keep only the owner licence and the Pascal source/build directory.
 (define wsm-fpc-source
   (local-file "../.." "wsm-desktop-source-fpc"
               #:recursive? #t
@@ -60,10 +63,9 @@
     (home-page "https://github.com/juv4uk/wsm-desktop")
     (synopsis "Native Free Pascal hardware evidence collector")
     (description
-     "Collects a read-only WSM hardware evidence report from Linux sysfs and
-procfs. The report preserves unknown facts, uses the WSM schema version 1.1.0,
-and declares strict-local privacy. The executable does not upload data, load
-modules, update firmware, or modify target devices.")
+     "Collects read-only Linux sysfs and procfs evidence. Unknown facts remain
+unknown; the report is local-only and the executable does not upload data,
+load modules, update firmware or modify devices.")
     (supported-systems '("x86_64-linux"))
     (license wsm-license)))
 
@@ -76,12 +78,11 @@ modules, update firmware, or modify target devices.")
     (arguments (wsm-fpc-arguments "build-classify" "test-classify" "install-classify"))
     (native-inputs (list fpc))
     (home-page "https://github.com/juv4uk/wsm-desktop")
-    (synopsis "Conservative Free Pascal hardware evidence classifier")
+    (synopsis "Conservative hardware evidence classifier")
     (description
-     "Reads a WSM hardware evidence report and emits conservative subsystem
-evidence states. A subsystem is KNOWN only when each observed device has a
-bound driver or a candidate and no functional test failed. CERTIFIED remains
-zero because the current report has no complete coverage manifest.")
+     "Classifies WSM subsystem evidence without turning missing or incomplete
+observations into certification. CERTIFIED is not emitted without a complete
+coverage manifest.")
     (supported-systems '("x86_64-linux"))
     (license wsm-license)))
 
@@ -96,11 +97,9 @@ zero because the current report has no complete coverage manifest.")
     (home-page "https://github.com/juv4uk/wsm-desktop")
     (synopsis "Conservative x86-64 ISA evidence from all logical processors")
     (description
-     "Reads the Linux procfs CPU flags exposed for all logical processors and
-reports the common x86-64 psABI levels. It refuses incomplete processor-block
-evidence, intersects flags instead of trusting CPU 0, and distinguishes
-observed kernel flags from silicon inventory or performance claims. The
-executable is read-only and has no Python runtime dependency.")
+     "Intersects observed Linux procfs CPU flags across every logical processor
+and reports the common x86-64 psABI level. It does not claim silicon inventory
+or performance.")
     (supported-systems '("x86_64-linux"))
     (license wsm-license)))
 
@@ -113,10 +112,44 @@ executable is read-only and has no Python runtime dependency.")
     (arguments (wsm-fpc-arguments "build-partition" "test-partition" "install-partition"))
     (native-inputs (list fpc))
     (home-page "https://github.com/juv4uk/wsm-desktop")
-    (synopsis "Read-only Free Pascal disk layout planner")
+    (synopsis "Read-only disk layout planner")
     (description
-     "Produces a partition layout plan or refuses with a reason. The executable
-does not invoke sgdisk, open block devices, or write to storage. Commands are
-emitted as data for a separate caller to review and authorize.")
+     "Produces a partition plan or refuses with a reason. It never invokes
+sgdisk, opens a block device or writes storage; commands remain data for a
+separate caller to review and authorize.")
+    (supported-systems '("x86_64-linux"))
+    (license wsm-license)))
+
+(define-public wsm-profile-fpc
+  (package
+    (name "wsm-profile-fpc")
+    (version "0.1.0")
+    (source wsm-fpc-source)
+    (build-system gnu-build-system)
+    (arguments (wsm-fpc-arguments "build-profile" "test-profile" "install-profile"))
+    (native-inputs (list fpc))
+    (home-page "https://github.com/juv4uk/wsm-desktop")
+    (synopsis "Read-only evidence bundle validator")
+    (description
+     "Checks evidence schema version, path safety, duplicate artifact paths,
+artifact presence and passing functional evidence. SHA-256 verification is
+explicitly delegated and never claimed as complete.")
+    (supported-systems '("x86_64-linux"))
+    (license wsm-license)))
+
+(define-public wsm-preflight-fpc
+  (package
+    (name "wsm-preflight-fpc")
+    (version "0.1.0")
+    (source wsm-fpc-source)
+    (build-system gnu-build-system)
+    (arguments (wsm-fpc-arguments "build-preflight" "test-preflight" "install-preflight"))
+    (native-inputs (list fpc))
+    (home-page "https://github.com/juv4uk/wsm-desktop")
+    (synopsis "Read-only WSM installation preflight")
+    (description
+     "Inspects required tools, privileges, an unused mount point, a Guix system
+declaration, a supplied hardware report and x86-64 long-mode evidence. It
+reports pass, fail or not-run without executing installer operations.")
     (supported-systems '("x86_64-linux"))
     (license wsm-license)))
