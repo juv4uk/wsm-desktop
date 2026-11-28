@@ -215,16 +215,20 @@ class FreePascalBuildTests(unittest.TestCase):
         self.assertIn("fp-compiler-3.2.2", self.text)
         self.assertIn('test "$(fpc -iV)" = "3.2.2"', self.text)
 
-    def test_it_compiles_every_program_in_the_tree(self) -> None:
-        self.assertIn("git ls-files '*.lpr'", self.text)
-        self.assertIn("fpc -O2", self.text)
+    def test_it_compiles_every_pascal_program_in_the_tree(self) -> None:
+        self.assertIn("git ls-files '*.pas' '*.pp' '*.lpr'", self.text)
+        self.assertIn("programs+=(", self.text)
+        self.assertIn("fpc -B -O2", self.text)
+        self.assertIn("tests/test_fpc_collector_parity.py", self.text)
+        self.assertIn("tests/test_fpc_classify_runtime.py", self.text)
 
     def test_a_compile_error_fails_the_run(self) -> None:
         self.assertIn("Free Pascal refused to compile", self.text)
         self.assertIn("exit 1", self.text)
 
-    def test_it_does_not_claim_success_when_there_is_nothing_to_build(self) -> None:
-        self.assertIn("WSM_FPC_PROGRAMS=0", self.text)
+    def test_it_reports_an_empty_source_tree_without_skipping_existing_pascal_files(self) -> None:
+        self.assertIn("WSM_FPC_SOURCES=0", self.text)
+        self.assertIn("No Pascal sources in the tree", self.text)
 
 
 class PascalSourceContractTests(unittest.TestCase):
