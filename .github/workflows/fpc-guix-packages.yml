@@ -77,7 +77,7 @@ jobs:
           "${outputs[1]}/bin/wsm-classify" --version
           "${outputs[2]}/bin/wsm-cpu-isa" --version
           plan="$("${outputs[3]}/bin/wsm-partition" --disk /dev/sdz --size 20000000000 --firmware uefi --ack /dev/sdz)"
-          printf '%s\\n' "$plan" | grep -F '"executed":false' >/dev/null
+          printf '%s\n' "$plan" | grep -F '"executed":false' >/dev/null
           set +e
           "${outputs[3]}/bin/wsm-partition" --disk /dev/sdz1 --size 20000000000 --firmware uefi --ack /dev/sdz1 >/dev/null 2>&1
           refusal_status=$?
