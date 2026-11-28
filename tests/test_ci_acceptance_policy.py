@@ -11,6 +11,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_PATH = ROOT / ".github" / "workflows" / "ci.yml"
+RELEASE_WORKFLOW_PATH = ROOT / ".github" / "workflows" / "release-minimal-live.yml"
 MAKEFILE_PATH = ROOT / "Makefile"
 
 
@@ -78,5 +79,52 @@ class CiAcceptancePolicyTests(unittest.TestCase):
         self.assertNotIn("qemu-acceptance-manual", aggregate)
 
 
+
+class ReleaseAcceptanceTimeoutTests(unittest.TestCase):
+    """A hung acceptance step must not be able to eat the whole release budget.
+
+    qemu_boot_smoke.py bounds its own serial read (--timeout-seconds), but the
+    release job ceiling is six hours. On 2026-11-28 the RC5 draft sat in "BIOS boot
+    acceptance" for hours with no diagnosis: either the kill path did not take
+    effect or the runner stopped reporting, and nothing at the workflow level
+    bounded the step. The step-level timeout is the fail-closed backstop: the
+    release fails with a diagnostic inside the job budget instead of hanging.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.workflow = yaml.load(
+            RELEASE_WORKFLOW_PATH.read_text(encoding="utf-8"), Loader=yaml.BaseLoader
+        )
+
+    def _steps(self) -> list[dict]:
+        jobs = self.workflow["jobs"]
+        self.assertIn("build-and-publish", jobs)
+        return jobs["build-and-publish"]["steps"]
+
+    def test_release_job_keeps_a_bounded_ceiling(self) -> None:
+        job = self.workflow["jobs"]["build-and-publish"]
+        self.assertLessEqual(int(job["timeout-minutes"]), 360)
+
+    def test_every_qemu_acceptance_step_bounds_itself(self) -> None:
+        qemu_steps = [
+            step for step in self._steps()
+            if "qemu_boot_smoke.py" in (step.get("run") or "")
+        ]
+        self.assertTrue(
+            qemu_steps,
+            "the release workflow no longer runs the QEMU boot smoke; update this test",
+        )
+        for step in qemu_steps:
+            name = step.get("name", "<unnamed>")
+            self.assertIn(
+                "timeout-minutes", step,
+                f"acceptance step {name!r} has no step-level timeout; a hung QEMU "
+                "would consume the six-hour job budget",
+            )
+            self.assertLessEqual(
+                int(step["timeout-minutes"]), 15,
+                f"acceptance step {name!r} may not wait longer than 15 minutes",
+            )
 if __name__ == "__main__":
     unittest.main()

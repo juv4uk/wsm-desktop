@@ -121,12 +121,14 @@ jobs:
           echo "release_dist=$DIST" >> "$GITHUB_ENV"
           echo "release_iso=$ISO_NAME" >> "$GITHUB_ENV"
       - name: BIOS boot acceptance
+        timeout-minutes: 15
         run: |
           set -euo pipefail
           python scripts/qemu_boot_smoke.py --iso "$release_dist/$release_iso" \
             --firmware bios --boot-marker WSM_LIVE_READY --timeout-seconds 300 \
             | tee "$release_dist/boot-bios.json"
       - name: UEFI boot acceptance
+        timeout-minutes: 15
         run: |
           set -euo pipefail
           OVMF_DIR=/usr/share/OVMF
