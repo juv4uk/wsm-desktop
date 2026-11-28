@@ -2,7 +2,7 @@
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Статус: **NOT_RUN** — вихідний код частково перевірений; інстанс не зареєстровано й не запускався.
+- Статус: **NOT_RUN** — вихідний код частково перевірений; інстанс не запускався, реєстрації ще не було.
 - Канонічна інтеграція: [#691](https://github.com/juv4uk/wsm-desktop/issues/691), виправлення API/шляхів: [#725](https://github.com/juv4uk/wsm-desktop/issues/725).
 - Файли: [specs.scm](../ci/cuirass/specs.scm), [images.scm](../ci/cuirass/images.scm), [service.scm](../ci/cuirass/service.scm).
 
