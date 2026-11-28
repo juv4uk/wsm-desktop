@@ -230,6 +230,61 @@ class FpcCpuIsaRuntimeTests(unittest.TestCase):
         self.assertEqual(result["evidence"]["kind"], "live-observation")
         self.assertTrue(result["collected_at"].endswith("Z"))
 
+    def test_report_cross_check_preserves_identity_and_warns_on_other_architecture(self) -> None:
+        cpuinfo = self.cpuinfo(self.block(0, V2))
+        report_path = self.build_dir / "hardware-report.json"
+        report_path.write_text(
+            json.dumps({
+                "report_id": "report-fixture-1",
+                "schema_version": "1.1.0",
+                "environment": {"architecture": "aarch64"},
+            }),
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                str(self.binary),
+                "--cpuinfo", str(cpuinfo),
+                "--architecture", "x86_64",
+                "--report", str(report_path),
+                "--compact",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        output = json.loads(result.stdout)
+        self.assertEqual(
+            output["cross_check"],
+            {
+                "report_id": "report-fixture-1",
+                "report_architecture": "aarch64",
+                "report_schema_version": "1.1.0",
+            },
+        )
+        self.assertTrue(any("differs from the running machine" in warning
+                            for warning in output["warnings"]))
+
+    def test_malformed_cross_check_report_is_refused(self) -> None:
+        cpuinfo = self.cpuinfo(self.block(0, V2))
+        report_path = self.build_dir / "broken-report.json"
+        report_path.write_text("{broken", encoding="utf-8")
+        result = subprocess.run(
+            [
+                str(self.binary),
+                "--cpuinfo", str(cpuinfo),
+                "--architecture", "x86_64",
+                "--report", str(report_path),
+                "--compact",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("cannot read report", result.stderr)
+
     def test_cli_help_and_version(self) -> None:
         help_result = subprocess.run(
             [str(self.binary), "--help"], capture_output=True, text=True, check=False
@@ -239,6 +294,7 @@ class FpcCpuIsaRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(help_result.returncode, 0, help_result.stderr)
         self.assertIn("--cpuinfo PATH", help_result.stdout)
+        self.assertIn("--report PATH", help_result.stdout)
         self.assertEqual(version_result.returncode, 0, version_result.stderr)
         self.assertEqual(version_result.stdout.strip(), "wsm-cpu-isa 0.1.2")
 
