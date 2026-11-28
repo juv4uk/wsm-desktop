@@ -92,3 +92,17 @@ jobs:
           echo "**NOT_PUBLISHED:** no NAR export, Actions artifact, Release asset, Pages deployment, signing key or substitute endpoint was created." >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "**Limit:** package build/closure evidence is not driver binding, firmware loading, GPU acceleration, boot or H170 physical acceptance. The pinned Linux-libre 7.3.5 GP107 atomic-init gap remains open (#514)." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Пояснити причину збою в summary
+        if: failure()
+        run: |
+          {
+            echo "### H170 Free package build evidence: збірка не завершилась"
+            echo ""
+            echo "Commit: `$GITHUB_SHA`"
+            echo ""
+            echo "Pinned package evaluation або збірка завершилася помилкою."
+            echo "Дивіться попередній крок для конкретної Guix помилки."
+            echo "Жодного NAR-файлу чи завантажуваного артефакту не створено."
+            echo "NOT_PUBLISHED: цей workflow лише формує ефемерний build evidence."
+          } >> "$GITHUB_STEP_SUMMARY"
