@@ -216,8 +216,15 @@ class FreePascalBuildTests(unittest.TestCase):
         self.assertIn('test "$(fpc -iV)" = "3.2.2"', self.text)
 
     def test_it_compiles_every_program_in_the_tree(self) -> None:
-        self.assertIn("git ls-files '*.lpr'", self.text)
-        self.assertIn("fpc -O2", self.text)
+        self.assertIn("git ls-files '*.lpr' '*.pas' '*.pp'", self.text)
+        self.assertIn("programs=()", self.text)
+        self.assertIn("fpc -B -O2", self.text)
+        self.assertIn("fp-units-fcl-3.2.2", self.text)
+
+    def test_zero_programs_is_a_failure_not_a_green_build(self) -> None:
+        self.assertIn("No Pascal program/library entry points", self.text)
+        self.assertIn("WSM_FPC_PROGRAMS=0", self.text)
+        self.assertIn("exit 1", self.text)
 
     def test_a_compile_error_fails_the_run(self) -> None:
         self.assertIn("Free Pascal refused to compile", self.text)
