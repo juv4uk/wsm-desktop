@@ -69,3 +69,13 @@ guix shell cuirass -- cuirass web --database="dbname=cuirass host=/var/run/postg
 Це і є причина, чому файли такого роду не можна писати без джерела: кожна з чотирьох помилок дала б збій лише в момент запуску, на машині, де Guix є, — тобто не в того, хто писав.
 
 Це чесний стан: файли описують, як запустити, а не стверджують, що запущено.
+
+## H170 Free upstream package job
+
+The Cuirass specs now include h170-free-upstream-packages. Its roots are read from manifests/h170-free-upstream.scm and converted to one package derivation job apiece for x86_64-linux. The list is pinned by the official Guix channel revision in the spec and is checked for exact package names/versions by tests/guix/source-module-evaluation.scm.
+
+The roots are linux-libre, mesa, intel-vaapi-driver, gptfdisk, parted, dosfstools, e2fsprogs, usbutils and alsa-utils. The custom job resolves derivations; it does not itself build them in the source-evaluation workflow. A real Cuirass scheduler/build remains NOT_RUN.
+
+This is a package collection, not a hardware profile or a validated system configuration. It contains no wsm-tools, proprietary NVIDIA driver, firmware payload, Intel microcode, or i915 DMC/GuC/HuC firmware. Mesa's pinned x86-64 recipe includes the Nouveau Vulkan backend at build time, but GP107 runtime acceleration remains unproven without the firmware and H170 functional tests.
+
+The Cuirass job is not registered against WSM main until owner-signed Phase B channel authentication is complete. It does not authorize NAR export, guix publish, signing-key generation, GitHub Release package assets, or substitute-server deployment; those decisions remain under #367 and docs/SUBSTITUTES.md.
