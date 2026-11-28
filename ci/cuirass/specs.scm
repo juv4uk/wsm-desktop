@@ -2,11 +2,12 @@
 ;;
 ;; Cuirass specifications for WSM Desktop.
 ;;
-;; Cuirass is GNU Guix's own continuous integration server. Its value here is
-;; not "another CI": it builds *inside Guix*, on top of the exact channel lock
-;; the release uses, and its results become substitutes. GitHub Actions builds
-;; the image and boots it in QEMU; Cuirass proves the derivations actually build
-;; from the pinned channels and warms the store for everyone else.
+;; Cuirass is GNU Guix's own continuous integration server. It builds inside
+;; Guix and stores local build results. The daemon may consume already trusted
+;; substitutes, but these jobs do not publish their outputs as substitutes.
+;; Publishing requires a separate remote-worker/guix-publish topology and keys.
+;; The official Guix input is pinned; the WSM development channel currently
+;; follows main and is not yet an owner-authenticated release lock.
 ;;
 ;; What it does NOT do: boot the image. Cuirass has no QEMU acceptance step, so
 ;; a green Cuirass job says "the closure builds", never "the medium boots".
