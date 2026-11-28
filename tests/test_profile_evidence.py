@@ -542,6 +542,13 @@ class ProfileTemplateTests(unittest.TestCase):
         """Nouveau and the proprietary module in one boot profile is a known trap."""
         self.assertIn("Ніколи не змішуйте", self.text)
 
+    def test_template_is_free_only_and_not_a_compatibility_toggle(self) -> None:
+        self.assertIn("лише H170 Free candidate", self.text)
+        self.assertIn("(kernel linux-libre)", self.text)
+        self.assertIn("Compatibility — окрема конфігурація", self.text)
+        self.assertNotIn("profile-variant", self.text)
+        self.assertNotIn("nonguix linux", self.text)
+
     def test_template_points_at_the_evidence_rule(self) -> None:
         self.assertIn("profiles/hardware/README.md", self.text)
 
