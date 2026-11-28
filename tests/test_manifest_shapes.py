@@ -1,8 +1,8 @@
+# SPDX-License-Identifier: LicenseRef-Volnist
 """Both manifest shapes must be readable; the pipeline's own shape first."""
 
 from __future__ import annotations
 
-import json
 import sys
 import tempfile
 import unittest
