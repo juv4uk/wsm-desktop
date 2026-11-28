@@ -33,9 +33,9 @@ jobs:
 
       - name: Validate the publication ref
         env:
-          EVENT_NAME: \${{ github.event_name }}
-          REF: \${{ github.ref }}
-          SHA: \${{ github.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           git fetch origin main --no-tags
@@ -75,7 +75,7 @@ jobs:
           STORE_PATHS=()
           printf 'package\tstore_path\tnar_sha256\n' > "$OUT/store-paths.tsv"
 
-          for package in "\${PACKAGES[@]}"; do
+          for package in "${PACKAGES[@]}"; do
             store_path="$(guix time-machine -C channels.lock.scm -- build --no-grafts "$package")"
             case "$store_path" in
               /gnu/store/*) ;;
@@ -86,7 +86,7 @@ jobs:
             printf '%s\t%s\t%s\n' "$package" "$store_path" "$nar_sha256" >> "$OUT/store-paths.tsv"
           done
 
-          guix time-machine -C channels.lock.scm -- size "\${STORE_PATHS[@]}" > "$OUT/store-closure-size.txt"
+          guix time-machine -C channels.lock.scm -- size "${STORE_PATHS[@]}" > "$OUT/store-closure-size.txt"
           {
             echo "## H170 Free package build"
             echo ""
@@ -109,8 +109,8 @@ jobs:
           sudo install -m 0644 /etc/guix/signing-key.pub "$OUT/signing-key.pub"
 
           mapfile -t STORE_PATHS < <(cut -f2 "$OUT/store-paths.tsv" | tail -n +2)
-          test "\${#STORE_PATHS[@]}" -eq 2
-          guix time-machine -C channels.lock.scm -- archive --export --recursive "\${STORE_PATHS[@]}" > "$OUT/h170-free-closure.nar"
+          test "${#STORE_PATHS[@]}" -eq 2
+          guix time-machine -C channels.lock.scm -- archive --export --recursive "${STORE_PATHS[@]}" > "$OUT/h170-free-closure.nar"
           test -s "$OUT/h170-free-closure.nar"
 
           zstd -T0 -19 --rm "$OUT/h170-free-closure.nar"
@@ -206,16 +206,16 @@ jobs:
 
       - name: Publish a versioned prerelease and verify its read-back
         env:
-          GH_TOKEN: \${{ github.token }}
-          REF: \${{ github.ref }}
-          SHA: \${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+          REF: ${{ github.ref }}
+          SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           OUT="$GITHUB_WORKSPACE/archives"
           if [[ "$REF" == refs/tags/* ]]; then
-            RELEASE_TAG="\${REF#refs/tags/}"
+            RELEASE_TAG="${REF#refs/tags/}"
           else
-            RELEASE_TAG="h170-free-$\{SHA:0:12}"
+            RELEASE_TAG="h170-free-${SHA:0:12}"
           fi
           git check-ref-format "refs/tags/$RELEASE_TAG"
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
@@ -257,7 +257,7 @@ jobs:
       - name: Report publication failure
         if: failure()
         env:
-          GH_TOKEN: \${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -uo pipefail
           BODY="$(mktemp)"
