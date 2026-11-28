@@ -1,21 +1,9 @@
 ;; SPDX-License-Identifier: LicenseRef-Volnist
 ;;
-;; Run Cuirass on your own machine, with the WSM specifications.
-;;
-;; This is a fragment, not a full operating-system declaration: paste the
-;; `services' entry into the system that should host the build farm. A complete
-;; system definition would become a second source of truth for how WSM machines
-;; are configured.
-;;
-;; Two corrections over the first revision of this file:
-;;   * `cuirass-service-type' lives in `(gnu services cuirass)', not
-;;     `(gnu services ci)' - the latter holds Laminar and Forgejo;
-;;   * `cuirass-configuration' has no `use-substitutes?' field; substitutes are
-;;     controlled by the daemon and by `fallback?'.
-;;
-;; The specifications are inlined as a gexp rather than loaded from a path: the
-;; service writes them into a build sandbox, where /run/current-system does not
-;; exist.
+;; Run Cuirass on a separate Guix build host.
+;; This is a service fragment, not a full WSM host-system declaration.
+;; The UI remains bound to loopback; remote access needs an authenticated proxy.
+;; This service does not publish NARs or create signing keys.
 
 (use-modules (gnu services cuirass)
              (gnu services)
@@ -49,6 +37,11 @@
            (name 'wsm-live-minimal-image)
            (priority 1)
            (build '(custom (ci cuirass images)))
+           (channels (list #$%wsm-guix-channel #$%wsm-channel)))
+          (specification
+           (name 'h170-free-upstream-packages)
+           (priority 1)
+           (build '(custom (ci cuirass h170-free-packages)))
            (channels (list #$%wsm-guix-channel #$%wsm-channel)))))
 
 (define wsm-cuirass-service
@@ -56,7 +49,6 @@
            (cuirass-configuration
             (host "localhost")
             (port 8081)
-            ;; Keep building locally when a substitute is missing, rather than
-            ;; failing the job.
+            ;; Keep building locally when no trusted substitute is available.
             (fallback? #t)
             (specifications %wsm-cuirass-specs))))
