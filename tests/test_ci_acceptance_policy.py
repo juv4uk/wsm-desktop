@@ -129,7 +129,7 @@ class ReleaseAcceptanceTimeoutTests(unittest.TestCase):
             )
 
 class PackageArchiveWorkflowTests(unittest.TestCase):
-    """The owner approved a bounded, provenance-bearing upstream H170 package release."""
+    """The first distribution lane follows the accepted ADR 0010 boundaries."""
 
     WORKFLOW = ROOT / ".github" / "workflows" / "package-archives.yml"
 
@@ -137,127 +137,74 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
         self.text = self.WORKFLOW.read_text(encoding="utf-8")
         self.workflow = yaml.load(self.text, Loader=yaml.BaseLoader)
         self.job = self.workflow["jobs"]["archive"]
+        self.steps = self.job["steps"]
 
-    def test_the_job_is_not_disabled(self) -> None:
-        self.assertNotEqual(self.job.get("if"), "${{ false }}")
-        self.assertNotIn("if: ${{ false }}", self.text)
+    def step(self, name: str) -> dict:
+        for item in self.steps:
+            if name in item.get("name", ""):
+                return item
+        raise AssertionError(f"workflow step not found: {name}")
 
-    def test_the_owner_permission_is_recorded(self) -> None:
-        self.assertIn("H170 Free", self.text)
-        self.assertIn("upstream", self.text)
+    def test_publication_is_manual_only(self) -> None:
+        self.assertEqual(set(self.workflow["on"]), {"workflow_dispatch"})
+        self.assertNotIn("push:", self.text)
+        self.assertNotIn("schedule:", self.text)
+        self.assertEqual(self.job["if"], "github.ref == 'refs/heads/main'")
 
-    def test_main_publisher_merge_tag_or_manual_dispatch_can_start_publication(self) -> None:
-        events = self.workflow["on"]
-        self.assertEqual(set(events), {"push", "workflow_dispatch"})
-        self.assertEqual(events["push"]["branches"], ["main"])
-        self.assertEqual(events["push"]["tags"], ["packages-h170-free-*"])
-        self.assertEqual(
-            events["push"]["paths"],
-            [
-                ".github/workflows/package-archives.yml",
-                "channels.lock.scm",
-                "drivers/profiles/h170-free-packages.scm",
-            ],
-        )
-        gate = str(self.job.get("if", ""))
-        self.assertIn("refs/heads/main", gate)
-        self.assertIn("refs/tags/packages-h170-free-", gate)
-        self.assertIn('EVENT_NAME" = "push"', self.text)
-        self.assertIn('REF" = "refs/heads/main"', self.text)
-        self.assertIn("git merge-base --is-ancestor", self.text)
-        self.assertIn("cancel-in-progress: false", self.text)
-
-    def test_the_package_roots_come_from_the_fixed_h170_manifest(self) -> None:
-        manifest_path = ROOT / "drivers" / "profiles" / "h170-free-packages.scm"
-        manifest = manifest_path.read_text(encoding="utf-8")
-        match = re.search(
-            r"specifications->manifest\s*'\((.*?)\)\)", manifest, re.DOTALL
-        )
-        self.assertIsNotNone(match, "H170 Free manifest form was not found")
-        packages = re.findall(r'"([a-z0-9.+-]+)"', match.group(1))
-        expected = [
+    def test_only_the_owner_package_is_packed(self) -> None:
+        build = self.step("Зібрати власний пакет")["run"]
+        self.assertIn("wsm-tools", build)
+        self.assertIn("pack --format=tarball", build)
+        self.assertIn("-L .", build)
+        for forbidden in (
             "linux-libre",
             "mesa",
-            "vulkan-loader",
-            "vulkan-tools",
-            "pciutils",
-            "usbutils",
-            "alsa-utils",
-            "ethtool",
-            "nvme-cli",
-            "smartmontools",
-            "lm-sensors",
-        ]
-        self.assertEqual(packages, expected)
-        self.assertIn("drivers/profiles/h170-free-packages.scm", self.text)
-        self.assertIn("expected = (", self.text)
-        self.assertIn('test "${#PACKAGES[@]}" -eq 11', self.text)
-        self.assertIn('test "${#STORE_PATHS[@]}" -eq 11', self.text)
-        self.assertIn('mapfile -t PACKAGES < "$OUT/packages.txt"', self.text)
-        for package in expected:
-            with self.subTest(package=package):
-                self.assertIn(f'"{package}"', self.text)
-        for forbidden in (
-            "wsm-tools",
-            "wsm-live-tools",
-            "linux-firmware",
             "nonguix",
             "nvda-580",
+            "linux-firmware",
+            "wsm-live-tools",
         ):
             with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, packages)
+                self.assertNotIn(forbidden, build)
 
-    def test_no_untrusted_package_input_reaches_the_shell(self) -> None:
+    def test_package_selection_is_not_user_controlled_shell_input(self) -> None:
         self.assertNotIn("inputs.packages", self.text)
-        self.assertNotIn("-L .", self.text)
-        self.assertNotIn("for package in ${{", self.text)
+        self.assertNotIn("github.event.inputs", self.text)
+        self.assertNotIn("for package in $" + "{{", self.text)
+        self.assertNotIn("PACKAGES=", self.text)
 
-    def test_the_archive_contains_the_recursive_store_closure(self) -> None:
-        self.assertIn("archive --export --recursive", self.text)
-        self.assertIn("h170-free-closure.nar", self.text)
-        self.assertIn("store-paths.tsv", self.text)
+    def test_guix_pack_uses_the_locked_channel_and_no_signing_key(self) -> None:
+        build = self.step("Зібрати власний пакет")["run"]
+        self.assertIn("guix time-machine -C channels.lock.scm", build)
+        self.assertNotIn("guix archive", self.text)
+        self.assertNotIn("signing-key", self.text)
+        self.assertNotIn("GUIX_SIGNING_KEY", self.text)
+        self.assertNotIn("secrets.", self.text)
 
-    def test_provenance_records_derivations_and_effective_license_metadata(self) -> None:
-        self.assertIn("build --derivations", self.text)
-        self.assertIn("derivation_path", self.text)
-        self.assertIn('show "$package"', self.text)
-        self.assertIn("license:", self.text)
-        self.assertIn("*.package-info.rec", self.text)
-        self.assertIn("Pinned Guix package metadata", self.text)
+    def test_release_is_created_as_draft_only_and_never_published(self) -> None:
+        release = self.step("Створити чернетку релізу")["run"]
+        self.assertIn("gh release create", release)
+        self.assertIn("--draft", release)
+        self.assertIn('test "$IS_DRAFT" = "true"', release)
+        self.assertNotIn("--draft=false", self.text)
+        self.assertNotIn("gh release edit", self.text)
+        self.assertNotIn("--prerelease", self.text)
 
-    def test_archive_import_trust_and_checksums_are_distributed(self) -> None:
-        self.assertIn("guix archive --generate-key", self.text)
-        self.assertLess(
-            self.text.index("guix archive --generate-key"),
-            self.text.index("systemctl enable --now guix-daemon.service"),
-        )
-        self.assertIn("signing-key.pub", self.text)
-        self.assertIn("guix archive --authorize", self.text)
-        self.assertIn("guix archive --import", self.text)
-        self.assertIn("SHA256SUMS", self.text)
-        self.assertNotIn("secrets.GUIX_SIGNING_KEY", self.text)
+    def test_archive_and_provenance_are_verified_after_upload(self) -> None:
+        release = self.step("Створити чернетку релізу")["run"]
+        self.assertIn("gh release download", release)
+        self.assertIn("sha256sum -c SHA256SUMS", release)
+        self.assertIn("tar -tzf wsm-tools-pack.tar.gz", release)
+        self.assertIn("PROVENANCE.txt", self.text)
+        self.assertIn("CHANNEL-INPUTS.sha256", self.text)
 
-    def test_the_build_has_github_provenance_attestation(self) -> None:
-        self.assertIn("uses: actions/attest@v4", self.text)
-        self.assertEqual(self.workflow["permissions"]["id-token"], "write")
-        self.assertEqual(self.workflow["permissions"]["attestations"], "write")
-        self.assertEqual(self.workflow["permissions"]["artifact-metadata"], "write")
-
-    def test_publication_is_versioned_and_read_back_verified(self) -> None:
-        self.assertIn("gh release create", self.text)
-        self.assertIn("--prerelease", self.text)
-        self.assertIn("gh release download", self.text)
-        self.assertIn("sha256sum -c SHA256SUMS", self.text)
-        self.assertIn("zstd -dc > /dev/null", self.text)
-
-    def test_failures_leave_diagnostics_without_disabling_the_job(self) -> None:
-        steps = self.job["steps"]
-        reporters = [
-            step for step in steps
-            if "failure()" in str(step.get("if", ""))
-            and "gh api" in str(step.get("run", ""))
+    def test_failure_is_reported_without_claiming_success(self) -> None:
+        failures = [
+            item for item in self.steps
+            if item.get("if") == "failure()"
+            and "commits/$GITHUB_SHA/comments" in item.get("run", "")
         ]
-        self.assertEqual(len(reporters), 1)
+        self.assertEqual(len(failures), 1)
 
 
 
