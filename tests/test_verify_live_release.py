@@ -354,6 +354,35 @@ class RegistryTests(unittest.TestCase):
         self.assertIn("не опублікована", section[:400])
 
 
+    def test_rc6_workflow_evidence_is_separate_from_local_verdict(self) -> None:
+        path = ROOT / "docs" / "artifacts" / "iso-verdict-0.1.0-rc6-minimal-live.json"
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        external = payload["workflow_evidence"]
+        self.assertEqual(external["run_id"], 46095631648)
+        self.assertEqual(
+            external["source_commit"],
+            "1fa19879ec780e372cce9a6bb4c13f613d01ec9f",
+        )
+        self.assertEqual(external["conclusion"], "success")
+        self.assertEqual(external["acceptance"]["bios"]["status"], "success")
+        self.assertEqual(external["acceptance"]["uefi"]["status"], "success")
+        self.assertEqual(external["acceptance"]["bios"]["installer_marker"], "WSM_INSTALLER_OK")
+        self.assertEqual(external["acceptance"]["uefi"]["installer_marker"], "WSM_INSTALLER_OK")
+        self.assertEqual(external["release_assets_readback"], "success")
+        self.assertEqual(external["provenance_verification"], "success")
+        self.assertEqual(external["publish_step"], "skipped")
+        self.assertEqual(external["release_state"], "draft")
+
+        # These are different evidence sources: the local verifier did not run QEMU.
+        local = {item["id"]: item["status"] for item in payload["criteria"]}
+        self.assertEqual(payload["overall"], "incomplete")
+        self.assertEqual(local["boot-bios"], "not-run")
+        self.assertEqual(local["boot-uefi"], "not-run")
+
+        self.assertIn("46095631648", self.registry)
+        self.assertIn("незалежний локальний verifier", self.registry)
+
+
 
 if __name__ == "__main__":
     unittest.main()
