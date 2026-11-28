@@ -2,7 +2,7 @@
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Статус: **конфігурація готова, інстанс не запускався**
+- Статус: **інертний прототип; не реєструвати й не запускати до owner Phase B та #367**
 - Файли: [`ci/cuirass/specs.scm`](../ci/cuirass/specs.scm), [`ci/cuirass/images.scm`](../ci/cuirass/images.scm), [`ci/cuirass/service.scm`](../ci/cuirass/service.scm)
 
 ## Навіщо другий конвеєр
@@ -14,9 +14,9 @@ Cuirass — це власний CI GNU Guix. Він не замінює GitHub A
 | Образ збирається з зафіксованих каналів | **обидва** — і Cuirass, і workflow |
 | Образ завантажується в BIOS і UEFI | **тільки** workflow (QEMU) |
 | Інсталятор у носії запускається | **тільки** workflow |
-| Заміни доступні іншим | **тільки** Cuirass |
+| Заміни доступні іншим | **окремий `guix publish`**, не Cuirass сам по собі |
 
-Третій рядок — причина існування Cuirass. Він збирає **всередині Guix** і віддає результати як substitutes, тобто наступна збірка не переробляє той самий closure з нуля.
+Cuirass координує збірки через `guix-daemon` і зберігає їхні результати. Він **не** запускає substitute HTTP endpoint сам по собі. Для роздачі substitutes потрібен окремий `guix publish` зі своїм ключем підпису, client trust та мережею; цей етап навмисно не налаштований.
 
 ## Дві незалежні дороги до тих самих байтів
 
@@ -24,22 +24,16 @@ Cuirass — це власний CI GNU Guix. Він не замінює GitHub A
 
 Це навмисна надлишковість: якщо workflow зелений, а Cuirass червоний (або навпаки), одна з двох доріг бреше про ті самі байти. Розбіжність видно одразу, а не через місяць.
 
-## Запуск
+## Чому запуск поки заборонений
 
-```sh
-sudo -u postgres createdb cuirass
+У WSM channel ще немає owner-signed introduction та `.guix-authorizations`; `channels/wsm.scm` досі є неавтентифікованим development input. Крім того, package allowlist для `wsm-tools` має пройти ліцензійне рішення #367. Тому наведені нижче prerequisites є блокувальними: **не виконуйте `cuirass register`, не запускайте service і не публікуйте substitutes до їх завершення**.
 
-guix shell cuirass postgresql -- \
-  cuirass register --specifications=ci/cuirass/specs.scm \
-                   --database="dbname=cuirass host=/var/run/postgresql" \
-                   --interval=300
+1. Власник виконує Phase B з [документа каналу](GUIX-CHANNEL.md): `.guix-authorizations`, signed introduction, public keyring та `guix git authenticate` без `--disable-authentication`.
+2. Перевірити channel inputs у споживачі з точними revisions; Cuirass jobset може відстежувати `wsm/main` лише після того, як кожен fetched revision проходить автентифікацію.
+3. Власник закриває #367 і затверджує точний Free package/image allowlist. Compatibility — окремий jobset і окремі locks; не додавати Nonguix до Free.
+4. Перевірити service та specifications через `guix system build` / `cuirass register --check` на disposable build host з authenticated inputs. Це ще не означає, що Cuirass було зареєстровано або запущено.
 
-guix shell cuirass -- cuirass web --database="dbname=cuirass host=/var/run/postgresql"
-```
-
-Веб-інтерфейс — `http://localhost:8081`.
-
-Як сервіс — фрагмент у [`service.scm`](../ci/cuirass/service.scm), який вставляється в `services` хост-системи. Це фрагмент, а не повна декларація: повна стала б другою правдою про те, як налаштовані машини WSM.
+Після виконання prerequisites owner може застосувати цей fragment у `services` окремого build host. `local-file` у [`service.scm`](../ci/cuirass/service.scm) очікує, що конфігурацію оцінюють із кореня репозиторію. Служба за замовчуванням слухає лише `localhost:8081`; не виставляйте цей порт у публічну мережу. Для віддаленого доступу потрібен authenticated TLS reverse proxy/mTLS перед адміністративними маршрутами.
 
 ## Що це **не** доводить
 
@@ -51,6 +45,6 @@ guix shell cuirass -- cuirass web --database="dbname=cuirass host=/var/run/postg
 
 ## Стан
 
-Конфігурація написана й перевірена структурно (тести в `tests/test_cuirass_specs.py`). **Інстанс не запускався**: у середовищі розробки немає ні Guix, ні PostgreSQL.
+Синтаксис/структуру файлів перевіряють тести в `tests/test_cuirass_specs.py`, але **Cuirass не оцінював jobset, сервіс не розгортався, build ID та build logs відсутні (`NOT_RUN`)**. Green GitHub test не є доказом Guix service evaluation.
 
 Це чесний стан: файли описують, як запустити, а не стверджують, що запущено.
