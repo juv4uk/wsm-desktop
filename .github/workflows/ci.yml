@@ -88,6 +88,13 @@ jobs:
       - name: Check installer tool closure
         run: python scripts/check_tool_closure.py --self-check
 
+      # The FPC front end's differential harness, self-test only: the real
+      # comparison needs a compiled Pascal binary, which this job does not
+      # build. `make check-fpc-cli-parity` runs the same command. The full run
+      # is .github/workflows/fpc-install-cli.yml.
+      - name: Test the FPC parity harness
+        run: python scripts/check_fpc_cli_parity.py --self-test
+
       - name: Check profile evidence
         run: python scripts/check_profile_evidence.py
 
