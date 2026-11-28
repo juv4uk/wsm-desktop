@@ -260,9 +260,6 @@ def problems(directory: Path, metadata_only: bool = False) -> list[str]:
         if installer_marker is not None and installer_marker not in tail:
             found.append(f"{name} never showed {installer_marker}")
 
-    if metadata_only and not found:
-        # Inspection is deliberately never a release approval.
-        found.append("metadata-only inspection cannot establish release readiness")
     return found
 
 
@@ -282,6 +279,9 @@ def main(argv: list[str] | None = None) -> int:
     if found:
         print("\n".join(f"release-readiness: {item}" for item in found), file=sys.stderr)
         return 1
+    if arguments.metadata_only:
+        print("release-readiness: metadata checks passed; artifact not accepted (NOT_READY)")
+        return 2
     print("release-readiness: complete evidence bundle verified")
     return 0
 
