@@ -13,4 +13,4 @@
 
 Кожне package definition мусить мати точний source origin, version, hash, build system, inputs та фактичну license metadata. Не додавати proprietary binaries без окремого правового й етичного review.
 
-Поточний стан: channel skeleton доданий, але криптографічна автентифікація ще не bootstrap-нута. Не називати канал authenticated, доки немає signed introduction commit, `.guix-authorizations`, keyring branch і успішного `guix git authenticate`. Також не оголошувати `wsm-tools` release-ready до вирішення #367.
+Поточний стан: channel skeleton доданий, але криптографічна автентифікація ще не bootstrap-нута. Не називати канал authenticated, доки немає signed introduction commit, `.guix-authorizations`, keyring branch і успішного `guix git authenticate`. Метадані `wsm-tools` тепер вказують на власну ліцензію WSM через `(wsm licenses)` (`LicenseRef-Volnist`, `file://LICENSE`), а не на GPL. Це не є доказом release readiness: окремо потрібні збірка, виміряна closure, channel trust, а також owner-approved рішення щодо мови реалізації та профілю розповсюдження.
