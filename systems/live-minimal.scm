@@ -100,6 +100,11 @@
                         (catch #t
                           (lambda () (zero? (apply system* command)))
                           (lambda _ #f)))
+                       ;; The installer wrapper uses `python3` by name. This
+                       ;; PATH belongs to this selfcheck process only; the new
+                       ;; tool-closure probe invokes Python by absolute path.
+                       (setenv "PATH"
+                               "/run/current-system/profile/bin:/run/current-system/bin:/usr/bin:/bin")
                       (cond
                        ((not (ok? "/run/current-system/profile/bin/wsm-install" "--help"))
                         (announce "WSM_INSTALLER_FAIL:exit"))
