@@ -77,6 +77,7 @@ jobs:
           test -x tools/pascal/build/wsm-hwcheck
           test -x tools/pascal/build/wsm-classify
           test -x tools/pascal/build/wsm-partition
+          test -x tools/pascal/build/wsm-profile
           test -x tools/pascal/build/wsm-partition
           ls -lh tools/pascal/build
           {
@@ -85,6 +86,7 @@ jobs:
             echo "- wsm-hwcheck: compiled"
             echo "- wsm-classify: compiled"
             echo "- wsm-partition: compiled"
+            echo "- wsm-profile: compiled"
             echo "- wsm-partition: compiled"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -95,6 +97,9 @@ jobs:
 
       - name: Check the read-only partition planner contract
         run: python3 tests/test_fpc_partition.py
+
+      - name: Check the FPC profile reader contract and runtime output
+        run: python3 tests/test_fpc_profile.py
 
       - name: Keep the compiled binaries
         if: always()
