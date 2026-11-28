@@ -52,6 +52,9 @@ jobs:
       - name: Report WSM channel bootstrap artifacts
         run: python scripts/check_channel_auth.py .
 
+      - name: Check WSM channel authorizations
+        run: python scripts/check_channel_authorizations.py .
+
       # Кожен скрипт, який `make check-*` запускає, мусить запускатися і тут.
       # Інакше перевірка існує лише на машині того, хто її додав, а зелений CI
       # означає менше, ніж обіцяє. Паритет тримає tests/test_ci_parity.py.
