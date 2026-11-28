@@ -16,13 +16,7 @@
   #:use-module (guix packages)
   #:use-module (guix gexp)
   #:use-module (gnu packages linux)
-  #:use-module (ice-9 ftw)
   #:export (linux-libre-h170))
-
-(define %h170-nouveau-atomic-patch
-  (or (search-path %load-path
-                   "wsm/packages/patches/linux-libre-h170-nouveau-atomic.patch")
-      (error "H170 Nouveau atomic patch is missing from the WSM channel")))
 
 (define-public linux-libre-h170
   (package
@@ -33,5 +27,7 @@
        (inherit (package-source linux-libre))
        (patches
         (append (origin-patches (package-source linux-libre))
-                (list (local-file %h170-nouveau-atomic-patch
+                ;; A relative local-file resolves against this module's directory, so the
+                ;; patch is found from a checkout or an authenticated channel checkout.
+                (list (local-file "patches/linux-libre-h170-nouveau-atomic.patch"
                                   "linux-libre-h170-nouveau-atomic.patch"))))))))
