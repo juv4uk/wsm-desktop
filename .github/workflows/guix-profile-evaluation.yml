@@ -18,8 +18,6 @@ on:
 
 permissions:
   contents: read
-  # Коментар до коміту з причиною збою — див. docs/ECOSYSTEM-PRINCIPLES.md.
-  pull-requests: read
 
 concurrency:
   group: guix-profile-evaluation-${{ github.event.pull_request.number || github.ref }}
@@ -65,21 +63,11 @@ jobs:
           path: ~/.cache/guix/checkouts
           key: ${{ steps.guix-checkouts.outputs.cache-primary-key }}
 
-      - name: Повідомити причину збою
+      - name: Summarize evaluation failure
         if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          set -uo pipefail
-          BODY=$(mktemp)
           {
-            echo "### Guix profile evaluation: оцінювання не завершилось"
-            echo ""
-            echo "Commit: \`$GITHUB_SHA\`"
-            echo ""
-            echo "Логи задачі потребують авторизації, тому причина лишається тут."
-            echo "Найчастіші причини: модуль не імпортовано, локальний load-path,"
-            echo "невідповідність API pinned Guix."
-          } > "$BODY"
-          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
-            -F body=@"$BODY" >/dev/null && echo "причину записано коментарем"
+            echo "### Guix profile evaluation failed"
+            echo "Inspect the first failing command in this job's preceding logs."
+            echo "WSM_CHANNEL_AUTHENTICATION=NOT_TESTED"
+          } >> "$GITHUB_STEP_SUMMARY"
