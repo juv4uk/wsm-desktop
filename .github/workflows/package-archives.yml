@@ -1,119 +1,25 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-name: WSM package archives
+name: WSM package archives — вимкнено до licensing decision
 
-# Builds the channel's packages on the locked channels and keeps the result as a
-# workflow artifact you can download and import by hand:
+# Тут може з'явитися лише ручне створення ephemeral build evidence.
+# Пакет/NAR не можна експортувати в Actions artifacts або draft/public releases,
+# доки власник не вирішить #367 і права на розповсюдження.
 #
-#   guix archive --import < wsm-tools.nar
-#
-# What this deliberately is NOT:
-#
-#  * not a substitute server — that needs a signing key, a public URL and a trust
-#    plan, and the decision is still open (#741, #367). Nothing here signs anything;
-#  * not a release asset by default — the archive stays a workflow artifact unless
-#    you name a draft release in `attach_to_draft`, and even then the step refuses
-#    anything that is not still a draft;
-#  * not automatic — `workflow_dispatch` only, no tag or branch trigger, because an
-#    archive that appears without a person asking for it is how unsigned binaries
-#    start circulating;
-#  * not attached to a published release — `attach_to_draft` refuses anything that is
-#    not still a draft. A draft is the owner's to publish; a published release is
-#    already being distributed, and adding a binary to it after the fact is a
-#    distribution decision that nobody made.
+# Поточна версія навмисно не будує, не експортує і не завантажує wsm-tools.
 
 on:
   workflow_dispatch:
-    inputs:
-      attach_to_draft:
-        description: "Existing DRAFT release tag to attach the archive to (empty: artifact only)"
-        type: string
-        default: ""
 
 permissions:
-  contents: write
-
-concurrency:
-  group: wsm-package-archives
-  cancel-in-progress: true
+  contents: read
 
 jobs:
   archive:
-    name: Build and archive the channel packages
+    if: ${{ false }}
+    name: Заблоковано до рішення #367
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
     steps:
-      - name: Checkout exact source
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Install Guix
+      - name: Fail closed
         run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y guix
-          sudo systemctl enable --now guix-daemon.service
-          guix --version
-
-      - name: Build on the release lock
-        id: build
-        run: |
-          set -euo pipefail
-          # The same lock the release uses: an archive built from other channels is
-          # not the thing the image was built against.
-          store_path="$(guix time-machine -C channels.lock.scm -- \
-                          build -L . wsm-tools --no-grafts)"
-          echo "store_path=$store_path" >> "$GITHUB_OUTPUT"
-          echo "WSM_PACKAGE_STORE_PATH=$store_path" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Export the closure as a nar
-        run: |
-          set -euo pipefail
-          guix archive --export "${{ steps.build.outputs.store_path }}" > wsm-tools.nar
-          sha256sum wsm-tools.nar | tee wsm-tools.nar.sha256
-          ls -l wsm-tools.nar
-          echo "WSM_PACKAGE_NAR_SHA256=$(cut -d' ' -f1 wsm-tools.nar.sha256)" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Keep the archive as a workflow artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: wsm-tools-nar
-          path: |
-            wsm-tools.nar
-            wsm-tools.nar.sha256
-          retention-days: 30
-
-      - name: Attach the archive to a draft release
-        if: inputs.attach_to_draft != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.attach_to_draft }}
-        run: |
-          set -euo pipefail
-          # Only a draft: a published release is already being distributed, and adding
-          # a binary to it afterwards is a decision, not a convenience.
-          is_draft="$(gh release view "$TAG" --json isDraft --jq '.isDraft')"
-          if [ "$is_draft" != "true" ]; then
-            echo "refusing: $TAG is not a draft release" >&2
-            exit 1
-          fi
-          gh release upload "$TAG" wsm-tools.nar wsm-tools.nar.sha256 --clobber
-          echo "WSM_PACKAGE_ATTACHED_TO=$TAG" | tee -a "$GITHUB_STEP_SUMMARY"
-
-      - name: Повідомити причину збою
-        if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -uo pipefail
-          BODY=$(mktemp)
-          {
-            echo "### WSM package archives: збірка не завершилась"
-            echo ""
-            echo "Commit: \`$GITHUB_SHA\`"
-            echo ""
-            echo "Архів не створено. Перевірте збірку на locked-каналах вище."
-            df -h / || true
-          } > "$BODY"
-          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
-            -F body=@"$BODY" >/dev/null && echo "причину записано коментарем"
+          echo "::error::Package archive workflow вимкнено до licensing decision #367."
+          exit 1
