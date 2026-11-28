@@ -64,9 +64,14 @@ class JobModuleTests(unittest.TestCase):
     def test_it_builds_the_same_profile_the_release_builds(self) -> None:
         self.assertIn("systems/live-minimal.scm", self.text)
 
-    def test_grafting_is_disabled(self) -> None:
-        """Grafting belongs on the user's machine, not in a build farm."""
-        self.assertIn("(%graft? #f)", self.text)
+    def test_it_uses_the_pinned_guix_image_job_api(self) -> None:
+        """The Guix lock exports image->job and arguments->systems from gnu ci."""
+        self.assertIn(
+            "(#:use-module ((gnu ci) #:select (arguments->systems image->job)))",
+            self.text,
+        )
+        self.assertIn("(image->job store image", self.text)
+        self.assertNotIn("derivation->job", self.text)
 
     def test_the_module_is_outside_the_channel_namespace(self) -> None:
         """wsm/ is the channel API; a CI helper is not part of it."""
@@ -75,11 +80,16 @@ class JobModuleTests(unittest.TestCase):
 
 
 class ServiceFragmentTests(unittest.TestCase):
-    def test_the_fragment_uses_substitutes(self) -> None:
-        """Without substitutes a build farm rebuilds every closure from source."""
+    def test_the_fragment_uses_the_pinned_cuirass_service_api(self) -> None:
         text = SERVICE.read_text(encoding="utf-8")
-        self.assertIn("(use-substitutes? #t)", text)
-        self.assertIn("cuirass-service-type", text)
+        self.assertIn("(gnu services cuirass)", text)
+        self.assertNotIn("(gnu services ci)", text)
+        self.assertIn('(local-file "ci/cuirass/specs.scm"', text)
+        self.assertIn(
+            "(specifications #~(load #$%wsm-cuirass-specs))", text
+        )
+        self.assertNotIn("(use-substitutes?", text)
+        self.assertNotIn("(fallback? #t)", text)
 
 
 class DocumentationTests(unittest.TestCase):
