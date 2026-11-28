@@ -14,6 +14,8 @@ on:
       - "wsm/**/*.scm"
       - "Makefile"
       - "scripts/build_iso.sh"
+      - "scripts/check-wsm-channel-set.sh"
+      - "tests/test_channel_set.py"
   workflow_dispatch:
 
 permissions:
@@ -55,8 +57,15 @@ jobs:
       - name: Evaluate pinned Guix profiles with local WSM source modules
         run: |
           set -euo pipefail
-          make check-guix-eval
-          echo "WSM_CHANNEL_AUTHENTICATION=NOT_TESTED" | tee -a "$GITHUB_STEP_SUMMARY"
+          LOG="$RUNNER_TEMP/guix-profile-evaluation.log"
+          if make check-guix-eval >"$LOG" 2>&1; then
+            cat "$LOG"
+            echo "WSM_CHANNEL_AUTHENTICATION=NOT_TESTED" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            result=$?
+            cat "$LOG"
+            exit "$result"
+          fi
 
       - name: Save Guix checkout cache
         if: success() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
@@ -67,19 +76,18 @@ jobs:
 
       - name: Повідомити причину збою
         if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -uo pipefail
-          BODY=$(mktemp)
           {
             echo "### Guix profile evaluation: оцінювання не завершилось"
             echo ""
-            echo "Commit: \`$GITHUB_SHA\`"
+            echo "Commit: `$GITHUB_SHA`"
             echo ""
-            echo "Логи задачі потребують авторизації, тому причина лишається тут."
-            echo "Найчастіші причини: модуль не імпортовано, локальний load-path,"
-            echo "невідповідність API pinned Guix."
-          } > "$BODY"
-          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
-            -F body=@"$BODY" >/dev/null && echo "причину записано коментарем"
+            if [ -f "$RUNNER_TEMP/guix-profile-evaluation.log" ]; then
+              echo "```text"
+              tail -100 "$RUNNER_TEMP/guix-profile-evaluation.log"
+              echo "```"
+            else
+              echo "Лог оцінювання не було створено."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
