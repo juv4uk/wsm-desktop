@@ -50,6 +50,15 @@ def inline_failure_reporter(workflow: Path) -> bool:
     )
 
 
+def inline_summary_reporter(workflow: Path) -> bool:
+    """Accept a read-only GitHub step summary as a visible failure report."""
+    return any(
+        "failure()" in str(step.get("if", ""))
+        and "$GITHUB_STEP_SUMMARY" in str(step.get("run", ""))
+        for step in steps_of(workflow)
+    )
+
+
 def exact_open_main_prs(
     candidates: list[dict],
     *,
@@ -251,6 +260,7 @@ class CiFailureVisibilityTests(unittest.TestCase):
             if workflow not in TRUSTED_WORKFLOWS | {TRUSTED_REPORTER}
             and not all_jobs_disabled(workflow)
             and not inline_failure_reporter(workflow)
+            and not inline_summary_reporter(workflow)
         ]
         self.assertEqual(
             missing,
