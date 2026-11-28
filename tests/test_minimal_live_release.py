@@ -39,7 +39,7 @@ class MinimalLiveProfileTests(unittest.TestCase):
         for path in ("scripts/wsm-hwcheck.sh","scripts/wsm-install.sh","scripts/wsm-install-live.sh"):
             with self.subTest(path=path):
                 self.assertIn(path, package)
-        self.assertIn("(propagated-inputs (list python python-jsonschema))", package)
+        self.assertIn("(propagated-inputs (list python-minimal python-jsonschema))", package)
         # The literal used to be pinned here and went stale for three releases.
         # The rule now lives in tests/test_package_version.py: the package
         # version must be a prefix of the tag RELEASE-REQUEST.txt asks for.
