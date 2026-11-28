@@ -1,6 +1,6 @@
 ;; SPDX-License-Identifier: LicenseRef-Volnist
 ;;
-;; A Cuirass job module: the live image, built by Guix, on the pinned channels.
+;; A Cuirass job module: the live image, built with pinned Guix and the WSM commit resolved by each evaluation.
 ;;
 ;; Cuirass calls `cuirass-jobs' with the store and the specification arguments.
 ;; The image expression is the same one the release workflow builds, so this is
@@ -11,7 +11,7 @@
 ;; channel namespace, and every module there must be loadable by the channel's
 ;; evaluation test. A CI helper is not part of the channel's API.
 
-(define-module (wsm ci images)
+(define-module (ci cuirass images)
   #:use-module (guix store)
   #:use-module (guix derivations)
   #:use-module (gnu system image)
