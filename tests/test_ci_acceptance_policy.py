@@ -155,6 +155,8 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
         build = self.step("Зібрати власний пакет")["run"]
         self.assertIn("wsm-tools", build)
         self.assertIn("pack --format=tarball", build)
+        self.assertIn("(begin (use-modules (wsm packages wsm)) wsm-tools)", build)
+        self.assertIn("--symlink=/opt/wsm/bin=bin", build)
         self.assertIn("-L .", build)
         for forbidden in (
             "linux-libre",
@@ -190,6 +192,12 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
         self.assertNotIn("gh release edit", self.text)
         self.assertNotIn("--prerelease", self.text)
 
+    def test_pack_contains_the_three_owned_commands(self) -> None:
+        verify = self.step("Перевірити команди в pack")["run"]
+        for command in ("wsm-hwcheck", "wsm-install", "wsm-install-live"):
+            with self.subTest(command=command):
+                self.assertIn(command, verify)
+
     def test_archive_and_provenance_are_verified_after_upload(self) -> None:
         release = self.step("Створити чернетку релізу")["run"]
         self.assertIn("gh release download", release)
@@ -197,6 +205,8 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
         self.assertIn("tar -tzf wsm-tools-pack.tar.gz", release)
         self.assertIn("PROVENANCE.txt", self.text)
         self.assertIn("CHANNEL-INPUTS.sha256", self.text)
+        self.assertIn('cp LICENSE "$OUT/LICENSE"', self.text)
+        self.assertIn('"$OUT/LICENSE"', release)
 
     def test_failure_is_reported_without_claiming_success(self) -> None:
         failures = [
