@@ -236,3 +236,10 @@ package/hash. Зовнішній GP107 test host не замінює H170.
 - **Profile pass**: усі попередні рівні підтверджені саме для заявленого профілю (Free або Compatibility), а manifest зберігає provenance.
 
 Поки ці критерії не виконані, H170 profile залишається draft, а невідомі стани не підвищуються.
+
+
+## H170 Free: GP107 Nouveau atomic-KMS kernel candidate
+
+Pinned Guix revision `4e5195be20d9b124df8a8bb69213412236e4668e` selects Linux-libre 7.3.5. The upstream fix `ed7fb901fce31588bd12ab95adc36ebcb51bc8ea` adds atomic check/commit callbacks for Nouveau atomic modesetting. WSM package `linux-libre-h170` inherits the upstream Linux-libre source, deblob transformations, configuration, build phases, inputs, supported systems, ABI and license metadata, then appends this one upstream patch.
+
+Evidence boundary: successful Guix package build is not H170 boot, physical Nouveau binding, KMS, 3D/compute, suspend/resume or firmware evidence. No NVIDIA FECS/GPCCS firmware, proprietary driver, Nonguix input or binary firmware is included. GP107 GR 3D/compute remains unavailable in the strict Free closure without separately licensed signed firmware. Keep `runtime_binding=unknown`, `functional_validation=not-run`, and profile status `draft` until physical evidence exists.
