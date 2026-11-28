@@ -4,13 +4,6 @@ on:
   push:
     branches: [main]
   pull_request:
-  workflow_dispatch:
-    inputs:
-      install_guix:
-        description: "Prove scripts/install-guix.sh works on a clean runner."
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: read
@@ -90,38 +83,3 @@ jobs:
           } > "$BODY"
           gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
             -F body=@"$BODY" >/dev/null && echo "причину записано коментарем"
-
-  guix-installer:
-    # Manual only: it installs Guix from the release tarball on a throwaway
-    # runner. The official installer is served by Savannah cgit, which refuses
-    # automated clients, so this script exists at all - and an installer nobody
-    # runs is a claim, not a tool.
-    name: install-guix.sh
-    if: github.event_name == 'workflow_dispatch' && inputs.install_guix
-    runs-on: ubuntu-24.04
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc || true
-          df -h /
-
-      - name: Install Guix with the repository script
-        run: |
-          set -euo pipefail
-          ./scripts/install-guix.sh
-          export PATH="/usr/local/bin:$PATH"
-          guix --version
-          test -x /var/guix/profiles/per-user/root/current-guix/bin/guix-daemon
-          pgrep -x guix-daemon
-
-      - name: Resolve one package from the locked channel
-        # A version string proves the binary starts. This proves the daemon
-        # answers and substitutes are accepted, which is what the build needs.
-        run: |
-          set -euo pipefail
-          export PATH="/usr/local/bin:$PATH"
-          guix time-machine -C channels.lock.scm -- \
-            build --dry-run --no-grafts hello

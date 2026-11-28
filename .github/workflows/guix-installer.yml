@@ -1,0 +1,67 @@
+name: Guix installer
+
+# Manual only. This workflow installs a Guix daemon on a throwaway runner, so it
+# must never run on a push: the fast `CI` workflow stays fast and deterministic,
+# and the policy in tests/test_ci_acceptance_policy.py keeps it that way.
+#
+# Why this exists at all: the official installer is served by Savannah cgit,
+# which refuses automated clients (wget exit 8). scripts/install-guix.sh is the
+# replacement, and an installer nobody runs is a claim rather than a tool.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    name: install-guix.sh
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Free disk space
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc || true
+          df -h /
+
+      - name: Install Guix with the repository script
+        run: |
+          set -euo pipefail
+          ./scripts/install-guix.sh
+          export PATH="/usr/local/bin:$PATH"
+          guix --version
+          test -x /var/guix/profiles/per-user/root/current-guix/bin/guix-daemon
+          pgrep -x guix-daemon
+
+      - name: Resolve one package from the locked channel
+        # A version string proves the binary starts. This proves the daemon
+        # answers and that substitutes are accepted with the authorised key,
+        # which is what a real build depends on.
+        run: |
+          set -euo pipefail
+          export PATH="/usr/local/bin:$PATH"
+          guix time-machine -C channels.lock.scm -- \
+            build --dry-run --no-grafts hello
+
+      - name: Report the failure where it can be read
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          BODY=$(mktemp)
+          {
+            echo "### install-guix.sh: встановлення не вдалося"
+            echo ""
+            echo "Commit: \`$GITHUB_SHA\`"
+            echo ""
+            echo "Локально: \`sudo ./scripts/install-guix.sh\`"
+            echo ""
+            echo "Логи задачі потребують авторизації; причина мусить бути тут."
+          } > "$BODY"
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
+            -F body=@"$BODY" >/dev/null && echo "причину записано коментарем"
