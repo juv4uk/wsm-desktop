@@ -1,12 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""The substitute workflow: owner-approved, manual-only, key never in the repo.
-
-History worth keeping: an earlier revision of this workflow published on every
-push to main and was replaced by a disabled stub until the owner decided on key
-custody and the endpoint. The owner approved publication on 2026-11-28. What
-stays forbidden is what the stub was protecting: automatic publishing and key
-material in the repository.
-"""
+"""The WSM package workflows: deliberate package tags, signed cache, no private keys in Git."""
 
 from __future__ import annotations
 
@@ -18,6 +11,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "substitutes.yml"
+ARCHIVE_WORKFLOW = ROOT / ".github" / "workflows" / "package-archives.yml"
 
 
 class SubstituteWorkflowTests(unittest.TestCase):
@@ -36,10 +30,11 @@ class SubstituteWorkflowTests(unittest.TestCase):
     def test_the_workflow_parses(self) -> None:
         self.assertIn("publish", self.data["jobs"])
 
-    def test_publication_is_manual_only(self) -> None:
-        """Automatic publishing on every push was the stub's first objection."""
-        self.assertIn("workflow_dispatch", self.data[True])
-        self.assertNotIn("push", self.data[True])
+    def test_publication_starts_only_by_manual_request_or_package_tag(self) -> None:
+        events = self.data[True]
+        self.assertIn("workflow_dispatch", events)
+        self.assertEqual(events["push"]["tags"], ["packages-*"])
+        self.assertNotIn("branches", events["push"])
 
     def test_the_job_is_not_disabled(self) -> None:
         self.assertNotEqual(self.job.get("if"), "${{ false }}")
@@ -57,34 +52,57 @@ class SubstituteWorkflowTests(unittest.TestCase):
     def test_no_key_material_is_committed(self) -> None:
         for marker in ("BEGIN OPENSSH PRIVATE KEY", "(signing-key", "(private-key"):
             self.assertNotIn(marker, self.text)
-        # Hex-only runs of 64 characters are digests, not keys; a key blob has
-        # characters outside [0-9a-f].
         blobs = [b for b in re.findall(r"[A-Za-z0-9+/]{64,}={0,2}", self.text)
                  if re.search(r"[g-zG-Z+/]", b)]
         self.assertEqual(blobs, [], f"possible key material: {blobs[:1]}")
 
     def test_guix_is_installed_from_the_pinned_tarball(self) -> None:
-        """`guix-install.sh` has no --unattended and fails on a wget network error."""
         step = self.step("Встановити")
         self.assertIn("guix-binary-", step["run"])
         self.assertIn("sha256sum -c -", step["run"])
         self.assertNotIn("guix-install.sh", step["run"])
-        # The comment explains why the installer was dropped; the code must not
-        # use the flag that never existed.
-        code = "\n".join(line.split("#")[0] for line in self.text.splitlines())
+        code = "\\n".join(line.split("#")[0] for line in self.text.splitlines())
         self.assertNotIn("--unattended", code)
 
     def test_the_daemon_socket_is_waited_for(self) -> None:
-        """A missing socket looks like a broken installer; say so explicitly."""
         self.assertIn("daemon-socket/socket", self.step("Встановити")["run"])
 
-    def test_the_cache_is_warmed_before_publishing(self) -> None:
-        self.assertIn("narinfo", self.step("Прогріти")["run"])
+    def test_the_h170_free_package_set_uses_local_wsm_and_pinned_upstream(self) -> None:
+        run = self.step("Зібрати пакетний набір")["run"]
+        self.assertIn("guix time-machine -C channels.lock.scm -- build --no-substitutes", run)
+        self.assertIn("-L . -e '(@ (wsm packages wsm) wsm-tools)' linux-libre mesa", run)
+        self.assertNotIn("guix build --no-substitutes $PACKAGES", run)
+
+    def test_cache_warmup_fetches_the_nar_archive(self) -> None:
+        run = self.step("Прогріти")["run"]
+        self.assertIn(".narinfo", run)
+        self.assertIn("URL:", run)
+        self.assertIn("curl -fsSL", run)
+        self.assertIn("nar/", run)
+        self.assertIn("/var/cache/publish/nar", run)
 
     def test_archives_go_to_a_release_and_metadata_to_pages(self) -> None:
         self.assertIn("gh release upload substitutes", self.text)
         self.assertIn("upload-pages-artifact@v3", self.text)
         self.assertIn("releases/download/substitutes", self.text)
+
+
+class PackageArchiveWorkflowTests(unittest.TestCase):
+    def test_package_archive_uses_same_deliberate_tag_namespace(self) -> None:
+        workflow = yaml.safe_load(ARCHIVE_WORKFLOW.read_text(encoding="utf-8"))
+        events = workflow[True]
+        self.assertEqual(events["push"]["tags"], ["packages-*"])
+        self.assertIn("workflow_dispatch", events)
+        self.assertNotIn("branches", events["push"])
+
+    def test_package_archive_resolves_wsm_tools_from_its_local_module(self) -> None:
+        workflow = yaml.safe_load(ARCHIVE_WORKFLOW.read_text(encoding="utf-8"))
+        steps = workflow["jobs"]["archive"]["steps"]
+        build = next(step for step in steps if "Build the requested packages" in step.get("name", ""))
+        run = build["run"]
+        self.assertIn("guix time-machine -C channels.lock.scm", run)
+        self.assertIn("-e '(@ (wsm packages wsm) wsm-tools)'", run)
+        self.assertIn("inputs.packages || 'wsm-tools linux-libre mesa'", run)
 
 
 if __name__ == "__main__":
