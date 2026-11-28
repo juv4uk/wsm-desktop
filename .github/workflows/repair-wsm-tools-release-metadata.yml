@@ -151,6 +151,45 @@ jobs:
           printf '%s' "$body" | grep -F "WITHDRAWN"
           echo "Second public WSM Python RC6 pack returned to Draft." >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Withdraw the accidentally published WSM RC6 v2 pack
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="wsm-tools-0.1.0-rc6-a7501a36c33c-run-46119662030"
+          EXPECTED_SOURCE="a7501a36c33cf3cc7d0ae0f44301d77822c00f77"
+          EXPECTED_PACK_SHA256="7e4fe98f4b41a2ef15926803c12d0a51a00ea911c4e9796209ffa2a1f3982c08"
+          actual_target="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json targetCommitish --jq .targetCommitish)"
+          test "$actual_target" = "$EXPECTED_SOURCE"
+
+          cat > "$RUNNER_TEMP/withdrawn-rc6-v2-notes.md" <<EOF
+          # WITHDRAWN — WSM tools 0.1.0-rc6 v2 (Draft only)
+
+          This WSM-owned pack contains the existing Python implementation of
+          `wsm_install` and `wsm_hwcheck`. The implementation language was not
+          approved by the owner; ADR 0009 remains proposed, not accepted.
+          The effective-license decision remains scoped to issue #367.
+
+          The release was published by workflow run 46119662030 without owner
+          approval. It is retained as provenance only and must not be installed,
+          redistributed or used in production. It is excluded from the H170 Free
+          upstream package manifest.
+
+          - Source commit: $EXPECTED_SOURCE
+          - Original build/attestation/read-back run: 46119662030
+          - Original archive SHA-256: $EXPECTED_PACK_SHA256
+          EOF
+
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --title "WITHDRAWN — WSM tools 0.1.0-rc6 v2 (Draft only)" \
+            --notes-file "$RUNNER_TEMP/withdrawn-rc6-v2-notes.md" \
+            --draft
+          test "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')" = "true"
+          body="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body)"
+          printf '%s' "$body" | grep -F "WITHDRAWN"
+          echo "Accidentally published WSM Python RC6 v2 pack returned to Draft." >> "$GITHUB_STEP_SUMMARY"
+
       - name: Summarize WSM package withdrawal failure
         if: failure()
         shell: bash
