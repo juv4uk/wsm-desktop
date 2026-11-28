@@ -1,31 +1,33 @@
 ;; SPDX-License-Identifier: LicenseRef-Volnist
 ;;
-;; Run Cuirass on your own machine, with the WSM specifications.
+;; Run Cuirass on a dedicated Guix build host after WSM channel trust Phase B.
 ;;
-;; This is a fragment, not a full operating-system declaration: paste the
-;; `services' entry into the system that should host the build farm. It is
-;; written as a fragment on purpose - a complete system definition would become
-;; a second source of truth for how WSM machines are configured.
-;;
-;; What you get: a web interface on port 8081, a PostgreSQL-backed job history,
-;; and substitutes for anything the jobs build. What you do not get: QEMU boot
-;; acceptance. That stays in the release workflow.
+;; This is a fragment, not a full operating-system declaration: add this
+;; service to the host's reviewed services list. Keep the web UI on localhost.
+;; The local Cuirass service does not publish its build results as substitutes;
+;; publishing is a separate service/security decision.
 
-(use-modules (gnu services ci)
-             (gnu services)
-             (guix channels))
+(use-modules (gnu services cuirass)
+             (guix gexp)
+             (ice-9 ftw))
+
+;; Resolve the sibling spec file relative to this fragment, not the caller's
+;; working directory. Embed it in the system closure.
+(define %wsm-cuirass-specs-path
+  (string-append (dirname (current-filename)) "/specs.scm"))
+
+(define %wsm-cuirass-specs-file
+  (local-file %wsm-cuirass-specs-path "wsm-cuirass-specs.scm"))
 
 (define %wsm-cuirass-specs
-  ;; Loaded from the file so the CLI and the service cannot drift apart.
-  #~(load "/run/current-system/profile/share/wsm/ci/cuirass/specs.scm"))
+  #~(load #$%wsm-cuirass-specs-file))
 
 (define wsm-cuirass-service
   (service cuirass-service-type
            (cuirass-configuration
+            ;; Loopback only. Expose through an authenticated reverse proxy
+            ;; only after a separate deployment/security review.
             (host "localhost")
             (port 8081)
-            ;; Substitutes make a build farm useful; without them every job
-            ;; rebuilds its whole closure from source.
-            (use-substitutes? #t)
             (fallback? #t)
             (specifications %wsm-cuirass-specs))))
