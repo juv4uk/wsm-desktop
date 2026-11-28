@@ -290,6 +290,27 @@ class ReleaseReadinessTests(unittest.TestCase):
         found = checker.problems(self.directory)
         self.assertTrue(any("missing build.log" in item for item in found), found)
 
+    def test_build_log_symlink_is_refused(self) -> None:
+        path = self.directory / "build.log"
+        external = self.directory.parent / "external-build.log"
+        external.write_text("external transcript\\n", encoding="utf-8")
+        path.unlink()
+        path.symlink_to(external)
+        found = checker.problems(self.directory)
+        self.assertTrue(any("build.log must not be a symlink" in item for item in found), found)
+
+    def test_truncated_build_log_is_caught_by_recorded_byte_count(self) -> None:
+        path = self.directory / "build.log"
+        path.write_text("short\\n", encoding="utf-8")
+        build_path = self.directory / "build-manifest.json"
+        build_manifest = json.loads(build_path.read_text(encoding="utf-8"))
+        build_manifest["build"]["log_sha256"] = checker.sha256_of(path)
+        write_json(build_path, build_manifest)
+        refresh_after_build_manifest_change(self.directory)
+        rewrite_checksum(self.directory, "build.log")
+        found = checker.problems(self.directory)
+        self.assertTrue(any("build.log does not match build-manifest build.log_bytes" in item for item in found), found)
+
     def test_build_log_hash_must_match_builder_manifest(self) -> None:
         (self.directory / "build.log").write_text("changed transcript\\n", encoding="utf-8")
         rewrite_checksum(self.directory, "build.log")
@@ -298,6 +319,34 @@ class ReleaseReadinessTests(unittest.TestCase):
             any("build.log does not match build-manifest build.log_sha256" in item for item in found),
             found,
         )
+
+    def test_bios_boot_evidence_without_iso_hash_is_refused(self) -> None:
+        path = self.directory / "boot-bios.json"
+        record = json.loads(path.read_text(encoding="utf-8"))
+        record.pop("iso_sha256")
+        write_json(path, record)
+        rewrite_checksum(self.directory, "boot-bios.json")
+        manifest_path = self.directory / "release-manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["boot_evidence"]["bios_sha256"] = checker.sha256_of(path)
+        write_json(manifest_path, manifest)
+        rewrite_checksum(self.directory, "release-manifest.json")
+        found = checker.problems(self.directory)
+        self.assertTrue(any("boot-bios.json iso_sha256 is missing or malformed" in item for item in found), found)
+
+    def test_uefi_boot_evidence_without_iso_hash_is_refused(self) -> None:
+        path = self.directory / "boot-uefi.json"
+        record = json.loads(path.read_text(encoding="utf-8"))
+        record.pop("iso_sha256")
+        write_json(path, record)
+        rewrite_checksum(self.directory, "boot-uefi.json")
+        manifest_path = self.directory / "release-manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["boot_evidence"]["uefi_sha256"] = checker.sha256_of(path)
+        write_json(manifest_path, manifest)
+        rewrite_checksum(self.directory, "release-manifest.json")
+        found = checker.problems(self.directory)
+        self.assertTrue(any("boot-uefi.json iso_sha256 is missing or malformed" in item for item in found), found)
 
     def test_boot_evidence_must_be_bound_to_the_published_iso(self) -> None:
         path = self.directory / "boot-bios.json"
