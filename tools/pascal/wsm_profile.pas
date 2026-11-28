@@ -56,7 +56,7 @@ end;
 { Absolute paths and `..' segments are rejected before any file is opened:
   a bundle that points outside itself is not a bundle, and following it would
   turn a data file into a filesystem instruction. }
-function PathProblem(const RawPath, Label: string): string;
+function PathProblem(const RawPath, AFieldName: string): string;
 var
   Part: string;
   Rest: string;
@@ -64,12 +64,12 @@ begin
   Result := '';
   if RawPath = '' then
   begin
-    Result := Label + ': empty path';
+    Result := AFieldName + ': empty path';
     Exit;
   end;
   if (RawPath[1] = '/') or (Copy(RawPath, 1, 3) = '..\') or (Copy(RawPath, 1, 3) = '../') then
   begin
-    Result := Label + ': ' + RawPath + ' is not a safe relative path';
+    Result := AFieldName + ': ' + RawPath + ' is not a safe relative path';
     Exit;
   end;
   Rest := RawPath;
@@ -85,7 +85,7 @@ begin
       Rest := '';
     if Part = '..' then
     begin
-      Result := Label + ': ' + RawPath + ' escapes the bundle directory';
+      Result := AFieldName + ': ' + RawPath + ' escapes the bundle directory';
       Exit;
     end;
   end;
