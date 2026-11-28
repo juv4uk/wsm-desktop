@@ -39,6 +39,26 @@
 можливі trademark restrictions — це вимога [ETHICS.md](ETHICS.md), і вона не
 залежить від ліцензії проєкту.
 
+## Публікація власних Guix-пакетів WSM
+
+28 листопада 2026 року правовласник прямо доручив публікувати оригінальні
+WSM-owned Guix package outputs через WSM-owned substitute cache
+(GitHub Releases для NAR та GitHub Pages для narinfo). Це вузький дозвіл на
+збирання й розповсюдження власних пакетних виходів WSM у межах цього каналу.
+
+Цей дозвіл:
+- не змінює текст ВОЛЬНІСТЬ і не переліцензовує вихідний код під GPL;
+- не стверджує сумісність ВОЛЬНІСТЬ з OSI або GNU FSDG;
+- не поширюється на сторонні драйвери, firmware чи інші файли NVIDIA/Nonguix;
+- не змінює умов ліцензій залежностей: вони зберігають власні copyright,
+  license та notices.
+
+Guix package metadata WSM використовує власний `license` record із назвою
+«ВОЛЬНІСТЬ» і `file://LICENSE`, щоб не представляти WSM code як GPL-3+.
+Це опис фактичної ліцензії, а не висновок про її прийнятність для upstream GNU
+Guix або GNU FSDG. Публікація власних WSM outputs відбувається у WSM-owned
+каналі, а не як внесок до офіційної дистрибуції GNU Guix.
+
 ## SPDX
 
 У нових файлах використовуйте `SPDX-License-Identifier: LicenseRef-Volnist`.
