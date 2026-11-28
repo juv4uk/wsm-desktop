@@ -13,6 +13,12 @@ sys.path.insert(0, str(ROOT))
 
 from wsm_install.executor import ExecutorError, execute  # noqa: E402
 from wsm_install.install_steps import TRUSTED_TOOLS, Step  # noqa: E402
+from wsm_install.consent import (  # noqa: E402
+    ConsentError,
+    grant_consent,
+    needs_consent,
+    require_consent,
+)
 from wsm_install.plan_digest import PlanDigestError, plan_digest, step_digest  # noqa: E402
 from wsm_install.verify import VERIFIERS, verify_step  # noqa: E402
 
@@ -247,6 +253,56 @@ class PlanDigestTests(unittest.TestCase):
         self.assertNotEqual(
             step_digest("/dev/nvme0n1", step, 2), step_digest("/dev/nvme1n1", step, 2)
         )
+
+
+class StepConsentTests(unittest.TestCase):
+    """One destructive step, one grant, bound to the plan and the command."""
+
+    def test_only_destructive_steps_need_consent(self) -> None:
+        self.assertTrue(needs_consent(STEPS[1]))
+        self.assertFalse(needs_consent(STEPS[0]))
+        require_consent(None, "/dev/nvme0n1", STEPS, 1)
+
+    def test_a_destructive_step_without_a_grant_is_refused(self) -> None:
+        with self.assertRaises(ConsentError) as caught:
+            require_consent(None, "/dev/nvme0n1", STEPS, 2)
+        self.assertEqual(caught.exception.code, "consent.missing")
+
+    def test_a_refusal_returns_no_grant(self) -> None:
+        self.assertIsNone(grant_consent("/dev/nvme0n1", STEPS, 2, approve=False))
+
+    def test_an_approved_grant_authorises_exactly_that_step(self) -> None:
+        grant = grant_consent("/dev/nvme0n1", STEPS, 2, approve=True)
+        self.assertIsNotNone(grant)
+        require_consent(grant, "/dev/nvme0n1", STEPS, 2)
+
+    def test_a_changed_plan_invalidates_the_grant(self) -> None:
+        grant = grant_consent("/dev/nvme0n1", STEPS, 2, approve=True)
+        longer = list(STEPS) + [Step(["/usr/bin/mkdir", "-p", "/mnt/boot"], "mkdir")]
+        with self.assertRaises(ConsentError) as caught:
+            require_consent(grant, "/dev/nvme0n1", longer, 2)
+        self.assertEqual(caught.exception.code, "consent.stale-plan")
+
+    def test_a_changed_command_invalidates_the_grant(self) -> None:
+        grant = grant_consent("/dev/nvme0n1", STEPS, 2, approve=True)
+        altered = list(STEPS)
+        altered[1] = Step(["/usr/sbin/mkfs.ext4", "-F", "/dev/nvme0n1p9"], "format root", destructive=True)
+        with self.assertRaises(ConsentError) as caught:
+            require_consent(grant, "/dev/nvme0n1", altered, 2)
+        self.assertEqual(caught.exception.code, "consent.stale-plan")
+
+    def test_a_grant_does_not_cover_another_position(self) -> None:
+        grant = grant_consent("/dev/nvme0n1", STEPS, 2, approve=True)
+        other = [Step(["/usr/sbin/mkfs.ext4", "-F", "/dev/nvme0n1p2"], "format root", destructive=True),
+                 Step(["/usr/sbin/mkfs.fat", "-F", "32", "/dev/nvme0n1p1"], "format esp", destructive=True)]
+        with self.assertRaises(ConsentError) as caught:
+            require_consent(grant, "/dev/nvme0n1", other, 2)
+        self.assertEqual(caught.exception.code, "consent.stale-plan")
+
+    def test_an_index_outside_the_plan_is_refused(self) -> None:
+        with self.assertRaises(ConsentError) as caught:
+            grant_consent("/dev/nvme0n1", STEPS, 9, approve=True)
+        self.assertEqual(caught.exception.code, "consent.index")
 
 
 if __name__ == "__main__":
