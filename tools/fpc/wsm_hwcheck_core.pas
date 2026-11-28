@@ -222,11 +222,6 @@ begin
     Target.Add(Name, Value);
 end;
 
-procedure AddUnavailable(Target: TJSONArray; const Name: string);
-begin
-  Target.Add(Name);
-end;
-
 function NewEvidence(const Source, Summary, ObservedAt: string): TJSONObject;
 begin
   Result := TJSONObject.Create;
@@ -376,10 +371,12 @@ begin
   if ((Architecture = 'x86_64') or (Architecture = 'i686')) and
      DmiIdentityAvailable then
   begin
-    Evidence := 'sysfs:/firmware/efi is absent while x86 DMI identity is present; legacy BIOS/CSM handoff is observed.';
+    Evidence := 'sysfs:/firmware/efi is absent while x86 DMI identity is present: ' +
+      'the firmware handed the kernel over in legacy BIOS/CSM mode.';
     Exit('bios');
   end;
-  Evidence := 'Neither sysfs:/firmware/efi nor sufficient platform identity is available; boot mode is unknown.';
+  Evidence := 'Neither sysfs:/firmware/efi nor an x86 DMI identity is available, ' +
+    'so the boot mode is not determined.';
   Result := 'unknown';
 end;
 
@@ -434,8 +431,8 @@ var
   TextValue, Line, Key, Value, Model, Manufacturer: string;
   Lines: TStringList;
   Index, Separator, LogicalCount: Integer;
-  Fields: array[0..4] of string;
-  CPUFacts, Identity, Unavailable: TJSONObject;
+  Fields: array[0..3] of string;
+  CPUFacts, Identity: TJSONObject;
   Missing: TJSONArray;
 begin
   Result := nil;
@@ -1079,18 +1076,20 @@ begin
   Environment.Add('boot_mode', BootMode);
   Environment.Add('boot_mode_evidence', BootEvidence);
   Environment.Add('virtualization', DetectVirtualization(SysfsRoot, Platform));
+  { Python рахує platform_facts ОДИН раз і використовує той самий словник і
+    для environment, і для board-пристрою. Тут було два окремі виклики
+    CollectPlatform: подвійне читання DMI і, гірше, два обʼєкти, які могли
+    розійтися, якби sysfs змінився між ними. Тепер один. }
+  Devices := TJSONArray.Create;
+  Device := CollectCPU(ProcRoot, SysfsRoot, ObservedAt);
+  if Device <> nil then Devices.Add(Device);
+  Device := CollectBoard(Platform, ObservedAt);
+  if Device <> nil then Devices.Add(Device);
+
   if Platform.Count > 0 then
     Environment.Add('platform', Platform)
   else
     Platform.Free;
-
-  Devices := TJSONArray.Create;
-  Device := CollectCPU(ProcRoot, SysfsRoot, ObservedAt);
-  if Device <> nil then Devices.Add(Device);
-  Platform := CollectPlatform(SysfsRoot);
-  Device := CollectBoard(Platform, ObservedAt);
-  if Device <> nil then Devices.Add(Device);
-  Platform.Free;
 
   AddPCIDevices(SysfsRoot, ObservedAt, Devices);
   AddUSBDevices(SysfsRoot, ObservedAt, Devices);
