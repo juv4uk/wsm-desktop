@@ -74,8 +74,12 @@
   ;; Інсталятор має мати свої інструменти в live-профілі.
   ;; gptfdisk, parted і dosfstools не входять у %base-packages:
   ;; вони надають sgdisk, partprobe та mkfs.fat відповідно.
-  ;; eudev, util-linux, e2fsprogs і coreutils приходять з %base-packages
-  ;; pinned Guix (linux/utils); причину звіряє TrustedToolClosureTests.
+  ;; Явні власники решти інструментів у pinned Guix:
+  ;; eudev/udevadm — %base-packages-linux.
+  ;; util-linux/mount — %base-packages-linux (util-linux+udev).
+  ;; e2fsprogs/mkfs.ext4 — %base-packages-utils.
+  ;; coreutils/mkdir — %base-packages-utils.
+  ;; TrustedToolClosureTests звіряє ці пояснення з канонічною tool_map.
   (packages
    (cons* wsm-tools
           font-dejavu
