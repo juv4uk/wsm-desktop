@@ -97,7 +97,7 @@ guix shell cuirass -- cuirass web --database="dbname=cuirass host=/var/run/postg
 systemctl status cuirass-register.service cuirass-web.service
 curl -sS 'http://127.0.0.1:8081/api/evaluations?spec=wsm-tools&nr=10'
 curl -sS 'http://127.0.0.1:8081/api/latestbuilds?nr=10'
-curl -sS 'http://127.0.0.1:8081/api/queue'
+curl -sS 'http://127.0.0.1:8081/api/queue?nr=10'
 
 # ручний evaluation
 curl -X POST http://127.0.0.1:8081/jobset/wsm-tools/hook/evaluate
@@ -111,7 +111,7 @@ journalctl -u cuirass-web.service -f
 sudo -u postgres psql -d cuirass -c 'SELECT id, specification, status FROM builds ORDER BY id DESC LIMIT 10;'
 ```
 
-API 1.3.7 — Hydra-подібний: `/api/jobs`, `/api/evaluations?spec=…&nr=…`, `/api/latestbuilds?nr=…`, `/api/queue`; окремий evaluation — `/api/evaluation?id=…`.
+API 1.3.7 — Hydra-подібний: `/api/jobs`, `/api/evaluations?spec=…&nr=…`, `/api/latestbuilds?nr=…`, `/api/queue?nr=…` (параметр `nr` обов'язковий); окремий evaluation — `/api/evaluation?id=…`.
 
 ### Спостереження за сервісами
 
@@ -119,6 +119,17 @@ API 1.3.7 — Hydra-подібний: `/api/jobs`, `/api/evaluations?spec=…&nr
 - `cuirass-web.service` слухає тільки `127.0.0.1:8081`; `curl http://127.0.0.1:8081` → `HTTP 200`.
 - Під час одночасного перезапуску обох юнітів веб один раз вийшов із кодом 1, бо bridge register ще не був готовий. `Restart=on-failure` підняв його через 10 с; повторний `curl` знову дав `HTTP 200`. Це спостереження auto-recovery, а не ознака стабільності конфігурації.
 - `cuirass register --check` до запуску дав `all good!` (з harmless warning про deprecated `load*`).
+
+### Контрольний evaluation 2026-11-28 (EET)
+
+- POST `/jobset/wsm-tools/hook/evaluate` о `10:42:17 EET` → `HTTP 200`; evaluation стартував після того, як Cuirass дістав checkout'и `guix 4e5195be20d9b124df8a8bb69213412236e4668e` і `wsm bb51f4979c8fd9853f70755f6d23b4097c0b1157` о `10:58:19 EET`.
+- Evaluation `id=1` завершився `status=0` (`succeeded`) о `11:03:15 EET`; лог — `/var/lib/cuirass/log/cuirass/evaluations/1.gz` (3166 bytes).
+- Він зареєстрував рівно 1 build і створив GC root `/var/guix/gcroots/profiles/per-user/cuirass/cuirass/amymd5gpav29pikml7wi6kqs8nyqp52v-wsm-tools-0.1.0-rc6.drv`.
+- Build `id=1` (`wsm-tools.x86_64-linux`) завершився `status=0` о `11:03:41 EET`. У журналі register видно `build started` → `build succeeded` для `module-import-compiled` і `amymd5…wsm-tools-0.1.0-rc6.drv`.
+- Output: `/gnu/store/j31f07cbvycl9a4byfz9mp2d52vhk8rm-wsm-tools-0.1.0-rc6`; у ньому є `bin/wsm-hwcheck`, `bin/wsm-install` і `LicenseRef-Volnist.txt`. `guix size` для цього output → 385.0 MiB (pinned Guix 4e5195b; попередній source-tree build під системним Guix 1.5.0 дав 452.3 MiB — це різні derivations, не суперечність).
+- Лог складання: `/var/log/guix/drvs/am/ymd5gpav29pikml7wi6kqs8nyqp52v-wsm-tools-0.1.0-rc6.drv.gz`; він закінчується успішними фазами `install-license-files`, `reset-gzip-timestamps`, `compress-documentation`.
+- GC roots після build: derivation, `module-import-compiled` і сам output — усі в `/var/guix/gcroots/profiles/per-user/cuirass/cuirass`.
+- Після `systemctl restart cuirass-register.service cuirass-web.service` обидва сервіси знову `active`, `HTTP 200`, API повертає ті самі evaluation/build, а БД має `evaluations=1`, `builds=1`, `checkouts=2`, `jobs=1`. `/api/queue?nr=10` → `[]`.
 
 ### Резервні копії
 
@@ -134,7 +145,7 @@ API 1.3.7 — Hydra-подібний: `/api/jobs`, `/api/evaluations?spec=…&nr
 
 ## Стан
 
-Структурні тести в `tests/test_cuirass_specs.py` і далі перевіряють specification-файл репозиторію. Окрім того, на цій машині тепер є реальний інстанс: PostgreSQL 16, Cuirass 1.3.7, обидва systemd-сервіси й локальний daemon. Перший контрольний evaluation після ручного POST на `/jobset/wsm-tools/hook/evaluate` ще обчислює похідну pinned Guix; поки що API повертає порожні `/api/evaluations` і `/api/latestbuilds`. Вебінтерфейс — лише подання даних бази, а не доказ складання.
+Структурні тести в `tests/test_cuirass_specs.py` і далі перевіряють specification-файл репозиторію. Окрім того, на цій машині тепер є реальний інстанс: PostgreSQL 16, Cuirass 1.3.7, обидва systemd-сервіси й локальний daemon. Контрольний evaluation після ручного POST на `/jobset/wsm-tools/hook/evaluate` завершився успішно (`id=1`, `status=0`), зареєстрував 1 build, і цей build теж завершився успішно (`status=0`); фактичні шляхи, логи, GC roots і перезапуск описані в розділі про контрольний прогон. Це доводить локальну збірку канального пакета, але не завантаження ISO, інсталятор чи hardware. Вебінтерфейс — лише подання даних бази, а не доказ складання; доказом є derivation, лог і output у `/gnu/store`.
 
 ## Що було виправлено після звірки з посібником
 
@@ -151,4 +162,4 @@ API 1.3.7 — Hydra-подібний: `/api/jobs`, `/api/evaluations?spec=…&nr
 
 Це і є причина, чому файли такого роду не можна писати без джерела: кожна з чотирьох помилок дала б збій лише в момент запуску, на машині, де Guix є, — тобто не в того, хто писав.
 
-Це чесний стан: файли описують, як запустити, а не стверджують, що запущено.
+Ці виправлення стосуються specification-файлу репозиторію; локальний інстанс описаний вище окремо й не робить ці помилки менш реальними.
