@@ -141,6 +141,24 @@ Bootstrap має бути виконаний власником ключа. Ни
 
 До появи owner-signed introduction CI може перевіряти Scheme API/evaluation сумісність WSM source tree з pinned Guix. Поточний smoke-test використовує `-L .`, тому module lookup іде з checkout репозиторію. Його успіх позначається тільки як `WSM-SOURCE-MODULE-EVAL-OK`; це **не** channel import і не authentication.
 
+### Діагностичний CLI smoke до Phase B
+
+`make check-guix-eval` запускає `scripts/check-wsm-channel-set.sh` на фактичному
+`channels/wsm.scm` через Guix CLI:
+
+- звичайний `guix time-machine -C channels/wsm.scm -- describe -f channels`
+  має відмовити саме через відсутній owner-signed WSM introduction/authorization;
+  parse, network або помилка резолвінгу гілки не зараховується;
+- окремий виклик із `--disable-authentication` використовується лише для
+  діагностики та перевіряє, що в channel set присутні `guix` і `wsm`;
+- фінальний маркер `WSM_CHANNEL_AUTHENTICATION=NOT_TESTED` означає, що
+  автентифікація **не перевірена і не прийнята**. Цей режим не використовується
+  для release lock або production build.
+
+Для непінованих записів у цьому файлі потрібні явні branch names: upstream
+Guix — `master`, WSM — `main`. `(branch #f)` у pinned lock із точним commit
+не тотожний непінованому запису без commit і не може копіюватися сюди.
+
 Після Phase B потрібна окрема перевірка реального channel consumer: зафіксувати owner-approved WSM commit у H170 release lock, запустити стандартний `guix time-machine` без `-L .` і без `--disable-authentication`, а тоді імпортувати той самий public module. Цей тест не можна вмикати раніше підписаного introduction та підтвердженої authorizations chain.
 
 ## Release gates

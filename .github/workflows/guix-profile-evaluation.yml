@@ -14,6 +14,8 @@ on:
       - "wsm/**/*.scm"
       - "Makefile"
       - "scripts/build_iso.sh"
+      - "scripts/check-wsm-channel-set.sh"
+      - "tests/test_wsm_channel_set.py"
   workflow_dispatch:
 
 permissions:

@@ -6,9 +6,9 @@ GUIX ?= guix
 PRODUCT ?= free
 
 
-.PHONY: check-driver-profiles check check-ci-policy qemu-acceptance-manual check-guix-eval check-compatibility-eval release-gate describe-compatibility-lock build-compatibility-system image-live-compat check-docs check-doc-ownership check-regression-register check-release-info check-artifact-versions check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle check-profiles check-agent check-calamares check-channels check-cli-install check-env-preflight check-evidence-drafter check-executor check-guided check-hygiene check-install-steps check-isa check-journal check-live-acceptance check-makefile check-observation check-partition check-perf-baseline check-boot-profile check-profile-evidence check-profile-match check-profiles-matrix check-release-verdict check-state check-syntax check-tui check-licences image-live-minimal check-temp-paths check-test-registration check-release-assets check-classification check-classification-policy check-readme-stage check-classification-schema check-ci-parity check-scheme-imports check-no-sleep-readiness check-ci-failure-visibility check-tests check-gp107-reference check-channel-artifacts check-release-docs
+.PHONY: check-driver-profiles check check-ci-policy qemu-acceptance-manual check-guix-eval check-compatibility-eval release-gate describe-compatibility-lock build-compatibility-system image-live-compat check-docs check-doc-ownership check-regression-register check-release-info check-artifact-versions check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle check-profiles check-agent check-calamares check-channels check-cli-install check-env-preflight check-evidence-drafter check-executor check-tool-closure check-guided check-hygiene check-install-steps check-isa check-journal check-live-acceptance check-makefile check-observation check-partition check-perf-baseline check-boot-profile check-profile-evidence check-profile-match check-profiles-matrix check-release-verdict check-state check-syntax check-tui check-licences image-live-minimal check-temp-paths check-test-registration check-release-assets check-classification check-classification-policy check-readme-stage check-classification-schema check-ci-parity check-scheme-imports check-no-sleep-readiness check-ci-failure-visibility check-tests check-gp107-reference check-channel-artifacts check-release-docs check-wsm-channel-set
 
-check: check-ci-policy check-docs check-doc-ownership check-regression-register check-release-info check-artifact-versions check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa check-live-acceptance check-profiles-matrix check-perf-baseline check-boot-profile check-profile-evidence check-driver-profiles check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-hygiene check-channels check-executor check-cli-install check-calamares check-guided check-tui check-agent check-journal check-env-preflight check-observation check-licences check-temp-paths check-test-registration check-release-assets check-classification check-classification-policy check-readme-stage check-classification-schema check-ci-parity check-scheme-imports check-no-sleep-readiness check-ci-failure-visibility check-tests check-gp107-reference check-channel-artifacts check-release-docs
+check: check-ci-policy check-docs check-doc-ownership check-regression-register check-release-info check-artifact-versions check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa check-live-acceptance check-profiles-matrix check-perf-baseline check-boot-profile check-profile-evidence check-driver-profiles check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-hygiene check-channels check-executor check-tool-closure check-cli-install check-calamares check-guided check-tui check-agent check-journal check-env-preflight check-observation check-licences check-temp-paths check-test-registration check-release-assets check-classification check-classification-policy check-readme-stage check-classification-schema check-ci-parity check-scheme-imports check-no-sleep-readiness check-ci-failure-visibility check-tests check-gp107-reference check-channel-artifacts check-release-docs
 
 check-profiles:
 	$(PYTHON) tests/test_system_profiles.py
@@ -68,6 +68,12 @@ check-install-steps:
 check-executor:
 	$(PYTHON) tests/test_executor.py
 
+# Proves the closure checker's behaviour on throwaway roots. It cannot prove any
+# image: `--root` on this host describes this host, and the image ships no /usr
+# yet. Run `scripts/check_tool_closure.py --root <image root>` for that.
+check-tool-closure:
+	$(PYTHON) scripts/check_tool_closure.py --self-check
+
 check-cli-install:
 	$(PYTHON) tests/test_cli_install.py
 
@@ -111,6 +117,7 @@ check-guix-eval:
 	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/live-minimal.scm --dry-run
 	$(MAKE) check-compatibility-eval
 	$(GUIX) time-machine -C channels.lock.scm -L . -- home -L . build systems/home.scm --dry-run
+	$(MAKE) check-wsm-channel-set
 
 # Compatibility is opt-in and always uses its own authenticated Guix + Nonguix lock.
 # This target resolves the lock and evaluates the full system graph without building it.
@@ -271,3 +278,6 @@ check-gp107-reference:
 
 check-release-docs:
 	$(PYTHON) tests/test_release_documents_agree.py
+
+check-wsm-channel-set:
+	GUIX="$(GUIX)" bash scripts/check-wsm-channel-set.sh
