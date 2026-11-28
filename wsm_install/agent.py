@@ -23,19 +23,23 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from wsm_install.executor import ExecutorError, execute
-from wsm_install.install_steps import Step
+from wsm_install.install_steps import (
+    SYSTEM_PROFILE_ROOT,
+    TRUSTED_TOOLS,
+    Step,
+    TrustedToolResolutionError,
+    resolve_trusted_tool,
+)
 from wsm_install.partition import DEVICE_PATH
 
-# Commands recognized by the plan validator. This list is not an execution
-# permission while APPLY remains disabled. Absolute paths avoid PATH ambiguity.
-ALLOWED_PROGRAMS = frozenset({
-    "/usr/sbin/partprobe",
-    "/usr/bin/udevadm",
-    "/usr/sbin/mkfs.ext4",
-    "/usr/sbin/mkfs.fat",
-    "/usr/bin/mount",
-    "/usr/bin/mkdir",
-})
+# Only exact paths emitted by the Guix system-profile resolver are accepted.
+# Non-Guix developer previews use bare logical names; the privileged agent
+# rejects those names and never searches PATH or accepts FHS aliases.
+ALLOWED_PROGRAMS = frozenset(
+    str(SYSTEM_PROFILE_ROOT / directory / basename)
+    for directory in ("bin", "sbin")
+    for basename in TRUSTED_TOOLS.values()
+)
 
 SHELL_METACHARACTERS = frozenset("|&;<>()$`\\\"'\n\r")
 MAX_STEPS = 32
@@ -57,8 +61,19 @@ def validate_command(command: Sequence[str]) -> None:
     if program not in ALLOWED_PROGRAMS:
         raise AgentError(
             "agent.not-allowed",
-            f"{program!r} is not in the agent allowlist; this plan contains an "
-            "unrecognized command form",
+            f"{program!r} is not an exact Guix system-profile tool path",
+        )
+    try:
+        resolved = resolve_trusted_tool(Path(program).name)
+    except TrustedToolResolutionError as exc:
+        raise AgentError(
+            "agent.tool-unavailable",
+            f"{exc.code}: {exc.message}",
+        ) from exc
+    if resolved != program:
+        raise AgentError(
+            "agent.tool-path",
+            f"{program!r} is not the canonical profile entry",
         )
     for argument in command[1:]:
         if not isinstance(argument, str):
