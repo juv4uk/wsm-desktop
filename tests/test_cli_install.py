@@ -9,6 +9,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 GIB = 1024 ** 3
@@ -29,6 +30,48 @@ def run_cli(*extra: str, backend: str = "guix") -> subprocess.CompletedProcess:
 
 
 class InstallModeTests(unittest.TestCase):
+    def test_running_guix_system_selects_its_profile_prefixes_only(self) -> None:
+        from wsm_install.cli import _tool_prefixes_for_running_system
+        from wsm_install.tools import GUIX_PROFILE_PREFIXES
+
+        with patch.object(Path, "is_dir", side_effect=[False, True]):
+            self.assertEqual(_tool_prefixes_for_running_system(), GUIX_PROFILE_PREFIXES)
+        with patch.object(Path, "is_dir", side_effect=[False, False]):
+            self.assertIsNone(_tool_prefixes_for_running_system())
+
+    def test_install_planner_receives_the_guix_profile_prefixes(self) -> None:
+        from wsm_install import cli
+        from wsm_install.tools import GUIX_PROFILE_PREFIXES
+
+        args = argparse.Namespace(
+            execute=False,
+            target_disk="/dev/nvme0n1",
+            target_size_bytes=256 * GIB,
+            acknowledge_disk="/dev/nvme0n1",
+            firmware="uefi",
+            filesystem="ext4",
+            mount_point="/mnt",
+            system_file=Path("systems/desktop.scm"),
+            backend="guix",
+            write_plan=None,
+            quiet=True,
+        )
+        layout = object()
+        with (
+            patch("wsm_install.cli.build_plan", return_value=(None, [], [])),
+            patch("wsm_install.cli._tool_prefixes_for_running_system", return_value=GUIX_PROFILE_PREFIXES),
+            patch("wsm_install.partition.Disk"),
+            patch("wsm_install.partition.plan", return_value=layout),
+            patch("wsm_install.install_steps.plan_steps", return_value=[]) as plan_steps,
+            patch("wsm_install.install_steps.backend_command", return_value=["guix"]),
+            patch("wsm_install.executor.execute", return_value=[]),
+        ):
+            result = cli._run_install(args, {}, b"{}")
+        self.assertEqual(result, 0)
+        plan_steps.assert_called_once_with(
+            layout, "ext4", "/mnt", tool_prefixes=GUIX_PROFILE_PREFIXES
+        )
+
     def test_deferred_backends_are_rejected_by_cli(self) -> None:
         for backend in ("nix", "nixos"):
             with self.subTest(backend=backend):
