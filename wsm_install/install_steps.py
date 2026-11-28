@@ -30,6 +30,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Sequence
 
+from wsm_install.tool_map import TOOLS
 from wsm_install.tools import resolve
 from wsm_install.partition import Layout, Refused
 
@@ -40,15 +41,9 @@ from wsm_install.partition import Layout, Refused
 # supply a file named like a standard utility that then executed as root
 # (fix #8172). The same shape applies here - these steps are meant to be run as
 # root - so no step may rely on PATH lookup at all.
-TRUSTED_TOOLS = {
-    "sgdisk": "/usr/sbin/sgdisk",
-    "partprobe": "/usr/sbin/partprobe",
-    "udevadm": "/usr/bin/udevadm",
-    "mkfs.ext4": "/usr/sbin/mkfs.ext4",
-    "mkfs.fat": "/usr/sbin/mkfs.fat",
-    "mount": "/usr/bin/mount",
-    "mkdir": "/usr/bin/mkdir",
-}
+# Derived from wsm_install.tool_map so the planner, the agent's allowlist, the
+# executor's argv policy and the verifier dispatch cannot drift apart (#645).
+TRUSTED_TOOLS = {name: spec["executable"] for name, spec in TOOLS.items()}
 
 ROOT_FILESYSTEM = "ext4"
 FILESYSTEMS = {

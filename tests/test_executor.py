@@ -22,6 +22,7 @@ import tempfile  # noqa: E402
 
 from wsm_install.admission import admit  # noqa: E402
 from wsm_install.tools import is_admissible_path, resolve  # noqa: E402
+from wsm_install.tool_map import TOOLS, EXECUTABLES, package  # noqa: E402
 from wsm_install.disk_identity import (  # noqa: E402
     DiskIdentity,
     IdentityError,
@@ -709,6 +710,41 @@ class ProfilePathAdmissibilityTests(unittest.TestCase):
     def test_the_host_path_from_the_table_still_works(self) -> None:
         admissible, reason = admissible_executable(STEPS[0])
         self.assertTrue(admissible, reason)
+
+
+class SingleToolMapTests(unittest.TestCase):
+    """One logical tool, one path, the same answer in every consumer (#645)."""
+
+    def test_every_consumer_uses_the_same_set(self) -> None:
+        from wsm_install.agent import ALLOWED_PROGRAMS
+        from wsm_install.executor import ALLOWED_EXECUTABLES
+        from wsm_install.install_steps import TRUSTED_TOOLS
+        from wsm_install.verify import VERIFIERS
+
+        consumers = {
+            "planner": frozenset(TRUSTED_TOOLS.values()),
+            "agent": frozenset(ALLOWED_PROGRAMS),
+            "executor": frozenset(ALLOWED_EXECUTABLES),
+            "verifier": frozenset(VERIFIERS),
+        }
+        for name, actual in consumers.items():
+            with self.subTest(consumer=name):
+                self.assertEqual(actual, frozenset(EXECUTABLES), f"{name} drifted from the tool map")
+
+    def test_sgdisk_is_reachable_by_every_consumer(self) -> None:
+        from wsm_install.agent import ALLOWED_PROGRAMS
+        from wsm_install.executor import ALLOWED_EXECUTABLES
+        from wsm_install.verify import VERIFIERS
+
+        path = "/usr/sbin/sgdisk"
+        self.assertIn(path, ALLOWED_PROGRAMS)
+        self.assertIn(path, ALLOWED_EXECUTABLES)
+        self.assertIn(path, VERIFIERS)
+
+    def test_every_tool_names_the_package_that_owns_it(self) -> None:
+        for name in TOOLS:
+            with self.subTest(tool=name):
+                self.assertTrue(package(name).strip(), f"{name} has no owning package")
 
 
 if __name__ == "__main__":
