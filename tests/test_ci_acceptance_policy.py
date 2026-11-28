@@ -166,5 +166,26 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
         self.assertIn("*[!A-Za-z0-9._+-]*", self.text)
         self.assertIn("refusing odd package name", self.text)
 
+class StorePathParsingTests(unittest.TestCase):
+    """A build step must hand the export step a store path, not a log line.
+
+    The first real run failed with `guix archive: error: ... unknown package`,
+    because the command substitution captured a marker line that this
+    repository's evaluation prints to stdout along with the path.
+    """
+
+    WORKFLOW = ROOT / ".github" / "workflows" / "package-archives.yml"
+
+    def setUp(self) -> None:
+        self.text = self.WORKFLOW.read_text(encoding="utf-8")
+
+    def test_the_store_path_is_taken_from_the_last_line(self) -> None:
+        self.assertIn("tail -n 1", self.text)
+
+    def test_a_non_store_path_is_refused(self) -> None:
+        self.assertIn("/gnu/store/*", self.text)
+        self.assertIn("refusing non-store output", self.text)
+
+
 if __name__ == "__main__":
     unittest.main()

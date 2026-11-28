@@ -74,8 +74,19 @@ jobs:
             case "$package" in
               *[!A-Za-z0-9._+-]*) echo "refusing odd package name: $package" >&2; exit 1 ;;
             esac
-            store_path="$(guix time-machine -C channels.lock.scm -- \
+            # `guix build` prints the store path on stdout and its messages on
+            # stderr - but something in this repository's evaluation prints a
+            # marker line to stdout too (WSM-SOURCE-MODULE-EVAL-OK ...), and the
+            # command substitution captured it. The export step then received
+            # "unknown package" instead of a path. Take the last line and refuse
+            # anything that is not a store path.
+            build_output="$(guix time-machine -C channels.lock.scm -- \
                             build -L . "$package" --no-grafts)"
+            store_path="$(printf '%s\n' "$build_output" | tail -n 1)"
+            case "$store_path" in
+              /gnu/store/*) ;;
+              *) echo "refusing non-store output for $package: $store_path" >&2; exit 1 ;;
+            esac
             printf '%s\t%s\n' "$package" "$store_path" >> archives/store-paths.txt
             echo "WSM_PACKAGE_BUILT=$package $store_path" >> "$GITHUB_STEP_SUMMARY"
           done
