@@ -162,6 +162,16 @@ class ChannelAuthorizationsTests(unittest.TestCase):
             found = checker.problems(self.root, keyring_dir=self.keyring)
         self.assertTrue(any("unauthorized fingerprint" in item for item in found), found)
 
+    def test_authorization_file_cannot_be_deleted_after_bootstrap(self) -> None:
+        self.commit_authorizations(GOOD, "bootstrap test channel authorizations")
+        self.git(["rm", ".guix-authorizations"])
+        self.git(["commit", "-m", "remove test channel authorizations"])
+        found = checker.problems(self.root)
+        self.assertTrue(
+            any("absent at HEAD but exists in channel history" in item for item in found),
+            found,
+        )
+
     def test_retired_authorization_remains_required_in_keyring(self) -> None:
         self.commit_authorizations(GOOD, "introduce first test authorization")
         self.commit_authorizations(OTHER_ONLY, "retire first test key")
