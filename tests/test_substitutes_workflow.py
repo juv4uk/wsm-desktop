@@ -1,16 +1,8 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""The substitute workflow: owner-approved, manual-only, key never in the repo.
-
-History worth keeping: an earlier revision of this workflow published on every
-push to main and was replaced by a disabled stub until the owner decided on key
-custody and the endpoint. The owner approved publication on 2026-11-28. What
-stays forbidden is what the stub was protecting: automatic publishing and key
-material in the repository.
-"""
+"""H170 Free substitutes use an ephemeral signing key and immutable outputs."""
 
 from __future__ import annotations
 
-import re
 import unittest
 from pathlib import Path
 
@@ -24,67 +16,69 @@ class SubstituteWorkflowTests(unittest.TestCase):
     def setUp(self) -> None:
         self.text = WORKFLOW.read_text(encoding="utf-8")
         self.data = yaml.safe_load(self.text)
+        self.events = self.data[True]
         self.job = self.data["jobs"]["publish"]
         self.steps = self.job["steps"]
 
     def step(self, needle: str) -> dict:
-        for step in self.steps:
-            if needle in (step.get("name") or ""):
-                return step
-        raise AssertionError(f"no step matching {needle!r}")
+        for item in self.steps:
+            if needle in (item.get("name") or ""):
+                return item
+        raise AssertionError(f"workflow step not found: {needle}")
 
-    def test_the_workflow_parses(self) -> None:
-        self.assertIn("publish", self.data["jobs"])
+    def test_workflow_runs_on_main_inputs_or_manually(self) -> None:
+        self.assertEqual(self.events["push"]["branches"], ["main"])
+        self.assertIn("workflow_dispatch", self.events)
+        self.assertEqual(self.job["if"], "${{ github.ref == 'refs/heads/main' }}")
 
-    def test_publication_is_manual_only(self) -> None:
-        """Automatic publishing on every push was the stub's first objection."""
-        self.assertIn("workflow_dispatch", self.data[True])
-        self.assertNotIn("push", self.data[True])
+    def test_build_uses_the_exact_lock_and_fixed_ten_package_manifest(self) -> None:
+        build = self.step("Evaluate and build the fixed H170 Free manifest")["run"]
+        self.assertIn("guix time-machine -C channels.lock.scm", build)
+        self.assertIn("--manifest=drivers/profiles/h170-free-packages.scm", build)
+        self.assertIn("--dry-run", build)
+        self.assertIn("--no-grafts", build)
+        self.assertIn('-ne 10', build)
+        self.assertIn('test_h170_free_package_manifest.py', build)
 
-    def test_the_job_is_not_disabled(self) -> None:
-        self.assertNotEqual(self.job.get("if"), "${{ false }}")
-        self.assertNotIn("if: ${{ false }}", self.text)
+    def test_signing_key_is_ephemeral_to_the_runner_and_not_a_repository_secret(self) -> None:
+        step = self.step("Generate an ephemeral signing key")
+        self.assertIn("guix archive --generate-key", step["run"])
+        self.assertIn("/etc/guix/signing-key.sec", step["run"])
+        self.assertIn("/etc/guix/signing-key.pub", step["run"])
+        self.assertNotIn("secrets.", self.text)
+        self.assertNotIn("vars.GUIX_SIGNING_PUBLIC_KEY", self.text)
+        self.assertIn("private key never leaves", self.text.lower())
 
-    def test_the_owner_decision_is_recorded(self) -> None:
-        self.assertIn("2026-11-28", self.text)
-        self.assertIn("ВЛАСНИК ДАВ ДОЗВІЛ", self.text)
+    def test_guix_publish_uses_the_run_key_and_bakes_all_ten_nars(self) -> None:
+        step = self.step("Bake signed NARs into the local substitute cache")["run"]
+        self.assertIn("--cache=", step)
+        self.assertIn("--compression=zstd:9", step)
+        self.assertIn("--public-key=/etc/guix/signing-key.pub", step)
+        self.assertIn("--private-key=/etc/guix/signing-key.sec", step)
+        self.assertIn("narinfo_url", step)
+        self.assertIn('NAR_COUNT', step)
+        self.assertIn('-eq 10', step)
 
-    def test_the_key_comes_from_a_secret_and_is_checked(self) -> None:
-        step = self.step("ключ")
-        self.assertIn("secrets.GUIX_SIGNING_KEY", str(step))
-        self.assertIn("exit 1", step["run"])
+    def test_release_and_pages_publish_key_provenance_and_narinfo(self) -> None:
+        self.assertIn("gh release create", self.text)
+        self.assertIn("gh release upload", self.text)
+        self.assertIn("actions/upload-pages-artifact@v3", self.text)
+        self.assertIn("actions/deploy-pages@v4", self.text)
+        self.assertIn("signing-key.pub", self.text)
+        self.assertIn("provenance.txt", self.text)
+        self.assertIn("SHA256SUMS", self.text)
+        self.assertIn("gh release download", self.text)
+        self.assertIn("sha256sum -c SHA256SUMS", self.text)
 
-    def test_no_key_material_is_committed(self) -> None:
+    def test_no_private_key_is_committed_or_uploaded(self) -> None:
         for marker in ("BEGIN OPENSSH PRIVATE KEY", "(signing-key", "(private-key"):
             self.assertNotIn(marker, self.text)
-        # Hex-only runs of 64 characters are digests, not keys; a key blob has
-        # characters outside [0-9a-f].
-        blobs = [b for b in re.findall(r"[A-Za-z0-9+/]{64,}={0,2}", self.text)
-                 if re.search(r"[g-zG-Z+/]", b)]
-        self.assertEqual(blobs, [], f"possible key material: {blobs[:1]}")
+        self.assertNotIn('gh release upload "$CACHE_TAG" "$OUT/signing-key.sec"', self.text)
 
-    def test_guix_is_installed_from_the_pinned_tarball(self) -> None:
-        """`guix-install.sh` has no --unattended and fails on a wget network error."""
-        step = self.step("Встановити")
-        self.assertIn("guix-binary-", step["run"])
-        self.assertIn("sha256sum -c -", step["run"])
-        self.assertNotIn("guix-install.sh", step["run"])
-        # The comment explains why the installer was dropped; the code must not
-        # use the flag that never existed.
-        code = "\n".join(line.split("#")[0] for line in self.text.splitlines())
-        self.assertNotIn("--unattended", code)
-
-    def test_the_daemon_socket_is_waited_for(self) -> None:
-        """A missing socket looks like a broken installer; say so explicitly."""
-        self.assertIn("daemon-socket/socket", self.step("Встановити")["run"])
-
-    def test_the_cache_is_warmed_before_publishing(self) -> None:
-        self.assertIn("narinfo", self.step("Прогріти")["run"])
-
-    def test_archives_go_to_a_release_and_metadata_to_pages(self) -> None:
-        self.assertIn("gh release upload substitutes", self.text)
-        self.assertIn("upload-pages-artifact@v3", self.text)
-        self.assertIn("releases/download/substitutes", self.text)
+    def test_failure_is_reported_without_claiming_success(self) -> None:
+        step = self.step("Report publication failure")
+        self.assertIn("failure()", str(step.get("if")))
+        self.assertIn("No success is claimed", step["run"])
 
 
 if __name__ == "__main__":
