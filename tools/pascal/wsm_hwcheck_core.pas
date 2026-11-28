@@ -229,7 +229,8 @@ end;
 function NewBaseDevice(const DeviceId, Category, Bus, Source, Summary,
   ObservedAt: string; Driver: TJSONObject): TJSONObject;
 var
-  Firmware, Tests, Evidence, Recommendations: TJSONData;
+  Firmware: TJSONObject;
+  Tests, Evidence, Recommendations: TJSONArray;
 begin
   Result := TJSONObject.Create;
   Result.Add('device_id', DeviceId);
@@ -247,9 +248,9 @@ begin
   Result.Add('driver', Driver);
 
   Firmware := TJSONObject.Create;
-  TJSONObject(Firmware).Add('requirement', 'unknown');
-  TJSONObject(Firmware).Add('runtime_status', 'unknown');
-  TJSONObject(Firmware).Add('redistribution_status', 'unknown');
+  Firmware.Add('requirement', 'unknown');
+  Firmware.Add('runtime_status', 'unknown');
+  Firmware.Add('redistribution_status', 'unknown');
   Result.Add('firmware', Firmware);
 
   Tests := TJSONArray.Create;
