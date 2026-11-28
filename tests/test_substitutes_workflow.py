@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""The substitute workflow must fail loudly without a key, and never leak one."""
+"""Keep package archives manual and block an unapproved public cache workflow."""
 
 from __future__ import annotations
 
@@ -9,68 +9,38 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-WORKFLOW = ROOT / ".github" / "workflows" / "substitutes.yml"
+PUBLISHER = ROOT / ".github" / "workflows" / "substitutes.yml"
+ARCHIVE_WORKFLOW = ROOT / ".github" / "workflows" / "package-archives.yml"
+SUBSTITUTE_DOC = ROOT / "docs" / "SUBSTITUTES.md"
 
 
 class SubstituteWorkflowTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.text = WORKFLOW.read_text(encoding="utf-8")
-        self.data = yaml.safe_load(self.text)
-        self.steps = self.data["jobs"]["publish"]["steps"]
+    def test_no_automatic_public_substitute_publisher_is_installed(self) -> None:
+        self.assertFalse(
+            PUBLISHER.exists(),
+            "public substitute publication needs owner-approved license, Phase B and key custody",
+        )
 
-    def step(self, needle: str) -> dict:
-        for step in self.steps:
-            if needle in (step.get("name") or "") or needle in str(step.get("uses", "")):
-                return step
-        raise AssertionError(f"no step matching {needle!r}")
+    def test_package_archives_are_manual_only(self) -> None:
+        text = ARCHIVE_WORKFLOW.read_text(encoding="utf-8")
+        workflow = yaml.load(text, Loader=yaml.BaseLoader)
+        events = workflow["on"]
+        self.assertEqual(set(events), {"workflow_dispatch"})
+        self.assertNotIn("push", events)
+        self.assertNotIn("pull_request", events)
+        self.assertIn("actions/upload-artifact@v7", text)
+        self.assertNotIn("secrets.", text)
+        self.assertNotIn("guix publish", text)
+        self.assertNotIn("gh release upload", text)
 
-    def test_the_workflow_parses(self) -> None:
-        self.assertIn("publish", self.data["jobs"])
-
-    def test_it_runs_on_manual_dispatch(self) -> None:
-        self.assertIn("workflow_dispatch", self.data[True])
-
-    def test_it_has_the_permissions_pages_needs(self) -> None:
-        permissions = self.data["permissions"]
-        for key in ("contents", "pages", "id-token"):
-            self.assertEqual(permissions[key], "write" if key != "id-token" else "write")
-
-    def test_the_key_comes_from_a_secret_and_is_checked(self) -> None:
-        step = self.step("ключ")
-        self.assertIn("secrets.GUIX_SIGNING_KEY", str(step))
-        # Missing key must stop the run: an unsigned cache cannot be authorised
-        # by a client, so publishing it would be busywork.
-        self.assertIn("exit 1", step["run"])
-
-    def test_no_key_material_is_committed(self) -> None:
-        """A path is fine; the key itself is not."""
-        for marker in (
-            "BEGIN OPENSSH PRIVATE KEY",
-            "(signing-key",
-            "(private-key",
-        ):
-            self.assertNotIn(marker, self.text)
-        # A base64 blob longer than 64 characters in a workflow is key material.
-        import re
-
-        blobs = re.findall(r"[A-Za-z0-9+/]{64,}={0,2}", self.text)
-        self.assertEqual(blobs, [], f"possible key material: {blobs[:1]}")
-
-    def test_the_cache_is_warmed_before_publishing(self) -> None:
-        """`guix publish` is lazy; without a warmup the cache directory is empty."""
-        warm = self.step("Прогріти")
-        self.assertIn("narinfo", warm["run"])
-
-    def test_archives_go_to_a_release_and_metadata_to_pages(self) -> None:
-        self.assertIn("gh release upload substitutes", self.text)
-        self.assertIn("upload-pages-artifact", self.text)
-        # The split is the whole point: nar archives must not be in the site.
-        self.assertIn("--base-url \"https://github.com/${{ github.repository }}/releases/download/substitutes\"", self.text)
-
-    def test_pages_deployment_uses_the_official_actions(self) -> None:
-        uses = [step.get("uses", "") for step in self.steps]
-        self.assertIn("actions/upload-pages-artifact@v3", uses)
-        self.assertIn("actions/deploy-pages@v4", uses)
+    def test_docs_describe_staging_not_a_live_cache(self) -> None:
+        text = SUBSTITUTE_DOC.read_text(encoding="utf-8").lower()
+        self.assertIn("публікація не запускалася", text)
+        self.assertIn("ключ підпису", text)
+        self.assertIn("не створено", text)
+        self.assertIn("issue #367", text)
+        self.assertIn("phase b", text)
+        self.assertIn("не створює й не публікує кеш", text)
 
 
 if __name__ == "__main__":
