@@ -147,11 +147,11 @@ class PackageTests(unittest.TestCase):
 
     def test_all_native_packages_use_fpc_as_a_build_time_input(self) -> None:
         self.assertIn("(gnu packages pascal)", self.text)
-        self.assertEqual(self.text.count("(define-public wsm-"), 4)
-        self.assertEqual(self.text.count("(native-inputs (list fpc))"), 4)
-        self.assertEqual(self.text.count("(arguments (fpc-package-arguments"), 4)
+        self.assertEqual(self.text.count("(define-public wsm-"), 5)
+        self.assertEqual(self.text.count("(native-inputs (list fpc))"), 5)
+        self.assertEqual(self.text.count("(arguments (fpc-package-arguments"), 5)
         self.assertNotIn("(inherit wsm-hwcheck-fpc)", self.text)
-        for name in ("wsm-hwcheck-fpc", "wsm-classify-fpc", "wsm-partition-fpc", "wsm-profile-fpc"):
+        for name in ("wsm-hwcheck-fpc", "wsm-classify-fpc", "wsm-partition-fpc", "wsm-profile-fpc", "wsm-preflight-fpc"):
             self.assertIn(name, self.text)
 
     def test_package_license_is_the_actual_owner_license(self) -> None:
@@ -222,8 +222,11 @@ class RuntimeParityTests(unittest.TestCase):
         cls.classifier = cls.build_dir / "wsm-classify"
         cls.partition = cls.build_dir / "wsm-partition"
         cls.profile = cls.build_dir / "wsm-profile"
-        if not all(path.is_file() for path in (cls.hwcheck, cls.classifier, cls.partition, cls.profile)):
-            raise AssertionError("FPC Makefile did not produce all four expected binaries")
+        cls.preflight = cls.build_dir / "wsm-preflight"
+        if not all(path.is_file() for path in (
+            cls.hwcheck, cls.classifier, cls.partition, cls.profile, cls.preflight
+        )):
+            raise AssertionError("FPC Makefile did not produce all five expected binaries")
 
     @classmethod
     def tearDownClass(cls) -> None:
