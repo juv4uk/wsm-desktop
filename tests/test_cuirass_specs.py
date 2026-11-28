@@ -95,7 +95,7 @@ class JobModuleTests(unittest.TestCase):
     def test_the_module_path_matches_its_declared_name(self) -> None:
         """Guile resolves module names from paths relative to the load root."""
         self.assertFalse((ROOT / "wsm" / "ci").exists())
-        module = re.search(r"\\(define-module\\s+\\(([^)]+)\\)", self.text)
+        module = re.search(r"\(define-module\s+\(([^)]+)\)", self.text)
         self.assertIsNotNone(module)
         module_path = ROOT.joinpath(*module.group(1).split()).with_suffix(".scm")
         self.assertEqual(module_path, IMAGES)
@@ -103,7 +103,7 @@ class JobModuleTests(unittest.TestCase):
 
 
 class ServiceFragmentTests(unittest.TestCase):
-    def test_the_fragment_uses_substitutes(self) -> None:
+    def test_the_fragment_matches_the_pinned_cuirass_api(self) -> None:
         """Without substitutes a build farm rebuilds every closure from source."""
         text = SERVICE.read_text(encoding="utf-8")
         self.assertIn("(gnu services cuirass)", text)
