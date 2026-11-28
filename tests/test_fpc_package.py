@@ -64,10 +64,14 @@ class PackageTests(unittest.TestCase):
             self.assertNotIn(marker, self.text, f"Python dependency present: {marker}")
 
     def test_it_installs_both_native_tools_and_keeps_fpc_build_only(self) -> None:
-        self.assertIn("wsm-hwcheck", self.text)
-        self.assertIn("wsm-classify", self.text)
+        self.assertIn("(name \"wsm-hwcheck-fpc\")", self.text)
+        self.assertIn("(name \"wsm-classify-fpc\")", self.text)
         self.assertIn("(native-inputs (list fpc))", self.text)
         self.assertIn("(license wsm-license)", self.text)
+        self.assertIn("build-hwcheck", self.text)
+        self.assertIn("build-classify", self.text)
+        self.assertIn("install-hwcheck", self.text)
+        self.assertIn("install-classify", self.text)
 
 
 class MakefileTests(unittest.TestCase):
@@ -77,6 +81,8 @@ class MakefileTests(unittest.TestCase):
         self.assertIn("-Sh", text)
         self.assertIn("$(BUILD_DIR)/wsm-hwcheck", text)
         self.assertIn("$(BUILD_DIR)/wsm-classify", text)
+        self.assertIn("install-hwcheck", text)
+        self.assertIn("install-classify", text)
         self.assertNotIn("-owsw-", text)
 
 
