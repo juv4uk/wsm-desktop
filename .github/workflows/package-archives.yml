@@ -81,7 +81,118 @@ jobs:
           pack="${{ steps.build.outputs.pack_path }}"
           tar -tzf "$pack" | grep -E '/bin/wsm-hwcheck$'
           tar -tzf "$pack" | grep -E '/bin/wsm-install$'
-          tar -tzf "$pack" | grep -E '/bin/wsm-install-live$'
+          tar -tzf "$pack" | grep -E '/bin/wsm-install-live
+
+      - name: Keep the package as a workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: wsm-tools-pack-${{ github.sha }}
+          path: |
+            archives/*.tar.gz
+            archives/LICENSE
+            archives/SHA256SUMS
+            archives/guix-channels.txt
+            archives/PROVENANCE.txt
+          retention-days: 30
+
+      - name: Note that no draft release was requested
+        if: inputs.attach_to_draft == ''
+        run: |
+          {
+            echo "no draft release to attach to; package remains an Actions artifact"
+            echo "WSM_PACKAGE_ATTACHED_TO=none"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Attach the pack to an existing draft release
+        if: inputs.attach_to_draft != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.attach_to_draft }}
+        run: |
+          set -euo pipefail
+          is_draft="$(gh release view "$TAG" --json isDraft --jq '.isDraft')"
+          if [ "$is_draft" != "true" ]; then
+            echo "refusing: $TAG is not a draft release" >&2
+            exit 1
+          fi
+          gh release upload "$TAG" archives/*.tar.gz archives/LICENSE archives/SHA256SUMS \
+            archives/guix-channels.txt archives/PROVENANCE.txt --clobber
+          echo "WSM_PACKAGE_ATTACHED_TO=$TAG" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Повідомити причину збою
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          {
+            echo "## WSM package pack failed"
+            echo ""
+            echo "Package: wsm-tools"
+            echo "Commit: $GITHUB_SHA"
+            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo ""
+            echo "No binary package is claimed as published."
+          } >> "$GITHUB_STEP_SUMMARY"
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
+            -f body="wsm-tools package pack failed. Inspect $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" || true
+
+          tar -tzf "$pack" | grep -E '/share/doc/wsm-tools/LICENSE
+
+      - name: Keep the package as a workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: wsm-tools-pack-${{ github.sha }}
+          path: |
+            archives/*.tar.gz
+            archives/LICENSE
+            archives/SHA256SUMS
+            archives/guix-channels.txt
+            archives/PROVENANCE.txt
+          retention-days: 30
+
+      - name: Note that no draft release was requested
+        if: inputs.attach_to_draft == ''
+        run: |
+          {
+            echo "no draft release to attach to; package remains an Actions artifact"
+            echo "WSM_PACKAGE_ATTACHED_TO=none"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Attach the pack to an existing draft release
+        if: inputs.attach_to_draft != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.attach_to_draft }}
+        run: |
+          set -euo pipefail
+          is_draft="$(gh release view "$TAG" --json isDraft --jq '.isDraft')"
+          if [ "$is_draft" != "true" ]; then
+            echo "refusing: $TAG is not a draft release" >&2
+            exit 1
+          fi
+          gh release upload "$TAG" archives/*.tar.gz archives/LICENSE archives/SHA256SUMS \
+            archives/guix-channels.txt archives/PROVENANCE.txt --clobber
+          echo "WSM_PACKAGE_ATTACHED_TO=$TAG" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Повідомити причину збою
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          {
+            echo "## WSM package pack failed"
+            echo ""
+            echo "Package: wsm-tools"
+            echo "Commit: $GITHUB_SHA"
+            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo ""
+            echo "No binary package is claimed as published."
+          } >> "$GITHUB_STEP_SUMMARY"
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
+            -f body="wsm-tools package pack failed. Inspect $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" || true
+
 
       - name: Keep the package as a workflow artifact
         uses: actions/upload-artifact@v7
