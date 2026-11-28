@@ -84,13 +84,21 @@ fi
 
 # Skylake-покоління Pentium/Celeron не має AVX2, і -march=skylake на них падає.
 # Перевіряємо прапорці CPU, а не назву моделі.
+# -march=skylake вимагає не лише AVX2: ще BMI1/BMI2, FMA, MOVBE і XSAVE-сімейство.
+# Перевірка лише avx2 пропустила б частину Skylake-покоління Pentium/Celeron.
 if [ -r /proc/cpuinfo ]; then
-  if ! grep -qw avx2 /proc/cpuinfo; then
-    die "CPU не має AVX2: -march=$CPU дасть illegal instruction. Для такого
-         процесора публікуйте без --tune або з нижчою мікроархітектурою."
+  required_features="avx2 bmi1 bmi2 fma movbe xsave"
+  missing_features=""
+  for feature in $required_features; do
+    grep -qw "$feature" /proc/cpuinfo || missing_features="$missing_features $feature"
+  done
+  if [ -n "$missing_features" ]; then
+    die "CPU не має:$missing_features — -march=$CPU дасть illegal instruction.
+         Публікуйте без --tune або з нижчою мікроархітектурою."
   fi
+  note "прапорці CPU для $CPU присутні: $required_features"
 else
-  note "WARN: /proc/cpuinfo недоступний, AVX2 не перевірено"
+  note "WARN: /proc/cpuinfo недоступний, прапорці CPU не перевірено"
 fi
 
 # --- 4. Що саме публікуємо ---------------------------------------------------

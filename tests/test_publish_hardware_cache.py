@@ -64,10 +64,15 @@ class PublishHardwareCacheTests(unittest.TestCase):
         self.assertIn("guix publish", completed.stdout)
         self.assertIn("--tune=skylake", completed.stdout)
 
-    def test_it_checks_avx2_before_tuning(self) -> None:
-        """A Skylake-era Pentium has no AVX2; -march=skylake would fault."""
+    def test_it_checks_every_feature_skylake_needs(self) -> None:
+        """AVX2 alone is not enough: -march=skylake also needs BMI1/2, FMA, MOVBE, XSAVE.
+
+        A Skylake-generation Pentium has none of these, and an AVX2-only guard
+        would let such a machine publish binaries that fault elsewhere.
+        """
         text = SCRIPT.read_text(encoding="utf-8")
-        self.assertIn("avx2", text)
+        for feature in ("avx2", "bmi1", "bmi2", "fma", "movbe", "xsave"):
+            self.assertIn(feature, text, feature)
 
     def test_it_warns_that_tuned_builds_skip_tests(self) -> None:
         """Guix does not run the test suite for tuned builds; that must be visible."""
