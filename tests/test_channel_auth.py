@@ -56,6 +56,12 @@ class InspectTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("authenticated: unknown by design", result.stdout)
 
+    def test_foreign_distro_installer_remains_upstream_owned(self) -> None:
+        upstreams = (ROOT / "docs" / "UPSTREAMS.md").read_text(encoding="utf-8")
+        self.assertIn("https://guix.gnu.org/guix-install.sh", upstreams)
+        self.assertFalse((ROOT / "scripts" / "install-guix.sh").exists())
+        self.assertFalse((ROOT / ".github" / "workflows" / "guix-installer.yml").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

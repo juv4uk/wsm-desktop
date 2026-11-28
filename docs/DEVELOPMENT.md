@@ -25,25 +25,6 @@
 
 Для перевірки конкретного ISO використовуйте `python scripts/qemu_boot_smoke.py --iso /absolute/path/to/image.iso`. Деталі й межі доказів — у [ручних QEMU runtime-перевірках](testing/QEMU-GUEST-CI.md).
 
-## Встановлення Guix на сторонній GNU/Linux хост
-
-Коли для розробки потрібен **сам пакетний менеджер Guix** на вже встановленій чужій GNU/Linux системі, використовуйте офіційний upstream installer:
-
-- [Офіційний `guix-install.sh`](https://guix.gnu.org/guix-install.sh)
-- [Розділ Installation у GNU Guix Reference Manual](https://guix.gnu.org/manual/en/html_node/Installation.html)
-
-Перед виконанням перегляньте завантажений скрипт і дотримуйтеся інструкцій upstream:
-
-```sh
-wget -O guix-install.sh https://guix.gnu.org/guix-install.sh
-less guix-install.sh
-sudo bash ./guix-install.sh
-```
-
-Це встановлює Guix як пакетний менеджер **на поточний host**. Це не встановлення Guix System, не встановлення WSM і не створення довіри до WSM channel. Для системного встановлення використовується окремий [Guix System installation flow](https://guix.gnu.org/manual/en/html_node/System-Installation.html), а відтворювані перевірки WSM продовжують pin-ити точні inputs через `guix time-machine` і lock-файли.
-
-WSM не підтримує власну копію host bootstrap script і не змінює upstream `gnu/installer`.
-
 ## Guix bring-up
 
 Перевірте доступність Guix:
@@ -64,6 +45,32 @@ WSM не підтримує власну копію host bootstrap script і н�
     make vm-system
 
 Команда guix system vm будує VM-образ/запускний скрипт відповідно до параметрів Guix. Вона не встановлює систему на фізичний диск.
+
+## Guix package manager на наявному GNU/Linux
+
+Коли потрібно встановити **лише package manager GNU Guix** на вже наявний
+foreign GNU/Linux distribution, використовуйте офіційний upstream
+[`guix-install.sh`](https://guix.gnu.org/guix-install.sh), а не окремий
+WSM-owned root bootstrap:
+
+```sh
+cd /tmp
+wget https://guix.gnu.org/guix-install.sh
+chmod +x guix-install.sh
+less guix-install.sh
+sudo ./guix-install.sh
+```
+
+Це root-level операція, яка налаштовує Guix store та daemon. Застосовуйте її
+лише на системі, де Guix ще не встановлено, після перевірки поточного скрипта
+та офіційної [Binary Installation документації](https://guix.gnu.org/manual/en/html_node/Binary-Installation.html).
+Не запускайте цей foreign-distro installer поверх наявної Guix installation.
+
+Цей шлях **не встановлює повну Guix System**: для неї призначено окремий
+[System Installation розділ](https://guix.gnu.org/manual/en/html_node/System-Installation.html)
+та Guix System installer flow. Він також не створює WSM channel
+`.guix-authorizations`, introduction commit, keyring чи authenticated consumer.
+WSM CI/release workflow налаштовує власний одноразовий runner окремо.
 
 ## Фіксація каналів
 
