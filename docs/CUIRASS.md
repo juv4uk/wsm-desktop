@@ -74,7 +74,7 @@ guix shell cuirass -- cuirass web --database="dbname=cuirass host=/var/run/postg
 
 The Cuirass specifications include `h170-free-upstream-packages`. The custom module `ci/cuirass/h170-free-packages.scm` reads the fixed upstream-only manifest `drivers/profiles/h170-free-packages.scm` and creates one Cuirass package derivation job per root for `x86_64-linux`.
 
-The package set is defined and versioned by the pinned official Guix channel. The job resolves derivation metadata; actual package builds are handled by the separate ephemeral GitHub Actions workflow `hw-build-evidence.yml`, which records output NAR hashes and closure sizes in the job summary but does not export or upload NARs.
+The package set is defined and versioned by the pinned official Guix channel. The job resolves derivation metadata; actual package builds are handled by the separate ephemeral GitHub Actions workflow `hw-build-evidence.yml`, which records output NAR hashes and closure sizes in the job summary but does not export or upload NARs. The Cuirass jobset deliberately has no broad `(build '(channels wsm))` job: it only contains the separately named live-image job and the fixed H170 Free allowlist, avoiding implicit evaluation of all WSM-owned packages while #367 remains open.
 
 Neither green derivation evaluation nor a successful ephemeral package build proves GPU driver binding, firmware loading, KMS/3D/compute, ISO boot or native H170 function. The locked Linux-libre 7.3.5 candidate has a documented GP107 Nouveau atomic-init gap; that limitation remains explicit until separately reviewed and resolved.
 
