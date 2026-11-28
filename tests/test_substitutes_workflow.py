@@ -78,13 +78,28 @@ class SubstituteWorkflowTests(unittest.TestCase):
         """A missing socket looks like a broken installer; say so explicitly."""
         self.assertIn("daemon-socket/socket", self.step("Встановити")["run"])
 
-    def test_the_cache_is_warmed_before_publishing(self) -> None:
-        self.assertIn("narinfo", self.step("Прогріти")["run"])
+    def test_cache_warmup_fetches_the_nar_archive(self) -> None:
+        """Fetching only narinfo leaves no .nar.zst asset to publish."""
+        run = self.step("Прогріти")["run"]
+        self.assertIn(".narinfo", run)
+        self.assertIn("URL:", run)
+        self.assertIn("curl -fsSL", run)
+        self.assertIn("nar/", run)
 
     def test_archives_go_to_a_release_and_metadata_to_pages(self) -> None:
         self.assertIn("gh release upload substitutes", self.text)
         self.assertIn("upload-pages-artifact@v3", self.text)
         self.assertIn("releases/download/substitutes", self.text)
+
+    def test_package_build_uses_the_pinned_guix_and_repo_recipe(self) -> None:
+        """wsm-tools is local; bare package-name lookup only searches Guix channels."""
+        run = self.step("Зібрати пакети каналу")["run"]
+        self.assertIn(
+            "guix time-machine -C channels.lock.scm -- build "
+            "--no-substitutes -f wsm/packages/wsm.scm",
+            run,
+        )
+        self.assertNotIn("guix build --no-substitutes $PACKAGES", run)
 
 
 if __name__ == "__main__":
