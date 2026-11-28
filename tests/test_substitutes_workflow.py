@@ -35,12 +35,12 @@ class SubstituteWorkflowTests(unittest.TestCase):
 
     def test_docs_describe_staging_not_a_live_cache(self) -> None:
         text = SUBSTITUTE_DOC.read_text(encoding="utf-8").lower()
-        self.assertIn("публікація не запускалася", text)
+        self.assertIn("публікація не запускалися", text)
         self.assertIn("ключ підпису", text)
-        self.assertIn("не створено", text)
+        self.assertIn("не створений", text)
         self.assertIn("issue #367", text)
         self.assertIn("phase b", text)
-        self.assertIn("не створює й не публікує кеш", text)
+        self.assertIn("нічого не публікує", text)
 
 
 if __name__ == "__main__":
