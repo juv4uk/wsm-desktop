@@ -23,19 +23,20 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from wsm_install.executor import ExecutorError, execute
-from wsm_install.install_steps import Step
+from wsm_install.install_steps import Step, TRUSTED_PROFILE_ROOT, TRUSTED_TOOLS
 from wsm_install.partition import DEVICE_PATH
 
 # Commands recognized by the plan validator. This list is not an execution
 # permission while APPLY remains disabled. Absolute paths avoid PATH ambiguity.
-ALLOWED_PROGRAMS = frozenset({
-    "/usr/sbin/partprobe",
-    "/usr/bin/udevadm",
-    "/usr/sbin/mkfs.ext4",
-    "/usr/sbin/mkfs.fat",
-    "/usr/bin/mount",
-    "/usr/bin/mkdir",
-})
+# The planner emits exact Guix system-profile paths. Accept both profile
+# directories because a package may expose an administrative tool in either;
+# the planner separately proves that exactly one candidate is executable.
+# FHS paths and bare basenames are deliberately not accepted here.
+ALLOWED_PROGRAMS = frozenset(
+    str(TRUSTED_PROFILE_ROOT / directory / binary)
+    for directory in ("bin", "sbin")
+    for binary in TRUSTED_TOOLS.values()
+)
 
 SHELL_METACHARACTERS = frozenset("|&;<>()$`\\\"'\n\r")
 MAX_STEPS = 32
