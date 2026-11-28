@@ -269,18 +269,3 @@ jobs:
             echo "If a Release was created before a later Pages failure, its tag is in the workflow logs."
             echo "A missing or mismatched signing key, pinned Guix evaluation/build failure, NAR bake failure or Pages configuration can cause this run to fail."
           } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Report publication failure
-        if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          {
-            echo "## H170 Free substitute publication failed"
-            echo ""
-            echo "Check the first failing step above. No success is claimed."
-            echo "If a Release was created before a later Pages failure, its tag is in the workflow logs."
-            echo "A missing or mismatched signing key, pinned Guix evaluation/build failure, NAR bake failure or Pages configuration can cause this run to fail."
-          } >> "$GITHUB_STEP_SUMMARY"
-          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
-            -f body="H170 Free substitute publication failed. Inspect the exact failing step: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" || true
