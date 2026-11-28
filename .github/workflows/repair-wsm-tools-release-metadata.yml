@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-name: Repair WSM Guix release metadata
+name: Repair WSM Guix release metadata (isolated promotion)
 
 on:
   push:
