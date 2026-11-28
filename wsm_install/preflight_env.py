@@ -28,18 +28,36 @@ def criterion(identifier: str, status: str, detail: str) -> dict[str, str]:
     return {"id": identifier, "status": status, "detail": detail}
 
 
-def check_tools(which: Callable[[str], str | None] = shutil.which) -> dict[str, str]:
-    """Every program the install steps call must exist before the first step runs."""
-    from wsm_install.agent import ALLOWED_PROGRAMS
+def check_tools(
+    profile_root: Path | str = Path("/run/current-system/profile"),
+) -> dict[str, str]:
+    """Resolve every required tool uniquely from the active Guix system profile."""
+    from wsm_install.install_steps import (
+        TRUSTED_TOOLS,
+        TrustedToolResolutionError,
+        resolve_trusted_tool,
+    )
 
-    missing = sorted(program for program in ALLOWED_PROGRAMS if which(program) is None)
-    if missing:
+    unresolved: list[str] = []
+    for name in TRUSTED_TOOLS:
+        try:
+            resolve_trusted_tool(name, profile_root=profile_root)
+        except TrustedToolResolutionError as exc:
+            unresolved.append(f"{name} ({exc})")
+
+    if unresolved:
         return criterion(
             "tools",
             "fail",
-            "missing: " + ", ".join(missing) + " (the install cannot proceed)",
+            "missing, non-executable or ambiguous in Guix system profile: "
+            + "; ".join(unresolved)
+            + " (the install cannot proceed)",
         )
-    return criterion("tools", "pass", f"{len(ALLOWED_PROGRAMS)} programs present")
+    return criterion(
+        "tools",
+        "pass",
+        f"{len(TRUSTED_TOOLS)} allowlisted tools resolve uniquely in {profile_root}",
+    )
 
 
 def check_guix(which: Callable[[str], str | None] = shutil.which) -> dict[str, str]:
@@ -172,7 +190,7 @@ def run(
     geteuid: Callable[[], int] = os.geteuid,
 ) -> dict[str, Any]:
     return verdict([
-        check_tools(which),
+        check_tools(),
         check_guix(which),
         check_root(geteuid),
         check_mount_point(mount_point),

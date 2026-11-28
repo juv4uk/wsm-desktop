@@ -283,7 +283,12 @@ def _run_install(
         return 2
 
     from wsm_install.executor import ExecutorError, execute
-    from wsm_install.install_steps import backend_command, plan_steps, render
+    from wsm_install.install_steps import (
+        TrustedToolResolutionError,
+        backend_command,
+        plan_steps,
+        render,
+    )
     from wsm_install.partition import Disk, Refused, plan as plan_layout
 
     if not args.target_disk:
@@ -327,6 +332,9 @@ def _run_install(
         )
         steps = plan_steps(layout, args.filesystem, args.mount_point)
         command = backend_command(layout, args.system_file, args.mount_point)
+    except TrustedToolResolutionError as exc:
+        print(f"wsm-install: install.tool-unavailable: {exc}", file=sys.stderr)
+        return 2
     except Refused as exc:
         print(f"wsm-install: {exc.code}: {exc.message}", file=sys.stderr)
         return 2
