@@ -277,7 +277,7 @@ begin
     Exit;
   if (YearValue < 1990) or (YearValue > YearOf(Now) + 1) then
     Exit;
-  if not TryEncodeDate(YearValue, MonthValue, DayValue, ParsedDate) then
+  if not TryEncodeDate(Word(YearValue), Word(MonthValue), Word(DayValue), ParsedDate) then
     Exit;
   Result := FormatDateTime('yyyy"-"mm"-"dd', ParsedDate);
 end;
