@@ -156,7 +156,10 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
         self.assertIn("cancel-in-progress: false", self.text)
 
     def test_the_package_roots_are_fixed_and_upstream_only(self) -> None:
-        self.assertIn("PACKAGES=(linux-libre mesa)", self.text)
+        self.assertIn("h170-free-packages.scm", self.text)
+        self.assertIn('test "${#PACKAGES[@]}" -eq 11', self.text)
+        self.assertIn('test "${#STORE_PATHS[@]}" -eq 11', self.text)
+        self.assertIn('for package in "${PACKAGES[@]}"; do', self.text)
         for forbidden in (
             "wsm-tools",
             "wsm-live-tools",
