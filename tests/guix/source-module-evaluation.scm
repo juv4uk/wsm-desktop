@@ -36,6 +36,13 @@
 (unless (procedure? cuirass-jobs)
   (error "Cuirass image module did not export cuirass-jobs"))
 
+;; Check a private imported binding as the custom job body is not evaluated
+;; merely by importing its module. A missing (gnu ci) import would otherwise
+;; escape the simple procedure? test until the first actual Cuirass evaluation.
+(unless (procedure?
+         (module-ref (resolve-module '(ci cuirass images)) 'derivation->job))
+  (error "Cuirass image module has no derivation->job binding from (gnu ci)"))
+
 ;; Load the service fragment as a real Guix configuration, not a text-only
 ;; assertion. This catches moved/renamed Cuirass service fields and imports.
 (primitive-load "ci/cuirass/service.scm")
