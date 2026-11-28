@@ -14,3 +14,5 @@
 Кожне package definition мусить мати точний source origin, version, hash, build system, inputs та фактичну license metadata. Не додавати proprietary binaries без окремого правового й етичного review.
 
 Поточний стан: channel skeleton доданий, але криптографічна автентифікація ще не bootstrap-нута. Не називати канал authenticated, доки немає signed introduction commit, `.guix-authorizations`, keyring branch і успішного `guix git authenticate`. Також не оголошувати `wsm-tools` release-ready до вирішення #367.
+
+Власний H170 Free kernel candidate: `(wsm packages linux-libre)` експортує `linux-libre-h170` — pinned Guix `linux-libre` з одним upstream Nouveau atomic-KMS backport. Це не додає firmware й не є доказом фізичного boot/KMS/3D на H170; повна Guix збірка та hardware acceptance лишаються окремими доказами.
