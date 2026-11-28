@@ -403,6 +403,50 @@ class GuestReportParsingTests(unittest.TestCase):
         self.assertEqual(verdict.not_executable, ())
         self.assertEqual(verdict.problems, ())
 
+    def test_a_missing_summary_is_a_failure(self) -> None:
+        report = "\\n".join(
+            line for line in closure_lines().splitlines()
+            if not line.startswith(SUMMARY_PREFIX)
+        )
+        verdict = parse(report)
+        self.assertEqual(verdict.status, "fail")
+        self.assertTrue(any("summary" in problem for problem in verdict.problems))
+
+    def test_a_duplicate_summary_is_a_failure(self) -> None:
+        report = closure_lines() + closure_lines().splitlines()[-1] + "\\n"
+        verdict = parse(report)
+        self.assertEqual(verdict.status, "fail")
+        self.assertTrue(any("more than once" in problem for problem in verdict.problems))
+
+    def test_a_malformed_summary_count_is_a_failure(self) -> None:
+        report = closure_lines().replace(
+            f"{SUMMARY_PREFIX}|{PROTOCOL_VERSION}|ok|",
+            f"{SUMMARY_PREFIX}|{PROTOCOL_VERSION}|ok|",
+        ).replace("|7/7", "|7/not-a-number")
+        verdict = parse(report)
+        self.assertEqual(verdict.status, "fail")
+        self.assertTrue(any("malformed summary" in problem for problem in verdict.problems))
+
+    def test_a_summary_total_must_match_the_expected_tool_count(self) -> None:
+        report = closure_lines().replace("|7/7", "|7/8")
+        verdict = parse(report)
+        self.assertEqual(verdict.status, "fail")
+        self.assertTrue(any("total" in problem for problem in verdict.problems))
+
+    def test_summary_counts_and_verdict_must_match_tool_rows(self) -> None:
+        all_ok_but_fail_summary = closure_lines().replace("|ok|7/7", "|fail|0/7")
+        verdict = parse(all_ok_but_fail_summary)
+        self.assertEqual(verdict.status, "fail")
+        self.assertTrue(any("usable count" in problem for problem in verdict.problems))
+        self.assertTrue(any("summary verdict" in problem for problem in verdict.problems))
+
+        non_ok_rows_but_pass_summary = closure_lines({"mount": STATE_NOT_EXECUTABLE}).replace(
+            "|fail|6/7", "|ok|7/7"
+        )
+        verdict = parse(non_ok_rows_but_pass_summary)
+        self.assertEqual(verdict.status, "fail")
+        self.assertTrue(any("summary verdict" in problem for problem in verdict.problems))
+
     def test_a_missing_tool_is_a_failure_that_names_it(self) -> None:
         text = "\n".join(
             line for line in closure_lines().splitlines() if "|sgdisk|" not in line
