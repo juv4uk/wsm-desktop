@@ -24,7 +24,7 @@ from typing import Any, Sequence
 
 from wsm_install.executor import ExecutorError, execute
 from wsm_install.install_steps import (
-    SYSTEM_PROFILE_ROOT,
+    TRUSTED_PROFILE_ROOT,
     TRUSTED_TOOLS,
     Step,
     TrustedToolResolutionError,
@@ -36,7 +36,7 @@ from wsm_install.partition import DEVICE_PATH
 # Non-Guix developer previews use bare logical names; the privileged agent
 # rejects those names and never searches PATH or accepts FHS aliases.
 ALLOWED_PROGRAMS = frozenset(
-    str(SYSTEM_PROFILE_ROOT / directory / basename)
+    str(TRUSTED_PROFILE_ROOT / directory / basename)
     for directory in ("bin", "sbin")
     for basename in TRUSTED_TOOLS.values()
 )
