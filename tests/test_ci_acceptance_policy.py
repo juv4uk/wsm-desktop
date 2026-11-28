@@ -178,5 +178,29 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
         self.assertIn("drivers/profiles/h170-free-packages.scm", substitutes)
         self.assertIn("guix publish", substitutes)
 
+
+class StartupBenchmarkTests(unittest.TestCase):
+    """The cost of starting the installer must be measurable, not argued about."""
+
+    SCRIPT = ROOT / "scripts" / "bench_installer_startup.py"
+
+    def test_the_benchmark_exists_and_measures_three_things(self) -> None:
+        text = self.SCRIPT.read_text(encoding="utf-8")
+        for expected in ("interpreter floor", "entry point import", "wsm-install --version"):
+            with self.subTest(expected=expected):
+                self.assertIn(expected, text)
+
+    def test_it_can_compare_a_compiled_candidate(self) -> None:
+        self.assertIn("--compare", self.SCRIPT.read_text(encoding="utf-8"))
+
+    def test_it_reports_and_does_not_gate(self) -> None:
+        """A threshold nobody agreed to is how a measurement becomes a flaky gate."""
+        text = self.SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("It reports; it never fails a build", text)
+        self.assertNotIn("sys.exit(1)", text)
+
+    def test_it_refuses_a_meaningless_sample_size(self) -> None:
+        self.assertIn("--runs below 3 is noise", self.SCRIPT.read_text(encoding="utf-8"))
+
 if __name__ == "__main__":
     unittest.main()
