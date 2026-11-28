@@ -24,7 +24,11 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 
 # Something that writes where a reader without auth can see it.
-REPORTS = re.compile(r"gh api .*commits/\$GITHUB_SHA/comments|gh pr comment|gh issue comment")
+REPORTS = re.compile(r"gh api .*commits/\\$GITHUB_SHA/comments|gh pr comment|gh issue comment")
+# A GitHub Actions step summary is also readable without downloading the
+# authenticated job log, but a failure report must include useful log context.
+SUMMARY = re.compile(r"\\$GITHUB_STEP_SUMMARY")
+LOG_TAIL = re.compile(r"\\btail\\b")
 
 
 def steps_of(workflow: Path) -> list[dict]:
@@ -41,12 +45,14 @@ def steps_of(workflow: Path) -> list[dict]:
 
 
 def reporting_steps(workflow: Path) -> list[dict]:
-    return [
-        step
-        for step in steps_of(workflow)
-        if "failure()" in str(step.get("if", ""))
-        and REPORTS.search(str(step.get("run", "")))
-    ]
+    visible: list[dict] = []
+    for step in steps_of(workflow):
+        if "failure()" not in str(step.get("if", "")):
+            continue
+        run = str(step.get("run", ""))
+        if REPORTS.search(run) or (SUMMARY.search(run) and LOG_TAIL.search(run)):
+            visible.append(step)
+    return visible
 
 
 class CiFailureVisibilityTests(unittest.TestCase):
@@ -68,17 +74,42 @@ class CiFailureVisibilityTests(unittest.TestCase):
 
     def test_the_rule_catches_a_workflow_without_a_reporting_step(self) -> None:
         sample = (
-            "name: sample\n"
-            "on: push\n"
-            "jobs:\n"
-            "  build:\n"
-            "    runs-on: ubuntu-24.04\n"
-            "    steps:\n"
-            "      - name: build\n"
-            "        run: echo hi\n"
+            "name: sample\\n"
+            "on: push\\n"
+            "jobs:\\n"
+            "  build:\\n"
+            "    runs-on: ubuntu-24.04\\n"
+            "    steps:\\n"
+            "      - name: build\\n"
+            "        run: echo hi\\n"
         )
         path = WORKFLOWS / "_tmp_sample.yml"
         path.write_text(sample, encoding="utf-8")
+        try:
+            self.assertEqual(reporting_steps(path), [])
+        finally:
+            path.unlink()
+
+    def test_a_step_summary_failure_report_must_include_log_context(self) -> None:
+        sample = (
+            "name: sample\\n"
+            "jobs:\\n"
+            "  build:\\n"
+            "    steps:\\n"
+            "      - name: report failure\\n"
+            "        if: failure()\\n"
+            "        run: |\\n"
+            "          tail -100 build.log >> \\\"$GITHUB_STEP_SUMMARY\\\"\\n"
+        )
+        path = WORKFLOWS / "_tmp_sample.yml"
+        path.write_text(sample, encoding="utf-8")
+        try:
+            self.assertEqual(len(reporting_steps(path)), 1)
+        finally:
+            path.unlink()
+
+        no_context = sample.replace("tail -100 build.log", "echo failed")
+        path.write_text(no_context, encoding="utf-8")
         try:
             self.assertEqual(reporting_steps(path), [])
         finally:
