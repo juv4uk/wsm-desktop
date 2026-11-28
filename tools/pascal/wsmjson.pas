@@ -658,7 +658,7 @@ function TJsonReader.ReadArray: TWsmJson;
 begin
   Result := TWsmJson.NewArray;
   try
-    Inc(FPosition); { '[' }
+    Inc(FPosition); // '['
     SkipWhitespace;
     if Peek = ']' then
     begin
@@ -694,7 +694,7 @@ var
 begin
   Result := TWsmJson.NewObject;
   try
-    Inc(FPosition); { '{' }
+    Inc(FPosition); // '{'
     SkipWhitespace;
     if Peek = '}' then
     begin
