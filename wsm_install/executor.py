@@ -22,7 +22,7 @@ import sys
 from dataclasses import dataclass
 from typing import Callable, Sequence
 
-from wsm_install.install_steps import Step
+from wsm_install.install_steps import TRUSTED_TOOLS, Step
 from wsm_install.partition import DEVICE_PATH
 
 
@@ -42,6 +42,11 @@ class StepResult:
     destructive: bool
     status: str
     detail: str = ""
+    # Whether this command could ever be applied. The preview still renders an
+    # inadmissible command so the operator can see what was proposed, but it is
+    # never silently treated as safe: the plan does not get to vouch for itself.
+    admissible: bool = True
+    inadmissible_reason: str = ""
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -50,6 +55,8 @@ class StepResult:
             "destructive": self.destructive,
             "status": self.status,
             "detail": self.detail,
+            "admissible": self.admissible,
+            "inadmissible_reason": self.inadmissible_reason,
         }
 
 
@@ -107,6 +114,25 @@ def _validate_preview(disk: str, steps: Sequence[Step]) -> None:
                     )
 
 
+ALLOWED_EXECUTABLES = frozenset(TRUSTED_TOOLS.values())
+
+
+def admissible_executable(step: Step) -> tuple[bool, str]:
+    """Whether this step's argv[0] may ever reach a runner.
+
+    #280 criterion 2: the executor checks the plan itself instead of trusting the
+    planner. A bare name means a PATH lookup, which is the hijack class Omarchy
+    #8172 documents; an absolute path outside the pinned tool table means a tool
+    that no closure proof covers.
+    """
+    executable = step.command[0] if step.command else ""
+    if not executable.startswith("/"):
+        return False, f"{executable!r} is not an absolute path; a PATH lookup is not allowed"
+    if executable not in ALLOWED_EXECUTABLES:
+        return False, f"{executable!r} is not in the pinned tool allowlist"
+    return True, ""
+
+
 def execute(
     steps: Sequence[Step],
     disk: str,
@@ -128,18 +154,25 @@ def execute(
 
     for index, step in enumerate(steps, start=1):
         command = list(step.command)
+        admissible, reason = admissible_executable(step)
         result = StepResult(
             command=command,
             purpose=step.purpose,
             destructive=step.destructive,
             status="not-run",
             detail="preview only; APPLY disabled; command not executed",
+            admissible=admissible,
+            inadmissible_reason=reason,
         )
         results.append(result)
         marker = "DESTRUCTIVE" if step.destructive else "read-only intent"
+        if not admissible:
+            marker = f"{marker}, NOT APPLICABLE"
         emit(
             f"[{index}/{len(steps)}] [{marker}] "
             f"{shlex.join(command)} — {step.purpose}"
         )
+        if not admissible:
+            emit(f"    refused for APPLY: {reason}")
 
     return results

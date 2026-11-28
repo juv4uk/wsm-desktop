@@ -11,7 +11,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from wsm_install.executor import ExecutorError, execute  # noqa: E402
+from wsm_install.executor import (  # noqa: E402
+    ExecutorError,
+    admissible_executable,
+    execute,
+)
 from wsm_install.install_steps import TRUSTED_TOOLS, Step  # noqa: E402
 from wsm_install.consent import (  # noqa: E402
     ConsentError,
@@ -303,6 +307,55 @@ class StepConsentTests(unittest.TestCase):
         with self.assertRaises(ConsentError) as caught:
             grant_consent("/dev/nvme0n1", STEPS, 9, approve=True)
         self.assertEqual(caught.exception.code, "consent.index")
+
+
+class AdmissibleArgvTests(unittest.TestCase):
+    """The executor judges the plan itself instead of trusting the planner."""
+
+    def test_an_allowlisted_absolute_tool_is_admissible(self) -> None:
+        admissible, reason = admissible_executable(STEPS[0])
+        self.assertTrue(admissible)
+        self.assertEqual(reason, "")
+
+    def test_a_bare_name_is_not_admissible(self) -> None:
+        admissible, reason = admissible_executable(Step(["mkfs.ext4", "/dev/nvme0n1p2"], "bare"))
+        self.assertFalse(admissible)
+        self.assertIn("absolute path", reason)
+
+    def test_an_absolute_path_outside_the_allowlist_is_not_admissible(self) -> None:
+        admissible, reason = admissible_executable(Step(["/bin/sh", "-c", "true"], "shell"))
+        self.assertFalse(admissible)
+        self.assertIn("allowlist", reason)
+
+    def test_the_preview_still_renders_an_inadmissible_command(self) -> None:
+        output: list[str] = []
+        results = execute(
+            [Step(["/bin/sh", "-c", "true"], "untrusted")],
+            "/dev/nvme0n1",
+            dry_run=True,
+            out=output.append,
+        )
+        self.assertEqual(results[0].status, "not-run")
+        self.assertFalse(results[0].admissible)
+        self.assertTrue(any("/bin/sh" in line for line in output))
+        self.assertTrue(any("NOT APPLICABLE" in line for line in output))
+        self.assertTrue(any("refused for APPLY" in line for line in output))
+
+    def test_an_allowlisted_plan_reports_every_step_admissible(self) -> None:
+        results = execute(STEPS, "/dev/nvme0n1", dry_run=True, out=lambda _: None)
+        self.assertTrue(all(result.admissible for result in results))
+        self.assertTrue(all(result.inadmissible_reason == "" for result in results))
+
+    def test_the_verdict_is_in_the_serialized_result(self) -> None:
+        results = execute(
+            [Step(["/usr/bin/true"], "unknown but absolute")],
+            "/dev/nvme0n1",
+            dry_run=True,
+            out=lambda _: None,
+        )
+        payload = results[0].as_dict()
+        self.assertFalse(payload["admissible"])
+        self.assertIn("allowlist", payload["inadmissible_reason"])
 
 
 if __name__ == "__main__":
