@@ -1,0 +1,119 @@
+name: Guix evaluation failure reporter
+
+on:
+  workflow_run:
+    workflows: ["Guix profile evaluation"]
+    types: [completed]
+
+# This workflow is loaded from the default branch, not the triggering PR head.
+# No job checks out or executes the source that produced the failure.
+permissions: {}
+
+concurrency:
+  group: guix-evaluation-failure-reporter-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  report:
+    name: Comment on the originating pull request
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      issues: write
+    steps:
+      - name: Validate trusted workflow-run metadata and report failure
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          [[ "$RUN_ID" =~ ^[1-9][0-9]*$ ]] || {
+            echo "::error::Invalid workflow run ID"
+            exit 1
+          }
+          [[ "$REPOSITORY" == "juv4uk/wsm-desktop" ]] || {
+            echo "::error::Unexpected repository"
+            exit 1
+          }
+
+          # Read the completed run from GitHub. Do not trust PR-provided
+          # artifacts, branch content, labels, or shell fragments.
+          RUN_JSON="$(gh api "repos/$REPOSITORY/actions/runs/$RUN_ID")"
+          RUN_REPOSITORY="$(jq -r '.repository.full_name // ""' <<< "$RUN_JSON")"
+          RUN_NAME="$(jq -r '.name // ""' <<< "$RUN_JSON")"
+          RUN_PATH="$(jq -r '.path // ""' <<< "$RUN_JSON")"
+          RUN_WORKFLOW_ID="$(jq -r '.workflow_id // 0' <<< "$RUN_JSON")"
+          RUN_EVENT="$(jq -r '.event // ""' <<< "$RUN_JSON")"
+          RUN_CONCLUSION="$(jq -r '.conclusion // ""' <<< "$RUN_JSON")"
+          RUN_SHA="$(jq -r '.head_sha // ""' <<< "$RUN_JSON")"
+          RUN_URL="$(jq -r '.html_url // ""' <<< "$RUN_JSON")"
+
+          [[ "$RUN_REPOSITORY" == "$REPOSITORY" ]] || {
+            echo "::warning::Run belongs to another repository; no comment posted"
+            exit 0
+          }
+          [[ "$RUN_NAME" == "Guix profile evaluation" ]] || {
+            echo "::warning::Unexpected workflow name; no comment posted"
+            exit 0
+          }
+          [[ "$RUN_PATH" == ".github/workflows/guix-profile-evaluation.yml" ]] || {
+            echo "::warning::Unexpected workflow path; no comment posted"
+            exit 0
+          }
+          [[ "$RUN_WORKFLOW_ID" == "431678119" ]] || {
+            echo "::warning::Unexpected workflow ID; review the pinned reporter identity"
+            exit 0
+          }
+          [[ "$RUN_EVENT" == "pull_request" && "$RUN_CONCLUSION" == "failure" ]] || {
+            echo "::notice::Run is not a failed pull_request evaluation; no comment posted"
+            exit 0
+          }
+          [[ "$RUN_SHA" =~ ^[0-9a-f]{40}$ && "$RUN_URL" == https://github.com/*/actions/runs/* ]] || {
+            echo "::error::Run metadata is missing a valid commit or run URL"
+            exit 1
+          }
+
+          mapfile -t PR_NUMBERS < <(
+            jq -r --arg repository "$REPOSITORY" '
+              [
+                .pull_requests[]?
+                | select(.base.ref == "main" and .base.repo.full_name == $repository)
+                | .number
+                | select(type == "number" and . > 0)
+              ]
+              | unique
+              | .[]
+            ' <<< "$RUN_JSON"
+          )
+
+          if [[ "${#PR_NUMBERS[@]}" -eq 0 ]]; then
+            echo "No associated pull request targeting main was present in trusted run metadata."
+            echo "Run: $RUN_URL" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          BODY="$(printf '%s\n' \
+            '### Guix profile evaluation failed' \
+            '' \
+            "Commit: `$RUN_SHA`" \
+            "Run: $RUN_URL" \
+            '' \
+            'Inspect the first failing Guix command in the workflow logs.' \
+            'WSM_CHANNEL_AUTHENTICATION=NOT_TESTED')"
+
+          for PR_NUMBER in "${PR_NUMBERS[@]}"; do
+            [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || {
+              echo "::error::Invalid pull request number from GitHub API"
+              exit 1
+            }
+            gh api --method POST \
+              "repos/$REPOSITORY/issues/$PR_NUMBER/comments" \
+              -f body="$BODY" >/dev/null
+            echo "Reported Guix evaluation failure on PR #$PR_NUMBER"
+          done
