@@ -151,6 +151,7 @@ class PackageTests(unittest.TestCase):
         self.assertIn("wsm-hwcheck-fpc", self.text)
         self.assertIn("wsm-classify-fpc", self.text)
         self.assertIn("wsm-partition-fpc", self.text)
+        self.assertIn("wsm-partition-fpc", self.text)
 
     def test_package_license_is_the_actual_owner_license(self) -> None:
         self.assertIn("(license wsm-license)", self.text)
@@ -178,6 +179,7 @@ class MakefileAndWorkflowTests(unittest.TestCase):
         self.assertIn("-o$(BUILD_DIR)/wsm-hwcheck", text)
         self.assertIn("-o$(BUILD_DIR)/wsm-classify", text)
         self.assertIn("-o$(BUILD_DIR)/wsm-partition", text)
+        self.assertIn("-o$(BUILD_DIR)/wsm-partition", text)
         self.assertIn("-Mobjfpc", text)
         self.assertIn("-Sh", text)
         self.assertIn("rm -rf $(BUILD_DIR)", text)
@@ -189,6 +191,7 @@ class MakefileAndWorkflowTests(unittest.TestCase):
         self.assertIn("fp-units-fcl-3.2.2", text)
         self.assertIn("make -C tools/pascal clean all", text)
         self.assertIn("python3 tests/test_fpc_package.py", text)
+        self.assertIn("tests/test_fpc_partition.py", text)
         self.assertIn("python3 tests/test_fpc_partition.py", text)
         self.assertIn("jsonschema[format]==4.26.0", text)
         self.assertNotIn("git ls-files '*.lpr'", text)
@@ -217,8 +220,9 @@ class RuntimeParityTests(unittest.TestCase):
             )
         cls.hwcheck = cls.build_dir / "wsm-hwcheck"
         cls.classifier = cls.build_dir / "wsm-classify"
-        if not cls.hwcheck.is_file() or not cls.classifier.is_file():
-            raise AssertionError("FPC Makefile did not produce both expected binaries")
+        cls.partition = cls.build_dir / "wsm-partition"
+        if not cls.hwcheck.is_file() or not cls.classifier.is_file() or not cls.partition.is_file():
+            raise AssertionError("FPC Makefile did not produce all three expected binaries")
 
     @classmethod
     def tearDownClass(cls) -> None:
