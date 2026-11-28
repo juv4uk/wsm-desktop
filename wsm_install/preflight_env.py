@@ -19,7 +19,7 @@ import json
 import os
 import shutil
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 SCHEMA = "wsm-install-preflight/1"
 
