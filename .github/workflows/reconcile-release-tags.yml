@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: LicenseRef-Volnist
+name: Reconcile release tags
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/reconcile-release-tags.yml"
+      - "docs/RELEASE-TAGS.md"
+      - "scripts/reconcile_release_tags.py"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-tag-reconciliation
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    name: Repair known release refs and retire obsolete triggers
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out the reviewed main commit
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Print the exact dry-run plan
+        run: python3 scripts/reconcile_release_tags.py --repo "$GITHUB_REPOSITORY"
+
+      - name: Apply and verify the reconciliation
+        run: python3 scripts/reconcile_release_tags.py --repo "$GITHUB_REPOSITORY" --apply
+
+      - name: Report reconciliation failure
+        if: failure()
+        run: |
+          {
+            echo "## Release-tag reconciliation failed"
+            echo ""
+            echo "No tag is force-moved. Inspect the exact failed operation above."
+            echo "The script refuses unexpected package tags, mismatched commit SHAs, or Release references."
+          } >> "$GITHUB_STEP_SUMMARY"

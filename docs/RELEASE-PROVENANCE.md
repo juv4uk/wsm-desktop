@@ -4,7 +4,7 @@
 
 - Статус: **дослідження** — вхідні дані для рішення про політику підпису образів (M6), не рішення
 - Дата: 2026-11-26
-- Пов'язане: [#405](https://github.com/juv4uk/wsm-desktop/pull/405) (збірка й публікація ISO в CI), [VERIFIED-ARTIFACTS.md](VERIFIED-ARTIFACTS.md) (що вже перевірено), [UPSTREAMS.md](UPSTREAMS.md) (SBOM із `guix graph`)
+- Пов'язане: [#405](https://github.com/juv4uk/wsm-desktop/pull/405) (збірка й публікація ISO в CI), [VERIFIED-ARTIFACTS.md](VERIFIED-ARTIFACTS.md) (що вже перевірено), [UPSTREAMS.md](UPSTREAMS.md) (SBOM із `guix graph`), [RELEASE-TAGS.md](RELEASE-TAGS.md) (семантика та цілісність Git-тегів)
 
 ## Що це дає
 
