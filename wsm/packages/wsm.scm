@@ -1,14 +1,10 @@
 ;; SPDX-License-Identifier: LicenseRef-Volnist
 ;;
-;; WSM Desktop — пакетне визначення власних інструментів для Guix.
+;; WSM Desktop — власний пакет апаратної інвентаризації та планування інсталяції.
 ;;
-;; СТАТУС: не зібрано й не перевірено (у середовищі написання немає Guix).
-;; Перед використанням: guix build -f wsm/packages/wsm.scm
-;;
-;; Пакет ставить модулі wsm_hwcheck і wsm_install у site-packages разом зі
-;; схемою звіту. Це необхідно, бо wsm_install/cli.py шукає схему відносно
-;; батьківського каталогу модуля: у site-packages це означає schemas/ поруч
-;; із пакетами, а не в корені репозиторію.
+;; Binary distribution is authorized by ADR 0010. The effective source license
+;; remains LicenseRef-Volnist; this package is not represented as GPL, OSI, or
+;; GNU FSDG approved. The actual text is shipped as LICENSE (file://LICENSE).
 
 (define-module (wsm packages wsm)
   #:use-module (guix packages)
@@ -19,11 +15,7 @@
   #:use-module (gnu packages python)
   #:use-module (gnu packages python-xyz)
   #:use-module (guix licenses)
-  ;; version-major+minor lives here; without it the module fails to load.
   #:use-module (guix utils)
-  ;; `any` comes from SRFI-1 and `string-contains` from SRFI-13. Both are used
-  ;; in the source select? predicate below; without these two imports the module
-  ;; does not load at all, and the failure appears only when Guix evaluates it.
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-13)
   #:export (wsm-tools))
@@ -32,10 +24,6 @@
   (package
     (name "wsm-tools")
     (version "0.1.0-rc6")
-    ;; Relative paths in local-file are resolved against this file, so "../.."
-    ;; is the repository root. select? keeps .git and build output out of the
-    ;; store: without it the source would embed the whole git directory, which
-    ;; differs between clones and makes the build non-reproducible.
     (source (local-file "../.." "wsm-desktop-source"
                         #:recursive? #t
                         #:select? (lambda (path _stat)
@@ -45,8 +33,6 @@
     (build-system python-build-system)
     (arguments
      (list
-      ;; Тести репозиторію потребують його структури (tests/, scripts/), тому
-      ;; вони виконуються в CI, а не в фазі збірки пакета.
       #:tests? #f
       #:phases
       #~(modify-phases %standard-phases
@@ -72,16 +58,16 @@
                            (string-append bin "/wsm-install"))
                 (copy-file "scripts/wsm-install-live.sh"
                            (string-append bin "/wsm-install-live"))
-                ;; copy-file does not promise to preserve executable bits.
                 (for-each (lambda (name)
                             (chmod (string-append bin "/" name) #o555))
                           '("wsm-hwcheck" "wsm-install" "wsm-install-live"))))))))
     (propagated-inputs (list python python-jsonschema))
     (synopsis "Read-only hardware evidence tools for WSM Desktop")
     (description
-     "Collects a read-only hardware report from sysfs and procfs, validates it
-against a versioned schema, and drafts a diagnostic-only installation plan for
-the GNU Guix backend.  Nothing in this package writes to a block device, invokes
-a system backend, or requires root.")
+     "Collects read-only hardware evidence from sysfs and procfs, validates it
+against a versioned schema, and drafts a diagnostic-only installation plan
+for the GNU Guix backend. It does not write to a block device or require root.")
     (home-page "https://github.com/juv4uk/wsm-desktop")
-    (license gpl3+)))
+    (license (license "ВОЛЬНІСТЬ"
+                      "file://LICENSE"
+                      "LicenseRef-Volnist; source license only; no OSI/FSDG claim."))))

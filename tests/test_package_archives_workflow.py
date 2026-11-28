@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""The legacy archive lane is a read-only fixed H170 Free package-plan check."""
+"""ADR 0010 WSM-owned guix pack publication policy."""
 
 from __future__ import annotations
 
@@ -15,45 +15,87 @@ WORKFLOW = ROOT / ".github" / "workflows" / "package-archives.yml"
 class PackageArchivesWorkflowTests(unittest.TestCase):
     def setUp(self) -> None:
         self.text = WORKFLOW.read_text(encoding="utf-8")
-        self.data = yaml.safe_load(self.text)
-        self.events = self.data[True]
-        self.job = self.data["jobs"]["plan"]
+        self.data = yaml.load(self.text, Loader=yaml.BaseLoader)
+        self.events = self.data["on"]
+        self.job = self.data["jobs"]["archive"]
         self.steps = self.job["steps"]
 
-    def test_manual_main_only_and_read_only_permissions(self) -> None:
+    def named(self, name: str) -> dict:
+        for step in self.steps:
+            if step.get("name") == name:
+                return step
+        raise AssertionError(f"missing step: {name}")
+
+    def test_manual_main_only_and_draft_only(self) -> None:
         self.assertEqual(set(self.events), {"workflow_dispatch"})
-        self.assertEqual(self.data["permissions"], {"contents": "read"})
-        self.assertEqual(self.job["if"], "${{ github.ref == 'refs/heads/main' }}")
+        self.assertEqual(self.data["permissions"]["contents"], "write")
+        self.assertEqual(self.job["if"], "github.ref == 'refs/heads/main'")
+        self.assertIn("--draft", self.text)
+        self.assertIn("isDraft", self.text)
+        self.assertNotIn("--draft=false", self.text)
+        self.assertNotIn("gh release edit", self.text)
+        self.assertNotIn("push:", self.text)
+        self.assertNotIn("schedule:", self.text)
 
-    def test_only_the_fixed_h170_manifest_is_evaluated(self) -> None:
-        plan = next(step for step in self.steps if step.get("name") == "Evaluate the fixed H170 Free package plan")
-        self.assertIn("guix time-machine -C channels.lock.scm", plan["run"])
-        self.assertIn("--dry-run --no-grafts", plan["run"])
-        self.assertIn("--manifest=drivers/profiles/h170-free-packages.scm", plan["run"])
-        self.assertNotIn("wsm-tools", plan["run"])
+    def test_only_the_fixed_wsm_package_is_built(self) -> None:
+        build = self.named("Build the fixed WSM package pack")["run"]
+        self.assertIn("guix time-machine -C channels.lock.scm", build)
+        self.assertIn("--expression='(begin (use-modules (wsm packages wsm)) wsm-tools)'", build)
+        self.assertIn("wsm-tools", build)
+        self.assertIn("-f tarball", build)
+        self.assertIn("-C zstd", build)
+        self.assertNotIn("inputs.packages", self.text)
+        self.assertNotIn("github.event.inputs", self.text)
+        for forbidden in ("linux-libre", "mesa", "nonguix", "nvda-580", "linux-firmware"):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, build)
 
-    def test_no_package_input_or_binary_publication_path_exists(self) -> None:
-        forbidden = (
-            "inputs:",
-            "github.event.inputs",
-            "packages-*",
-            "actions/upload-artifact",
-            "gh release",
-            "guix archive --export",
-            "guix publish",
-            "contents: write",
-            "pages: write",
-            "GH_TOKEN",
-            "${{ inputs.",
-        )
-        for marker in forbidden:
-            with self.subTest(marker=marker):
-                self.assertNotIn(marker, self.text)
+    def test_package_module_and_effective_license_are_evaluated(self) -> None:
+        evaluate = self.named("Evaluate the package module and exact LicenseRef metadata")["run"]
+        self.assertIn("tests/guix/source-module-evaluation.scm", evaluate)
+        self.assertIn("guix time-machine -C channels.lock.scm -- repl", evaluate)
 
-    def test_failure_report_is_read_only(self) -> None:
-        step = next(step for step in self.steps if step.get("name") == "Summarize package-plan failure")
-        self.assertIn("failure()", str(step.get("if")))
-        self.assertIn("$GITHUB_STEP_SUMMARY", step["run"])
+    def test_pack_is_self_contained_and_expected_commands_are_checked(self) -> None:
+        build = self.named("Build the fixed WSM package pack")["run"]
+        for command in ("wsm-hwcheck", "wsm-install", "wsm-install-live"):
+            with self.subTest(command=command):
+                self.assertIn(command, build)
+        self.assertIn("propagated runtime inputs", self.text)
+
+    def test_github_attestation_is_created_for_the_pack(self) -> None:
+        attest = self.named("Attest the exact pack and provenance")
+        self.assertEqual(attest["uses"], "actions/attest@v4")
+        self.assertIn("archives/wsm-tools-pack.tar.zst", attest["with"]["subject-path"])
+        self.assertEqual(self.data["permissions"]["id-token"], "write")
+        self.assertEqual(self.data["permissions"]["attestations"], "write")
+
+    def test_release_assets_are_unique_and_remain_draft_after_readback(self) -> None:
+        release = self.named("Create a dedicated Draft Release and verify read-back")["run"]
+        self.assertIn("GITHUB_RUN_ID", release)
+        self.assertIn("GITHUB_RUN_ATTEMPT", release)
+        self.assertIn("gh release create", release)
+        self.assertIn("gh release download", release)
+        self.assertIn("sha256sum -c SHA256SUMS", release)
+        self.assertIn("zstd -t", release)
+        self.assertIn("isDraft", release)
+        self.assertNotIn("gh release list", self.text)
+        self.assertNotIn("latest draft", self.text.lower())
+
+    def test_license_metadata_is_not_misrepresented_as_gpl(self) -> None:
+        package = (ROOT / "wsm" / "packages" / "wsm.scm").read_text(encoding="utf-8")
+        self.assertIn('"ВОЛЬНІСТЬ"', package)
+        self.assertIn('"file://LICENSE"', package)
+        self.assertNotIn("(license gpl3+)", package)
+
+    def test_no_signing_key_or_substitute_server_is_added(self) -> None:
+        for forbidden in ("guix archive --generate-key", "GUIX_SIGNING_KEY", "signing-key.sec", "guix publish"):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, self.text)
+
+    def test_failure_report_does_not_claim_success(self) -> None:
+        failure = self.named("Report the exact failure without claiming publication")
+        self.assertEqual(failure["if"], "failure()")
+        self.assertIn("No successful package build or Release is claimed", failure["run"])
 
 
 if __name__ == "__main__":
