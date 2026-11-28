@@ -67,7 +67,7 @@ jobs:
           set -euo pipefail
           OUT="$RUNNER_TEMP/h170-release"
           sudo guix archive --export "$STORE_PATH" > "$OUT/linux-libre-h170.nar"
-          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
+          tar --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner \
             -C "$SOURCE_PATH" -cJf "$OUT/linux-libre-h170-source.tar.xz" .
           printf '%s\n' "$GITHUB_SHA" > "$OUT/wsm-source-commit.txt"
           printf '%s\n' "4e5195be20d9b124df8a8bb69213412236e4668e" > "$OUT/guix-channel-commit.txt"
@@ -134,7 +134,6 @@ jobs:
             --notes-file "$NOTES" --target "$GITHUB_SHA"
           mkdir -p "$RUNNER_TEMP/h170-readback"
           gh release download "$TAG" --dir "$RUNNER_TEMP/h170-readback"
-          cp "$OUT/SHA256SUMS" "$RUNNER_TEMP/h170-readback/SHA256SUMS"
           (
             cd "$RUNNER_TEMP/h170-readback"
             sha256sum -c SHA256SUMS
