@@ -16,7 +16,7 @@ WORKFLOW = ROOT / ".github" / "workflows" / "h170-free-core-build-evidence.yml"
 
 def manifest_roots(source: str) -> tuple[str, ...]:
     match = re.search(
-        r"specifications->manifest\\s*'\\((.*?)\\)\\s*\\)",
+        r"specifications->manifest\s*'\((.*?)\)\s*\)",
         source,
         flags=re.DOTALL,
     )
