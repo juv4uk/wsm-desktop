@@ -12,13 +12,45 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from wsm_install.executor import ExecutorError, execute  # noqa: E402
-from wsm_install.install_steps import Step  # noqa: E402
+from wsm_install.install_steps import TRUSTED_TOOLS, Step  # noqa: E402
+from wsm_install.verify import VERIFIERS, verify_step  # noqa: E402
 
 STEPS = [
     Step(["/usr/sbin/partprobe", "/dev/nvme0n1"], "re-read"),
     Step(["/usr/sbin/mkfs.ext4", "-F", "/dev/nvme0n1p2"], "format root", destructive=True),
     Step(["/usr/bin/mount", "/dev/nvme0n1p2", "/mnt"], "mount root"),
 ]
+
+
+class FakeObserver:
+    """Read-only observations the verifier is allowed to consult."""
+
+    def __init__(self, fs: str | None = "ext4", mounted: bool = True, disks: tuple[str, ...] = ("/dev/nvme0n1",)) -> None:
+        self._fs = fs
+        self._mounted = mounted
+        self._disks = disks
+
+    def filesystem_of(self, path: str) -> str | None:
+        return self._fs
+
+    def is_mounted(self, path: str) -> bool:
+        return self._mounted
+
+    def partitioned_disks(self) -> tuple[str, ...]:
+        return self._disks
+
+    def path_exists(self, path: str) -> bool:
+        return True
+
+
+class ExplodingObserver(FakeObserver):
+    """Every observation fails; the verifier must report that, not crash or guess."""
+
+    def filesystem_of(self, path: str) -> str | None:
+        raise OSError("udev is not answering")
+
+    def is_mounted(self, path: str) -> bool:
+        raise OSError("udev is not answering")
 
 
 class DryRunTests(unittest.TestCase):
@@ -107,6 +139,61 @@ class PreviewValidationTests(unittest.TestCase):
         with self.assertRaises(ExecutorError) as caught:
             execute([Step(["/bin/true"], " ")], "/dev/nvme0n1", dry_run=True, out=lambda _: None)
         self.assertEqual(caught.exception.code, "execute.purpose")
+
+
+class VerifierContractTests(unittest.TestCase):
+    """Every allowlisted step has a real postcondition; anything else is unverified.
+
+    The executor on main is preview-only, so this contract is the piece that has to
+    exist before APPLY can be re-enabled (#280, acceptance criterion 5). The point
+    is the fail-closed direction: an unknown command must never be reported as
+    success just because no verifier noticed it.
+    """
+
+    def test_unknown_command_is_unverified_not_success(self) -> None:
+        result = verify_step(
+            Step(["/bin/sh", "-c", "touch /tmp/x"], "untrusted"),
+            FakeObserver(),
+        )
+        self.assertEqual(result.status, "unverified")
+        self.assertIn("no postcondition", result.detail)
+
+    def test_relative_executable_is_unverified(self) -> None:
+        result = verify_step(Step(["mkfs.ext4", "/dev/nvme0n1p2"], "bare name"), FakeObserver())
+        self.assertEqual(result.status, "unverified")
+
+    def test_mkfs_is_verified_only_when_the_filesystem_matches(self) -> None:
+        step = Step(["/usr/sbin/mkfs.ext4", "-F", "/dev/nvme0n1p2"], "format root")
+        self.assertEqual(verify_step(step, FakeObserver(fs="ext4")).status, "verified")
+        failed = verify_step(step, FakeObserver(fs="vfat"))
+        self.assertEqual(failed.status, "failed")
+        self.assertIn("vfat", failed.detail)
+
+    def test_mkfs_without_a_readable_filesystem_is_unverified(self) -> None:
+        step = Step(["/usr/sbin/mkfs.ext4", "-F", "/dev/nvme0n1p2"], "format root")
+        self.assertEqual(verify_step(step, FakeObserver(fs=None)).status, "unverified")
+
+    def test_observer_failure_is_unverified_not_a_crash(self) -> None:
+        step = Step(["/usr/bin/mount", "/dev/nvme0n1p2", "/mnt"], "mount root")
+        self.assertEqual(verify_step(step, ExplodingObserver()).status, "unverified")
+
+    def test_mount_is_verified_only_when_the_mountpoint_is_mounted(self) -> None:
+        step = Step(["/usr/bin/mount", "/dev/nvme0n1p2", "/mnt"], "mount root")
+        self.assertEqual(verify_step(step, FakeObserver(mounted=True)).status, "verified")
+        self.assertEqual(verify_step(step, FakeObserver(mounted=False)).status, "failed")
+
+    def test_partition_table_step_needs_a_matching_disk(self) -> None:
+        step = Step(["/usr/sbin/sgdisk", "-n", "1:0:+512M", "/dev/nvme0n1"], "partition")
+        self.assertEqual(verify_step(step, FakeObserver(disks=("/dev/nvme0n1",))).status, "verified")
+        self.assertEqual(verify_step(step, FakeObserver(disks=("/dev/sda",))).status, "failed")
+
+    def test_every_trusted_tool_has_a_verifier(self) -> None:
+        for name, executable in TRUSTED_TOOLS.items():
+            with self.subTest(tool=name):
+                self.assertIn(
+                    executable, VERIFIERS,
+                    f"{name} is allowlisted for execution but has no postcondition",
+                )
 
 
 if __name__ == "__main__":
