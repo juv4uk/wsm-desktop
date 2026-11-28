@@ -33,6 +33,7 @@ from scripts.qemu_boot_smoke import (
     MAX_STDERR_CAPTURE_BYTES,
     build_qemu_command,
     main,
+    sha256_of,
     parse_disk_size_mib,
     run_bounded_process,
     validate_iso,
