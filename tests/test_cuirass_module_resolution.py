@@ -44,6 +44,8 @@ class CuirassModuleResolutionTests(unittest.TestCase):
         self.assertIsNotNone(module, "images.scm must declare a Guile module")
         self.assertIsNotNone(selector, "Cuirass specs must declare a custom job module")
         self.assertEqual(selector.group(1), module.group(1))
+        self.assertIn("#:use-module (gnu ci)", source)
+        self.assertIn("#:use-module (guix grafts)", source)
 
 
 if __name__ == "__main__":

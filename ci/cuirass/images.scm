@@ -12,6 +12,8 @@
 ;; evaluation test. A CI helper is not part of the public WSM channel API.
 
 (define-module (ci cuirass images)
+  #:use-module (gnu ci)
+  #:use-module (guix grafts)
   #:use-module (guix store)
   #:use-module (guix derivations)
   #:use-module (gnu system image)
