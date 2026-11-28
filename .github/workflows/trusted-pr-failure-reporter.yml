@@ -42,6 +42,7 @@ jobs:
           WORKFLOW_ID="$(jq -r '.workflow_id // empty' <<< "$RUN_JSON")"
           EVENT="$(jq -r '.event // empty' <<< "$RUN_JSON")"
           CONCLUSION="$(jq -r '.conclusion // empty' <<< "$RUN_JSON")"
+          SOURCE_WORKFLOW_NAME="$(jq -r '.name // empty' <<< "$RUN_JSON")"
           HEAD_SHA="$(jq -r '.head_sha // empty' <<< "$RUN_JSON")"
           HEAD_BRANCH="$(jq -r '.head_branch // empty' <<< "$RUN_JSON")"
           HEAD_REPOSITORY="$(jq -r '.head_repository.full_name // empty' <<< "$RUN_JSON")"
@@ -65,7 +66,7 @@ jobs:
           BODY="$(mktemp)"
           trap 'rm -f "$BODY"' EXIT
           {
-            echo "### $GITHUB_WORKFLOW failed"
+            echo "### $SOURCE_WORKFLOW_NAME failed"
             echo
             echo "The trusted default-branch reporter matched this failure to the PR head."
             echo "Commit: `$HEAD_SHA`"
