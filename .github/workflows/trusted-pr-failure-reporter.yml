@@ -1,0 +1,79 @@
+name: Trusted PR failure reporter
+
+# workflow_run is intentionally defined on the default branch. Do not add
+# checkout, artifact download, or execution of the triggering PR's code.
+on:
+  workflow_run:
+    workflows: ["CI", "Guix profile evaluation"]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: trusted-pr-failure-reporter-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  report-pr-failure:
+    name: Report failed PR checks using trusted metadata only
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      (github.event.workflow_run.workflow_id == 431025036 ||
+       github.event.workflow_run.workflow_id == 431678119)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      pull-requests: read
+      issues: write
+    steps:
+      - name: Validate source run and identify its PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_RUN_ID" =~ ^[0-9]+$ ]] || { echo "invalid source run id"; exit 0; }
+
+          # Re-fetch GitHub-generated metadata; do not trust PR artifacts or scripts.
+          RUN_JSON="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID")"
+          RUN_ID="$(jq -r '.id // empty' <<< "$RUN_JSON")"
+          WORKFLOW_ID="$(jq -r '.workflow_id // empty' <<< "$RUN_JSON")"
+          EVENT="$(jq -r '.event // empty' <<< "$RUN_JSON")"
+          CONCLUSION="$(jq -r '.conclusion // empty' <<< "$RUN_JSON")"
+          SOURCE_WORKFLOW_NAME="$(jq -r '.name // empty' <<< "$RUN_JSON")"
+          HEAD_SHA="$(jq -r '.head_sha // empty' <<< "$RUN_JSON")"
+          HEAD_BRANCH="$(jq -r '.head_branch // empty' <<< "$RUN_JSON")"
+          HEAD_REPOSITORY="$(jq -r '.head_repository.full_name // empty' <<< "$RUN_JSON")"
+          BASE_REPOSITORY="$(jq -r '.repository.full_name // empty' <<< "$RUN_JSON")"
+
+          [[ "$RUN_ID" == "$SOURCE_RUN_ID" ]] || exit 0
+          [[ "$WORKFLOW_ID" == "431025036" || "$WORKFLOW_ID" == "431678119" ]] || exit 0
+          [[ "$EVENT" == "pull_request" && "$CONCLUSION" == "failure" ]] || exit 0
+          [[ "$BASE_REPOSITORY" == "$GITHUB_REPOSITORY" ]] || exit 0
+          # Fork PRs are deliberately skipped; this reporter only comments on
+          # same-repository PRs and never elevates code from another repository.
+          [[ "$HEAD_REPOSITORY" == "$GITHUB_REPOSITORY" ]] || exit 0
+          [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 0
+          [[ -n "$HEAD_BRANCH" ]] || exit 0
+
+          HEAD_FILTER="$(jq -rn --arg value "$GITHUB_REPOSITORY:$HEAD_BRANCH" '$value | @uri')"
+          PRS_JSON="$(gh api "repos/$GITHUB_REPOSITORY/pulls?state=all&head=$HEAD_FILTER&base=main")"
+          PR_NUMBER="$(jq -r --arg sha "$HEAD_SHA" '[.[] | select(.head.sha == $sha and .base.ref == "main") | .number] | unique | if length == 1 then .[0] else empty end' <<< "$PRS_JSON")"
+          [[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || { echo "no unique PR matched source run"; exit 0; }
+
+          BODY="$(mktemp)"
+          trap 'rm -f "$BODY"' EXIT
+          {
+            echo "### $SOURCE_WORKFLOW_NAME failed"
+            echo
+            echo "The trusted default-branch reporter matched this failure to the PR head."
+            echo "Commit: `$HEAD_SHA`"
+            echo "Workflow run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID"
+            echo
+            echo "Inspect the first failing command in the linked workflow logs."
+          } > "$BODY"
+
+          gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+            -F body=@"$BODY" >/dev/null
