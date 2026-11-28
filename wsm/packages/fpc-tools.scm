@@ -9,6 +9,8 @@
   #:use-module (guix build-system gnu)
   #:use-module (gnu packages pascal)
   #:use-module (wsm licenses)
+  #:use-module (srfi srfi-1)
+  #:use-module (srfi srfi-13)
   #:export (wsm-hwcheck-fpc wsm-classify-fpc))
 
 (define (fpc-package-arguments make-target executable)
