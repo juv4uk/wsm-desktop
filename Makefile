@@ -127,6 +127,7 @@ describe-compatibility-lock:
 check-compatibility-eval:
 	$(PYTHON) scripts/check_channels.py --policy compatibility --lock channels/compatibility.lock.scm
 	$(GUIX) time-machine -C channels/compatibility.lock.scm -L . -- describe -f channels
+	$(GUIX) time-machine -C channels/compatibility.lock.scm -L . -- repl -L . tests/guix/compatibility-license-evaluation.scm
 	$(GUIX) time-machine -C channels/compatibility.lock.scm -L . -- system -L . build systems/live-compat.scm --dry-run
 
 # These two targets build local store outputs only; they do not install or write to physical disks.
