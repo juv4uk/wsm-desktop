@@ -69,8 +69,11 @@ class H170LinuxLibreOverlayTests(unittest.TestCase):
         self.assertIn('sha256sum -c SHA256SUMS', workflow)
         self.assertNotIn('secrets.GUIX_SIGNING_KEY', workflow)
         self.assertNotIn('actions/upload-artifact', workflow)
-        self.assertNotIn('nvidia-firmware', workflow.lower())
-        self.assertNotIn('nonguix', workflow.lower())
+        # Negative dependency checks belong to the actual Scheme package
+        # definition above. Release notes may correctly state that these inputs
+        # are excluded; mentioning an excluded dependency is not adding it.
+        self.assertIn('No NVIDIA firmware, proprietary driver, Nonguix package, or firmware blob is included.', workflow)
+        self.assertNotIn('channels/compatibility.lock.scm', workflow)
 
     def test_documentation_keeps_runtime_and_compute_claims_unproven(self) -> None:
         text = MATRIX.read_text(encoding="utf-8").lower()
