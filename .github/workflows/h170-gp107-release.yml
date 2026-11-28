@@ -1,0 +1,276 @@
+# SPDX-License-Identifier: LicenseRef-Volnist
+name: Publish H170 GP107 Linux-libre package
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/h170-gp107-release.yml"
+      - "channels.lock.scm"
+      - "wsm/packages/linux-libre.scm"
+      - "wsm/packages/patches/linux-libre-h170-nouveau-atomic.patch"
+
+permissions:
+  contents: write
+  attestations: write
+  id-token: write
+  artifact-metadata: write
+
+concurrency:
+  group: h170-gp107-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build, attest and publish the H170 Free kernel closure
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - name: Checkout reviewed main source commit
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Install the Guix build host
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y guix
+          sudo systemctl enable --now guix-daemon.service
+          guix --version
+
+      - name: Verify the exact official Guix lock
+        env:
+          EXPECTED_GUIX_COMMIT: "4e5195be20d9b124df8a8bb69213412236e4668e"
+        run: |
+          set -euo pipefail
+          test -s channels.lock.scm
+          sha256sum channels.lock.scm | tee "$RUNNER_TEMP/channels-lock.sha256"
+          guix time-machine -C channels.lock.scm -- describe -f channels             | tee "$RUNNER_TEMP/resolved-channels.scm"
+          grep -F "$EXPECTED_GUIX_COMMIT" "$RUNNER_TEMP/resolved-channels.scm"
+
+      - name: Build the fixed H170 kernel root and derivation
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          GUIX=(guix time-machine -C channels.lock.scm --)
+          PACKAGE_EXPR='(@ (wsm packages linux-libre) linux-libre-h170)'
+          STORE_PATH="$("${GUIX[@]}" build -L "$GITHUB_WORKSPACE" --no-grafts --expression="$PACKAGE_EXPR")"
+          SOURCE_PATH="$("${GUIX[@]}" build -S -L "$GITHUB_WORKSPACE" --no-grafts --expression="$PACKAGE_EXPR")"
+          DERIVATION_PATH="$("${GUIX[@]}" build -d -L "$GITHUB_WORKSPACE" --no-grafts --expression="$PACKAGE_EXPR")"
+          test -d "$STORE_PATH"
+          test -d "$SOURCE_PATH"
+          test -s "$DERIVATION_PATH"
+          PACKAGE_VERSION="${STORE_PATH##*-linux-libre-h170-}"
+          NAR_SHA256="$(guix time-machine -C channels.lock.scm -- hash --recursive --format=hex "$STORE_PATH")"
+          {
+            echo "STORE_PATH=$STORE_PATH" >> "$GITHUB_OUTPUT"
+            echo "SOURCE_PATH=$SOURCE_PATH" >> "$GITHUB_OUTPUT"
+            echo "DERIVATION_PATH=$DERIVATION_PATH" >> "$GITHUB_OUTPUT"
+            echo "PACKAGE_VERSION=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+            echo "NAR_SHA256=$NAR_SHA256" >> "$GITHUB_OUTPUT"
+          }
+
+      - name: Prepare an ephemeral Guix archive signing key
+        run: |
+          set -euo pipefail
+          sudo install -d -m 700 /etc/guix
+          if [ ! -s /etc/guix/signing-key.sec ] || [ ! -s /etc/guix/signing-key.pub ]; then
+            sudo guix archive --generate-key
+          fi
+          sudo chmod 0600 /etc/guix/signing-key.sec
+          sudo chmod 0644 /etc/guix/signing-key.pub
+          sudo test -s /etc/guix/signing-key.sec
+          sudo test -s /etc/guix/signing-key.pub
+          chmod 700 "$RUNNER_TEMP"
+          mkdir -m 700 "$RUNNER_TEMP/h170-release"
+          sudo install -m 0644 /etc/guix/signing-key.pub "$RUNNER_TEMP/h170-release/signing-key.pub"
+
+      - name: Export the complete signed recursive closure
+        env:
+          STORE_PATH: ${{ steps.build.outputs.STORE_PATH }}
+          SOURCE_PATH: ${{ steps.build.outputs.SOURCE_PATH }}
+          DERIVATION_PATH: ${{ steps.build.outputs.DERIVATION_PATH }}
+          PACKAGE_VERSION: ${{ steps.build.outputs.PACKAGE_VERSION }}
+          NAR_SHA256: ${{ steps.build.outputs.NAR_SHA256 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/h170-release"
+          sudo guix archive --export --recursive "$STORE_PATH" > "$OUT/linux-libre-h170-closure.nar"
+          sudo chown "$(id -u):$(id -g)" "$OUT/linux-libre-h170-closure.nar"
+          guix gc --requisites "$STORE_PATH" | LC_ALL=C sort -u > "$OUT/closure.paths.txt"
+          test -s "$OUT/closure.paths.txt"
+          guix time-machine -C channels.lock.scm -- size "$STORE_PATH" > "$OUT/closure-size.txt"
+          NAR_ARCHIVE_SHA256="$(sha256sum "$OUT/linux-libre-h170-closure.nar" | cut -d' ' -f1)"
+          NAR_ARCHIVE_SIZE="$(stat -c '%s' "$OUT/linux-libre-h170-closure.nar")"
+          CLOSURE_COUNT="$(wc -l < "$OUT/closure.paths.txt" | tr -d ' ')"
+          if [ "$NAR_ARCHIVE_SIZE" -ge 2000000000 ]; then
+            echo "::error::Recursive NAR exceeds the GitHub Release asset limit; no Release was created."
+            exit 1
+          fi
+          tar --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner             -C "$SOURCE_PATH" -cJf "$OUT/linux-libre-h170-source.tar.xz" .
+          guix time-machine -C channels.lock.scm -- describe -f channels > "$OUT/resolved-channels.scm"
+          cp "$RUNNER_TEMP/channels-lock.sha256" "$OUT/channels-lock.sha256"
+          echo "$GITHUB_SHA" > "$OUT/wsm-source-commit.txt"
+          echo "4e5195be20d9b124df8a8bb69213412236e4668e" > "$OUT/guix-channel-commit.txt"
+          PATCH_SHA256="$(sha256sum wsm/packages/patches/linux-libre-h170-nouveau-atomic.patch | cut -d' ' -f1)"
+          export STORE_PATH SOURCE_PATH DERIVATION_PATH PACKAGE_VERSION NAR_SHA256             NAR_ARCHIVE_SHA256 NAR_ARCHIVE_SIZE CLOSURE_COUNT PATCH_SHA256
+          python3 - <<'PY'
+          import json, os
+          payload = {
+              "schema": "wsm-guix-release-provenance/1",
+              "package": "linux-libre-h170",
+              "version": os.environ["PACKAGE_VERSION"],
+              "source_commit": os.environ["GITHUB_SHA"],
+              "workflow_run_id": os.environ["GITHUB_RUN_ID"],
+              "workflow_run_url": os.environ["GITHUB_SERVER_URL"] + "/" + os.environ["GITHUB_REPOSITORY"] + "/actions/runs/" + os.environ["GITHUB_RUN_ID"],
+              "guix_lock_commit": "4e5195be20d9b124df8a8bb69213412236e4668e",
+              "guix_lock_sha256_file": "channels-lock.sha256",
+              "derivation_path": os.environ["DERIVATION_PATH"],
+              "store_path": os.environ["STORE_PATH"],
+              "store_path_nar_hash_sha256": os.environ["NAR_SHA256"],
+              "recursive_closure_archive": "linux-libre-h170-closure.nar",
+              "recursive_closure_archive_sha256": os.environ["NAR_ARCHIVE_SHA256"],
+              "recursive_closure_archive_size_bytes": int(os.environ["NAR_ARCHIVE_SIZE"]),
+              "recursive_closure_store_paths_file": "closure.paths.txt",
+              "recursive_closure_store_path_count": int(os.environ["CLOSURE_COUNT"]),
+              "source_archive": "linux-libre-h170-source.tar.xz",
+              "upstream_patch_commit": "ed7fb901fce31588bd12ab95adc36ebcb51bc8ea",
+              "upstream_patch_sha256": os.environ["PATCH_SHA256"],
+              "package_license": "inherited unchanged from the pinned upstream Guix linux-libre package",
+              "firmware_and_driver_scope": "no NVIDIA firmware, proprietary driver, or Nonguix input",
+          }
+          with open(os.path.join(os.environ["RUNNER_TEMP"], "h170-release", "provenance.json"), "w", encoding="utf-8") as f:
+              json.dump(payload, f, ensure_ascii=False, indent=2)
+              f.write("\n")
+          PY
+          (
+            cd "$OUT"
+          echo "$GITHUB_SHA" > "$OUT/wsm-source-commit.txt"
+          )
+          {
+            echo "## H170 Free Linux-libre package"
+            echo
+            echo "- Package/version: linux-libre-h170 $PACKAGE_VERSION"
+            echo "- Store path: $STORE_PATH"
+            echo "- Derivation: $DERIVATION_PATH"
+            echo "- NAR hash (store root): $NAR_SHA256"
+            echo "- Recursive closure: $CLOSURE_COUNT store paths"
+            echo "- Recursive NAR archive: $NAR_ARCHIVE_SIZE bytes"
+            echo "- Source commit: $GITHUB_SHA"
+            echo "- Guix commit: 4e5195be20d9b124df8a8bb69213412236e4668e"
+            echo "- Package license metadata: inherited from upstream linux-libre"
+            echo "- Distribution: H170 Free only; no proprietary driver or firmware"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Prepare release notes and final checksums
+        env:
+          STORE_PATH: ${{ steps.build.outputs.STORE_PATH }}
+          PACKAGE_VERSION: ${{ steps.build.outputs.PACKAGE_VERSION }}
+          NAR_SHA256: ${{ steps.build.outputs.NAR_SHA256 }}
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/h170-release"
+          cat > "$OUT/RELEASE-NOTES.md" <<EOF
+          # H170 Free — linux-libre-h170 $PACKAGE_VERSION
+
+          This release contains the recursively exported and Guix-signed store closure for the H170 Free kernel root.
+
+          - Guix lock: 4e5195be20d9b124df8a8bb69213412236e4668e
+          - WSM source commit: $GITHUB_SHA
+          - Store path: $STORE_PATH
+          - Store-root NAR hash: $NAR_SHA256
+          - Package license: inherited unchanged from pinned upstream linux-libre
+          - No NVIDIA firmware, proprietary driver, Nonguix package, or firmware blob is included.
+
+          ## Import the complete closure
+
+          Inspect provenance.json and SHA256SUMS. Authorize the release's public key, then import the self-contained archive:
+
+              sudo guix archive --authorize < signing-key.pub
+              guix archive --import < linux-libre-h170-closure.nar
+
+          Verify the GitHub build provenance for the downloaded archive:
+
+              gh attestation verify linux-libre-h170-closure.nar --repo $GITHUB_REPOSITORY
+
+          The archive includes the complete recursive Guix store closure for this package root. The public key is specific to this release; authorize it only after verifying the provenance and source commit.
+
+          This is package-build and closure evidence, not H170 hardware certification. It does not prove physical boot, Nouveau binding, KMS, 3D/compute, suspend/resume, or firmware loading. GP107 FECS/GPCCS firmware is not included.
+          EOF
+          (
+            cd "$OUT"
+            sha256sum \\
+              linux-libre-h170-closure.nar \\
+              linux-libre-h170-source.tar.xz \\
+              signing-key.pub \\
+              provenance.json \\
+              closure.paths.txt \\
+              closure-size.txt \\
+              resolved-channels.scm \\
+              channels-lock.sha256 \\
+              wsm-source-commit.txt \\
+              guix-channel-commit.txt \\
+              > SHA256SUMS
+            sha256sum -c SHA256SUMS
+            sha256sum RELEASE-NOTES.md >> SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
+
+      - name: Attest the complete release bundle
+        uses: actions/attest@v4
+        with:
+          subject-path: ${{ runner.temp }}/h170-release/*
+
+      - name: Publish the versioned GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STORE_PATH: ${{ steps.build.outputs.STORE_PATH }}
+          PACKAGE_VERSION: ${{ steps.build.outputs.PACKAGE_VERSION }}
+          NAR_SHA256: ${{ steps.build.outputs.NAR_SHA256 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/h170-release"
+          SHORT_SHA="${GITHUB_SHA:0:12}"
+          TAG="h170-gp107-linux-libre-${PACKAGE_VERSION}-$SHORT_SHA"
+          (
+            cd "$OUT"
+            sha256sum -c SHA256SUMS
+          )
+          gh release create "$TAG" \\
+            "$OUT/linux-libre-h170-closure.nar" \\
+            "$OUT/linux-libre-h170-source.tar.xz" \\
+            "$OUT/signing-key.pub" \\
+            "$OUT/provenance.json" \\
+            "$OUT/closure.paths.txt" \\
+            "$OUT/closure-size.txt" \\
+            "$OUT/resolved-channels.scm" \\
+            "$OUT/channels-lock.sha256" \\
+            "$OUT/wsm-source-commit.txt" \\
+            "$OUT/guix-channel-commit.txt" \\
+            "$OUT/SHA256SUMS" \\
+            "$OUT/RELEASE-NOTES.md" \\
+            --title "H170 Free Linux-libre $PACKAGE_VERSION ($SHORT_SHA)" \\
+            --notes-file "$OUT/RELEASE-NOTES.md" \\
+            --target "$GITHUB_SHA"
+          mkdir -p "$RUNNER_TEMP/h170-readback"
+          gh release download "$TAG" --dir "$RUNNER_TEMP/h170-readback"
+          (
+            cd "$RUNNER_TEMP/h170-readback"
+            sha256sum -c SHA256SUMS
+          )
+          echo "Published release: $TAG" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Summarize publication failure
+        if: failure()
+        run: |
+          {
+            echo "### H170 GP107 kernel publication failed"
+            echo "Commit: $GITHUB_SHA"
+            echo "No success is claimed. Inspect the exact failing step."
+            echo "No source branch receives binary build artifacts."
+          } >> "$GITHUB_STEP_SUMMARY"
