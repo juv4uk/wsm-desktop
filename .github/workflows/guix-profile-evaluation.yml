@@ -19,7 +19,6 @@ on:
 
 permissions:
   contents: read
-  # Коментар до коміту з причиною збою — див. docs/ECOSYSTEM-PRINCIPLES.md.
   pull-requests: read
 
 concurrency:
