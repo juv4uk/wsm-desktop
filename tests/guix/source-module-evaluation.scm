@@ -9,6 +9,8 @@
 ;; from this list is a module nobody has checked.
 ;; scripts/check_scheme_module_coverage.py enforces that rule.
 (use-modules (guix packages)
+             (gnu services)
+             (ci cuirass images)
              (wsm systems performance)
              (wsm packages wsm))
 
@@ -27,4 +29,18 @@
 (display (package-name wsm-tools))
 (display " ")
 (display (package-version wsm-tools))
+(newline)
+
+;; The Cuirass helper must resolve under its path-derived module name against
+;; the same pinned Guix API used for the live-image evaluation.
+(unless (procedure? cuirass-jobs)
+  (error "Cuirass image module did not export cuirass-jobs"))
+
+;; Load the service fragment as a real Guix configuration, not a text-only
+;; assertion. This catches moved/renamed Cuirass service fields and imports.
+(primitive-load "ci/cuirass/service.scm")
+(unless (service? wsm-cuirass-service)
+  (error "Cuirass service fragment did not define a Guix service"))
+
+(display "WSM-CUIRASS-SERVICE-EVAL-OK")
 (newline)
