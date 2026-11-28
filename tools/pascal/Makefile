@@ -6,7 +6,7 @@
 
 FPC ?= fpc
 FPCFLAGS ?= -Mobjfpc -Sh -O2 -vewn
-TARGETS = wsm-hwcheck wsm-classify wsm-partition wsm-profile
+TARGETS = wsm-hwcheck wsm-classify wsm-partition wsm-profile wsm-preflight
 
 all: $(TARGETS)
 
@@ -21,6 +21,9 @@ wsm-partition: wsm_partition.pas
 
 wsm-profile: wsm_profile.pas
 	$(FPC) $(FPCFLAGS) -owsw-profile wsm_profile.pas
+
+wsm-preflight: wsm_preflight.pas
+	$(FPC) $(FPCFLAGS) -owsw-preflight wsm_preflight.pas
 
 wsm-install-fpc: $(PASCAL_DIR)/wsm_install_cli.lpr $(PASCAL_DIR)/wsmjson.pas
 	$(FPC) $(FPCFLAGS) \

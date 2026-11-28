@@ -19,16 +19,13 @@
   #:use-module (guix download)
   #:use-module (guix build-system gnu)
   #:use-module (gnu packages pascal)
-  #:use-module (guix licenses)
-  ;; The installer front end declares the project licence as a record rather
-  ;; than approximating it with gpl3+; see wsm/licenses.scm.
   #:use-module (wsm licenses)
   ;; `any' comes from SRFI-1 and `string-contains' from SRFI-13; the source
   ;; select? predicate uses both, and without the imports the module fails to
   ;; load only when Guix evaluates it.
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-13)
-  #:export (wsm-hwcheck-fpc wsm-classify-fpc wsm-partition-fpc wsm-profile-fpc))
+  #:export (wsm-hwcheck-fpc wsm-classify-fpc wsm-partition-fpc wsm-profile-fpc wsm-preflight-fpc))
 
 (define-public wsm-hwcheck-fpc
   (package
@@ -59,7 +56,8 @@
                 (install-file "tools/pascal/wsm-hwcheck" bin)
                 (install-file "tools/pascal/wsm-classify" bin)
                 (install-file "tools/pascal/wsm-partition" bin)
-                (install-file "tools/pascal/wsm-profile" bin)))))))
+                (install-file "tools/pascal/wsm-profile" bin)
+                (install-file "tools/pascal/wsm-preflight" bin)))))))
     (synopsis "Read-only PCI hardware reader for WSM Desktop, built with FPC")
     (description
      "A native binary that reads PCI identity and driver binding from sysfs and
@@ -67,7 +65,7 @@ writes a JSON report. It is the Free Pascal counterpart of the Python
 collector: no interpreter or Python library enters the runtime closure.  It
 reads only; it never opens a block device and needs no privileges.")
     (home-page "https://github.com/juv4uk/wsm-desktop")
-    (license license:gpl3+)))
+    (license wsm-license)))
 
 (define-public wsm-classify-fpc
   (package
@@ -101,3 +99,15 @@ invocations are emitted as data for a caller that holds the consent chain.")))
 schema version, path safety, at least one passing function, duplicate paths and
 artifact presence.  Digest verification is deliberately delegated and the
 output says so, so no caller mistakes this for a full check.")))
+
+(define-public wsm-preflight-fpc
+  (package
+    (inherit wsm-hwcheck-fpc)
+    (name "wsm-preflight-fpc")
+    (synopsis "Pre-install environment checks for WSM Desktop, built with FPC")
+    (description
+     "Reports whether this machine can install WSM before anything is touched:
+required programs, guix, root, an unused mount point, the system declaration and
+the instruction set.  The verdict keeps the rule that makes it honest:
+incomplete is not a pass, and the exit code differs between fail and
+incomplete.")))

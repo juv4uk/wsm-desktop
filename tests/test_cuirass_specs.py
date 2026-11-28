@@ -137,9 +137,10 @@ class DocumentationTests(unittest.TestCase):
         self.assertIn("не завантажує образ", text.lower())
         self.assertIn("не перевіряє інсталятор", text.lower())
 
-    def test_the_document_admits_the_instance_never_ran(self) -> None:
-        text = DOC.read_text(encoding="utf-8")
-        self.assertIn("інстанс не запускався", text.lower())
+    def test_the_document_separates_running_instance_from_proven_build(self) -> None:
+        text = DOC.read_text(encoding="utf-8").lower()
+        self.assertIn("реальний інстанс", text)
+        self.assertIn("а не доказ складання", text)
 
 
 if __name__ == "__main__":
