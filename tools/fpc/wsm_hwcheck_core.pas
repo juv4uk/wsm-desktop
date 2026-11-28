@@ -158,6 +158,30 @@ begin
   {$endif}
 end;
 
+{ Імена записів каталогу в тому ж порядку, що й у Python: відсортовані.
+  FindFirst віддає порядок readdir, а collector.py робить
+  sorted(root.iterdir()), тому без сортування текстовий паритет не зійшовся б
+  на машині з двома й більше пристроями. }
+procedure ListSortedEntries(const Directory: string; Names: TStringList);
+var
+  Search: TSearchRec;
+begin
+  Names.Clear;
+  Names.Sorted := True;
+  Names.Duplicates := dupIgnore;
+  if FindFirst(JoinPath(Directory, '*'), faAnyFile, Search) <> 0 then
+    Exit;
+  try
+    repeat
+      if (Search.Name = '.') or (Search.Name = '..') then
+        Continue;
+      Names.Add(Search.Name);
+    until FindNext(Search) <> 0;
+  finally
+    FindClose(Search);
+  end;
+end;
+
 procedure AddIfPresent(Target: TJSONObject; const Name, Value: string);
 begin
   if Value <> '' then
@@ -538,26 +562,22 @@ end;
 procedure AddPCIDevices(const SysfsRoot, ObservedAt: string; Devices: TJSONArray);
 var
   Root, EntryName, DevicePath, Vendor, Product, ClassValue, Category: string;
-  Search: TSearchRec;
+  Names: TStringList;
+  Index: Integer;
   Identity, Device: TJSONObject;
   Count: Integer;
 begin
-  { ВАЖЛИВО: FindFirst віддає порядок readdir, а Python сортує
-    (sorted(root.iterdir())). Поки що це не виправлено — див. tests/
-    test_fpc_collector_parity.py, який порівнює множини, а не порядок.
-    Виправлення вимагає збирати імена в TStringList з Sorted := True. }
   Root := JoinPath(SysfsRoot, 'bus/pci/devices');
   if not DirectoryExists(Root) then
     Exit;
 
-  Count := 0;
-  if FindFirst(JoinPath(Root, '*'), faAnyFile, Search) <> 0 then
-    Exit;
+  Names := TStringList.Create;
   try
-    repeat
-      EntryName := Search.Name;
-      if (EntryName = '.') or (EntryName = '..') then
-        Continue;
+    ListSortedEntries(Root, Names);
+    Count := 0;
+    for Index := 0 to Names.Count - 1 do
+    begin
+      EntryName := Names[Index];
       Inc(Count);
       if Count > MaxDevices then
         Break;
@@ -596,9 +616,9 @@ begin
         Device.Add('network', CollectNetworkFacts);
 
       Devices.Add(Device);
-    until FindNext(Search) <> 0;
+    end;
   finally
-    FindClose(Search);
+    Names.Free;
   end;
 end;
 
