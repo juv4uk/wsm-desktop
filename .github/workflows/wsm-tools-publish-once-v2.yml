@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   pack:
-    if: ${{ github.ref == 'refs/heads/publish/wsm-tools/2026-11-28-rc6-v2' && github.event.before == '4f3ea730407858cba9292ce5eeba55fc52c73273' }}
+    if: ${{ github.ref == 'refs/heads/publish/wsm-tools/2026-11-28-rc6-v2' }}
     name: Build, attest and draft-release WSM-owned wsm-tools
     runs-on: ubuntu-24.04
     timeout-minutes: 180
@@ -126,7 +126,7 @@ jobs:
           cat > archives/RELEASE-NOTES.md <<'EOF'
           # WSM tools 0.1.0-rc6 — Guix package
 
-          **Draft pre-release:** owner-authorized WSM-owned package output.
+          **Public pre-release:** owner-authorized WSM-owned package output, built and read-back-verified from the exact source commit and pinned Guix lock.
 
           Assets include the self-contained Guix pack, the exact WSM license text, SHA-256 checksums, pinned Guix channel description and provenance. GitHub Artifact Attestation covers the exact artifact digests.
 
@@ -164,7 +164,15 @@ jobs:
             tar -tzf "wsm-tools-0.1.0-rc6-${GITHUB_SHA:0:12}.tar.gz" | grep -E '/share/doc/wsm-tools/LICENSE$'
           )
           test "$(gh release view "$tag" --json isDraft --jq '.isDraft')" = "true"
-          echo "Verified Draft Release: $tag" | tee -a "$GITHUB_STEP_SUMMARY"
+          gh release edit "$tag" --draft=false
+          test "$(gh release view "$tag" --json isDraft --jq '.isDraft')" = "false"
+          {
+            echo "## Public WSM tools package release"
+            echo "Release: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$tag"
+            echo "Read-back SHA-256: PASS"
+            echo "Runtime pack license asset: LICENSE (LicenseRef-Volnist)"
+            echo "Artifact Attestation covers the package and provenance metadata."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Report publication failure
         if: failure()
