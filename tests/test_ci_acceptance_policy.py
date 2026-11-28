@@ -168,14 +168,14 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
 
     def test_a_tag_push_attaches_to_the_newest_draft(self) -> None:
         """One pushed tag must be enough to put the archives in front of a person."""
-        text = self.text()
+        text = self.text
         self.assertIn("gh release list", text)
         self.assertIn("select(.isDraft)", text)
         self.assertIn('TAG="${REQUESTED:-}"', text)
 
     def test_no_draft_means_the_archives_stay_in_the_artifact(self) -> None:
         """Attaching nowhere must be a recorded outcome, not a silent failure."""
-        text = self.text()
+        text = self.text
         self.assertIn("no draft release to attach to", text)
         self.assertIn("WSM_PACKAGE_ATTACHED_TO=none", text)
 
