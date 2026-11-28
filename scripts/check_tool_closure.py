@@ -293,6 +293,24 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     problems = check(root, prefixes=args.prefix)
+
+    # A prefix is an image-internal path (/run/current-system/profile/bin), not a
+    # host path. Passing a host path resolves nothing and reads as "the image has no
+    # tools at all", which is a misleading way to learn about a bad argument.
+    if args.prefix:
+        missing_dirs = [
+            prefix for prefix in args.prefix
+            if not (root / prefix.lstrip("/")).is_dir()
+        ]
+        if missing_dirs:
+            print(
+                "check-tool-closure: these prefixes do not exist under --root: "
+                + ", ".join(missing_dirs)
+                + ". A prefix is an image-internal path (for example "
+                "/run/current-system/profile/bin), not a host path.",
+                file=sys.stderr,
+            )
+
     for name, problem in problems:
         print(f"check-tool-closure: {name}: {problem}", file=sys.stderr)
 
