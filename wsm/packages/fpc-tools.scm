@@ -98,7 +98,7 @@ coverage manifest.")
     (home-page "https://github.com/juv4uk/wsm-desktop")
     (synopsis "Conservative x86-64 ISA evidence from all logical processors")
     (description
-     "Intersects observed Linux procfs CPU flags across every logical processor
+     "Intersects observed Linux procfs CPU flags across all logical processors
 and reports the common x86-64 psABI level. It does not claim silicon inventory
 or performance.")
     (supported-systems '("x86_64-linux"))
