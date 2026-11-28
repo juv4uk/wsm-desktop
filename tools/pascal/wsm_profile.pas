@@ -64,12 +64,12 @@ begin
   Result := '';
   if RawPath = '' then
   begin
-    Result := Label + ': empty path';
+    Result := FieldName + ': empty path';
     Exit;
   end;
   if (RawPath[1] = '/') or (Copy(RawPath, 1, 3) = '..\') or (Copy(RawPath, 1, 3) = '../') then
   begin
-    Result := Label + ': ' + RawPath + ' is not a safe relative path';
+    Result := FieldName + ': ' + RawPath + ' is not a safe relative path';
     Exit;
   end;
   Rest := RawPath;
@@ -85,7 +85,7 @@ begin
       Rest := '';
     if Part = '..' then
     begin
-      Result := Label + ': ' + RawPath + ' escapes the bundle directory';
+      Result := FieldName + ': ' + RawPath + ' escapes the bundle directory';
       Exit;
     end;
   end;
