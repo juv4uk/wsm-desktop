@@ -1,19 +1,13 @@
 { SPDX-License-Identifier: LicenseRef-Volnist }
 {
-  wsm-classify, FPC edition: the diagnostic subsystem summary as a native binary.
+  wsm-classify, FPC edition.
 
-  The contract is copied from wsm_install/classification.py, not reinvented:
-    * a subsystem is KNOWN only when every observed device is either
-      driver-bound-not-tested or candidate-only, and no functional test failed;
-    * a functional test applies only to its named capability, so a passed test
-      never certifies a subsystem;
-    * CERTIFIED stays at zero - report v1 has no coverage manifest, and a
-      summary that could say CERTIFIED would authorise an installation it
-      cannot support.
-
-  JSON comes from FPC's own fpjson unit, which ships with the compiler: no
-  external library enters the closure, which is the whole reason this exists.
+  This is a native implementation of wsm_install/classification.py.
+  It emits the complete hardware-classification/2 schema and never promotes
+  a functional test to subsystem certification. CERTIFIED remains zero:
+  report v1 has no complete coverage manifest.
 }
+
 program wsm_classify;
 
 {$mode objfpc}{$H+}
@@ -22,8 +16,8 @@ uses
   SysUtils, Classes, fpjson, jsonparser;
 
 const
-  LevelKnown = 'KNOWN';
-  LevelUnknown = 'UNKNOWN';
+  LevelKnown = 'known';
+  LevelUnknown = 'unknown';
 
 type
   TSubsystemMap = record
@@ -32,8 +26,6 @@ type
   end;
 
 const
-  { Categories are separated by `|' because Pascal array-of-string constants
-    inside a record constant are awkward and easy to get wrong. }
   Subsystems: array[0..10] of TSubsystemMap = (
     (Name: 'cpu';       Categories: 'cpu'),
     (Name: 'memory';    Categories: 'memory'),
@@ -51,16 +43,19 @@ const
 function Str(Obj: TJSONObject; const Key: string): string;
 begin
   Result := '';
-  if Obj.IndexOfName(Key) >= 0 then
+  if (Obj <> nil) and (Obj.IndexOfName(Key) >= 0) then
     Result := Obj.Get(Key, '');
 end;
 
-{ The collector writes `bound_driver' for built-in drivers that have no module
-  symlink. Requiring `module' here would turn every built-in driver into a
-  false unknown - the exact mistake the Python module's comment warns about. }
+function CategoryInList(const Category, Allowed: string): Boolean;
+begin
+  Result := Pos('|' + Category + '|', '|' + Allowed + '|') > 0;
+end;
+
 function EvidenceStateFor(Device: TJSONObject): string;
 var
   Discovery, Status, Bound, Candidate: string;
+  DriverData: TJSONData;
   Driver: TJSONObject;
 begin
   Discovery := Str(Device, 'discovery_status');
@@ -69,11 +64,10 @@ begin
   if Discovery <> 'discovered' then
     Exit('unknown');
 
-  if Device.IndexOfName('driver') < 0 then
+  DriverData := Device.Find('driver');
+  if not (DriverData is TJSONObject) then
     Exit('unknown');
-  if not (Device.Find('driver') is TJSONObject) then
-    Exit('unknown');
-  Driver := TJSONObject(Device.Find('driver'));
+  Driver := TJSONObject(DriverData);
 
   Status := Str(Driver, 'status');
   Bound := Trim(Str(Driver, 'bound_driver'));
@@ -94,109 +88,240 @@ begin
   Result := 'not-tested';
 end;
 
-function HasFailedFunction(Device: TJSONObject): Boolean;
+function FailedFunctionTest(Device: TJSONObject): Boolean;
 var
+  TestsData: TJSONData;
   Tests: TJSONArray;
+  ItemData: TJSONData;
   I: Integer;
-  Item: TJSONObject;
-  Result2: string;
 begin
   Result := False;
-  if Device.IndexOfName('functional_tests') < 0 then
+  TestsData := Device.Find('functional_tests');
+  if not (TestsData is TJSONArray) then
     Exit;
-  if not (Device.Find('functional_tests') is TJSONArray) then
-    Exit;
-  Tests := TJSONArray(Device.Find('functional_tests'));
+  Tests := TJSONArray(TestsData);
   for I := 0 to Tests.Count - 1 do
   begin
-    if not (Tests.Items[I] is TJSONObject) then
-      Continue;
-    Item := TJSONObject(Tests.Items[I]);
-    Result2 := Str(Item, 'result');
-    if Result2 = '' then
-      Result2 := Str(Item, 'status');
-    if Result2 = 'failed' then
-      Exit(True);
+    ItemData := Tests.Items[I];
+    if ItemData is TJSONObject then
+      if Str(TJSONObject(ItemData), 'status') = 'failed' then
+        Exit(True);
   end;
 end;
 
-function CategoryInList(const Category, Allowed: string): Boolean;
-var
-  Padded: string;
+function FunctionalTestState(const Status: string): string;
 begin
-  Padded := '|' + Allowed + '|';
-  Result := Pos('|' + Category + '|', Padded) > 0;
+  if Status = 'passed' then
+    Exit('supported-tested');
+  if Status = 'failed' then
+    Exit('known-problem');
+  if Status = 'not-run' then
+    Exit('not-tested');
+  Result := 'unknown';
 end;
 
-procedure EmitSubsystem(const Name, AllowedCategories: string;
-  Devices: TJSONArray; var KnownCount, UnknownCount: Integer; var First: Boolean);
+procedure CloneField(Source, Destination: TJSONObject; const Name: string);
+var
+  Value: TJSONData;
+begin
+  Value := Source.Find(Name);
+  if Value <> nil then
+    Destination.Add(Name, Value.Clone);
+end;
+
+function FunctionalTestsFor(Device: TJSONObject): TJSONArray;
+var
+  TestsData, ItemData, RefData: TJSONData;
+  Tests, Refs: TJSONArray;
+  Item, ResultItem: TJSONObject;
+  I: Integer;
+  Status: string;
+begin
+  Result := TJSONArray.Create;
+  TestsData := Device.Find('functional_tests');
+  if not (TestsData is TJSONArray) then
+    Exit;
+  Tests := TJSONArray(TestsData);
+
+  for I := 0 to Tests.Count - 1 do
+  begin
+    ItemData := Tests.Items[I];
+    if not (ItemData is TJSONObject) then
+      Continue;
+    Item := TJSONObject(ItemData);
+    Status := Str(Item, 'status');
+
+    ResultItem := TJSONObject.Create;
+    ResultItem.Add('device_id', Str(Device, 'device_id'));
+    ResultItem.Add('capability', Str(Item, 'capability'));
+    ResultItem.Add('reported_status', Status);
+    ResultItem.Add('evidence_state', FunctionalTestState(Status));
+
+    CloneField(Item, ResultItem, 'tested_at');
+    CloneField(Item, ResultItem, 'method');
+    CloneField(Item, ResultItem, 'result');
+    RefData := Item.Find('evidence_refs');
+    if RefData is TJSONArray then
+    begin
+      Refs := TJSONArray(RefData);
+      ResultItem.Add('evidence_refs', Refs.Clone);
+    end;
+    Result.Add(ResultItem);
+  end;
+end;
+
+function DeviceEvidenceFor(Device: TJSONObject): TJSONObject;
+var
+  DriverSource, FirmwareSource, EvidenceSource: TJSONData;
+  DriverTarget, FirmwareTarget: TJSONObject;
+  EvidenceTarget: TJSONArray;
+begin
+  Result := TJSONObject.Create;
+  Result.Add('device_id', Str(Device, 'device_id'));
+
+  DriverSource := Device.Find('driver');
+  if DriverSource is TJSONObject then
+  begin
+    DriverTarget := TJSONObject.Create;
+    CloneField(TJSONObject(DriverSource), DriverTarget, 'status');
+    CloneField(TJSONObject(DriverSource), DriverTarget, 'candidate');
+    CloneField(TJSONObject(DriverSource), DriverTarget, 'module');
+    CloneField(TJSONObject(DriverSource), DriverTarget, 'module_loaded');
+    CloneField(TJSONObject(DriverSource), DriverTarget, 'bound_driver');
+    CloneField(TJSONObject(DriverSource), DriverTarget, 'kernel_config_symbol');
+    CloneField(TJSONObject(DriverSource), DriverTarget, 'notes');
+    Result.Add('driver', DriverTarget);
+  end;
+
+  FirmwareSource := Device.Find('firmware');
+  if FirmwareSource is TJSONObject then
+  begin
+    FirmwareTarget := TJSONObject.Create;
+    CloneField(TJSONObject(FirmwareSource), FirmwareTarget, 'requirement');
+    CloneField(TJSONObject(FirmwareSource), FirmwareTarget, 'runtime_status');
+    CloneField(TJSONObject(FirmwareSource), FirmwareTarget, 'files_observed');
+    CloneField(TJSONObject(FirmwareSource), FirmwareTarget, 'package_candidates');
+    CloneField(TJSONObject(FirmwareSource), FirmwareTarget, 'kernel_log_evidence');
+    CloneField(TJSONObject(FirmwareSource), FirmwareTarget, 'redistribution_status');
+    Result.Add('firmware', FirmwareTarget);
+  end;
+
+  EvidenceSource := Device.Find('evidence');
+  if EvidenceSource is TJSONArray then
+  begin
+    EvidenceTarget := TJSONArray(EvidenceSource).Clone as TJSONArray;
+    Result.Add('evidence', EvidenceTarget);
+  end;
+end;
+
+function BuildSubsystem(const Name, AllowedCategories: string;
+  Devices: TJSONArray; out IsKnown: Boolean): TJSONObject;
 var
   I: Integer;
+  DeviceData: TJSONData;
   Device: TJSONObject;
-  Level, State, Ids, Observation: string;
+  State, DeviceId: string;
+  DeviceIds, Reasons, EvidenceStates, FunctionalTests, DeviceEvidence: TJSONArray;
   AllGood, AnyFailed: Boolean;
   Count: Integer;
 begin
+  DeviceIds := TJSONArray.Create;
+  Reasons := TJSONArray.Create;
+  EvidenceStates := TJSONArray.Create;
+  FunctionalTests := TJSONArray.Create;
+  DeviceEvidence := TJSONArray.Create;
   AllGood := True;
   AnyFailed := False;
-  Ids := '';
   Count := 0;
 
   for I := 0 to Devices.Count - 1 do
   begin
-    if not (Devices.Items[I] is TJSONObject) then
+    DeviceData := Devices.Items[I];
+    if not (DeviceData is TJSONObject) then
       Continue;
-    Device := TJSONObject(Devices.Items[I]);
+    Device := TJSONObject(DeviceData);
     if not CategoryInList(Str(Device, 'category'), AllowedCategories) then
       Continue;
 
-    State := EvidenceStateFor(Device);
     Inc(Count);
-    if Ids <> '' then
-      Ids := Ids + ',';
-    Ids := Ids + '"' + Str(Device, 'device_id') + '=' + State + '"';
+    DeviceId := Str(Device, 'device_id');
+    State := EvidenceStateFor(Device);
+    DeviceIds.Add(DeviceId);
+    EvidenceStates.Add(DeviceId + '=' + State);
+    Reasons.Add(DeviceId + ': ' + State);
+    FunctionalTests.Add(FunctionalTestsFor(Device));
+    DeviceEvidence.Add(DeviceEvidenceFor(Device));
 
     if not ((State = 'driver-bound-not-tested') or (State = 'candidate-only')) then
       AllGood := False;
-    if HasFailedFunction(Device) then
+    if FailedFunctionTest(Device) then
       AnyFailed := True;
   end;
 
+  IsKnown := (Count > 0) and AllGood and (not AnyFailed);
+  Result := TJSONObject.Create;
+  Result.Add('subsystem', Name);
+  if IsKnown then
+    Result.Add('level', LevelKnown)
+  else
+    Result.Add('level', LevelUnknown);
+  Result.Add('devices', DeviceIds);
+  Result.Add('reasons', Reasons);
+  Result.Add('coverage', 'unknown');
+  if Count > 0 then
+    Result.Add('observation', 'device-records-present')
+  else
+    Result.Add('observation', 'no-device-record');
+  Result.Add('evidence_states', EvidenceStates);
+  Result.Add('functional_tests', FunctionalTests);
+  Result.Add('device_evidence', DeviceEvidence);
+
   if Count = 0 then
+    Reasons.Add('no device record is present; report v1 has no coverage manifest, so absence cannot be interpreted as not-detected or not-collected');
+end;
+
+function BuildSummary(Devices: TJSONArray): TJSONObject;
+var
+  SubsystemArray: TJSONArray;
+  Counts: TJSONObject;
+  Subsystem: TJSONObject;
+  I, KnownCount, UnknownCount: Integer;
+  IsKnown: Boolean;
+begin
+  Result := TJSONObject.Create;
+  Result.Add('schema', 'wsm-hardware-classification/2');
+
+  SubsystemArray := TJSONArray.Create;
+  KnownCount := 0;
+  UnknownCount := 0;
+  for I := Low(Subsystems) to High(Subsystems) do
   begin
-    Level := LevelUnknown;
-    Observation := 'no-device-record';
-  end
-  else
-  begin
-    Observation := 'device-records-present';
-    if AllGood and not AnyFailed then
-      Level := LevelKnown
+    Subsystem := BuildSubsystem(Subsystems[I].Name, Subsystems[I].Categories,
+      Devices, IsKnown);
+    SubsystemArray.Add(Subsystem);
+    if IsKnown then
+      Inc(KnownCount)
     else
-      Level := LevelUnknown;
+      Inc(UnknownCount);
   end;
+  Result.Add('subsystems', SubsystemArray);
 
-  if not First then
-    Write(',');
-  First := False;
-  Write('{"subsystem":"', Name, '","level":"', Level, '"');
-  Write(',"observation":"', Observation, '"');
-  Write(',"evidence_states":[', Ids, ']}');
-
-  if Level = LevelKnown then
-    Inc(KnownCount)
-  else
-    Inc(UnknownCount);
+  Counts := TJSONObject.Create;
+  Counts.Add('certified', 0);
+  Counts.Add('known', KnownCount);
+  Counts.Add('unknown', UnknownCount);
+  Result.Add('counts', Counts);
+  Result.Add('decision_policy', 'docs/INSTALL-CAPABILITY-MATRIX.md');
+  Result.Add('note',
+    'Diagnostic summary only. Report v1 has no complete coverage manifest; functional-test results apply only to their named capability. This summary does not choose an installation scenario or authorize a plan.');
 end;
 
 var
-  Text: TStringList;
-  Parser: TJSONParser;
+  InputText: TStringList;
+  RootData, DevicesData: TJSONData;
   Root: TJSONObject;
   Devices: TJSONArray;
-  First: Boolean;
-  KnownCount, UnknownCount: Integer;
-  I: Integer;
+  Summary: TJSONObject;
 begin
   if ParamCount <> 1 then
   begin
@@ -204,66 +329,50 @@ begin
     Halt(2);
   end;
 
-  Text := TStringList.Create;
+  InputText := TStringList.Create;
+  RootData := nil;
+  Summary := nil;
   try
     try
-      Text.LoadFromFile(ParamStr(1));
+      InputText.LoadFromFile(ParamStr(1));
     except
       on E: Exception do
       begin
-        WriteLn(StdErr, 'wsm-classify: cannot read ', ParamStr(1), ': ', E.Message);
+        WriteLn(StdErr, 'wsm-classify: cannot read report: ', E.Message);
         Halt(3);
       end;
     end;
 
-    Parser := nil;
     try
-      try
-        Parser := TJSONParser.Create(Text.Text);
-        if not (Parser.Parse is TJSONObject) then
-        begin
-          WriteLn(StdErr, 'wsm-classify: report is not a JSON object');
-          Halt(4);
-        end;
-        Root := TJSONObject(Parser.Parse);
-      except
-        on E: Exception do
-        begin
-          WriteLn(StdErr, 'wsm-classify: report is not valid JSON: ', E.Message);
-          Halt(4);
-        end;
-      end;
-
-      if Root.IndexOfName('devices') < 0 then
+      RootData := GetJSON(InputText.Text);
+    except
+      on E: Exception do
       begin
-        WriteLn(StdErr, 'wsm-classify: report has no devices array');
+        WriteLn(StdErr, 'wsm-classify: report is not valid JSON: ', E.Message);
         Halt(4);
       end;
-      if not (Root.Find('devices') is TJSONArray) then
-      begin
-        WriteLn(StdErr, 'wsm-classify: devices is not an array');
-        Halt(4);
-      end;
-      Devices := TJSONArray(Root.Find('devices'));
-
-      KnownCount := 0;
-      UnknownCount := 0;
-      First := True;
-      Write('{"schema":"wsm-hardware-classification/2","subsystems":[');
-      for I := Low(Subsystems) to High(Subsystems) do
-        EmitSubsystem(Subsystems[I].Name, Subsystems[I].Categories,
-                      Devices, KnownCount, UnknownCount, First);
-      Write(']');
-      Write(',"counts":{"CERTIFIED":0,"KNOWN":', KnownCount,
-            ',"UNKNOWN":', UnknownCount, '}');
-      Write(',"note":"Diagnostic summary only. Report v1 has no complete ');
-      Write('coverage manifest; functional-test results apply only to their ');
-      Write('named capability. This summary does not authorise a plan."');
-      WriteLn('}');
-    finally
-      Parser.Free;
     end;
+
+    if not (RootData is TJSONObject) then
+    begin
+      WriteLn(StdErr, 'wsm-classify: report is not a JSON object');
+      Halt(4);
+    end;
+    Root := TJSONObject(RootData);
+
+    DevicesData := Root.Find('devices');
+    if not (DevicesData is TJSONArray) then
+    begin
+      WriteLn(StdErr, 'wsm-classify: report has no devices array');
+      Halt(4);
+    end;
+    Devices := TJSONArray(DevicesData);
+
+    Summary := BuildSummary(Devices);
+    WriteLn(Summary.AsJSON);
   finally
-    Text.Free;
+    Summary.Free;
+    RootData.Free;
+    InputText.Free;
   end;
 end.
