@@ -34,7 +34,7 @@ class PublishHardwareCacheTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_it_refuses_without_a_licence_decision(self) -> None:
-        completed = run("--cpu", "skylake", "--dry-run")
+        completed = run("--cpu", "skylake")
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn("#367", completed.stderr)
 
@@ -43,13 +43,12 @@ class PublishHardwareCacheTests(unittest.TestCase):
             "--cpu", "native",
             "--license-decision", "custom-record",
             "--channel-unsigned-accepted",
-            "--dry-run",
         )
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn("native", completed.stderr)
 
     def test_it_refuses_an_unsigned_channel_without_explicit_acceptance(self) -> None:
-        completed = run("--cpu", "skylake", "--license-decision", "custom-record", "--dry-run")
+        completed = run("--cpu", "skylake", "--license-decision", "custom-record")
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn("guix-authorizations", completed.stderr)
 
@@ -64,6 +63,34 @@ class PublishHardwareCacheTests(unittest.TestCase):
         self.assertIn("guix publish", completed.stdout)
         self.assertIn("--tune=skylake", completed.stdout)
 
+    def test_dry_run_works_without_naming_the_decisions(self) -> None:
+        """The plan must be inspectable before the owner has decided anything."""
+        completed = run("--dry-run")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("План", completed.stdout)
+
+    def test_a_flag_without_a_value_is_refused_with_a_message(self) -> None:
+        """`--cpu` last used to eat itself and die on shift with no diagnostic."""
+        completed = run("--license-decision", "custom-record", "--cpu")
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("потребує значення", completed.stderr)
+
+    def test_the_consumer_authorizes_the_publisher_key(self) -> None:
+        """Authorizing the consumer's own key would authorize nothing."""
+        completed = run("--dry-run")
+        self.assertIn("scp", completed.stdout)
+        self.assertIn("publisher.pub", completed.stdout)
+
+    def test_it_compares_derivations_instead_of_grepping_the_log(self) -> None:
+        """Build logs are bz2-compressed and -march is wrapper-injected."""
+        text = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("guix build -L . -d", text)
+        self.assertNotIn('grep -q -- "-march=', text)
+
+    def test_it_requires_root_before_touching_the_key(self) -> None:
+        text = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn('id -u', text)
+
     def test_it_checks_every_feature_skylake_needs(self) -> None:
         """AVX2 alone is not enough: -march=skylake also needs BMI1/2, FMA, MOVBE, XSAVE.
 
@@ -77,7 +104,7 @@ class PublishHardwareCacheTests(unittest.TestCase):
     def test_it_warns_that_tuned_builds_skip_tests(self) -> None:
         """Guix does not run the test suite for tuned builds; that must be visible."""
         text = SCRIPT.read_text(encoding="utf-8")
-        self.assertIn("НЕ виконуються", text)
+        self.assertIn("НЕ проганяє тести", text)
 
     def test_it_verifies_the_tuning_in_the_build_log(self) -> None:
         text = SCRIPT.read_text(encoding="utf-8")
