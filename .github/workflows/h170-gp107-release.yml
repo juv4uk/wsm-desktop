@@ -101,6 +101,8 @@ jobs:
           cat > "$NOTES" <<EOF
           # H170 GP107 Linux-libre kernel package
 
+          **Pre-release:** experimental package artifact for further validation; not a hardware certification.
+
           This release contains the Guix-built linux-libre-h170 package:
           pinned upstream Linux-libre plus one upstream Nouveau GP107 atomic-KMS fix.
 
@@ -131,7 +133,7 @@ jobs:
             "$OUT/wsm-source-commit.txt" "$OUT/guix-channel-commit.txt" \
             "$OUT/provenance.txt" "$OUT/SHA256SUMS" "$NOTES" \
             --title "H170 GP107 Linux-libre 7.3.5 ($SHORT_SHA)" \
-            --notes-file "$NOTES" --target "$GITHUB_SHA"
+            --notes-file "$NOTES" --target "$GITHUB_SHA" --prerelease
           mkdir -p "$RUNNER_TEMP/h170-readback"
           gh release download "$TAG" --dir "$RUNNER_TEMP/h170-readback"
           (
