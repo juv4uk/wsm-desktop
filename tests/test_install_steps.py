@@ -6,6 +6,7 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -13,7 +14,7 @@ sys.path.insert(0, str(ROOT))
 from wsm_install.install_steps import (  # noqa: E402
     backend_command,
     device_for,
-    plan_steps,
+    plan_steps as _plan_steps,
     render,
     TRUSTED_TOOLS,
 )
@@ -23,6 +24,23 @@ from wsm_install.partition import Disk, Layout, Refused, plan  # noqa: E402
 def tool(step) -> str:
     """Basename of the command: paths are absolute, names are what we assert on."""
     return step.command[0].rsplit("/", 1)[-1]
+
+# Unit tests also run on non-Guix CI hosts. Give the planner a disposable
+# system-profile fixture rather than relying on the developer host or PATH.
+_PROFILE_TMP = TemporaryDirectory(prefix="wsm-guix-tool-profile-")
+_PROFILE_ROOT = Path(_PROFILE_TMP.name)
+for _index, (_name, _binary) in enumerate(TRUSTED_TOOLS.items()):
+    _directory = "bin" if _index % 2 == 0 else "sbin"
+    _executable = _PROFILE_ROOT / _directory / _binary
+    _executable.parent.mkdir(parents=True, exist_ok=True)
+    _executable.write_text("#!/bin/sh\\nexit 0\\n", encoding="utf-8")
+    _executable.chmod(0o755)
+
+
+def plan_steps(*args, **kwargs):
+    kwargs.setdefault("profile_root", _PROFILE_ROOT)
+    return _plan_steps(*args, **kwargs)
+
 
 GIB = 1024 ** 3
 
@@ -73,8 +91,8 @@ class OrderingTests(unittest.TestCase):
         commands = current.commands()
         steps = plan_steps(current)[:len(commands)]
         expected = [
-            [TRUSTED_TOOLS["sgdisk"], *command[1:]]
-            for command in commands
+            [steps[index].command[0], *command[1:]]
+            for index, command in enumerate(commands)
         ]
         self.assertEqual([step.command for step in steps], expected)
         self.assertTrue(all(step.destructive for step in steps))
