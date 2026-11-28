@@ -43,9 +43,19 @@ def all_jobs_disabled(workflow: Path) -> bool:
 
 
 def inline_failure_reporter(workflow: Path) -> bool:
+    """Detect an inline comment writer; used for PR-controlled write-policy checks."""
     return any(
         "failure()" in str(step.get("if", ""))
         and REPORTS.search(str(step.get("run", "")))
+        for step in steps_of(workflow)
+    )
+
+
+def inline_summary_reporter(workflow: Path) -> bool:
+    """Accept a read-only GitHub step summary as a visible failure report."""
+    return any(
+        "failure()" in str(step.get("if", ""))
+        and "$GITHUB_STEP_SUMMARY" in str(step.get("run", ""))
         for step in steps_of(workflow)
     )
 
@@ -251,6 +261,7 @@ class CiFailureVisibilityTests(unittest.TestCase):
             if workflow not in TRUSTED_WORKFLOWS | {TRUSTED_REPORTER}
             and not all_jobs_disabled(workflow)
             and not inline_failure_reporter(workflow)
+            and not inline_summary_reporter(workflow)
         ]
         self.assertEqual(
             missing,

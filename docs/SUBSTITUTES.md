@@ -1,57 +1,74 @@
-# Субститути WSM — публікацію дозволено власником 2026-11-28
+# H170 Free — субститути Guix
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Стан: **OWNER_APPROVED / MANUAL_ONLY**
-- Workflow публікації: **увімкнений, запуск лише вручну**
-- Package/NAR export: **увімкнений; рішення щодо #367 прийняв власник, issue лишається відкритим**
-- Підписний ключ: **не створений і не збережений у CI**
-- Cuirass: **окремий build coordinator; не є автоматичним substitute server**
+- Workflow: `.github/workflows/substitutes.yml`
+- Маніфест пакетів: `drivers/profiles/h170-free-packages.scm`
+- Lock Guix: `channels.lock.scm` (лише офіційний канал Guix)
+- Стан публікації: workflow налаштований; успішної публікації H170 Free cache поки не зафіксовано
+- Зберігання: незмінні assets GitHub Release для NAR; GitHub Pages для `.narinfo`, `nix-cache-info` та `signing-key.pub`
 
-## Що є в репозиторії
+## Перший набір пакетів
 
-`scripts/narinfo_to_release_urls.py` — локальний конвертер URL у Guix narinfo. Він не створює ключі, не підписує дані, не збирає package closures і не публікує архіви.
+Початковий H170 Free cache містить рівно 11 upstream-пакетів із фіксованого маніфесту:
 
-`.github/workflows/substitutes.yml` та `.github/workflows/package-archives.yml` увімкнені 2026-11-28 рішенням власника. Обидва запускаються **лише вручну**, без тригерів на push чи тег; жоден із них не створює й не читає підписний ключ, крім `substitutes.yml`, який бере його з секрету і без нього падає.
+- `linux-libre`
+- `mesa`
+- `vulkan-loader`
+- `vulkan-tools`
+- `pciutils`
+- `usbutils`
+- `alsa-utils`
+- `ethtool`
+- `nvme-cli`
+- `smartmontools`
+- `lm-sensors`
 
-## Рішення, яких бракує
+Набір резолвиться через `guix time-machine -C channels.lock.scm`; він не залежить від рухомої ревізії Guix або неперевіреного списку назв пакетів із workflow input. Workflow збирає маніфест, доручає `guix publish` підписати й кешувати NAR, зберігає NAR-файли як assets GitHub Release та розгортає перетворені метадані `.narinfo` на Pages.
 
-**1. Ліцензія та право на розповсюдження — issue #367.**
+Це відтворювана upstream-основа для H170, а не заява про сертифіковану апаратну сумісність чи оптимізоване ядро. У наборі немає WSM-owned пакетів, входів Nonguix, пропрієтарного NVIDIA-драйвера або firmware blob. Зокрема, цей набір не підтверджує 3D/compute для GTX 1050 Ti.
 
-Потрібне окреме рішення власника щодо суперечності між repository license declaration та Guix package metadata, а також щодо права розповсюджувати отримані package outputs/NARs. Поки issue #367 відкрите, не запускайте package archive workflow, не прикріплюйте NAR до Releases/Actions artifacts і не вмикайте substitute workflow.
+## Що не входить до цього потоку
 
-**2. Channel trust — issue #534 / Phase B.**
+- `wsm-tools`, `wsm-live-tools` та Compatibility live tools не входять до публічного кешу, доки не вирішено issue [#367](https://github.com/juv4uk/wsm-desktop/issues/367). Цей issue **не** блокує upstream-only набір.
+- Прошивка NVIDIA GP107 виключена. Тому issue [#586](https://github.com/juv4uk/wsm-desktop/issues/586) не є передумовою для цього набору.
+- Phase B автентифікації WSM-каналу окремий від цього кешу: результати збираються з офіційного Guix lock, а не з WSM-owned модулів каналу. Phase B лишається обов'язковою перед тим, як просити користувачів довіряти або фіксувати віддалені ревізії WSM-owned каналу, наприклад майбутній пакет `linux-libre-h170`.
+- Nouveau atomic-KMS overlay у PR [#767](https://github.com/juv4uk/wsm-desktop/pull/767) — окремий кандидат. Він має пройти Scheme evaluation на точному lock і повну збірку ядра, перш ніж потрапити до майбутнього маніфесту кешу.
 
-Потрібні owner-signed introduction/history, `.guix-authorizations`, публічний keyring та успішна перевірка звичайним `guix git authenticate` consumer. Не використовуйте `--disable-authentication`, вигаданий fingerprint або рухому гілку як production source.
+## Налаштування ключа підпису
 
-**3. Endpoint і ключ.**
+Субститути Guix підписуються. Workflow відмовляється від публікації, якщо owner-controlled пара ключів не налаштована.
 
-Власник має зафіксувати українською в ADR:
-- точні URLs metadata та NAR assets;
-- хто генерує і зберігає private key, де він використовується, хто має доступ;
-- ротацію, відкликання та процедуру компрометації;
-- дозволений trigger (manual/tag/release) та хто його запускає;
-- retention, доступність, ліміти й процес видалення старих assets.
+На машині власника з Guix:
 
-GitHub Releases та Pages були названі допустимими hosting families, але це не затверджує конкретний endpoint, signing key custody або право розповсюджувати WSM builds.
+```sh
+sudo guix archive --generate-key
+gh secret set GUIX_SIGNING_KEY --repo juv4uk/wsm-desktop < /etc/guix/signing-key.sec
+gh variable set GUIX_SIGNING_PUBLIC_KEY --repo juv4uk/wsm-desktop < /etc/guix/signing-key.pub
+```
 
-## Поточна схема — лише варіант для майбутнього рішення
+Приватний ключ зберігається лише як GitHub Actions secret `GUIX_SIGNING_KEY`; відкритий ключ — як repository Actions variable `GUIX_SIGNING_PUBLIC_KEY`. Не комітьте жоден із ключів і не вставляйте приватний ключ в issue, чат чи журнали workflow. Публічний ключ публікується разом із метаданими, щоб клієнти могли авторизувати його після перевірки provenance конкретного першого релізу.
 
-Можлива архітектура після owner approval: підписані Guix narinfo як metadata + NAR archives як окремі immutable assets. Вона не повинна запускатися автоматично від push у `main`.
+Новий незмінний cache release має назву `h170-free-cache-<workflow-run-number>`. Workflow запускається після злиття релевантних змін у `main` або вручну з `main`; довільний список пакетів через workflow input не приймається.
 
-Підпис Guix narinfo охоплює ідентичність store object (StorePath, NarHash, NarSize, References та Deriver, якщо присутній), а транспортний URL можна переписати лише якщо це підтверджено конкретним pinned Guix форматом і тестами. Converter має зберігати всі підписані поля байт-у-байт та відмовлятися від неоднозначних/multi-URL форматів, які він не підтримує.
+## Довіра клієнта
 
-До окремої перевірки pinned Guix не припускайте, що compression layout, ім'я NAR asset, location `signing-key.pub` або cache warm-up збігаються з поточним upstream manual.
+Після успішної публікації візьміть Pages URL і release tag зі звіту Actions. Авторизуйте опублікований публічний ключ:
 
-## Що дозволено робити до рішення
+```sh
+curl -fsS <PAGES_URL>/signing-key.pub | sudo guix archive --authorize
+```
 
-- статично перевіряти Scheme/Python код, YAML і тестові fixtures;
-- звіряти очікуваний формат із pinned Guix source;
-- складати release manifest без package output binaries;
-- документувати trust, ownership, provenance та acceptance gates.
+Потім додайте Pages URL до `--substitute-urls` демона поряд з офіційними серверами Guix. Не авторизуйте ключ лише тому, що файл доступний за URL: спочатку звірте його з публічним ключем, зафіксованим у provenance конкретного релізу.
 
-Не створюйте signing keys, не додавайте secrets, не запускайте package build/export, не створюйте GitHub Release assets, не викладайте Pages metadata і не вмикайте workflow guards до явного owner approval українською.
+## Межі доказів
 
-## Статус
+Успішний workflow підтверджує derivations пакетів, створення підписаних NAR, завантаження assets у Release та розгортання метаданих Pages для зафіксованого маніфесту. Він не підтверджує:
 
-Жоден substitute cache не опублікований цією роботою. Наявність workflow чи конвертера не означає, що канал автентифіковано, package build пройшов або бінарний output дозволено розповсюджувати.
+- прив'язку драйверів під час виконання на платі H170 власника;
+- завантаження firmware або фізичну роботу GPU;
+- завантаження BIOS/UEFI, роботу інсталятора чи зміни диска;
+- GP107 3D/compute, reclocking або повну продуктивність;
+- доступність окремого WSM-owned каналу чи його автентифікованого ланцюжка Phase B.
+
+ISO, NAR та інші результати збірки не комітяться у звичайні Git-гілки.
