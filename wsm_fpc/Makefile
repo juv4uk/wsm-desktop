@@ -19,11 +19,11 @@ FPCFLAGS ?= -O2 -Sh -vw
 
 # Every program in this directory is built from its own source file; the units are
 # pulled in by the compiler as they are referenced.
-PROGRAMS = plan-digest schema-vectors plan-vectors
+PROGRAMS = plan-digest schema-vectors plan-vectors tui-vectors
 
 SOURCES = wsm_sha256.pas plan_digest.pas wsmcpufacts.pas wsmsteps.pas \
           wsmbackend.pas wsmplan.pas wsmplan_vectors.pas wsmtools.pas \
-          wsmfresh.pas wsmclassify.pas wsmpaths.pas wsmverdict.pas wsmfreshdecision.pas wsmguixargv.pas \
+          wsmfresh.pas wsmclassify.pas wsmpaths.pas wsmverdict.pas wsmfreshdecision.pas wsmguixargv.pas wsmtui.pas wsmtui_scripted.pas wsmtui_vectors.pas \
           wsmschema.pas wsmschema_vectors.pas
 
 .PHONY: all check install clean
@@ -41,6 +41,10 @@ schema-vectors: wsmschema_vectors.pas wsmschema.pas
 plan-vectors: wsmplan_vectors.pas wsmplan.pas wsm_sha256.pas
 	$(FPC) $(FPCFLAGS) -o$@ $<
 
+# 12 scenarios, 78 frames captured from the real Python TUI through a pty.
+tui-vectors: wsmtui_vectors.pas wsmtui.pas wsmtui_scripted.pas
+	$(FPC) $(FPCFLAGS) -o$@ $<
+
 # Each program carries its own vectors and exits non-zero when one differs, so
 # `check` is the same run as `all` - which is the point: the first compile on a
 # machine with FPC is also the verification.
@@ -48,6 +52,7 @@ check: $(PROGRAMS)
 	./plan-digest
 	./schema-vectors
 	./plan-vectors
+	./tui-vectors
 
 install: $(PROGRAMS)
 	install -d $(DESTDIR)$(PREFIX)/bin
