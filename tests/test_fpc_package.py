@@ -9,6 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "tools" / "pascal" / "wsm_hwcheck.pas"
+CORE = ROOT / "tools" / "pascal" / "wsm_hwcheck_core.pas"
 PKG = ROOT / "wsm" / "packages" / "fpc-tools.scm"
 MAKE = ROOT / "tools" / "pascal" / "Makefile"
 
@@ -25,11 +26,12 @@ class SourceTests(unittest.TestCase):
         self.assertIn("{$H+}", self.text)
 
     def test_it_emits_every_field_the_schema_requires(self) -> None:
+        core = CORE.read_text(encoding="utf-8")
         for field in (
             "device_id", "category", "bus", "discovery_status",
             "driver", "firmware", "functional_tests", "evidence",
         ):
-            self.assertIn(f'"{field}"', self.text, f"missing required field {field}")
+            self.assertIn(f"'{field}'", core, f"missing report field {field}")
 
     def test_it_never_writes_to_a_device(self) -> None:
         """The whole product promise is read-only."""
@@ -60,16 +62,21 @@ class PackageTests(unittest.TestCase):
         for marker in ("python-build-system", "python-jsonschema", "(gnu packages python"):
             self.assertNotIn(marker, self.text, f"Python dependency present: {marker}")
 
-    def test_it_installs_exactly_one_binary(self) -> None:
-        self.assertIn("install-file", self.text)
-        self.assertIn("/bin", self.text)
+    def test_it_installs_both_native_tools_and_keeps_fpc_build_only(self) -> None:
+        self.assertIn("wsm-hwcheck", self.text)
+        self.assertIn("wsm-classify", self.text)
+        self.assertIn("(native-inputs (list fpc))", self.text)
+        self.assertIn("(license wsm-license)", self.text)
 
 
 class MakefileTests(unittest.TestCase):
-    def test_the_makefile_passes_the_mode_flags(self) -> None:
+    def test_the_makefile_passes_mode_flags_and_names_installed_outputs_correctly(self) -> None:
         text = MAKE.read_text(encoding="utf-8")
         self.assertIn("-Mobjfpc", text)
         self.assertIn("-Sh", text)
+        self.assertIn("$(BUILD_DIR)/wsm-hwcheck", text)
+        self.assertIn("$(BUILD_DIR)/wsm-classify", text)
+        self.assertNotIn("-owsw-", text)
 
 
 if __name__ == "__main__":
