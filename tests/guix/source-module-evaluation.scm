@@ -40,21 +40,26 @@
 (unless (and (package? wsm-hwcheck-fpc)
              (package? wsm-classify-fpc)
              (package? wsm-partition-fpc)
+             (package? wsm-profile-fpc)
              (string=? (package-name wsm-hwcheck-fpc) "wsm-hwcheck-fpc")
              (string=? (package-name wsm-classify-fpc) "wsm-classify-fpc")
              (string=? (package-name wsm-partition-fpc) "wsm-partition-fpc")
+             (string=? (package-name wsm-profile-fpc) "wsm-profile-fpc")
              (eq? (package-license wsm-hwcheck-fpc) wsm-license)
              (eq? (package-license wsm-classify-fpc) wsm-license)
              (eq? (package-license wsm-partition-fpc) wsm-license)
+             (eq? (package-license wsm-profile-fpc) wsm-license)
              (pair? (package-native-inputs wsm-hwcheck-fpc))
              (pair? (package-native-inputs wsm-classify-fpc))
-             (pair? (package-native-inputs wsm-partition-fpc)))
+             (pair? (package-native-inputs wsm-partition-fpc))
+             (pair? (package-native-inputs wsm-profile-fpc)))
   (error "FPC packages must use LicenseRef-Volnist and a build-time compiler only"))
 
 ;; Force Guix to evaluate all actual package sources, not just module names.
 (unless (and (package-source wsm-hwcheck-fpc)
              (package-source wsm-classify-fpc)
-             (package-source wsm-partition-fpc))
+             (package-source wsm-partition-fpc)
+             (package-source wsm-profile-fpc))
   (error "FPC package sources did not evaluate"))
 
 ;; Evaluate the ordinary live profile as well as the standalone channel module.
