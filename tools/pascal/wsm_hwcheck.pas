@@ -353,7 +353,7 @@ var
   Privacy: TJSONObject;
   I: Integer;
 begin
-  Epoch := fpTime;
+  Epoch := DateTimeToUnix(Now, False);
   if Epoch < 0 then
     Epoch := 0;
   ObservedAt := DateTimeToISO8601(UnixToDateTime(Epoch, True), True);
