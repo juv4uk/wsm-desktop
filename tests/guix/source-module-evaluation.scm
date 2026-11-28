@@ -11,6 +11,7 @@
 (use-modules (guix licenses)
              (guix packages)
              (gnu packages linux)
+             (gnu packages pascal)
              (wsm licenses)
              (wsm systems performance)
              (wsm packages wsm)
@@ -34,6 +35,17 @@
                        "LicenseRef-Volnist; власна ліцензія WSM Desktop.")
              (eq? (package-license wsm-tools) wsm-license))
   (error "WSM Guix license metadata does not preserve LicenseRef-Volnist"))
+
+;; Native FPC packages must preserve WSM's own license and keep the compiler
+;; out of the installed runtime closure.
+(unless (and (package? wsm-hwcheck-fpc)
+             (package? wsm-classify-fpc)
+             (eq? (package-license wsm-hwcheck-fpc) wsm-license)
+             (eq? (package-license wsm-classify-fpc) wsm-license)
+             (memq fpc (package-native-inputs wsm-hwcheck-fpc))
+             (null? (package-inputs wsm-hwcheck-fpc))
+             (null? (package-propagated-inputs wsm-hwcheck-fpc)))
+  (error "FPC packages have incorrect license metadata or a runtime compiler dependency"))
 
 ;; Evaluate the ordinary live profile as well as the standalone channel module.
 (primitive-load "systems/live-iso.scm")
