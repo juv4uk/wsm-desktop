@@ -24,7 +24,7 @@ class SubstituteWorkflowTests(unittest.TestCase):
     def test_publication_job_is_explicitly_disabled(self) -> None:
         job = self.data["jobs"]["publish"]
         self.assertEqual(job["if"], "${{ false }}")
-        self.assertIn("NOT", self.text.upper())
+        self.assertIn("вимкнено", self.text.lower())
 
     def test_no_publication_permissions_are_granted(self) -> None:
         permissions = self.data["permissions"]
