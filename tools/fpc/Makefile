@@ -18,7 +18,7 @@ test: build
 	"$(PROGRAM)" --version | grep -Fx "wsm-hwcheck 0.1.0"
 	"$(PROGRAM)" --help >/dev/null
 
-install: build
+install: $(PROGRAM)
 	mkdir -p "$(PREFIX)/bin"
 	install -m 0755 "$(PROGRAM)" "$(PREFIX)/bin/wsm-hwcheck"
 
