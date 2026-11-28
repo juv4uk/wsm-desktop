@@ -59,13 +59,14 @@ def rewrite_url(text: str, base_url: str) -> str:
         len(components) != 3
         or components[0] != "nar"
         or components[1] != compression
+        or not components[2]
     ):
         raise ValueError(
             "narinfo URL must match Guix publish layout nar/<Compression>/<basename>"
         )
 
     basename = components[2]
-    if not basename or basename in {".", ".."}:
+    if basename in {".", ".."}:
         raise ValueError("narinfo URL has no usable NAR basename")
 
     target = f"{base_url.rstrip('/')}/{basename}{NAR_SUFFIX}"
