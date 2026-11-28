@@ -11,7 +11,7 @@
   #:use-module (wsm licenses)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-13)
-  #:export (wsm-hwcheck-fpc wsm-classify-fpc wsm-partition-fpc))
+  #:export (wsm-hwcheck-fpc wsm-classify-fpc wsm-partition-fpc wsm-profile-fpc))
 
 (define (fpc-package-arguments make-target executable)
   (list
@@ -96,5 +96,28 @@ build time.")
 whole-disk target and emits a partition layout as JSON. It never invokes
 sgdisk, opens a block device, or writes a partition table. The FPC compiler
 is used only at build time.")
+    (home-page "https://github.com/juv4uk/wsm-desktop")
+    (license wsm-license)))
+
+
+(define-public wsm-profile-fpc
+  (package
+    (name "wsm-profile-fpc")
+    (version "0.1.1")
+    (source (local-file "../.." "wsm-desktop-source-fpc"
+                        #:recursive? #t
+                        #:select? (lambda (path _stat)
+                                    (not (any (lambda (skip)
+                                                (string-contains path skip))
+                                              '("/.git" "/__pycache__" "/build"))))))
+    (build-system gnu-build-system)
+    (native-inputs (list fpc))
+    (arguments (fpc-package-arguments "wsm-profile" "wsm-profile"))
+    (synopsis "Evidence bundle reader for WSM Desktop")
+    (description
+     "Checks a WSM profile evidence bundle before a profile is accepted:
+schema version, path safety, at least one passing function, duplicate paths
+and artifact presence. Digest verification is explicitly delegated; the
+reader does not write or execute anything.")
     (home-page "https://github.com/juv4uk/wsm-desktop")
     (license wsm-license)))
