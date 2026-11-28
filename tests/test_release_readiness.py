@@ -246,7 +246,7 @@ class ChannelResolutionCaptureTests(unittest.TestCase):
             build(directory)
             log_path = directory / "channel-resolution.log"
             transcript = json.loads(log_path.read_text(encoding="utf-8"))
-            transcript["command"] = ["/usr/bin/guix", "describe", "-f", "channels"]
+            transcript["command"][1] = "describe"
             write_json(log_path, transcript)
             build_manifest_path = directory / "build-manifest.json"
             build_manifest = json.loads(build_manifest_path.read_text(encoding="utf-8"))
