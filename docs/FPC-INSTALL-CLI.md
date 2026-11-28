@@ -10,7 +10,8 @@
 - Код: [wsm_install_cli.lpr](../tools/pascal/wsm_install_cli.lpr),
   [wsmjson.pas](../tools/pascal/wsmjson.pas), ціль `wsm-install-fpc` у
   [tools/pascal/Makefile](../tools/pascal/Makefile).
-- Пакет: [wsm-install-fpc.scm](../wsm/packages/wsm-install-fpc.scm).
+- Пакет: `wsm-install-fpc` у [fpc-tools.scm](../wsm/packages/fpc-tools.scm) —
+  один модуль на інструментарій, як `wsm.scm` для Python-версії.
 - Перевірка паритету: [check_fpc_cli_parity.py](../scripts/check_fpc_cli_parity.py),
   [fpc-install-cli.yml](../.github/workflows/fpc-install-cli.yml).
 
@@ -104,7 +105,7 @@ GPU-пристрій, у якого названо рівно половину �
 ## Як збирається
 
 ```sh
-guix build -L . -f wsm/packages/wsm-install-fpc.scm
+guix build -L . -e "(begin (use-modules (wsm packages fpc-tools)) wsm-install-fpc)"
 ```
 
 Механіка та сама, що в сусідньому `(wsm packages fpc-tools)`: джерело — корінь

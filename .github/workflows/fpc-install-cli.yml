@@ -2,7 +2,7 @@
 #
 # The Free Pascal front end is only useful if it answers exactly what the Python
 # CLI answers. This workflow is where that claim is tested: Guix builds the
-# binary from wsm/packages/wsm-install-fpc.scm, and
+# binary from the wsm-install-fpc package in wsm/packages/fpc-tools.scm, and
 # scripts/check_fpc_cli_parity.py runs both front ends over the same table of
 # reports and compares exit codes and the first line of stderr.
 #
@@ -18,7 +18,7 @@ on:
       - ".github/workflows/fpc-install-cli.yml"
       - "tools/pascal/**"
       - "scripts/check_pascal_sources.py"
-      - "wsm/packages/wsm-install-fpc.scm"
+      - "wsm/packages/fpc-tools.scm"
       - "wsm/licenses.scm"
       - "scripts/check_fpc_cli_parity.py"
       - "tests/test_fpc_cli_parity.py"
@@ -72,7 +72,11 @@ jobs:
       - name: Build the Free Pascal front end
         run: |
           set -euo pipefail
-            printf '%s\n' "  guix build -L . -e '(@ (wsm packages wsm-install-fpc) wsm-install-fpc)'"
+          # The installer is a package in the shared FPC module, so the build goes
+          # through that module rather than a file of its own.
+          guix build -L . \
+            -e '(begin (use-modules (wsm packages fpc-tools)) wsm-install-fpc)' \
+            > /tmp/fpc-store-path.txt
           cat /tmp/fpc-store-path.txt
           printf 'FPC_STORE_PATH=%s\n' "$(tail -n1 /tmp/fpc-store-path.txt)" >> "$GITHUB_ENV"
 
