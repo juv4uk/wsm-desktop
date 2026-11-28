@@ -104,14 +104,12 @@ channel, Linux-libre чи повний склад саме цієї H170 кон�
 - [Матриця workgroup × batching](https://github.com/juv4uk/gp107-nvidia-re/blob/master/docs/21-proprietary-performance-matrix.md)
   містить 108 успішних NVIDIA runtime points. Вона вказує на помітний
   submit overhead для малих задач і workload-залежний вплив local size.
-- [DEVICE_LOCAL transfer/compute](https://github.com/juv4uk/gp107-nvidia-re/blob/master/docs/22-device-local-transfer-and-compute-phases.md)
-  має 12 exploratory points і корисні raw logs, але локальне рев'ю
-  GP107 issue #28 виявило відсутні Vulkan memory dependencies між H2D →
-  compute → D2H, неперевірений `memoryTypeBits` та відсутність GPU
-  timestamp queries. Тому docs/22 зараз **EXPLORATORY / NOT ACCEPTED**;
-  його 90.46 GB/s і 52.39 ms не використовувати як валідні висновки.
-  Потрібні barriers, synchronization validation, memoryTypeBits checks
-  та повторний запуск із новими артефактами.
+- [DEVICE_LOCAL transfer/compute](https://github.com/juv4uk/gp107-nvidia-re/blob/2f98a9b100ae3ea905c25090c1c06191ab9744e2/docs/22-device-local-transfer-and-compute-phases.md)
+  містить виправлений command stream із memory dependencies для H2D →
+  compute → D2H та `memoryTypeBits` validation у коді, але build,
+  synchronization-validation і новий фізичний rerun ще не прийняті.
+  Історичні 90.46 GB/s і 52.39 ms лишаються **EXPLORATORY / NOT ACCEPTED**
+  і не можуть бути baseline чи доказом NVK/NVIDIA performance gap.
 
 ### Обмеження й незакриті питання
 
@@ -147,11 +145,11 @@ channel, Linux-libre чи повний склад саме цієї H170 кон�
 2. Не підвищувати H170 profile statuses: package resolution, kernel config,
    firmware presence, runtime binding і functional validation лишаються
    `not-assessed` / `unknown` до H170-specific evidence.
-3. Найближча оптимізаційна гіпотеза — мінімізувати зайві submit/fence
-   цикли та тримати повторно використовувані дані у DEVICE_LOCAL пам'яті.
-   Проте docs/22 поки не має коректних memory dependencies і не приймається;
-   спочатку виправити synchronization та measurement methodology, потім
-   повторити proprietary baseline і лише після цього порівнювати з NVK.
+3. docs/22 уже містить кодові виправлення memory dependencies та
+   `memoryTypeBits`, але їх треба зібрати, перевірити synchronization
+   validation і повторити workload на тому самому стенді. До прийняття
+   нових артефактів історичні DEVICE_LOCAL числа не використовувати;
+   причинність NVK/NVIDIA performance gap лишається UNPROVEN.
 4. Не обіцяти універсальне перевершення NVIDIA. Спершу визначити workload,
    де WSM має виміряну перевагу; окремо документувати обмеження reclocking,
    power/clock control та відсутні функції.
