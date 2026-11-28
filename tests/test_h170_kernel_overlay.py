@@ -83,28 +83,42 @@ class H170LinuxLibreOverlayTests(unittest.TestCase):
         self.assertNotIn("guix publish", workflow)
         self.assertNotIn("actions/upload-artifact", workflow)
 
-    def test_release_workflow_is_pinned_to_the_h170_kernel_and_provides_source(self) -> None:
+    def test_release_workflow_builds_and_publishes_a_verified_recursive_closure(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "h170-gp107-release.yml").read_text(
             encoding="utf-8"
         )
-        self.assertIn('publish/h170-gp107/**', workflow)
-        self.assertIn('channels.lock.scm', workflow)
-        self.assertIn('STORE_PATH="$(guix time-machine -C channels.lock.scm -- build -L "$GITHUB_WORKSPACE" --no-grafts', workflow)
-        self.assertIn('NAR_SHA256="$(guix hash --recursive --format=hex "$STORE_PATH")"', workflow)
-        self.assertIn('linux-libre-h170', workflow)
-        self.assertIn('guix archive --generate-key', workflow)
-        self.assertIn('guix archive --export', workflow)
+        data = self._yaml(workflow)
+        trigger = data["on"]["push"]
+        self.assertEqual(trigger["branches"], ["main"])
+        self.assertTrue({
+            ".github/workflows/h170-gp107-release.yml",
+            "channels.lock.scm",
+            "wsm/packages/linux-libre.scm",
+            "wsm/packages/patches/linux-libre-h170-nouveau-atomic.patch",
+        }.issubset(set(trigger["paths"])))
+        self.assertIn("Use the GNU Guix project's authenticated Codeberg mirror", workflow)
+        self.assertIn("PACKAGE_EXPR='(@ (wsm packages linux-libre) linux-libre-h170)'", workflow)
+        self.assertIn('DERIVATION_PATH=', workflow)
+        self.assertIn('guix archive --export --recursive "$STORE_PATH"', workflow)
+        self.assertIn('guix gc --requisites "$STORE_PATH"', workflow)
+        self.assertIn('closure.paths.txt', workflow)
         self.assertIn('linux-libre-h170-source.tar.xz', workflow)
         self.assertIn('signing-key.pub', workflow)
+        self.assertIn('provenance.json', workflow)
+        self.assertIn('uses: actions/attest@v4', workflow)
         self.assertIn('gh release create', workflow)
+        self.assertIn('--draft', workflow)
         self.assertIn('gh release download', workflow)
         self.assertIn('sha256sum -c SHA256SUMS', workflow)
+        self.assertIn('gh release edit "$TAG" --draft=false', workflow)
+        self.assertLess(
+            workflow.index('gh release download'),
+            workflow.index('gh release edit "$TAG" --draft=false'),
+        )
         self.assertNotIn('secrets.GUIX_SIGNING_KEY', workflow)
         self.assertNotIn('actions/upload-artifact', workflow)
-        self.assertIn(
-            "Firmware policy: no NVIDIA firmware, proprietary driver, or nonfree driver payload",
-            workflow,
-        )
+        self.assertIn('No NVIDIA firmware, proprietary driver, Nonguix package, or firmware blob is included.', workflow)
+        self.assertNotIn('channels/compatibility.lock.scm', workflow)
 
     def test_documentation_keeps_runtime_and_compute_claims_unproven(self) -> None:
         text = MATRIX.read_text(encoding="utf-8").lower()
