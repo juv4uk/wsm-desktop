@@ -17,7 +17,7 @@
 | Scheme module | Файл | Стан |
 |---|---|---|
 | `(wsm systems performance)` | `wsm/systems/performance.scm` | source-tree evaluation на pinned Guix; authenticated channel lookup потребує окремого Phase B bootstrap |
-| `(wsm packages wsm)` | `wsm/packages/wsm.scm` | package metadata має невирішену ліцензійну суперечність #367; не оголошувати release-ready |
+| `(wsm packages wsm)` | `wsm/packages/wsm.scm` | package metadata використовує спільний авторський об’єкт `wsm-license` (`LicenseRef-Volnist`, `file://LICENSE`); оцінка збірки й релізу окрема |
 
 Не переносити модулі з `wsm/` без необхідності: цей шлях уже відповідає Scheme namespace `(wsm …)`. Файли `systems/*.scm` залишаються machine/release configurations, а не публічним API channel namespace.
 
@@ -49,7 +49,7 @@ Compatibility — це окрема родина профілів, а не од�
 
 Цей технічний варіант описує відкритий kernel/userspace stack Nouveau + Mesa/NVK із зовнішньою GP107 firmware. Він залишається **дослідницьким кандидатом**, а не дозволеним WSM Compatibility package/profile. GP107 docs/39 — source-only карта FECS/GPCCS, ACR, SEC2 та NVDEC paths; вона не доводить boot request/load, точний runtime file set або Guix closure.
 
-LICENCE.nvidia §2.1.2 містить умову щодо використання firmware на ОС, що розповсюджуються під OSI-approved open-source license, незмінених binaries та копії ліцензії. Саме opt-in позначення Compatibility не підтверджує виконання цієї умови; WSM LicenseRef-Volnist і #367 потребують окремого owner/legal рішення. Згідно з прийнятим release gate #586, до письмового clearance для конкретної distribution model **WSM не включає й не перерозповсюджує NVIDIA GP107 firmware ані в Free, ані в Compatibility channel/ISO**.
+LICENCE.nvidia §2.1.2 містить умову щодо використання firmware на ОС, що розповсюджуються під OSI-approved open-source license, незмінених binaries та копії ліцензії. Саме opt-in позначення Compatibility не підтверджує виконання цієї умови: `LicenseRef-Volnist` є власною ліцензією WSM і не декларується як OSI-approved. Виправлення Guix metadata не змінює цю сторонню умову. Згідно з прийнятим release gate #586, до письмового clearance для конкретної distribution model **WSM не включає й не перерозповсюджує NVIDIA GP107 firmware ані в Free, ані в Compatibility channel/ISO**.
 
 - Не додавати firmware blobs, subset packages, downloader, package assets або копії до репозиторію чи release.
 - Не заявляти цей варіант як доступний для встановлення, build-ready чи shippable.
@@ -201,7 +201,7 @@ added here». Це **опис вмісту файлу, а не рішення в
 
 ## Ліцензійна межа
 
-Поточний `wsm-tools` package definition має невідповідність metadata до repo license; це відстежує #367. До вирішення не публікувати його як release-ready channel package і не маскувати проблему заміною ліцензійного ідентифікатора. Окремо, merged policy #586 забороняє включення або redistribution NVIDIA GP107 firmware у Free чи Compatibility channel/ISO до письмового owner/legal clearance для exact distribution model. Кожен майбутній пакет має мати коректний origin, hash, build system, inputs і фактичну license metadata.
+Усі власні Guix-пакети WSM мають передавати фактичну ліцензію через спільний `wsm-license` (`LicenseRef-Volnist`, `file://LICENSE`); це прибирає попередню хибну заяву `GPL-3+` без зміни тексту ВОЛЬНОСТІ. Ці метадані самі по собі не класифікують ліцензію як OSI-approved/FSDG-compatible і не означають автоматичного upstream GNU Guix acceptance. Окремий merged policy #586 забороняє включення або redistribution NVIDIA GP107 firmware у Free чи Compatibility channel/ISO до письмового owner/legal clearance для exact distribution model.
 
 ## Джерела
 
