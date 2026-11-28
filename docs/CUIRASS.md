@@ -1,30 +1,66 @@
-# Cuirass: збірка всередині Guix
+# Cuirass і публікація збірок WSM
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Статус: **конфігурація готова, інстанс не запускався**
-- Файли: [`ci/cuirass/specs.scm`](../ci/cuirass/specs.scm), [`ci/cuirass/images.scm`](../ci/cuirass/images.scm), [`ci/cuirass/service.scm`](../ci/cuirass/service.scm)
+- Статус: **Cuirass job source виправляється й перевіряється проти pinned Guix; інстанс не запускався**
+- Основні файли: [specifications](../ci/cuirass/specs.scm), [ISO job](../ci/cuirass/images.scm), [service](../ci/cuirass/service.scm)
 
-## Навіщо другий конвеєр
+## Ролі конвеєрів
 
-Cuirass — це власний CI GNU Guix. Він не замінює GitHub Actions і не дублює його: вони доводять різні речі.
+Cuirass — Guix-native scheduler/evaluator/build coordinator. Він оцінює специфікації каналів, запускає derivation builds через Guix store і зберігає job history. Він не замінює GitHub Actions і сам по собі не є публічним substitute server.
 
-| Що | Хто доводить |
+| Що доводимо або публікуємо | Власник |
 | --- | --- |
-| Образ збирається з зафіксованих каналів | **обидва** — і Cuirass, і workflow |
-| Образ завантажується в BIOS і UEFI | **тільки** workflow (QEMU) |
-| Інсталятор у носії запускається | **тільки** workflow |
-| Заміни доступні іншим | **тільки** Cuirass |
+| Канал WSM та його пакети оцінюються на pinned Guix | Cuirass job `wsm-channel` |
+| Derivation live ISO створюється для запитаних systems | Cuirass custom job `wsm-live-minimal-image` |
+| ISO завантажується у BIOS та UEFI; інсталятор запускається в guest | release workflow із QEMU/OVMF |
+| ISO, release manifests, hashes та boot evidence публікуються | GitHub Releases |
+| Доступність власних package substitutes | окремий publisher/cache deployment; **ще не налаштовано** |
 
-Третій рядок — причина існування Cuirass. Він збирає **всередині Guix** і віддає результати як substitutes, тобто наступна збірка не переробляє той самий closure з нуля.
+Не вважати локальний Guix store Cuirass автоматично доступним клієнтам. Для HTTP substitute service потрібні окремий процес/експорт `guix publish` або еквівалентний статичний cache, підписані `.narinfo`, NAR payload та клієнтський trust до public key. Успішний job у Cuirass не означає, що користувач уже може отримати substitute.
 
-## Дві незалежні дороги до тих самих байтів
+## Cuirass job для live ISO
 
-`ci/cuirass/images.scm` будує `operating-system-image` з `systems/live-minimal.scm` — те саме, що будує `scripts/build_iso.sh`.
+Release workflow збирає `systems/live-minimal.scm` як `--image-type=iso9660`. Custom module `ci/cuirass/images.scm` має відтворювати саме цей derivation path:
 
-Це навмисна надлишковість: якщо workflow зелений, а Cuirass червоний (або навпаки), одна з двох доріг бреше про ті самі байти. Розбіжність видно одразу, а не через місяць.
+- Cuirass передає в custom job аргумент `systems` (множина); використовується upstream `arguments->systems` із `(gnu ci)`.
+- `image-with-os iso9660-image` прив’язує той самий WSM OS profile до ISO9660 image record.
+- `image->job` із `(gnu ci)` створює Cuirass image job і використовує штатний `system-image` lowering; ім’я формується як `wsm-live-minimal.<system>`.
+- Grafting вимкнено для відтворюваних build-farm jobs, як і в upstream Guix image jobs.
 
-## Запуск
+Pinned Guix evaluation викликає `cuirass-jobs` з реальним `((systems . ("x86_64-linux")))`, відкриває store, знижує image derivation і перевіряє job name, system та `#:job-type`. Це не збирає важкий ISO payload і не доводить його QEMU boot.
+
+## Канали та межа довіри
+
+Офіційний Guix channel зафіксований за commit із `channels.lock.scm` та має channel introduction. WSM channel у поточній Cuirass service specification посилається на `main`. Це development input, а не owner-authenticated release lock.
+
+До завершення підписаного bootstrap WSM channel (introduction/authorizations) та закріплення точного release commit не використовувати цей job як доказ довіреної release-збірки. Не обходити цей gate через `--disable-authentication`. Окрема Guix profile evaluation у CI перевіряє source API на pinned Guix, але не перевіряє віддалену автентифікацію WSM channel.
+
+## Substitute publication: GitHub Releases і GitHub Pages
+
+Зібрані артефакти не комітити в `main`, release branches чи звичайні feature branches. Вихідні файли, Scheme/Python код, manifests і перевірки залишаються в Git; бінарні результати мають окремі канали публікації:
+
+1. **GitHub Releases** — ISO, release bundles та окремі `guix archive --export` bundles для ручного `guix archive --import`. Це не HTTP substitute server.
+2. **GitHub Pages із окремої orphan-гілки `gh-pages`** — можливий статичний endpoint для невеликих NAR cache entries. Це окрема publish job із контрольованою заміною вмісту гілки, без зміни `main`.
+
+Статичний substitute mirror повинен мати сумісні з Guix endpoint-и: `nix-cache-info`, `signing-key.pub`, `<hash>.narinfo` у корені та NAR payload-и за URL, вказаними в `narinfo` (типово `nar/<compression>/<store-basename>`). `.narinfo` має містити валідний підпис саме того ключа, який клієнт явно додав до `authorized-keys`. Не публікувати непідписані metadata, не додавати приватний ключ у Pages і не послаблювати перевірку підпису клієнтом.
+
+### Обмеження Pages
+
+Офіційні ліміти GitHub Pages: опублікований сайт не може перевищувати **1 GB**, soft bandwidth limit — **100 GB на місяць**. Для branch-based публікації кожен NAR ще й є звичайним Git object: GitHub має hard limit **100 MiB на один Git-файл**. Тому `gh-pages` підходить лише для невеликого, allow-listed пакета/closure після виміру кожного NAR і сумарного сайту. Один файл понад 100 MiB не можна розбити на частини без зміни Guix substitute URL/формату; такий output треба виключити з Pages cache або розміщувати на Releases/іншому сумісному сервері. Ліміти та очікувану пропускну здатність потрібно контролювати в publisher.
+
+Перш ніж увімкнути Pages:
+- створити окремий signing key для WSM substitute cache; приватний ключ зберігати лише в protected publishing environment/secret, public key версіонувати як безпечний trust anchor;
+- збирати лише дозволені WSM-owned packages, не експортувати весь CI store або довільні залежності;
+- генерувати NAR і `.narinfo` штатним Guix tooling, перевіряти підписи, URL/path consistency, NAR hash/size та реальний `guix substitute` download у disposable client;
+- перевірити сумарний розмір сайту, максимальний розмір окремого Git object і bandwidth budget до force-push;
+- публікувати в `gh-pages` лише після всіх перевірок, атомарно замінюючи попередній cache. Не використовувати force-push до `main`.
+
+Це design direction, не заява про готовий сервіс: Pages deploy workflow, signing key та клієнтське приймання поки не створені.
+
+## Запуск Cuirass вручну
+
+Інструкція для окремого Guix build host із PostgreSQL. **Інстанс у межах цього завдання не запускався.**
 
 ```sh
 sudo -u postgres createdb cuirass
@@ -34,38 +70,21 @@ guix shell cuirass postgresql -- \
                    --database="dbname=cuirass host=/var/run/postgresql" \
                    --interval=300
 
-guix shell cuirass -- cuirass web --database="dbname=cuirass host=/var/run/postgresql"
+guix shell cuirass -- cuirass web \
+  --database="dbname=cuirass host=/var/run/postgresql" \
+  --port=8081 --listen=localhost
 ```
 
-Веб-інтерфейс — `http://localhost:8081`.
+Web UI — `http://localhost:8081`. Він не має власної автентифікації; не відкривати його публічно. Для віддаленого доступу потрібні TLS та автентифікований reverse proxy.
 
-Як сервіс — фрагмент у [`service.scm`](../ci/cuirass/service.scm), який вставляється в `services` хост-системи. Це фрагмент, а не повна декларація: повна стала б другою правдою про те, як налаштовані машини WSM.
+`ci/cuirass/service.scm` — service fragment, який включається до `services` build-host конфігурації. Він не є повною конфігурацією окремої машини.
 
-## Що це **не** доводить
+## Межі доказів
 
-- **Не завантажує образ.** У Cuirass немає кроку QEMU, тому зелений job означає «closure збирається», а не «носій стартує».
-- **Не перевіряє інсталятор.** Маркер `WSM_INSTALLER_OK` друкує гостя, а гостя тут немає.
-- **Не замінює приймання.** Вердикт релізу формується з BIOS/UEFI-свідчень, яких Cuirass не створює.
+- **Не завантажує образ.** У Cuirass немає QEMU/OVMF acceptance step.
+- **Не перевіряє інсталятор.** `WSM_INSTALLER_OK` створює QEMU guest у release workflow, не Cuirass.
+- **Не автентифікує автоматично WSM channel.** Для цього потрібні owner-signed bootstrap та exact release lock.
+- **Не публікує substitute endpoint автоматично.** Потрібен окремий підписаний publisher/cache deployment.
+- **Не підтверджує фізичну сумісність H170/GTX 1050 Ti.** Для цього потрібне окреме owner-approved hardware evidence.
 
-Тому в матриці вище й стоїть «тільки workflow»: спокуса назвати зелений Cuirass доказом завантаження — саме та підміна, від якої проєкт застерігає.
-
-## Стан
-
-Конфігурація написана й перевірена структурно (тести в `tests/test_cuirass_specs.py`). **Інстанс не запускався**: у середовищі розробки немає ні Guix, ні PostgreSQL.
-
-## Що було виправлено після звірки з посібником
-
-Перша редакція цих файлів була написана «на віру» і містила чотири помилки, які виявила звірка з офіційними джерелами:
-
-| Було | Стало |
-| --- | --- |
-| `(wsm ci images)` — модуль не резолвився, файл лежить у `ci/` | `(ci cuirass images)` — namespace збігається з шляхом |
-| `(operating-system-image os #:target system)` — такої процедури немає | `(system-image image)` у монадичному store, без `#:target` |
-| `(assq-ref arguments 'system)` — Cuirass передає `systems`, список | `(assq-ref arguments 'systems)` |
-| `(gnu services ci)` — там Laminar і Forgejo | `(gnu services cuirass)` |
-
-Плюс `use-substitutes?` — не поле `cuirass-configuration`, і `load` з `/run/current-system` не працює в пісочниці збірки, тому специфікації вбудовані як gexp.
-
-Це і є причина, чому файли такого роду не можна писати без джерела: кожна з чотирьох помилок дала б збій лише в момент запуску, на машині, де Guix є, — тобто не в того, хто писав.
-
-Це чесний стан: файли описують, як запустити, а не стверджують, що запущено.
+Поточний стан чесний: код job/service і pinned Guix evaluation перевіряються в CI; сервер Cuirass, substitute publisher і фізичне приймання заліза ще не запущені.
