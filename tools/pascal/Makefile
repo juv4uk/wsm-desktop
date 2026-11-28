@@ -1,22 +1,47 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
 #
-# FPC is invoked with -Mobjfpc and -Sh so the unit's {$mode objfpc}{$H+}
-# directives are honoured; without -Sh the H+ (ANSI strings) is ignored and
-# the JSON builder silently truncates on the first byte above 127.
+# Native FPC executables. Build outputs never enter the source tree's Git paths.
 
 FPC ?= fpc
-FPCFLAGS ?= -Mobjfpc -Sh -O2 -vewn
-TARGETS = wsm-hwcheck wsm-classify
+PREFIX ?= /usr/local
+BUILD_DIR ?= build
+FPCFLAGS ?= -B -O2 -Mobjfpc -Sh -vewn
 
-all: $(TARGETS)
+HW_BINARY := $(BUILD_DIR)/wsm-hwcheck
+CLASSIFY_BINARY := $(BUILD_DIR)/wsm-classify
 
-wsm-hwcheck: wsm_hwcheck.pas
-	$(FPC) $(FPCFLAGS) -owsw-hwcheck wsm_hwcheck.pas
+.PHONY: all build-wsm-hwcheck test-wsm-hwcheck install-wsm-hwcheck \
+        build-wsm-classify test-wsm-classify install-wsm-classify clean
 
-wsm-classify: wsm_classify.pas
-	$(FPC) $(FPCFLAGS) -owsw-classify wsm_classify.pas
+all: build-wsm-hwcheck build-wsm-classify
+
+build-wsm-hwcheck: $(HW_BINARY)
+
+$(HW_BINARY): wsm_hwcheck.pas wsm_hwcheck_core.pas
+	mkdir -p "$(BUILD_DIR)"
+	$(FPC) $(FPCFLAGS) -Fu. -FU"$(abspath $(BUILD_DIR))" \
+		-FE"$(abspath $(BUILD_DIR))" -o"$(abspath $(HW_BINARY))" wsm_hwcheck.pas
+
+build-wsm-classify: $(CLASSIFY_BINARY)
+
+$(CLASSIFY_BINARY): wsm_classify.pas
+	mkdir -p "$(BUILD_DIR)"
+	$(FPC) $(FPCFLAGS) -Fu. -FU"$(abspath $(BUILD_DIR))" \
+		-FE"$(abspath $(BUILD_DIR))" -o"$(abspath $(CLASSIFY_BINARY))" wsm_classify.pas
+
+test-wsm-hwcheck: build-wsm-hwcheck
+	"$(HW_BINARY)" --version | grep -Fx "wsm-hwcheck 0.1.0"
+	"$(HW_BINARY)" --help >/dev/null
+
+test-wsm-classify: build-wsm-classify
+	"$(CLASSIFY_BINARY)" --version | grep -Fx "wsm-classify 0.2.0"
+	"$(CLASSIFY_BINARY)" --help >/dev/null
+
+install-wsm-hwcheck: build-wsm-hwcheck
+	install -D -m 0755 "$(HW_BINARY)" "$(PREFIX)/bin/wsm-hwcheck"
+
+install-wsm-classify: build-wsm-classify
+	install -D -m 0755 "$(CLASSIFY_BINARY)" "$(PREFIX)/bin/wsm-classify"
 
 clean:
-	rm -f $(TARGETS) *.o *.ppu
-
-.PHONY: all clean
+	rm -rf "$(BUILD_DIR)" *.o *.ppu
