@@ -12,13 +12,14 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from jsonschema import Draft202012Validator, FormatChecker
 
 from .plan import build_plan, canonical_json, summarize_report
 from .profile import EvidenceUnavailable, load as load_profile_evidence
-
-ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_SCHEMA = ROOT / "schemas" / "hardware-report.schema.json"
+from .validation import (
+    DEFAULT_SCHEMA,
+    SchemaUnavailableError,
+    validate_report,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -423,20 +424,18 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
-        schema = json.loads(args.schema.read_text(encoding="utf-8"))
-        Draft202012Validator.check_schema(schema)
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        schema_errors = validate_report(report, args.schema)
+    except SchemaUnavailableError as exc:
         print(f"wsm-install: cannot load hardware report schema: {exc}", file=sys.stderr)
         return 2
-
-    validator = Draft202012Validator(schema, format_checker=FormatChecker())
-    errors = sorted(validator.iter_errors(report), key=lambda item: list(item.absolute_path))
-    if errors:
-        for item in errors[:20]:
-            location = ".".join(str(part) for part in item.absolute_path) or "$"
-            print(f"wsm-install: schema error at {location}: {item.message}", file=sys.stderr)
-        if len(errors) > 20:
-            print(f"wsm-install: {len(errors) - 20} additional schema errors omitted", file=sys.stderr)
+    if schema_errors:
+        for location, message in schema_errors[:20]:
+            print(f"wsm-install: schema error at {location}: {message}", file=sys.stderr)
+        if len(schema_errors) > 20:
+            print(
+                f"wsm-install: {len(schema_errors) - 20} additional schema errors omitted",
+                file=sys.stderr,
+            )
         return 2
 
     if args.profile_evidence is not None and (
