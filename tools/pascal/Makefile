@@ -12,13 +12,20 @@ FPCFLAGS ?= -B -O2 -Mobjfpc -Sh -Fu"$(SOURCE_DIR)" -FU"$(BUILD_DIR)" -FE"$(BUILD
 
 HW_TARGET := $(BUILD_DIR)/wsm-hwcheck
 CLASSIFY_TARGET := $(BUILD_DIR)/wsm-classify
-TARGETS := $(HW_TARGET) $(CLASSIFY_TARGET)
+ISA_TARGET := $(BUILD_DIR)/wsm-cpu-isa
+TARGETS := $(HW_TARGET) $(CLASSIFY_TARGET) $(ISA_TARGET)
 
-.PHONY: all build build-hwcheck build-classify test test-hwcheck test-classify install install-hwcheck install-classify clean
+.PHONY: all build build-hwcheck build-classify build-isa test test-hwcheck test-classify test-isa install install-hwcheck install-classify install-isa clean
 
 all: build
 
-build: build-hwcheck build-classify
+build: build-hwcheck build-classify build-isa
+
+build-isa: $(ISA_TARGET)
+
+$(ISA_TARGET): $(SOURCE_DIR)/wsm_cpu_isa.pas $(SOURCE_DIR)/wsm_cpu_isa_core.pas
+	mkdir -p "$(BUILD_DIR)"
+	$(FPC) $(FPCFLAGS) -o"$@" "$(SOURCE_DIR)/wsm_cpu_isa.pas"
 
 build-hwcheck: $(HW_TARGET)
 
@@ -32,7 +39,7 @@ $(CLASSIFY_TARGET): $(SOURCE_DIR)/wsm_classify.pas
 	mkdir -p "$(BUILD_DIR)"
 	$(FPC) $(FPCFLAGS) -o"$@" "$(SOURCE_DIR)/wsm_classify.pas"
 
-test: test-hwcheck test-classify
+test: test-hwcheck test-classify test-isa
 
 test-hwcheck: build-hwcheck
 	"$(HW_TARGET)" --version | grep -Fx "wsm-hwcheck 0.1.0"
@@ -42,7 +49,11 @@ test-classify: build-classify
 	"$(CLASSIFY_TARGET)" --version | grep -Fx "wsm-classify 0.1.0"
 	"$(CLASSIFY_TARGET)" --help >/dev/null
 
-install: install-hwcheck install-classify
+test-isa: build-isa
+	"$(ISA_TARGET)" --version | grep -Fx "wsm-cpu-isa 0.1.2"
+	"$(ISA_TARGET)" --help >/dev/null
+
+install: install-hwcheck install-classify install-isa
 
 install-hwcheck: build-hwcheck
 	mkdir -p "$(PREFIX)/bin"
@@ -51,6 +62,10 @@ install-hwcheck: build-hwcheck
 install-classify: build-classify
 	mkdir -p "$(PREFIX)/bin"
 	install -m 0755 "$(CLASSIFY_TARGET)" "$(PREFIX)/bin/wsm-classify"
+
+install-isa: build-isa
+	mkdir -p "$(PREFIX)/bin"
+	install -m 0755 "$(ISA_TARGET)" "$(PREFIX)/bin/wsm-cpu-isa"
 
 clean:
 	rm -rf "$(BUILD_DIR)"
