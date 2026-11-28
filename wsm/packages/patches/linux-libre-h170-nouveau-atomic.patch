@@ -26,7 +26,6 @@ index d71dcfc6ee66b3349cd87404aa15ea9823417d36..07882624a7f6f86531898c45723429d7
 +	.atomic_commit = drm_atomic_helper_commit,
 +	.atomic_check = drm_atomic_helper_check,
 +};
-+
  struct nouveau_drm_prop_enum_list {
  	u8 gen_mask;
  	int type;
