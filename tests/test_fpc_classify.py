@@ -41,11 +41,27 @@ class ContractParityTests(unittest.TestCase):
         self.assertNotIn("'supported-tested'", self.pas)
 
     def test_a_failed_function_blocks_known(self) -> None:
-        self.assertIn("HasFailedFunction", self.pas)
+        self.assertIn("FailedFunctionTest", self.pas)
         self.assertIn("AnyFailed", self.pas)
 
     def test_built_in_drivers_are_not_false_unknowns(self) -> None:
         self.assertIn("bound_driver", self.pas)
+
+    def test_classification_output_matches_the_versioned_schema_shape(self) -> None:
+        for field in (
+            "decision_policy", "coverage", "devices", "reasons",
+            "observation", "evidence_states", "functional_tests", "device_evidence",
+        ):
+            with self.subTest(field=field):
+                self.assertIn("'" + field + "'", self.pas)
+        for count in ("certified", "known", "unknown"):
+            with self.subTest(count=count):
+                self.assertIn("Counts.Add('" + count + "'", self.pas)
+
+    def test_json_parser_is_not_called_twice_and_status_is_authoritative(self) -> None:
+        self.assertIn("RootData := GetJSON(InputText.Text)", self.pas)
+        self.assertNotIn("Parser.Parse", self.pas)
+        self.assertIn("Str(TJSONObject(ItemData), 'status') = 'failed'", self.pas)
 
 
 class SafetyTests(unittest.TestCase):
