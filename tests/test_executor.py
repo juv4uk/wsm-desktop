@@ -904,6 +904,27 @@ class SysfsObserverTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             self.assertIsNone(SysfsDiskObserver(sys_root=Path(temporary)).block_identity("/dev/nope"))
 
+    def test_noncanonical_paths_do_not_alias_a_sysfs_basename(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._disk(root, "sda")
+            observer = SysfsDiskObserver(sys_root=root)
+            for path in ("sda", "/tmp/sda", "/dev/disk/by-id/sda", "/dev/../sda"):
+                with self.subTest(path=path):
+                    self.assertIsNone(observer.block_identity(path))
+
+    def test_a_partition_node_is_not_accepted_as_a_whole_disk(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            partition = root / "class" / "block" / "sda1"
+            partition.mkdir(parents=True)
+            (partition / "partition").write_text("1\\n", encoding="utf-8")
+            (partition / "dev").write_text("8:1\\n", encoding="utf-8")
+            (partition / "size").write_text("100\\n", encoding="utf-8")
+            (partition / "removable").write_text("0\\n", encoding="utf-8")
+            observer = SysfsDiskObserver(sys_root=root)
+            self.assertIsNone(observer.block_identity("/dev/sda1"))
+
     def test_only_sysfs_partition_entries_are_listed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
