@@ -215,13 +215,18 @@ begin
   First := True;
   Found := False;
   Count := 0;
-  if FindFirst(PciDevices + '/*', faDirectory, SearchRec) = 0 then
+  { faAnyFile, а не faDirectory: записи /sys/bus/pci/devices — це symlink-и на
+    каталоги, і фільтр за faDirectory відкидав їх усі. Паритетний тест це
+    показав одразу: Python бачив десятки пристроїв, нативна версія — нуль.
+    Тому беремо все, а каталог перевіряємо через DirectoryExists, яка йде за
+    symlink-ом. }
+  if FindFirst(PciDevices + '/*', faAnyFile, SearchRec) = 0 then
   begin
     try
       repeat
         if (SearchRec.Name = '.') or (SearchRec.Name = '..') then
           Continue;
-        if (SearchRec.Attr and faDirectory) = 0 then
+        if not DirectoryExists(PciDevices + '/' + SearchRec.Name) then
           Continue;
         EmitDevice(PciDevices + '/' + SearchRec.Name, First);
         Inc(Count);
