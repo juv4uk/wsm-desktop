@@ -126,7 +126,8 @@ class DocumentationTests(unittest.TestCase):
     def test_cuirass_is_not_claimed_registerable_before_phase_b(self) -> None:
         self.assertIn("not_registerable", self.text)
         self.assertIn("phase b", self.text)
-        self.assertIn("no public substitute", self.text)
+        self.assertIn("публічне substitute serving не дозволене", self.text)
+        self.assertIn("окремий guix publish", self.text)
 
     def test_the_document_admits_the_instance_never_ran(self) -> None:
         self.assertIn("інстанс не запускався", self.text)
