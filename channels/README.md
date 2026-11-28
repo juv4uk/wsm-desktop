@@ -17,22 +17,35 @@ guix time-machine -C channels.lock.scm -- describe -f channels
 виконує channel authentication у Guix. PASS лише структурної перевірки не
 доводить криптографічну автентифікацію.
 
-## Набір каналів WSM (не lock)
+## Набір каналів WSM (не release lock)
 
-[`wsm.scm`](wsm.scm) — набір, який робить `(wsm packages wsm)` доступним **як
-канал**, а не через `-L "$PWD"`:
+[`wsm.scm`](wsm.scm) додає WSM channel до `%default-channels` GNU Guix.
+Тому URL, introduction та інші upstream defaults залишаються авторитетними
+в самому Guix, а WSM задається окремо на рухомій гілці `main`.
+
+Звичайна автентифікація має відмовити саме через відсутній WSM introduction:
 
 ```sh
-guix time-machine -C channels/wsm.scm -- describe      # відмова: не автентифіковано
-guix time-machine -C channels/wsm.scm --disable-authentication -- describe
+guix time-machine -C channels/wsm.scm -- describe -f channels
 ```
 
-Друга команда працює вже сьогодні. Саме тому нею не користуються для релізних
-збірок: вона вимикає ту саму перевірку, яку проєкт обіцяє.
+Локальна діагностика може перевірити, що Guix читає обидва записи, але лише
+з явним обходом автентифікації:
 
-Це **не** lock: `wsm` тут іде за гілкою `main`, бо канал ще не має
-introduction. Релізні збірки й далі використовують `channels.lock.scm` із
-точними commit-ами.
+```sh
+guix time-machine -C channels/wsm.scm --disable-authentication -- describe -f channels
+```
+
+Цей обхід ніколи не є production/release режимом. Такий прогін доводить лише
+читання конфігурації каналів і мусить звітувати
+`WSM_CHANNEL_AUTHENTICATION=NOT_TESTED`.
+
+Це **не** lock. Релізні збірки продовжують використовувати
+`channels.lock.scm` із точними commit-ами. До додавання WSM у будь-який
+release lock власник має локально завершити trust bootstrap: підписаний
+introduction commit, `.guix-authorizations`, public-only `keyring` branch
+і consumer-side `guix git authenticate` зі звичайною автентифікацією.
+Не вигадуйте fingerprint і не передавайте секретний ключ у GitHub/CI.
 
 ## Compatibility
 
