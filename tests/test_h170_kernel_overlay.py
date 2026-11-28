@@ -62,7 +62,8 @@ class H170LinuxLibreOverlayTests(unittest.TestCase):
         self.assertIn("(inherit (package-source linux-libre))", scheme)
         self.assertIn("(origin-patches (package-source linux-libre))", scheme)
         self.assertIn("(append (origin-patches", scheme)
-        self.assertIn("search-path %load-path", scheme)
+        self.assertIn('(local-file "patches/linux-libre-h170-nouveau-atomic.patch"', scheme)
+        self.assertNotIn("search-path %load-path", scheme)
         self.assertIn('(name "linux-libre-h170")', scheme)
 
     def test_overlay_does_not_add_proprietary_driver_or_firmware_packages(self) -> None:
@@ -72,6 +73,14 @@ class H170LinuxLibreOverlayTests(unittest.TestCase):
         self.assertNotIn("nvidia-firmware", code)
         self.assertNotIn("firmware-nvidia", code)
         self.assertNotIn("nvidia-kernel", code)
+
+    def test_guix_profile_evaluation_uses_authenticated_codeberg_transport(self) -> None:
+        workflow = (
+            ROOT / ".github" / "workflows" / "guix-profile-evaluation.yml"
+        ).read_text(encoding="utf-8")
+        self.assertIn("https://codeberg.org/guix/guix.git", workflow)
+        self.assertIn("https://git.guix.gnu.org/guix.git", workflow)
+        self.assertNotIn("--disable-authentication", workflow)
 
     def test_profile_workflow_evaluates_without_exporting_binary_artifacts(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "guix-profile-evaluation.yml").read_text(
