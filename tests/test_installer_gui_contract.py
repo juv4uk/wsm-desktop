@@ -56,7 +56,7 @@ class InstallerGuiContractTests(unittest.TestCase):
     def test_scroll_views_use_the_aliased_controls_module(self) -> None:
         qml = (GUI / "qml" / "Main.qml").read_text(encoding="utf-8")
         self.assertIn("import QtQuick.Controls as Controls", qml)
-        self.assertNotRegex(qml, r"(?m)^\\s*ScrollView\\s*\\{")
+        self.assertNotRegex(qml, String.raw`(?m)^\s*ScrollView\s*\{`)
         self.assertEqual(qml.count("Controls.ScrollView {"), 3)
 
     def test_package_recipe_returns_value_for_guix_build_f(self) -> None:
