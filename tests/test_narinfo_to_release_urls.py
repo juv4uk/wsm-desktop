@@ -134,5 +134,23 @@ class RewriteTests(unittest.TestCase):
             )
 
 
+class DocumentationTests(unittest.TestCase):
+    def test_documents_the_actual_pinned_guix_layout(self) -> None:
+        text = (ROOT / "docs" / "SUBSTITUTES.md").read_text(encoding="utf-8")
+        self.assertIn("<cache>/gzip/<store-basename>.nar", text)
+        self.assertIn("nar/gzip/<store-basename>", text)
+        self.assertIn("nix-cache-info", text)
+        self.assertIn("signing-key.pub", text)
+        self.assertIn("upload-pages-artifact", text)
+        self.assertIn("Release assets", text)
+        self.assertNotIn("nar/*.nar.zst", text)
+
+    def test_documentation_does_not_claim_that_publication_is_live(self) -> None:
+        text = (ROOT / "docs" / "SUBSTITUTES.md").read_text(encoding="utf-8")
+        self.assertIn("workflow публікації не створено", text)
+        self.assertIn("кеш не опубліковано", text)
+        self.assertIn("не створює й не публікує кеш", text)
+
+
 if __name__ == "__main__":
     unittest.main()
