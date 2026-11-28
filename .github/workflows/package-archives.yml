@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-# Owner instruction 2026-11-28: begin publishing H170 Free packages; do not reintroduce
-# a draft-only approval gate. Entrypoints are deliberate (manual dispatch or packages-* tag).
+# ВЛАСНИК ДАВ ДОЗВІЛ 2026-11-28: почати публікацію Guix-пакетів під H170.
+# Не повертати процесний approval gate для upstream Free packages; запуск явний
+# (ручний dispatch або тег packages-*), а власні WSM-пакети та nonfree firmware виключені.
 # Only the fixed upstream H170 Free allowlist is publishable here; WSM-owned tools and
 # proprietary/Nonguix firmware are excluded. Each run creates an ephemeral signing key.
 name: WSM H170 Free package archives
