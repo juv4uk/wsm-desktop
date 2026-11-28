@@ -8,6 +8,7 @@ shell contract of the image builder using a fake Guix executable.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -98,6 +99,100 @@ def read_forms(text: str) -> list[str]:
 
 def profile(name: str) -> str:
     return (SYSTEMS / name).read_text(encoding="utf-8")
+
+
+TOOL_MAP = ROOT / "wsm_install" / "tool_map.py"
+LIVE_IMAGES = ("live.scm", "live-minimal.scm")
+
+# Packages the live images deliberately do not name, because the base system
+# already puts them in the profile. This is evidence, not assumption: both locks
+# pin Guix commit 4e5195be20d9b124df8a8bb69213412236e4668e (channels.lock.scm),
+# and in that commit gnu/system.scm defines
+#
+#   %base-packages-utils = ... e2fsprogs ... (list bash coreutils ...)
+#   %base-packages-linux = ... util-linux+udev ... kmod eudev
+#
+# with %base-packages appending both. `mount` is util-linux's /bin/mount, which
+# gnu/system.scm itself refers to as (file-append util-linux "/bin/mount") when
+# it builds %setuid-programs. A definition relying on this must still say so in
+# a comment: the reason belongs in the file, not only in this test.
+BASE_PACKAGE_PROVIDERS = {
+    "coreutils": "%base-packages-utils",
+    "e2fsprogs": "%base-packages-utils",
+    "eudev": "%base-packages-linux",
+    "util-linux": "%base-packages-linux",
+}
+
+
+def strip_scheme_comments(text: str) -> str:
+    """Drop `;` line comments and `#| |#` block comments from Scheme source."""
+    kept: list[str] = []
+    index = 0
+    length = len(text)
+    block_depth = 0
+    while index < length:
+        if block_depth:
+            if text.startswith("#|", index):
+                block_depth += 1
+                index += 2
+            elif text.startswith("|#", index):
+                block_depth -= 1
+                index += 2
+            else:
+                index += 1
+            continue
+        if text.startswith("#|", index):
+            block_depth = 1
+            index += 2
+            continue
+        if text[index] == ";":
+            newline = text.find("\n", index)
+            index = length if newline == -1 else newline + 1
+            kept.append("\n")
+            continue
+        kept.append(text[index])
+        index += 1
+    return "".join(kept)
+
+
+def mentions(package: str, text: str) -> bool:
+    """Whole-symbol match: `parted` must not be satisfied by `parted-foo`."""
+    return re.search(rf"(?<![\w-]){re.escape(package)}(?![\w-])", text) is not None
+
+
+def commented_mention(package: str, text: str) -> bool:
+    """True when a `;` comment line names the package."""
+    return any(
+        mentions(package, line)
+        for line in text.splitlines()
+        if line.lstrip().startswith(";")
+    )
+
+
+def tools_from_map() -> dict[str, str]:
+    """Logical tool -> owning Guix package, read from the real map."""
+    spec = importlib.util.spec_from_file_location("wsm_tool_map", TOOL_MAP)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return {name: entry["package"] for name, entry in module.TOOLS.items()}
+
+
+def closure_gaps(tools: dict[str, str], text: str, label: str) -> list[str]:
+    """Tools whose owning package the definition does not install.
+
+    A package counts as installed only when it appears in the definition's
+    Scheme code. A comment naming it does not count, unless the package is one
+    the base system already provides — and then the comment has to be there.
+    """
+    code = strip_scheme_comments(text)
+    gaps: list[str] = []
+    for tool, package in sorted(tools.items()):
+        if mentions(package, code):
+            continue
+        if package in BASE_PACKAGE_PROVIDERS and commented_mention(package, text):
+            continue
+        gaps.append(f"{tool}: package {package} is not installed by {label}")
+    return gaps
 
 
 class SchemeReadabilityTests(unittest.TestCase):
@@ -464,6 +559,52 @@ class MinimalLiveTests(unittest.TestCase):
                        "pipewire", "pulseaudio"):
             with self.subTest(absent=absent):
                 self.assertNotIn(absent, text)
+
+
+class TrustedToolClosureTests(unittest.TestCase):
+    """The installer's tool map and the live images must agree (#645, point 3).
+
+    `wsm_install/tool_map.py` names the package that owns each trusted
+    executable. An image that does not install that package promises a tool it
+    cannot run, and the failure lands in the middle of an installation.
+
+    These checks are structural: they prove the two source files agree, not that
+    Guix resolves the packages. Only `make check-guix-eval` / a real image build
+    proves the closure.
+    """
+
+    def test_every_tool_package_is_installed_by_both_live_images(self) -> None:
+        tools = tools_from_map()
+        self.assertTrue(tools, "wsm_install/tool_map.py listed no tools")
+        for image in LIVE_IMAGES:
+            with self.subTest(image=image):
+                self.assertEqual(closure_gaps(tools, profile(image), f"systems/{image}"), [])
+
+    def test_the_tool_map_is_the_source_of_the_check(self) -> None:
+        """A tool added to the map without its package must be reported."""
+        tools = dict(tools_from_map())
+        tools["mkfs.xfs"] = "xfsprogs"
+        gaps = closure_gaps(tools, profile("live.scm"), "systems/live.scm")
+        self.assertTrue(any("mkfs.xfs" in gap and "xfsprogs" in gap for gap in gaps), gaps)
+        self.assertEqual(len(gaps), 1, gaps)
+
+    def test_a_package_named_only_in_a_comment_is_not_installed(self) -> None:
+        text = ";; xfsprogs would provide mkfs.xfs here\n(packages (list wsm-tools))\n"
+        gaps = closure_gaps({"mkfs.xfs": "xfsprogs"}, text, "synthetic.scm")
+        self.assertEqual(len(gaps), 1, gaps)
+
+    def test_a_base_system_package_needs_its_reason_written_down(self) -> None:
+        """Relying on %base-packages is allowed; leaving it unexplained is not."""
+        bare = "(packages (append (list wsm-tools) %base-packages))\n"
+        explained = bare + ";; mkdir comes from coreutils in %base-packages-utils\n"
+        self.assertEqual(len(closure_gaps({"mkdir": "coreutils"}, bare, "synthetic.scm")), 1)
+        self.assertEqual(closure_gaps({"mkdir": "coreutils"}, explained, "synthetic.scm"), [])
+
+    def test_the_disk_packages_are_imported_from_their_own_module(self) -> None:
+        """gptfdisk, parted and dosfstools live in (gnu packages disk)."""
+        for image in LIVE_IMAGES:
+            with self.subTest(image=image):
+                self.assertIn("(gnu packages disk)", strip_scheme_comments(profile(image)))
 
 
 class HomeEnvironmentTests(unittest.TestCase):

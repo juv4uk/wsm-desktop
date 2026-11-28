@@ -34,6 +34,9 @@
              (gnu services sddm)
              (gnu packages fonts)
              (gnu packages kde-plasma)
+             ;; gptfdisk, parted і dosfstools живуть саме тут; інших модулів для
+             ;; них у pinned Guix немає.
+             (gnu packages disk)
              (wsm packages wsm))
 
 ;; Завантажуємо сусідній файл за абсолютним шляхом, а не через include з
@@ -71,11 +74,33 @@
   (inherit base-os)
 
   ;; Ті самі служби, що й у цільовому профілі, плюс наші інструменти.
+  ;; Інсталятор може запускати лише інструменти з wsm_install/tool_map.py, і
+  ;; кожен із них має бути в образі: відсутній інструмент падає не на
+  ;; перевірці, а посеред встановлення. tests/test_system_profiles.py тримає цю
+  ;; відповідність між мапою та обома live-визначеннями.
+  ;;
+  ;; Три пакети не входять у %base-packages, тому названі явно:
+  ;;   gptfdisk   — sgdisk
+  ;;   parted     — partprobe
+  ;;   dosfstools — mkfs.fat
+  ;;
+  ;; Імена змінних звірені з pinned Guix (channels.lock.scm, commit
+  ;; 4e5195be20d9b124df8a8bb69213412236e4668e): усі три — (gnu packages disk).
+  ;;
+  ;; Решта чотири інструменти вже в профілі через %base-packages того самого
+  ;; commit-у (gnu/system.scm), тому дублювати їх не потрібно:
+  ;;   eudev      — udevadm   — %base-packages-linux;
+  ;;   util-linux — mount     — %base-packages-linux (util-linux+udev, /bin/mount);
+  ;;   e2fsprogs  — mkfs.ext4 — %base-packages-utils;
+  ;;   coreutils  — mkdir     — %base-packages-utils.
   (packages
    (cons* wsm-tools
           font-dejavu
           font-liberation
           font-google-noto
+          gptfdisk
+          parted
+          dosfstools
           (operating-system-packages base-os)))
 
   ;; У live-сесії немає сенсу тримати повний набір локалей у пам'яті.

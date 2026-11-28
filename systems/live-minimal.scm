@@ -24,6 +24,9 @@
              (gnu services networking)
              (gnu services shepherd)
              (gnu system nss)
+             ;; gptfdisk, parted і dosfstools живуть саме тут; інших модулів для
+             ;; них у pinned Guix немає.
+             (gnu packages disk)
              (wsm packages wsm))
 
 ;; DHCP тут не потрібен окремою службою: NetworkManager має власний DHCP-клієнт
@@ -146,7 +149,18 @@
                 %base-user-accounts))
 
   ;; Рівно те, що потрібно, щоб дійти до консолі й запустити інсталятор.
-  (packages (append (list wsm-tools)
+  ;;
+  ;; Мінімальний образ не має винятку з правила «кожен інструмент мапи є в
+  ;; образі»: без sgdisk, partprobe і mkfs.fat інсталятор зупиниться на
+  ;; розмітці й форматовані ESP. Цих трьох немає в %base-packages, тому вони
+  ;; названі явно; імена звірені з pinned Guix (channels.lock.scm, commit
+  ;; 4e5195be20d9b124df8a8bb69213412236e4668e) — (gnu packages disk).
+  ;;
+  ;; Інші чотири інструменти мапи приходять через %base-packages того самого
+  ;; commit-у (gnu/system.scm): eudev (udevadm) і util-linux (mount, у складі
+  ;; util-linux+udev) — з %base-packages-linux; e2fsprogs (mkfs.ext4) і
+  ;; coreutils (mkdir) — з %base-packages-utils.
+  (packages (append (list wsm-tools gptfdisk parted dosfstools)
                     %base-packages))
 
   (services

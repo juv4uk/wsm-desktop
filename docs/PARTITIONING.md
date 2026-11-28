@@ -45,6 +45,15 @@ pinned Guix live closure/ISO не доведена. До package-closure і QEMU
 цей стан — `not-assessed`; абсолютний шлях сам по собі не є доказом, що файл
 існує. Не запускати план вручну й не трактувати його як дозвіл на APPLY.
 
+Джерельний бік цієї вимоги тепер закритий окремо: `systems/live.scm` і
+`systems/live-minimal.scm` явно ставлять пакети, яких немає в `%base-packages`
+(`gptfdisk`, `parted`, `dosfstools`), а для `eudev`, `util-linux`, `e2fsprogs` і
+`coreutils` посилаються на `%base-packages` pinned Guix. Відповідність мапи
+`wsm_install/tool_map.py` до обох визначень тримає
+`tests/test_system_profiles.py::TrustedToolClosureTests`. Це structural check,
+а не доказ: чи справді ці пакети дають `/bin/sgdisk`-подібні шляхи в образі,
+покаже лише Guix evaluation та збірка ISO, тому стан лишається `not-assessed`.
+
 ## Відмови
 
 Планувальник відмовляє частіше, ніж погоджується. Кожна відмова має код:
