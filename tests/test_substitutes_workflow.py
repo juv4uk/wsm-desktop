@@ -62,6 +62,13 @@ class SubstituteWorkflowTests(unittest.TestCase):
         self.assertIn("channels.lock.scm", self.text)
         self.assertNotIn("--disable-authentication", self.text)
 
+    def test_pinned_guix_bootstrap_uses_only_the_official_ci_substitute(self) -> None:
+        install = self.step("Install GNU Guix 1.5.0")["run"]
+        self.assertIn("--substitute-urls=https://ci.guix.gnu.org", install)
+        self.assertNotIn("bordeaux.guix.gnu.org", install)
+        self.assertNotIn("--no-substitutes", install)
+        self.assertNotIn("--disable-authentication", self.text)
+
     def test_build_uses_the_exact_locked_manifest(self) -> None:
         build = self.step("Evaluate and build the fixed H170 Free manifest")["run"]
         self.assertIn("guix time-machine -C channels.lock.scm", build)
