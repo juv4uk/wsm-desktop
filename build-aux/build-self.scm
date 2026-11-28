@@ -42,16 +42,17 @@ root stays the module root, so (wsm ...) keeps its namespace and relative
 local-file paths keep pointing at the checkout root."
   (if (< pull-version 1)
       #f
-      (gexp->derivation
-       "wsm"
-       #~(begin
-           (use-modules (guix build utils))
+      (with-imported-modules '((guix build utils))
+        (gexp->derivation
+         "wsm"
+         #~(begin
+             (use-modules (guix build utils))
 
-           (define scm
-             (string-append #$output "/share/guile/site/"
-                            (effective-version)))
-           (mkdir-p (dirname scm))
-           (symlink #$source scm)))))
+             (define scm
+               (string-append #$output "/share/guile/site/"
+                              (effective-version)))
+             (mkdir-p (dirname scm))
+             (symlink #$source scm))))))
 
 ;; 'guix pull' takes the last expression of this file as the build procedure.
 build
