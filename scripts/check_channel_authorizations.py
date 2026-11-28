@@ -251,6 +251,24 @@ def historical_authorization_fingerprints(root: Path, current_text: str | None) 
             raise ValueError(f"AUTH_HISTORY_CHECK=NOT_RUN: git log failed: {detail}")
 
         for commit in filter(None, history.stdout.splitlines()):
+            tree_entry = subprocess.run(
+                ["git", "-C", str(root), "ls-tree", "--name-only", commit, "--", ".guix-authorizations"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=30,
+            )
+            if tree_entry.returncode != 0:
+                detail = tree_entry.stderr.strip() or f"exit status {tree_entry.returncode}"
+                raise ValueError(
+                    f"AUTH_HISTORY_CHECK=NOT_RUN: cannot inspect authorization tree at {commit}: {detail}"
+                )
+            if ".guix-authorizations" not in tree_entry.stdout.splitlines():
+                # The history includes the commit that deleted the file. Previous
+                # versions are still inspected below; current absence is rejected
+                # by problems() after the full history has been collected.
+                continue
+
             snapshot = subprocess.run(
                 ["git", "-C", str(root), "show", f"{commit}:.guix-authorizations"],
                 capture_output=True,
