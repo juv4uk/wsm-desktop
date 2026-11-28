@@ -56,7 +56,8 @@
                 (copy-file "installer/gui/assets/wsm-installer.svg"
                            (string-append icons "/wsm-installer.svg"))))))))
     (propagated-inputs
-     (list python python-pyside-6 qtdeclarative kirigami wsm-tools))
+     ;; qtbase propagates Qt6 QML_IMPORT_PATH and QT_PLUGIN_PATH into guix shell.
+     (list python python-pyside-6 qtbase qtdeclarative kirigami wsm-tools))
     (home-page "https://github.com/juv4uk/wsm-desktop")
     (synopsis "WSM read-only KDE hardware preflight preview")
     (description
