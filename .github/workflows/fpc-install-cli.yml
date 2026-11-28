@@ -16,7 +16,8 @@ on:
   pull_request:
     paths:
       - ".github/workflows/fpc-install-cli.yml"
-      - "wsm_install_fpc/**"
+      - "tools/pascal/**"
+      - "scripts/check_pascal_sources.py"
       - "wsm/packages/wsm-install-fpc.scm"
       - "wsm/licenses.scm"
       - "scripts/check_fpc_cli_parity.py"

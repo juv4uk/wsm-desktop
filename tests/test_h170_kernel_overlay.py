@@ -137,6 +137,22 @@ class H170LinuxLibreOverlayTests(unittest.TestCase):
         self.assertIn("не доводить", text)
         self.assertIn("fecs", text)
 
+    def test_the_package_describes_itself_rather_than_inheriting_upstream_text(self) -> None:
+        """`guix show linux-libre-h170` must not read as plain upstream linux-libre."""
+        scheme = SCHEME.read_text(encoding="utf-8")
+        self.assertIn("(synopsis ", scheme)
+        self.assertIn("(description", scheme)
+        self.assertIn("H170 candidate", scheme)
+        self.assertIn("ed7fb901fce3", scheme)
+
+    def test_the_description_does_not_claim_what_the_patch_cannot_do(self) -> None:
+        scheme = SCHEME.read_text(encoding="utf-8")
+        # The description is wrapped across lines in the source, so compare it as
+        # text rather than as lines.
+        flat = " ".join(scheme.split())
+        self.assertIn("FECS/GPCCS", flat)
+        self.assertIn("not a statement that the kernel boots", flat)
+
 
 if __name__ == "__main__":
     unittest.main()

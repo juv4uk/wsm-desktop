@@ -7,8 +7,9 @@
   компілюється лише в CI.
 - Власник контракту рішень: [INSTALLER-PREFLIGHT.md](INSTALLER-PREFLIGHT.md),
   `wsm_install/cli.py`, `wsm_install/report_schema.py`, `wsm_install/plan.py`.
-- Код: [wsm_install_cli.pas](../wsm_install_fpc/wsm_install_cli.pas),
-  [wsmjson.pas](../wsm_install_fpc/wsmjson.pas).
+- Код: [wsm_install_cli.lpr](../tools/pascal/wsm_install_cli.lpr),
+  [wsmjson.pas](../tools/pascal/wsmjson.pas), ціль `wsm-install-fpc` у
+  [tools/pascal/Makefile](../tools/pascal/Makefile).
 - Пакет: [wsm-install-fpc.scm](../wsm/packages/wsm-install-fpc.scm).
 - Перевірка паритету: [check_fpc_cli_parity.py](../scripts/check_fpc_cli_parity.py),
   [fpc-install-cli.yml](../.github/workflows/fpc-install-cli.yml).
@@ -106,10 +107,15 @@ GPU-пристрій, у якого названо рівно половину �
 guix build -L . -f wsm/packages/wsm-install-fpc.scm
 ```
 
-Пакет бере лише каталог `wsm_install_fpc/`, компілює `fpc` з
-`(gnu packages pascal)` у режимі `objfpc` і ставить один бінарник
-`bin/wsm-install-fpc`. Обгортки немає навмисно: паритетний тест має виконувати
-саме той файл, який зібрано.
+Механіка та сама, що в сусідньому `(wsm packages fpc-tools)`: джерело — корінь
+репозиторію з відсіюванням `.git`/`__pycache__`/`build`, `gnu-build-system`,
+компіляція через ціль `wsm-install-fpc` у `tools/pascal/Makefile`, `fpc` з
+`(gnu packages pascal)`. Ставиться один бінарник `bin/wsm-install-fpc`, без
+обгортки: паритетний тест має виконувати саме той файл, який зібрано.
+
+Програма — `.lpr`, тому наявний робочий процес
+[fpc-build.yml](../.github/workflows/fpc-build.yml) компілює її автоматично на
+кожну зміну Pascal-джерел, незалежно від паритетного workflow.
 
 ## Як перевіряється паритет
 
@@ -135,7 +141,8 @@ stderr, у відсутньому рядку, у дозволеній сувор
 Перевірено тут: контракт кодів виходу на боці Python (22 порівняння),
 поведінка harness на підставних бінарниках, `make check` для всього, що не
 потребує Guix, включно з реєстрацією тестів, документами й Scheme-перевірками
-пакета.
+пакета, а також `scripts/check_pascal_sources.py` — контракт джерела (SPDX,
+`{$mode}`, назва оголошення, відсутність debug-виводу в stdout).
 
 Не перевірено тут: компіляція `wsm_install_cli.pas`, збірка пакета Guix,
 робота бінарника на реальних звітах. У середовищі, де це писали, немає ні

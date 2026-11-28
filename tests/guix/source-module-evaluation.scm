@@ -14,8 +14,9 @@
              (wsm licenses)
              (wsm systems performance)
              (wsm packages wsm)
-             (wsm packages wsm-install-fpc)
-             (wsm packages linux-libre))
+             (wsm packages linux-libre)
+             (wsm packages fpc-tools)
+             (wsm packages wsm-install-fpc))
 
 (unless (and (list? %wsm-performance-services)
              (pair? %wsm-performance-services))
