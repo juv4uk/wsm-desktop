@@ -120,6 +120,12 @@ class SubstituteWorkflowTests(unittest.TestCase):
         self.assertIn("SHA256SUMS", self.text)
         self.assertIn("provenance.json", self.text)
 
+    def test_release_tag_is_unique_for_each_workflow_attempt(self) -> None:
+        prepare = self.step("Prepare immutable Release assets and Pages metadata")["run"]
+        self.assertIn("GITHUB_RUN_ID", prepare)
+        self.assertIn("GITHUB_RUN_ATTEMPT", prepare)
+        self.assertNotIn('CACHE_TAG="h170-free-cache-${GITHUB_RUN_NUMBER}"', prepare)
+
     def test_release_stays_draft_until_attestation_and_readback_pass(self) -> None:
         create = self.text.index("gh release create")
         upload = self.text.index("gh release upload")
