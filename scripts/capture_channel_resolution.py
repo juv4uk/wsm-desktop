@@ -105,10 +105,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not stdout:
         print("channel-resolution: Guix succeeded but returned an empty channel description", file=sys.stderr)
         return 1
-    combined = (stdout + b"\n" + stderr).lower()
-    if b"channel authentication disabled" in combined:
-        print("channel-resolution: refusing disabled channel authentication", file=sys.stderr)
-        return 1
+    # The caller retains the established exit-code-7 policy for the exact
+    # "channel authentication disabled" diagnostic. Keep the full bytes here.
     return 0
 
 

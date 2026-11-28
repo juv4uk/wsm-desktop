@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import binascii
 import hashlib
 import json
 import re
@@ -98,6 +99,8 @@ def channel_resolution_log_problems(directory: Path) -> list[str]:
     found: list[str] = []
     if document.get("schema") != "wsm-channel-resolution/1":
         found.append("channel-resolution.log has an unsupported schema")
+    if document.get("launch_error") is not None:
+        found.append("channel-resolution.log records a Guix launch error")
 
     command = document.get("command")
     if (
@@ -134,6 +137,8 @@ def channel_resolution_log_problems(directory: Path) -> list[str]:
         except OSError as error:
             found.append(f"cannot read channels.resolved.scm for transcript validation: {error}")
         else:
+            if b"channel authentication disabled" in channels_bytes.lower():
+                found.append("channels.resolved.scm reports disabled channel authentication")
             stdout_bytes = stdout.get("bytes")
             if (
                 not isinstance(stdout_bytes, int)
@@ -162,7 +167,7 @@ def channel_resolution_log_problems(directory: Path) -> list[str]:
             if not isinstance(encoded, str):
                 raise ValueError("base64 value is not a string")
             raw_stderr = base64.b64decode(encoded, validate=True)
-        except (ValueError, TypeError):
+        except (binascii.Error, ValueError, TypeError):
             found.append("channel-resolution.log stderr base64 is malformed")
         else:
             if (
