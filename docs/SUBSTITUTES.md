@@ -51,6 +51,10 @@ sudo guix archive --authorize < signing-key.pub
 
 Новий незмінний cache release має назву `h170-free-cache-<workflow-run-number>`. Workflow запускається після злиття релевантних змін у `main` або вручну з `main`; довільний список пакетів через workflow input не приймається.
 
+## Перевірка релізу до використання
+
+Публікаційний workflow спочатку створює GitHub artifact attestation для NAR і metadata, потім завантажує незмінний Release, повторно зчитує його assets і перевіряє `SHA256SUMS` та `metadata.SHA256SUMS`. Успішний build без завершеного read-back не вважається опублікованим кешем.
+
 ## Довіра клієнта
 
 Після успішної публікації візьміть Pages URL і release tag зі звіту Actions. Авторизуйте опублікований публічний ключ:
