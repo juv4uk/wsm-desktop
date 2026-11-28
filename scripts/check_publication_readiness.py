@@ -31,8 +31,27 @@ from pathlib import Path
 
 PACKAGE_FILE = Path("wsm") / "packages" / "wsm.scm"
 REPO_LICENCE_MARKER = "LicenseRef-Volnist"
+
+# Кожне визначення пакета в репозиторії, не лише канальне: ліцензійна
+# суперечність #367 стосується трьох файлів, і публікація будь-якого з них
+# розповсюджує код під хибними метаданими.
+PACKAGE_DEFINITIONS = (
+    Path("wsm") / "packages" / "wsm.scm",
+    Path("systems") / "live-iso.scm",
+    Path("systems") / "live-compat.scm",
+)
+
+# Системні визначення, які тягнуть nonfree: політика #586 забороняє
+# розповсюджувати такі збірки без письмового clearance.
+NONFREE_SYSTEMS = (
+    Path("systems") / "live-compat.scm",
+    Path("systems") / "compatibility.scm",
+)
+# Навмисно вузько: шукаємо самі nonfree-джерела, а не згадку моделі GPU.
+# «GP107» у назві ядра — не firmware; перша версія правила давала через це
+# шість хибних спрацювань на `(define wsm-linux-gp107`.
 FIRMWARE_PATTERN = re.compile(
-    r"nvidia[/-]firmware|GP107|firmware.*\.bin|nonguix", re.IGNORECASE
+    r"nvidia-firmware|linux-firmware|nonguix|nongnu|firmware.*\.bin", re.IGNORECASE
 )
 PLACEHOLDER = re.compile(r"TODO|FIXME|0{32,}|\bplaceholder\b", re.IGNORECASE)
 
@@ -76,6 +95,28 @@ def problems(root: Path) -> list[str]:
             "locally, but it must not be advertised as authenticated or pinned in a "
             "release lock (see docs/GUIX-CHANNEL.md)"
         )
+
+    for definition in PACKAGE_DEFINITIONS:
+        if definition == PACKAGE_FILE or not (root / definition).is_file():
+            continue
+        other_licence = declared_licence((root / definition).read_text(encoding="utf-8"))
+        if other_licence and not other_licence.startswith("license:volnist"):
+            found.append(
+                f"{definition} declares ({other_licence}) while the repository is under "
+                f"{REPO_LICENCE_MARKER} — the same #367 mismatch as {PACKAGE_FILE}"
+            )
+
+    for definition in NONFREE_SYSTEMS:
+        path = root / definition
+        if not path.is_file():
+            continue
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            code = line.split(";", 1)[0]
+            if FIRMWARE_PATTERN.search(code) or "nongnu" in code:
+                found.append(
+                    f"{definition}:{number} pulls nonfree or firmware: "
+                    f"{code.strip()[:70]} — #586 requires written clearance"
+                )
 
     free_channel = root / "channels" / "free.scm"
     if free_channel.is_file():

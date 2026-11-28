@@ -75,6 +75,27 @@ class PublicationReadinessTests(unittest.TestCase):
         found = checker.problems(self.root)
         self.assertTrue(any("no .guix-authorizations" in item for item in found), found)
 
+    def test_every_package_definition_is_checked(self) -> None:
+        """#367 covers three files, not just the channel package."""
+        self.write_package(PACKAGE_OK)
+        (self.root / ".guix-authorizations").write_text("(authorizations)\n", encoding="utf-8")
+        (self.root / "systems").mkdir()
+        (self.root / "systems" / "live-iso.scm").write_text(
+            "(package (license license:gpl3+))\n", encoding="utf-8"
+        )
+        found = checker.problems(self.root)
+        self.assertTrue(any("systems/live-iso.scm" in item for item in found), found)
+
+    def test_the_gpu_model_name_is_not_a_firmware_reference(self) -> None:
+        """A kernel named after the GPU is not a nonfree source."""
+        self.write_package(PACKAGE_OK)
+        (self.root / ".guix-authorizations").write_text("(authorizations)\n", encoding="utf-8")
+        (self.root / "systems").mkdir()
+        (self.root / "systems" / "compatibility.scm").write_text(
+            '(define wsm-linux-gp107\n  (kernel #:name "linux-wsm-gp107"))\n', encoding="utf-8"
+        )
+        self.assertEqual(checker.problems(self.root), [])
+
     def test_firmware_in_the_free_channel_is_reported(self) -> None:
         self.write_package(PACKAGE_OK)
         (self.root / ".guix-authorizations").write_text("(authorizations)\n", encoding="utf-8")
