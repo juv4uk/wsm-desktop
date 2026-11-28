@@ -4,6 +4,10 @@
 ;; This is a build/evidence manifest, not a supported-hardware verdict or a release lock.
 ;; Evaluate only with channels.lock.scm (the official Guix channel).
 ;;
+;; WSM-owned application code is not part of this upstream-only pack.
+;; In particular, `wsm-tools` (currently implemented in Python) remains out of
+;; distribution until the owner ratifies its implementation language.
+;; This keeps the published set independent of the unapproved Python payload.
 ;; Deliberately excluded:
 ;; - wsm-tools: unresolved effective-license mismatch in #367.
 ;; - linux-firmware, Intel microcode and NVIDIA firmware: firmware/license gates #519/#586.
