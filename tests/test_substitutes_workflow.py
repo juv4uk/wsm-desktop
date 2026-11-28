@@ -80,6 +80,8 @@ class SubstituteWorkflowTests(unittest.TestCase):
         self.assertIn("/etc/guix/signing-key.sec", step["run"])
         self.assertIn("/etc/guix/signing-key.pub", step["run"])
         self.assertIn("ephemeral runner", step["run"])
+        self.assertNotIn("WSM_SUBSTITUTES_SIGNED=false", self.text)
+        self.assertNotIn("GUIX_SIGNING_KEY", self.text)
         self.assertNotIn("secrets.GUIX_SIGNING_KEY", self.text)
         self.assertNotIn("vars.GUIX_SIGNING_PUBLIC_KEY", self.text)
         self.assertNotIn("signing-key.sec", self.text.split("gh release upload", 1)[-1])
