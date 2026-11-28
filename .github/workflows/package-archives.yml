@@ -129,7 +129,7 @@ jobs:
           {
             echo "## H170 Free package build"
             echo ""
-            echo "Roots: linux-libre, mesa (official Guix channel only)"
+            echo "Roots: all 11 packages in the committed H170 Free manifest (official Guix channel only)"
             echo ""
             cat "$OUT/store-paths.tsv"
             echo ""
@@ -145,7 +145,7 @@ jobs:
           sudo install -m 0644 /etc/guix/signing-key.pub "$OUT/signing-key.pub"
 
           mapfile -t STORE_PATHS < <(cut -f2 "$OUT/store-paths.tsv" | tail -n +2)
-          test "${#STORE_PATHS[@]}" -eq 2
+          test "${#STORE_PATHS[@]}" -eq 11
           guix time-machine -C channels.lock.scm -- archive --export --recursive "${STORE_PATHS[@]}" > "$OUT/h170-free-closure.nar"
           test -s "$OUT/h170-free-closure.nar"
 
