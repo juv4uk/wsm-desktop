@@ -9,8 +9,14 @@
 ;; from this list is a module nobody has checked.
 ;; scripts/check_scheme_module_coverage.py enforces that rule.
 (use-modules (guix packages)
+             (wsm licenses)
              (wsm systems performance)
              (wsm packages wsm))
+
+;; Ліцензія — це метадані, але власний запис мусить бути справжнім <license>:
+;; guix lint приймає лише такі, а guix show друкує саме поле name.
+(unless (string=? (license-name license-ref-volnist) "LicenseRef-Volnist")
+  (error "WSM licence object does not name LicenseRef-Volnist"))
 
 (unless (and (list? %wsm-performance-services)
              (pair? %wsm-performance-services))
