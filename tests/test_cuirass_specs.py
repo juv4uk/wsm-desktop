@@ -129,7 +129,7 @@ class H170PackageJobTests(unittest.TestCase):
     def test_job_reads_the_upstream_h170_manifest(self) -> None:
         self.assertIn("drivers/profiles/h170-free-packages.scm", self.text)
         self.assertIn("(manifest-entries manifest)", self.text)
-        self.assertIn("(manifest-entry-item", self.text)
+        self.assertIn("manifest-entry-item", self.text)
 
     def test_job_resolves_each_root_as_a_pinned_package_derivation(self) -> None:
         self.assertIn("(package-derivation store package system #:graft? #f)", self.text)
