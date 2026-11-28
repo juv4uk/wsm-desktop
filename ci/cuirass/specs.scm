@@ -2,23 +2,9 @@
 ;;
 ;; Cuirass specifications for WSM Desktop.
 ;;
-;; Cuirass is GNU Guix's own continuous integration server. Its value here is
-;; not "another CI": it builds *inside Guix*, on top of the exact channel lock
-;; the release uses, and its results become substitutes. GitHub Actions builds
-;; the image and boots it in QEMU; Cuirass proves the derivations actually build
-;; from the pinned channels and warms the store for everyone else.
-;;
-;; What it does NOT do: boot the image. Cuirass has no QEMU acceptance step, so
-;; a green Cuirass job says "the closure builds", never "the medium boots".
-;; docs/CUIRASS.md keeps that boundary explicit.
-;;
-;; Register with:
-;;   cuirass register --specifications=ci/cuirass/specs.scm \
-;;                    --database="dbname=cuirass host=/var/run/postgresql"
-;;
-;; The file must evaluate to a plain list of specifications: `cuirass register'
-;; loads it and takes the last expression, so a gexp would not work here. The
-;; gexp form belongs only in `cuirass-configuration'.
+;; Guix is pinned to the release lock. WSM main is a moving development input;
+;; production registration remains gated on owner-signed channel Phase B.
+;; Cuirass builds derivations only. It does not boot images or publish NARs.
 
 (define %wsm-guix-channel
   (channel
@@ -39,20 +25,25 @@
    (branch "main")))
 
 (list
- ;; Every package the channel provides. This is the canonical Cuirass job and
- ;; it subsumes the single-package case: today the channel ships one package,
- ;; and when it ships three this job still covers them without an edit.
+ ;; Evaluate/build all packages exposed by the WSM channel.
  (specification
   (name 'wsm-channel)
   (priority 1)
   (build '(channels wsm))
   (channels (list %wsm-guix-channel %wsm-channel)))
 
- ;; The live image derivation. Cuirass builds the same expression the release
- ;; workflow builds, so a broken profile shows up here within one poll interval
- ;; instead of after a forty-minute Actions run.
+ ;; Build the same minimal live image used by the release workflow.
  (specification
   (name 'wsm-live-minimal-image)
   (priority 1)
   (build '(custom (ci cuirass images)))
+  (channels (list %wsm-guix-channel %wsm-channel)))
+
+ ;; Build only the upstream package roots selected for the owner's H170 Free
+ ;; target. This is not a hardware profile and is not an artifact-publication
+ ;; authorization. Firmware and WSM-owned package outputs are excluded.
+ (specification
+  (name 'h170-free-upstream-packages)
+  (priority 1)
+  (build '(custom (ci cuirass h170-free-packages)))
   (channels (list %wsm-guix-channel %wsm-channel))))
