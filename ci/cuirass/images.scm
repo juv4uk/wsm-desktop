@@ -7,11 +7,12 @@
 ;; a second, independent path to the same derivation: if the workflow is green
 ;; and Cuirass is red, one of them is lying about the same bytes.
 ;;
-;; This module lives under ci/ rather than wsm/ on purpose: wsm/ is the public
-;; channel namespace, and every module there must be loadable by the channel's
-;; evaluation test. A CI helper is not part of the channel's API.
+;; This module lives under ci/ rather than wsm/ on purpose: a Cuirass helper
+;; is not part of the public WSM channel namespace. The file path and module
+;; name must still agree: ci/cuirass/images.scm -> (ci cuirass images).
 
-(define-module (wsm ci images)
+(define-module (ci cuirass images)
+  #:use-module (gnu ci)
   #:use-module (guix store)
   #:use-module (guix derivations)
   #:use-module (gnu system image)
