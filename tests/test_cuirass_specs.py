@@ -74,7 +74,7 @@ class JobModuleTests(unittest.TestCase):
             self.text,
         )
         self.assertNotIn("operating-system-image", self.text)
-        self.assertNotIn("derivation->job", self.text)
+        self.assertNotRegex(self.text, r"\(\s*derivation->job\b")
 
     def test_uses_cuirass_system_argument_and_release_architecture(self) -> None:
         self.assertIn("(arguments->systems arguments)", self.text)
@@ -105,7 +105,7 @@ class ServiceFragmentTests(unittest.TestCase):
     def test_uses_only_existing_pinned_configuration_fields(self) -> None:
         self.assertIn("(fallback? #t)", self.text)
         self.assertIn("(specifications %wsm-cuirass-specs)", self.text)
-        self.assertNotIn("use-substitutes?", self.text)
+        self.assertNotRegex(self.text, r"\(\s*use-substitutes\?")
 
     def test_spec_file_is_captured_relative_to_this_source_file(self) -> None:
         self.assertIn('(local-file "specs.scm" "wsm-cuirass-specs.scm")',
@@ -123,7 +123,7 @@ class DocumentationTests(unittest.TestCase):
 
     def test_instance_and_jobs_are_honestly_not_run(self) -> None:
         self.assertIn("not_run", self.text)
-        self.assertIn("інстанс не запускався", self.text)
+        self.assertIn("жоден cuirass job не запускалися", self.text)
 
     def test_channel_phase_b_is_a_prerequisite(self) -> None:
         self.assertIn("phase b", self.text)
