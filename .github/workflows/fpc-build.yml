@@ -1,29 +1,37 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
 name: Free Pascal build
 
-# The owner approved Free Pascal as the implementation language for WSM tools
-# (ADR-006 in juv4uk/wsm-os-lisp). Nothing in the development environment can compile
-# Pascal — there is no fpc there and freepascal.org is unreachable — so a Pascal file
-# that has never been compiled is exactly the kind of artefact this project keeps
-# getting burned by: green tests over source text that a compiler would reject.
-#
-# This workflow is the compiler. It pins the same toolchain version the RE repository
-# uses, builds every Pascal program in the tree, and fails on the first error.
-
 on:
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
       - "**/*.pas"
       - "**/*.lpr"
       - "**/*.pp"
+      - "tools/pascal/Makefile"
+      - "wsm/packages/fpc-tools.scm"
+      - "wsm/licenses.scm"
+      - "schemas/hardware-report.schema.json"
+      - "schemas/hardware-classification.schema.json"
+      - "schemas/profile-evidence.schema.json"
+      - "wsm_install/profile.py"
+      - "tests/test_fpc*.py"
+      - "scripts/check_pascal_sources.py"
       - ".github/workflows/fpc-build.yml"
   pull_request:
     paths:
       - "**/*.pas"
       - "**/*.lpr"
       - "**/*.pp"
+      - "tools/pascal/Makefile"
+      - "wsm/packages/fpc-tools.scm"
+      - "wsm/licenses.scm"
+      - "schemas/hardware-report.schema.json"
+      - "schemas/hardware-classification.schema.json"
+      - "schemas/profile-evidence.schema.json"
+      - "wsm_install/profile.py"
+      - "tests/test_fpc*.py"
+      - "scripts/check_pascal_sources.py"
       - ".github/workflows/fpc-build.yml"
   workflow_dispatch:
 
@@ -36,81 +44,69 @@ concurrency:
 
 jobs:
   build:
-    name: Compile every Pascal program
+    name: Compile and verify six native FPC tools
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Checkout exact source
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - name: Install pinned Free Pascal toolchain
+      - name: Set up Python for schema and reference tests
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned FPC and schema validator
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y fp-compiler-3.2.2 make binutils
+          sudo apt-get install -y fp-compiler-3.2.2 fp-units-fcl-3.2.2 make binutils
           test "$(fpc -iV)" = "3.2.2"
-          fpc -iV
 
       - name: Check the Pascal source contract
         run: python3 scripts/check_pascal_sources.py
 
-      - name: Build every program
+      - name: Build all six native FPC programs
         run: |
           set -euo pipefail
-          mapfile -t programs < <(git ls-files '*.lpr' | grep -v '^third_party/' || true)
-          if [ "${#programs[@]}" -eq 0 ]; then
-            echo "No Pascal programs in the tree yet; nothing to compile."
-            echo "WSM_FPC_PROGRAMS=0" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          mkdir -p build/fpc
-          failed=0
-          for program in "${programs[@]}"; do
-            echo "::group::fpc $program"
-            if ! fpc -O2 -Mobjfpc -Sh -FUbuild/fpc -FEbuild/fpc "$program"; then
-              echo "::error::Free Pascal refused to compile $program"
-              failed=$((failed + 1))
-            fi
-            echo "::endgroup::"
+          make -C tools/pascal clean all
+          for program in wsm-hwcheck wsm-classify wsm-partition wsm-profile wsm-preflight wsm-install; do
+            test -x "tools/pascal/build/$program"
           done
-          ls -l build/fpc || true
+          ls -lh tools/pascal/build
           {
-            echo "### Free Pascal build"
+            echo "### Free Pascal 3.2.2 build"
             echo ""
-            echo "Programs: ${#programs[@]}, failed: $failed"
+            for program in wsm-hwcheck wsm-classify wsm-partition wsm-profile wsm-preflight wsm-install; do
+              echo "- $program: compiled"
+            done
           } >> "$GITHUB_STEP_SUMMARY"
-          [ "$failed" -eq 0 ] || exit 1
+
+      - name: Check FPC source and package contracts
+        run: python3 tests/test_fpc_package.py
+
+      - name: Check read-only partition planner at runtime
+        env:
+          WSM_PARTITION_FPC_BINARY: tools/pascal/build/wsm-partition
+        run: python3 tests/test_fpc_partition.py
+
+      - name: Check profile reader at runtime
+        env:
+          WSM_PROFILE_FPC_BINARY: tools/pascal/build/wsm-profile
+        run: python3 tests/test_fpc_profile.py
+
+      - name: Check preflight and installer CLI contracts
+        run: |
+          python3 tests/test_fpc_preflight.py
+          python3 tests/test_fpc_cli.py
 
       - name: Keep the compiled binaries
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: fpc-binaries
-          path: build/fpc
+          path: tools/pascal/build
           retention-days: 7
           if-no-files-found: ignore
-
-      - name: Повідомити причину збою
-        if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -uo pipefail
-          BODY=$(mktemp)
-          {
-            echo "### Free Pascal build: компіляція не пройшла"
-            echo ""
-            echo "Commit: \`$GITHUB_SHA\`"
-            echo ""
-            echo "Компілятор відмовився збирати один або кілька Pascal-файлів."
-            echo "Це саме те, що локальне середовище перевірити не може: там немає fpc."
-            echo ""
-            echo "#### зібрані бінарники"
-            echo '```'
-            ls -la build/fpc 2>&1 || true
-            echo '```'
-          } > "$BODY"
-          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
-            -F body=@"$BODY" >/dev/null && echo "причину записано коментарем"
