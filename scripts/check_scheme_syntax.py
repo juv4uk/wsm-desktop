@@ -32,8 +32,20 @@ class Imbalance(Exception):
         self.message = message
 
 
+CONFLICT_MARKERS = ("<<<<<<< ", ">>>>>>> ", "||||||| ")
+
+
 def scan(path: Path, source: str) -> None:
-    """Raise Imbalance if the source is not balanced. Ignores strings and comments."""
+    """Raise Imbalance if the source is not balanced. Ignores strings and comments.
+
+    Also refuses a committed merge conflict. Balanced parentheses say nothing
+    about that: `ci/cuirass/images.scm` reached main with `<<<<<<< HEAD` in it and
+    this check passed, because a conflict marker is not a paren problem.
+    """
+    for number, line in enumerate(source.splitlines(), start=1):
+        stripped = line.lstrip()
+        if stripped.startswith(CONFLICT_MARKERS) or stripped == "=======":
+            raise Imbalance(path, number, 1, f"committed merge conflict marker: {stripped[:20]!r}")
     stack: list[tuple[str, int, int]] = []
     index = 0
     line = 1
