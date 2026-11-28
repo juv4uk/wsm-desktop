@@ -76,15 +76,42 @@ def check_checksum(iso: Path, sums: dict[str, str]) -> dict[str, str]:
     return criterion("checksum", "pass", f"sha256 {actual} matches SHA256SUMS")
 
 
-def check_manifest(iso: Path, manifest: dict[str, Any], sums: dict[str, str]) -> dict[str, str]:
+def manifest_artifact(iso: Path, manifest: dict[str, Any]) -> dict[str, Any] | None:
+    """Find the entry describing this image, in either manifest shape.
+
+    ``wsm-live-release/1`` carries a single ``artifact`` object with
+    ``filename``/``sha256``/``bytes``; older manifests carry a list under
+    ``files`` or ``artifacts``. Reading only the list form meant the verifier
+    rejected the pipeline's own releases, which is the worst possible blind
+    spot: the tool that decides "verified" could not read the evidence.
+    """
+    artifact = manifest.get("artifact")
+    if isinstance(artifact, dict) and artifact.get("filename") == iso.name:
+        return {
+            "name": artifact.get("filename"),
+            "sha256": artifact.get("sha256"),
+            "bytes": artifact.get("bytes"),
+        }
     entries = manifest.get("files") or manifest.get("artifacts") or []
-    named = None
     for entry in entries:
         if isinstance(entry, dict) and entry.get("name") == iso.name:
-            named = entry
-            break
+            return entry
+    return None
+
+
+def check_manifest(iso: Path, manifest: dict[str, Any], sums: dict[str, str]) -> dict[str, str]:
+    named = manifest_artifact(iso, manifest)
     if named is None:
         return criterion("manifest", "fail", f"{iso.name} is not described in the release manifest")
+
+    # Size is a second, independent fact: a truncated download can keep a
+    # matching prefix but not the length.
+    recorded_bytes = named.get("bytes")
+    if isinstance(recorded_bytes, int) and recorded_bytes != iso.stat().st_size:
+        return criterion(
+            "manifest", "fail",
+            f"manifest says {recorded_bytes} bytes, file is {iso.stat().st_size}",
+        )
     recorded = str(named.get("sha256", "")).lower()
     if recorded and sums.get(iso.name) and recorded != sums[iso.name]:
         return criterion(
