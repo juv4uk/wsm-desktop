@@ -7,9 +7,9 @@ PRODUCT ?= free
 
 
 
-.PHONY: check-driver-profiles check check-ci-policy qemu-acceptance-manual check-guix-eval check-compatibility-eval release-gate describe-compatibility-lock build-compatibility-system image-live-compat check-docs check-doc-ownership check-regression-register check-release-info check-artifact-versions check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle check-profiles check-agent check-calamares check-channels check-cli-install check-env-preflight check-evidence-drafter check-executor check-tool-closure check-guided check-hygiene check-install-steps check-isa check-journal check-live-acceptance check-makefile check-observation check-partition check-perf-baseline check-boot-profile check-profile-evidence check-profile-match check-profiles-matrix check-release-verdict check-state check-syntax check-tui check-licences image-live-minimal check-temp-paths check-test-registration check-release-assets check-classification check-classification-policy check-readme-stage check-classification-schema check-ci-parity check-scheme-imports check-no-sleep-readiness check-ci-failure-visibility check-tests check-gp107-reference check-channel-artifacts check-release-docs check-channel-contract check-release-readiness check-cuirass check-branch-freshness check-narinfo check-substitutes check-package-version
+.PHONY: check-driver-profiles check check-ci-policy qemu-acceptance-manual check-guix-eval check-compatibility-eval release-gate describe-compatibility-lock build-compatibility-system image-live-compat check-docs check-doc-ownership check-regression-register check-release-info check-artifact-versions check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-system vm-system vm-system-serial describe-lock check-locked-system release-bundle check-profiles check-agent check-calamares check-channels check-cli-install check-env-preflight check-evidence-drafter check-executor check-tool-closure check-guided check-hygiene check-install-steps check-isa check-journal check-live-acceptance check-makefile check-observation check-partition check-perf-baseline check-boot-profile check-profile-evidence check-profile-match check-profiles-matrix check-release-verdict check-state check-syntax check-tui check-licences image-live-minimal check-temp-paths check-test-registration check-release-assets check-classification check-classification-policy check-readme-stage check-classification-schema check-ci-parity check-scheme-imports check-no-sleep-readiness check-ci-failure-visibility check-tests check-gp107-reference check-channel-artifacts check-release-docs check-channel-contract check-release-readiness check-cuirass check-branch-freshness check-narinfo check-substitutes check-package-version check-h170-package-set build-h170-free-package-set
 
-check: check-ci-policy check-docs check-doc-ownership check-regression-register check-release-info check-artifact-versions check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa check-live-acceptance check-profiles-matrix check-perf-baseline check-boot-profile check-profile-evidence check-driver-profiles check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-hygiene check-channels check-executor check-tool-closure check-cli-install check-calamares check-guided check-tui check-agent check-journal check-env-preflight check-observation check-licences check-temp-paths check-test-registration check-release-assets check-classification check-classification-policy check-readme-stage check-classification-schema check-ci-parity check-scheme-imports check-no-sleep-readiness check-ci-failure-visibility check-tests check-gp107-reference check-channel-artifacts check-release-docs check-channel-contract check-release-readiness check-cuirass check-branch-freshness check-narinfo check-substitutes check-package-version
+check: check-ci-policy check-docs check-doc-ownership check-regression-register check-release-info check-artifact-versions check-hardware-schema check-hwcheck check-installer check-release check-qemu-harness check-validation-protocols check-hardware-providers check-minimal-system check-uefi-preboot-policy check-profiles check-syntax check-state check-isa check-live-acceptance check-profiles-matrix check-perf-baseline check-boot-profile check-profile-evidence check-driver-profiles check-profile-match check-release-verdict check-makefile check-evidence-drafter check-partition check-install-steps check-hygiene check-channels check-executor check-tool-closure check-cli-install check-calamares check-guided check-tui check-agent check-journal check-env-preflight check-observation check-licences check-temp-paths check-test-registration check-release-assets check-classification check-classification-policy check-readme-stage check-classification-schema check-ci-parity check-scheme-imports check-no-sleep-readiness check-ci-failure-visibility check-tests check-gp107-reference check-channel-artifacts check-release-docs check-channel-contract check-release-readiness check-cuirass check-branch-freshness check-narinfo check-substitutes check-package-version check-h170-package-set
 
 check-profiles:
 	$(PYTHON) tests/test_system_profiles.py
@@ -112,6 +112,7 @@ check-licences:
 # Not part of `check` on purpose - a contributor without Guix must still pass.
 check-guix-eval:
 	$(GUIX) time-machine -C channels.lock.scm -- repl -L . tests/guix/source-module-evaluation.scm
+	$(GUIX) time-machine -C channels.lock.scm -- build -m ci/packages/h170-free.scm --dry-run --no-grafts
 	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/minimal.scm --dry-run
 	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/desktop.scm --dry-run
 	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/live.scm --dry-run
@@ -144,6 +145,14 @@ release-gate:
 
 check-branch-freshness:
 	$(PYTHON) tests/test_branch_freshness.py
+
+check-h170-package-set:
+	$(PYTHON) tests/test_h170_package_set.py
+
+# Build upstream H170 Free package roots in the local Guix store only.
+# This target does not export NARs, upload artifacts, or publish substitutes.
+build-h170-free-package-set:
+	$(GUIX) time-machine -C channels.lock.scm -- build -m ci/packages/h170-free.scm --no-grafts
 
 check-package-version:
 	$(PYTHON) tests/test_package_version.py
