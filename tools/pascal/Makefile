@@ -6,7 +6,7 @@
 
 FPC ?= fpc
 FPCFLAGS ?= -Mobjfpc -Sh -O2 -vewn
-TARGETS = wsm-hwcheck wsm-classify wsm-partition wsm-profile wsm-preflight
+TARGETS = wsm-hwcheck wsm-classify wsm-partition wsm-profile wsm-preflight wsm-install
 
 all: $(TARGETS)
 
@@ -25,9 +25,9 @@ wsm-profile: wsm_profile.pas
 wsm-preflight: wsm_preflight.pas
 	$(FPC) $(FPCFLAGS) -owsw-preflight wsm_preflight.pas
 
-# Where this Makefile lives, so the target works when make is started from the
-# repository root (`make -f tools/pascal/Makefile ...`), which is how the Guix package
-# invokes it. Without this the paths expand to `/wsm_install_cli.lpr`.
+wsm-install: wsm_install.pas
+	$(FPC) $(FPCFLAGS) -owsw-install wsm_install.pas
+
 PASCAL_DIR := $(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
 
 wsm-install-fpc: $(PASCAL_DIR)/wsm_install_cli.lpr $(PASCAL_DIR)/wsmjson.pas
