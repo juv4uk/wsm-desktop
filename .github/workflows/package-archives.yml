@@ -10,18 +10,27 @@ name: WSM package archives
 #
 #  * not a substitute server — that needs a signing key, a public URL and a trust
 #    plan, and the decision is still open (#741, #367). Nothing here signs anything;
-#  * not a release asset — attaching binaries to a tag is a distribution decision,
-#    so this workflow only produces artifacts that expire with the run. If you want
-#    them on a release, download and attach them yourself;
+#  * not a release asset by default — the archive stays a workflow artifact unless
+#    you name a draft release in `attach_to_draft`, and even then the step refuses
+#    anything that is not still a draft;
 #  * not automatic — `workflow_dispatch` only, no tag or branch trigger, because an
 #    archive that appears without a person asking for it is how unsigned binaries
-#    start circulating.
+#    start circulating;
+#  * not attached to a published release — `attach_to_draft` refuses anything that is
+#    not still a draft. A draft is the owner's to publish; a published release is
+#    already being distributed, and adding a binary to it after the fact is a
+#    distribution decision that nobody made.
 
 on:
   workflow_dispatch:
+    inputs:
+      attach_to_draft:
+        description: "Existing DRAFT release tag to attach the archive to (empty: artifact only)"
+        type: string
+        default: ""
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: wsm-package-archives
@@ -73,6 +82,23 @@ jobs:
             wsm-tools.nar
             wsm-tools.nar.sha256
           retention-days: 30
+
+      - name: Attach the archive to a draft release
+        if: inputs.attach_to_draft != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.attach_to_draft }}
+        run: |
+          set -euo pipefail
+          # Only a draft: a published release is already being distributed, and adding
+          # a binary to it afterwards is a decision, not a convenience.
+          is_draft="$(gh release view "$TAG" --json isDraft --jq '.isDraft')"
+          if [ "$is_draft" != "true" ]; then
+            echo "refusing: $TAG is not a draft release" >&2
+            exit 1
+          fi
+          gh release upload "$TAG" wsm-tools.nar wsm-tools.nar.sha256 --clobber
+          echo "WSM_PACKAGE_ATTACHED_TO=$TAG" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Повідомити причину збою
         if: failure()

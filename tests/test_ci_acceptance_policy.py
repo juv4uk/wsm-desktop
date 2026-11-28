@@ -141,9 +141,17 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
         self.assertNotIn("tags:", text)
         self.assertNotIn("branches:", text)
 
-    def test_it_publishes_no_release_asset_and_no_signing_key(self) -> None:
+    def test_it_publishes_no_signing_key_and_no_release_of_its_own(self) -> None:
+        """Attaching to a draft is allowed; creating or publishing a release is not."""
         text = self.text()
-        for forbidden in ("gh release upload", "secrets.", "guix archive --generate-key", "git push"):
+        for forbidden in (
+            "secrets.",
+            "guix archive --generate-key",
+            "git push",
+            "gh release create",
+            "gh release edit",
+            "--draft=false",
+        ):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, text)
 
@@ -160,6 +168,36 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
         text = self.text().lower()
         self.assertIn("not a substitute server", text)
         self.assertIn("#741", text)
+
+
+class ReleaseAssetAttachmentTests(unittest.TestCase):
+    """A package may reach a draft release, never a published one."""
+
+    WORKFLOW = ROOT / ".github" / "workflows" / "package-archives.yml"
+
+    def text(self) -> str:
+        return self.WORKFLOW.read_text(encoding="utf-8")
+
+    def test_attachment_is_optional_and_manual(self) -> None:
+        text = self.text()
+        self.assertIn("attach_to_draft", text)
+        self.assertIn("if: inputs.attach_to_draft != ''", text)
+
+    def test_it_refuses_a_release_that_is_not_a_draft(self) -> None:
+        text = self.text()
+        self.assertIn('--json isDraft', text)
+        self.assertIn('refusing:', text)
+        self.assertIn('exit 1', text)
+
+    def test_it_uploads_only_the_archive_and_its_checksum(self) -> None:
+        text = self.text()
+        self.assertIn('gh release upload "$TAG" wsm-tools.nar wsm-tools.nar.sha256', text)
+
+    def test_it_never_publishes_a_release(self) -> None:
+        text = self.text()
+        for forbidden in ("gh release edit", "--draft=false", "gh release create"):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, text)
 
 if __name__ == "__main__":
     unittest.main()
