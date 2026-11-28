@@ -3,11 +3,11 @@
 
 For the pinned Guix 1.5 publish implementation, a gzip cache stores each NAR
 as <cache>/gzip/<store-basename>.nar while the narinfo URL is
-nar/gzip/<store-basename>.  This tool flattens the small narinfo files for a
-Pages metadata site and points each URL at the matching Release asset named
+nar/gzip/<store-basename>. This tool flattens small narinfo files for a Pages
+metadata site and points each URL at the matching Release asset named
 <store-basename>.nar.
 
-Only the URL value may change.  All other bytes, including every field covered
+Only the URL value may change. All other bytes, including every field covered
 by the Guix narinfo signature, are preserved exactly.
 """
 
@@ -22,6 +22,7 @@ URL_LINE = re.compile(
     r"^URL:(?P<before>\s*)(?P<value>\S+)(?P<after>\s*)$",
     re.MULTILINE,
 )
+COMPRESSION_LINE = re.compile(r"^Compression:\s*(\S+)\s*$", re.MULTILINE)
 NAR_SUFFIX = ".nar"
 
 
@@ -35,6 +36,15 @@ def _url_value_span(text: str) -> tuple[int, int, str]:
     return match.start("value"), match.end("value"), match.group("value")
 
 
+def _compression(text: str) -> str:
+    matches = list(COMPRESSION_LINE.finditer(text))
+    if len(matches) != 1:
+        raise ValueError(
+            f"expected exactly one Compression: field, found {len(matches)}"
+        )
+    return matches[0].group(1)
+
+
 def _without_url_value(text: str) -> str:
     start, end, _ = _url_value_span(text)
     return text[:start] + "<URL>" + text[end:]
@@ -43,7 +53,18 @@ def _without_url_value(text: str) -> str:
 def rewrite_url(text: str, base_url: str) -> str:
     """Point one Guix narinfo at its matching GitHub Release asset."""
     start, end, original = _url_value_span(text)
-    basename = original.rsplit("/", 1)[-1]
+    compression = _compression(text)
+    components = original.split("/")
+    if (
+        len(components) != 3
+        or components[0] != "nar"
+        or components[1] != compression
+    ):
+        raise ValueError(
+            "narinfo URL must match Guix publish layout nar/<Compression>/<basename>"
+        )
+
+    basename = components[2]
     if not basename or basename in {".", ".."}:
         raise ValueError("narinfo URL has no usable NAR basename")
 
@@ -78,6 +99,8 @@ def convert_directory(
     written: list[Path] = []
     for name, content in sorted(rewritten.items()):
         target = destination / name
+        if target.exists():
+            raise FileExistsError(f"refusing to overwrite existing file: {target}")
         target.write_text(content, encoding="utf-8")
         written.append(target)
     return written
