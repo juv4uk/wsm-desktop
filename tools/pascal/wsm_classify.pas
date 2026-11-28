@@ -180,6 +180,15 @@ begin
   end;
 end;
 
+procedure AppendFunctionalTests(Target, Source: TJSONArray);
+var
+  I: Integer;
+begin
+  { The schema stores one object per test, not one nested array per device. }
+  for I := 0 to Source.Count - 1 do
+    Target.Add(Source.Items[I].Clone);
+end;
+
 function DeviceEvidenceFor(Device: TJSONObject): TJSONObject;
 var
   DriverSource, FirmwareSource, EvidenceSource: TJSONData;
@@ -235,6 +244,7 @@ var
   Device: TJSONObject;
   State, DeviceId: string;
   DeviceIds, Reasons, EvidenceStates, FunctionalTests, DeviceEvidence: TJSONArray;
+  PerDeviceTests: TJSONArray;
   AllGood, AnyFailed: Boolean;
   Count: Integer;
 begin
@@ -262,7 +272,12 @@ begin
     DeviceIds.Add(DeviceId);
     EvidenceStates.Add(DeviceId + '=' + State);
     Reasons.Add(DeviceId + ': ' + State);
-    FunctionalTests.Add(FunctionalTestsFor(Device));
+    PerDeviceTests := FunctionalTestsFor(Device);
+    try
+      AppendFunctionalTests(FunctionalTests, PerDeviceTests);
+    finally
+      PerDeviceTests.Free;
+    end;
     DeviceEvidence.Add(DeviceEvidenceFor(Device));
 
     if not ((State = 'driver-bound-not-tested') or (State = 'candidate-only')) then
