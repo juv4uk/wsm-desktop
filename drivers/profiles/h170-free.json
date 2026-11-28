@@ -327,6 +327,13 @@
        "summary": "The default Linux-libre 7.3 x86_64 config at pinned Guix commit 4e5195be sets CONFIG_DRM_NOUVEAU=m. This establishes that the driver is configured as a built-in or module in the source config; it does not prove a built kernel, package/initrd inclusion, runtime binding, or physical function."
       },
       {
+       "kind": "upstream-reference",
+       "source": "Linux Nouveau GP107 atomic-KMS regression report and mainline fix",
+       "source_url": "https://lkml.iu.edu/hypermail/linux/kernel/2611.3/03709.html",
+       "observed_at": "2026-11-28",
+       "summary": "An upstream report for a GP107 hybrid-graphics system documents a NULL dereference during Nouveau atomic display initialization on kernels after commit 2652aca460dcfdd0d169bbfa358aa15804dc736b; the report identifies fix ed7fb901fce31588bd12ab95adc36ebcb51bc8ea as merged into mainline on 2026-11-25. The H170 Free lock currently selects linux-libre 7.3.5, and the project's source comparison found the separate atomic function set absent from stable 7.3.5 and 7.3.6. This marks a version-specific GP107 KMS risk; stable backport inclusion in a future candidate, exact H170 manifestation and any workaround remain unverified. It is not a hardware test result."
+      },
+      {
        "kind": "functional-test",
        "source": "gp107-nvidia-re physical Nouveau/NVK boot and vector-add witness",
        "source_url": "https://github.com/juv4uk/gp107-nvidia-re/blob/master/docs/14-nvk-vector-add-compute-result.md",
