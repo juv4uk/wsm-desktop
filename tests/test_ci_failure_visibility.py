@@ -24,7 +24,9 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 
 # Something that writes where a reader without auth can see it.
-REPORTS = re.compile(r"gh api .*commits/\$GITHUB_SHA/comments|gh pr comment|gh issue comment")
+REPORTS = re.compile(
+    r"gh api .*commits/\$GITHUB_SHA/comments|gh pr comment|gh issue comment|GITHUB_STEP_SUMMARY"
+)
 
 
 def steps_of(workflow: Path) -> list[dict]:
@@ -62,6 +64,22 @@ class CiFailureVisibilityTests(unittest.TestCase):
             "these workflows fail without leaving a readable cause: " + ", ".join(missing),
         )
 
+    def test_ci_workflow_uses_read_only_job_summary(self) -> None:
+        """The read-only PR token cannot write commit comments (403)."""
+        workflow = WORKFLOWS / "ci.yml"
+        reports = reporting_steps(workflow)
+        self.assertTrue(
+            any("GITHUB_STEP_SUMMARY" in str(step.get("run", "")) for step in reports),
+            "ci.yml must expose the failure reason in GITHUB_STEP_SUMMARY",
+        )
+        self.assertFalse(
+            any("gh api" in str(step.get("run", "")).lower() for step in reports),
+            "ci.yml must not try to write comments with the read-only workflow token",
+        )
+        self.assertFalse(
+            any("GH_TOKEN" in (step.get("env") or {}) for step in reports),
+            "ci.yml does not need a write token for failure reporting",
+        )
     def test_the_scan_is_not_empty(self) -> None:
         """If the glob stopped matching, the test above would pass vacuously."""
         self.assertGreaterEqual(len(list(WORKFLOWS.glob("*.yml"))), 2)
