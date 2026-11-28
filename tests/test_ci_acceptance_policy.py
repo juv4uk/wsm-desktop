@@ -199,7 +199,8 @@ class HardwareBuildEvidenceTests(unittest.TestCase):
 
     def test_it_fails_when_the_expected_package_outputs_are_missing(self) -> None:
         text = self.text()
-        self.assertIn('"-ne 11', text)
+        self.assertIn("-ne 11", text)
+        self.assertIn("Expected 11 package outputs", text)
         self.assertIn("exit 1", text)
 
     def test_it_states_that_nothing_was_published(self) -> None:
