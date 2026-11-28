@@ -18,12 +18,20 @@ on:
       - "**/*.pas"
       - "**/*.lpr"
       - "**/*.pp"
+      - "tools/pascal/Makefile"
+      - "wsm/packages/fpc-tools.scm"
+      - "wsm/licenses.scm"
+      - "tests/test_fpc*.py"
       - ".github/workflows/fpc-build.yml"
   pull_request:
     paths:
       - "**/*.pas"
       - "**/*.lpr"
       - "**/*.pp"
+      - "tools/pascal/Makefile"
+      - "wsm/packages/fpc-tools.scm"
+      - "wsm/licenses.scm"
+      - "tests/test_fpc*.py"
       - ".github/workflows/fpc-build.yml"
   workflow_dispatch:
 
@@ -96,6 +104,7 @@ jobs:
             test -x build/fpc/wsm_hwcheck
             test -x build/fpc/wsm_classify
             test -x build/fpc/wsm_cpu_isa
+            test -x build/fpc/wsm_partition
             echo "::group::Hardware collector schema and PCI parity"
             python3 tests/test_fpc_collector_parity.py || failed=$((failed + 1))
             echo "::endgroup::"
@@ -103,7 +112,9 @@ jobs:
             python3 tests/test_fpc_classify_runtime.py || failed=$((failed + 1))
             echo "::endgroup::"
             echo "::group::CPU ISA contract tests"
-            python3 tests/test_fpc_cpu_isa_runtime.py || failed=$((failed + 1))
+            python3 tests/test_fpc_cpu_isa_runtime.py
+            python3 tests/test_fpc_partition.py
+            python3 tests/test_fpc_partition_runtime.py || failed=$((failed + 1))
             echo "::endgroup::"
           fi
           ls -l build/fpc || true
