@@ -120,6 +120,25 @@ class SubstituteWorkflowTests(unittest.TestCase):
         self.assertIn("SHA256SUMS", self.text)
         self.assertIn("provenance.json", self.text)
 
+    def test_release_stays_draft_until_attestation_and_readback_pass(self) -> None:
+        create = self.text.index("gh release create")
+        upload = self.text.index("gh release upload")
+        attest = self.text.index("uses: actions/attest@v4")
+        readback = self.text.index("Read back and verify the draft Release assets")
+        publish = self.text.index("Publish the verified H170 Free Release")
+        pages = self.text.index("Deploy Pages metadata")
+        self.assertLess(create, upload)
+        self.assertLess(upload, attest)
+        self.assertLess(attest, readback)
+        self.assertLess(readback, publish)
+        self.assertLess(publish, pages)
+        self.assertIn("--draft", self.text[create:attest])
+        self.assertIn("gh release download", self.text[readback:publish])
+        self.assertIn("sha256sum -c SHA256SUMS", self.text[readback:publish])
+        self.assertIn("sha256sum -c metadata.SHA256SUMS", self.text[readback:publish])
+        self.assertIn("zstd -t", self.text[readback:publish])
+        self.assertIn("draft=false", self.text[publish:pages])
+
     def test_failure_is_reported_without_claiming_success(self) -> None:
         step = self.step("Report publication failure")
         self.assertIn("failure()", str(step.get("if")))
