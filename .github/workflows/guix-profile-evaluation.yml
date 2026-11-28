@@ -28,7 +28,7 @@ jobs:
   evaluate-locked-profiles:
     name: Evaluate every locked Guix System and Home profile
     runs-on: ubuntu-24.04
-    timeout-minutes: 180
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@v7
 
@@ -56,6 +56,31 @@ jobs:
           set -euo pipefail
           make check-guix-eval
           echo "WSM_CHANNEL_AUTHENTICATION=NOT_TESTED" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Build the H170 GP107 kernel package on the exact Guix lock
+        timeout-minutes: 240
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "## H170 GP107 kernel package build" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          df -h "$GITHUB_WORKSPACE" | tee -a "$GITHUB_STEP_SUMMARY"
+          STORE_PATH="$(guix time-machine -C channels.lock.scm -- build -L "$GITHUB_WORKSPACE" --no-grafts -e '(begin (use-modules (wsm packages linux-libre)) linux-libre-h170)')"
+          test -d "$STORE_PATH"
+          NAR_SHA256="$(guix hash --recursive --format=hex "$STORE_PATH")"
+          {
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Guix lock | `channels.lock.scm` |"
+            echo "| Package | `linux-libre-h170` |"
+            echo "| Store path | `$STORE_PATH` |"
+            echo "| NAR SHA-256 | `$NAR_SHA256` |"
+            echo ""
+            echo "This proves the package build only. It does not prove H170 boot, module binding, KMS, 3D, compute, or firmware availability."
+            echo "No NAR export, release upload, substitute publication, firmware installation, or host-device passthrough is performed by this CI step."
+          } >> "$GITHUB_STEP_SUMMARY"
+          guix time-machine -C channels.lock.scm -- size "$STORE_PATH" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Save Guix checkout cache
         if: success() && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
