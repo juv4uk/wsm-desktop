@@ -22,6 +22,7 @@ SHA256 = re.compile(r"^[0-9a-f]{64}$")
 REQUIRED = (
     "SHA256SUMS",
     "build-manifest.json",
+    "build.log",
     "release-manifest.json",
     "boot-bios.json",
     "boot-uefi.json",
@@ -247,6 +248,31 @@ def problems(directory: Path, metadata_only: bool = False) -> list[str]:
             True,
         ),
     )
+    build_section = build_manifest.get("build")
+    if not isinstance(build_section, dict):
+        found.append("build-manifest build section is missing or invalid")
+        build_section = {}
+    build_log_name = build_section.get("log")
+    if build_log_name != "build.log":
+        found.append("build-manifest build.log must be build.log")
+    build_log_sha = build_section.get("log_sha256")
+    if not isinstance(build_log_sha, str) or SHA256.fullmatch(build_log_sha) is None:
+        found.append("build-manifest build.log_sha256 is missing or malformed")
+    else:
+        if sums.get("build.log") != build_log_sha:
+            found.append("build-manifest build.log_sha256 != SHA256SUMS entry for build.log")
+        if (directory / "build.log").is_file() and sha256_of(directory / "build.log") != build_log_sha:
+            found.append("build.log does not match build-manifest build.log_sha256")
+    build_log_bytes = build_section.get("log_bytes")
+    if (
+        not isinstance(build_log_bytes, int)
+        or isinstance(build_log_bytes, bool)
+        or build_log_bytes <= 0
+    ):
+        found.append("build-manifest build.log_bytes is missing or invalid")
+    elif (directory / "build.log").is_file() and (directory / "build.log").stat().st_size != build_log_bytes:
+        found.append("build.log does not match build-manifest build.log_bytes")
+
     for filename_key, expected_name, digest_key, bytes_key, must_be_nonempty in channel_evidence:
         recorded_name = guix.get(filename_key)
         if recorded_name != expected_name:
@@ -500,6 +526,11 @@ def problems(directory: Path, metadata_only: bool = False) -> list[str]:
             found.append(f"{name} has boot_confirmed false")
         if record.get("guest_installer_execution") is not True:
             found.append(f"{name} has guest_installer_execution false")
+        boot_iso_sha = record.get("iso_sha256")
+        if not isinstance(boot_iso_sha, str) or SHA256.fullmatch(boot_iso_sha) is None:
+            found.append(f"{name} iso_sha256 is missing or malformed")
+        elif artifact_sha is None or boot_iso_sha != artifact_sha:
+            found.append(f"{name} boot evidence iso_sha256 != release-manifest artifact sha256")
         if marker is not None and marker not in tail:
             found.append(f"{name} never showed {marker}")
         if installer_marker is not None and installer_marker not in tail:
