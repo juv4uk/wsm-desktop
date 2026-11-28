@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 import unittest
 from pathlib import Path
 
@@ -27,15 +28,13 @@ EXPECTED = {
 class H170FreePackageManifestTests(unittest.TestCase):
     def test_manifest_contains_the_fixed_h170_upstream_roots(self) -> None:
         text = MANIFEST.read_text(encoding="utf-8")
-        actual = {
-            line.strip().strip('"')
-            for line in text.splitlines()
-            if line.strip().startswith('"') and line.strip().endswith('"')
-        }
+        code = "\n".join(line.split(";;", 1)[0] for line in text.splitlines())
+        actual = set(re.findall(r'"([^"]+)"', code))
         self.assertEqual(actual, EXPECTED)
 
     def test_manifest_excludes_wsm_owned_and_nonfree_roots(self) -> None:
-        text = MANIFEST.read_text(encoding="utf-8").lower()
+        text = MANIFEST.read_text(encoding="utf-8")
+        code = "\n".join(line.split(";;", 1)[0] for line in text.splitlines()).lower()
         for forbidden in (
             "wsm-tools",
             "wsm-live-tools",
@@ -45,7 +44,7 @@ class H170FreePackageManifestTests(unittest.TestCase):
             "intel-microcode",
         ):
             with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, text)
+                self.assertNotIn(forbidden, code)
 
     def test_archive_workflow_uses_the_fixed_manifest_and_exact_lock(self) -> None:
         text = WORKFLOW.read_text(encoding="utf-8")
