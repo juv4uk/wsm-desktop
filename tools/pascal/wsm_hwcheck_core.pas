@@ -229,7 +229,8 @@ end;
 function NewBaseDevice(const DeviceId, Category, Bus, Source, Summary,
   ObservedAt: string; Driver: TJSONObject): TJSONObject;
 var
-  Firmware, Tests, Evidence, Recommendations: TJSONData;
+  Firmware: TJSONObject;
+  Tests, Evidence, Recommendations: TJSONArray;
 begin
   Result := TJSONObject.Create;
   Result.Add('device_id', DeviceId);
