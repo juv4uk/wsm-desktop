@@ -188,9 +188,10 @@ def run(
     report: Path | None = None,
     which: Callable[[str], str | None] = shutil.which,
     geteuid: Callable[[], int] = os.geteuid,
+    paths: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     return verdict([
-        check_tools(which),
+        check_tools(which, paths=paths),
         check_guix(which),
         check_root(geteuid),
         check_mount_point(mount_point),
