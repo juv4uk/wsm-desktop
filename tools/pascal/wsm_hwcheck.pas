@@ -106,12 +106,36 @@ begin
     Result := 'other';
 end;
 
+{ Basename of a sysfs symlink, or '' when the link is absent.
+
+  The RTL signature is fpReadLink(name, linkname: pchar; maxlen: size_t): cint —
+  it fills a caller buffer and returns a length. There is no one-argument
+  form returning a string, and FPC 3.2.2 does not convert AnsiString to PChar
+  implicitly, so the first argument must be wrapped: the compiler proved both
+  points with
+    wsm_hwcheck.pas(89,45) Error: Incompatible type for arg no. 1:
+    Got "AnsiString", expected "PChar"
+}
+function ReadLinkName(const LinkPath: string): string;
+var
+  Buffer: array[0..1023] of Char;
+  Count: SizeInt;
+begin
+  Result := '';
+  FillChar(Buffer, SizeOf(Buffer), 0);
+  Count := fpReadLink(PChar(LinkPath), @Buffer[0], SizeOf(Buffer) - 1);
+  if Count <= 0 then
+    Exit;
+  Buffer[Count] := #0;
+  Result := StrPas(@Buffer[0]);
+end;
+
 function DriverOf(const DevicePath: string): string;
 var
   Link: string;
 begin
   { A bound device has a `driver' symlink; its basename is the module name. }
-  Link := fpReadLink(DevicePath + '/driver');
+  Link := ReadLinkName(DevicePath + '/driver');
   if Link = '' then
     Result := ''
   else
