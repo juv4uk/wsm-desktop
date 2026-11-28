@@ -19,7 +19,7 @@
   #:use-module (guix download)
   #:use-module (guix build-system gnu)
   #:use-module (gnu packages pascal)
-  #:use-module (guix licenses)
+  #:use-module (wsm licenses)
   ;; `any' comes from SRFI-1 and `string-contains' from SRFI-13; the source
   ;; select? predicate uses both, and without the imports the module fails to
   ;; load only when Guix evaluates it.
@@ -65,7 +65,7 @@ writes a JSON report. It is the Free Pascal counterpart of the Python
 collector: no interpreter or Python library enters the runtime closure.  It
 reads only; it never opens a block device and needs no privileges.")
     (home-page "https://github.com/juv4uk/wsm-desktop")
-    (license license:gpl3+)))
+    (license wsm-license)))
 
 (define-public wsm-classify-fpc
   (package
