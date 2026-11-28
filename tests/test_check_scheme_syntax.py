@@ -65,6 +65,19 @@ class IgnoredContentTest(unittest.TestCase):
         self.assertTrue(balanced("(a #\\space b)"))
 
 
+class ConflictMarkerTest(unittest.TestCase):
+    """A committed conflict is always a defect, and parens say nothing about it."""
+
+    def test_ours_marker_is_rejected(self) -> None:
+        self.assertFalse(balanced("(define x 1)\n<<<<<<< HEAD\n(define y 2)\n=======\n(define y 3)\n>>>>>>> origin/main\n"))
+
+    def test_a_bare_separator_is_rejected(self) -> None:
+        self.assertFalse(balanced("(a)\n=======\n(b)\n"))
+
+    def test_the_repository_has_no_conflict_markers(self) -> None:
+        self.assertEqual(checker.main([]), 0)
+
+
 class BrokenFormsTest(unittest.TestCase):
     def test_missing_closer(self) -> None:
         self.assertFalse(balanced("(define (f x) (+ x 1)"))
