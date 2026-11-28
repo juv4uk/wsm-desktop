@@ -32,6 +32,7 @@
              (gnu services desktop)
              (gnu services networking)
              (gnu services sddm)
+             (gnu packages disk)
              (gnu packages fonts)
              (gnu packages kde-plasma)
              (wsm packages wsm))
@@ -73,6 +74,9 @@
   ;; Ті самі служби, що й у цільовому профілі, плюс наші інструменти.
   (packages
    (cons* wsm-tools
+          gptfdisk
+          parted
+          dosfstools
           font-dejavu
           font-liberation
           font-google-noto
