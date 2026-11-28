@@ -2,7 +2,7 @@
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Дата аудиту: 2026-11-27.
+- Дата аудиту: 2026-11-28.
 - Ціль: Gigabyte GA-H170-Gaming 3, Intel Core i5-6400, Intel HD Graphics 530, NVIDIA GTX 1050 Ti (GP107), Killer Ethernet, HDA audio, SATA, NVMe, USB.
 - Джерело апаратної ідентичності: [OWNER-HARDWARE-REFERENCE.md](OWNER-HARDWARE-REFERENCE.md) та [wsm-os OWNER-HARDWARE-PROFILE](https://github.com/juv4uk/wsm-os/blob/main/docs/OWNER-HARDWARE-PROFILE.md).
 - Статус: статичний source/license audit; не є фізичною Linux functional certification.
@@ -27,7 +27,7 @@ fork лише для ввімкнення i915/Nouveau/NVK/alx/HDA/AHCI/NVMe н�
 | --- | --- | --- | --- | --- |
 | Intel Core i5-6400 (Skylake) | x86 CPU + kernel microcode loader | OS update optional, nonfree; BIOS уже містить 0xC2 | Без раннього Intel package Linux використовує BIOS 0xC2; Windows owner evidence показує 0xD6 | CPUID 0x506E3, BIOS/UEFI 0xC2, Windows 0xD6 у [wsm-os FIT analysis](https://github.com/juv4uk/wsm-os/blob/main/hardware/bios-f22e/FIT-AND-STRUCTURE-ANALYSIS.md). Runtime Linux revision не перевірена |
 | Intel HD Graphics 530 | i915, Mesa | DMC optional/nonfree; GuC/HuC окремі optional capabilities | Без DMC i915 вимикає runtime power management; це не означає відсутність базової графіки | [i915 DMC source](https://kernel.googlesource.com/pub/scm/linux/kernel/git/soc/soc/+/e805c06a80fb657f568ea36600a8e1e6746c2987/drivers/gpu/drm/i915/display/intel_dmc.c); exact physical binding не перевірений |
-| NVIDIA GTX 1050 Ti / GP107 | nouveau + Mesa NVK | GR FECS/GPCCS required/nonfree | Без потрібної firmware fallback повертає -ENODEV для GR. Водночас зовнішній GP107 repo зафіксував фізичний Nouveau binding і один NVK vector-add compute pass на окремому GP107 test host під Kali 7.2.15/Mesa 26.1.6; його motherboard/CPU/BIOS не доведені як H170 reference machine, а exact GR firmware package/blob provenance не записано. Це device-level evidence, не H170 чи strict Free profile validation. Basic KMS/display та power/reclocking оцінюються окремо | [GP107 firmware declarations](https://linux.googlesource.com/linux/kernel/git/tip/tip/+/refs/heads/perf/urgent/drivers/gpu/drm/nouveau/nvkm/engine/gr/gp107.c), [no-firmware fallback](https://linux.googlesource.com/linux/kernel/git/tip/tip/+/refs/heads/x86/urgent/drivers/gpu/drm/nouveau/nvkm/engine/gr/gm200.c), [NVK compute witness](https://github.com/juv4uk/gp107-nvidia-re/blob/68fee7ef4a41a9b1ce6a20c18faffdb11be2daf4/docs/14-nvk-vector-add-compute-result.md), [Nouveau feature matrix](https://nouveau.freedesktop.org/FeatureMatrix.html). External GP107 runtime proof exists; H170 runtime_binding remains unknown and WSM Free profile remains not-run |
+| NVIDIA GTX 1050 Ti / GP107 | nouveau + Mesa NVK | GR FECS/GPCCS required/nonfree | Без потрібної firmware fallback повертає -ENODEV для GR. Зовнішній GP107 host підтверджує Nouveau binding і один vector-add compute pass під Kali 7.2.15/Mesa 26.1.6, але його motherboard/CPU/BIOS не доводять H170 тотожність; package/blob GR firmware не ідентифіковано. [GP107 docs/39](https://github.com/juv4uk/gp107-nvidia-re/blob/f5f2cd3fc494cc072f5b10645260e36241bd1f98/docs/39-gp107-nouveau-firmware-dependency-map.md) є source-only map GR FECS/GPCCS, ACR, SEC2 і NVDEC шляхів; це не boot request/load чи Guix closure evidence. Basic KMS/display та power/reclocking оцінюються окремо | [Pinned GP107 firmware map](https://github.com/juv4uk/gp107-nvidia-re/blob/f5f2cd3fc494cc072f5b10645260e36241bd1f98/docs/39-gp107-nouveau-firmware-dependency-map.md), [NVK compute witness](https://github.com/juv4uk/gp107-nvidia-re/blob/68fee7ef4a41a9b1ce6a20c18faffdb11be2daf4/docs/14-nvk-vector-add-compute-result.md), [Nouveau feature matrix](https://nouveau.freedesktop.org/FeatureMatrix.html). External GP107 runtime proof exists; H170 runtime_binding remains unknown and WSM Free profile remains not-run |
 | Killer Ethernet (Windows label E2200) | alx candidate | Не потрібна зовнішня host firmware | alx source не містить request_firmware/MODULE_FIRMWARE у перевірених файлах. Точний PCI ID невідомий | Owner profile: Windows label E2200. GIGABYTE Rev. 1.0 вказує E2201, Rev. 1.1 — E2400; [Rev. 1.0 spec](https://www.gigabyte.com/Motherboard/GA-H170-Gaming-3-rev-10/sp), [Rev. 1.1 spec](https://www.gigabyte.com/Motherboard/GA-H170-Gaming-3-rev-11/sp). Не виводити PCI ID з назви |
 | HDA audio | snd_hda_intel + Realtek codec candidate | Не потрібна для стандартного codec path | Optional user-supplied HDA patch loader — окрема override; не vendor firmware. Board spec lists ALC1150, exact codec ID не спостерігався | [HDA notes](https://cdn.kernel.org/doc/html/latest/sound/hd-audio/notes.html), [GIGABYTE Rev. 1.0](https://www.gigabyte.com/Motherboard/GA-H170-Gaming-3-rev-10/sp) |
 | SATA/AHCI + Samsung drives | ahci | Не потрібна зовнішня host firmware для generic AHCI | Внутрішня firmware диска — окремий компонент пристрою, не host package Guix | [Linux AHCI source](https://github.com/torvalds/linux/blob/master/drivers/ata/ahci.c); disk firmware не перевірялася й не оновлювалася |
@@ -103,6 +103,27 @@ policy та compile-time source path. Це не дорівнює
 [upstream Mesa 26.2.6 tag/commit](https://chromium.googlesource.com/chromiumos/third_party/mesa/+/refs/tags/upstream/mesa-26.2.6),
 [NVK physical-device policy](https://chromium.googlesource.com/chromiumos/third_party/mesa/+/refs/tags/upstream/mesa-26.2.6/src/nouveau/vulkan/nvk_physical_device.c),
 [Nouveau DRM/VM_BIND gates](https://chromium.googlesource.com/chromiumos/third_party/mesa/+/refs/tags/upstream/mesa-26.2.6/src/nouveau/vulkan/nvkmd/nouveau/nvkmd_nouveau_pdev.c).
+
+### 3.2. GP107 Nouveau firmware dependency map
+
+Зовнішній GP107 source audit [docs/39](https://github.com/juv4uk/gp107-nvidia-re/blob/f5f2cd3fc494cc072f5b10645260e36241bd1f98/docs/39-gp107-nouveau-firmware-dependency-map.md)
+закріплює Linux source `f4585067150b85e33f60876149a6e742928da75e` та
+linux-firmware WHENCE snapshot. Він показує GP107 GR FECS/GPCCS і software
+context paths, спільні GP102 ACR paths, дві SEC2 version candidates та NVDEC
+scrubber path. Це лише source/manifest evidence: не встановлено, які з
+кандидатів запитав або завантажив конкретний boot, і не доведено їх наявність
+у Guix package closure, initrd, live ISO чи installed rootfs. Pairing цього
+Linux source із фактичним `nouveau.ko` окремого witness host також не
+підтверджено.
+
+`WHENCE` відсилає до `LICENCE.nvidia`, яка ставить умови на redistribution
+(OSI-approved OS license, незмінені binaries та супровідна копія ліцензії).
+Це не є clearance для WSM: #367 щодо `LicenseRef-Volnist` ще відкрите.
+Тому WSM Free не включає ці blobs; Compatibility не отримує їх автоматично
+і потребує окремої правової перевірки, повної symlink/manifest closure та
+окремого package/runtime acceptance. Жодних firmware blobs до репозиторію
+або release assets не додавати.
+
 
 ## 4. Відомі невільні залежності та ліцензійні межі
 
