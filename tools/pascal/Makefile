@@ -7,7 +7,7 @@ FPC ?= fpc
 FPCFLAGS ?= -Mobjfpc -Sh -O2 -vewn
 BUILD_DIR ?= build
 
-all: wsm-hwcheck wsm-classify wsm-partition wsm-profile
+all: wsm-hwcheck wsm-classify wsm-partition wsm-profile wsm-preflight
 
 wsm-hwcheck: $(BUILD_DIR)/wsm-hwcheck
 
@@ -16,6 +16,8 @@ wsm-classify: $(BUILD_DIR)/wsm-classify
 wsm-partition: $(BUILD_DIR)/wsm-partition
 
 wsm-profile: $(BUILD_DIR)/wsm-profile
+
+wsm-preflight: $(BUILD_DIR)/wsm-preflight
 
 $(BUILD_DIR)/wsm-hwcheck: wsm_hwcheck.pas
 	mkdir -p $(BUILD_DIR)
@@ -33,7 +35,11 @@ $(BUILD_DIR)/wsm-profile: wsm_profile.pas
 	mkdir -p $(BUILD_DIR)
 	$(FPC) $(FPCFLAGS) -FE$(BUILD_DIR) -FU$(BUILD_DIR) -o$(BUILD_DIR)/wsm-profile wsm_profile.pas
 
+$(BUILD_DIR)/wsm-preflight: wsm_preflight.pas
+	mkdir -p $(BUILD_DIR)
+	$(FPC) $(FPCFLAGS) -FE$(BUILD_DIR) -FU$(BUILD_DIR) -o$(BUILD_DIR)/wsm-preflight wsm_preflight.pas
+
 clean:
 	rm -rf $(BUILD_DIR) *.o *.ppu
 
-.PHONY: all wsm-hwcheck wsm-classify wsm-partition wsm-profile clean
+.PHONY: all wsm-hwcheck wsm-classify wsm-partition wsm-profile wsm-preflight clean

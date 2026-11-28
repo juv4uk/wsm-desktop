@@ -74,7 +74,7 @@ jobs:
       - name: Check the Pascal source contract
         run: python3 scripts/check_pascal_sources.py
 
-      - name: Build all four native FPC programs
+      - name: Build all five native FPC programs
         run: |
           set -euo pipefail
           make -C tools/pascal clean all
@@ -82,6 +82,7 @@ jobs:
           test -x tools/pascal/build/wsm-classify
           test -x tools/pascal/build/wsm-partition
           test -x tools/pascal/build/wsm-profile
+          test -x tools/pascal/build/wsm-preflight
           ls -lh tools/pascal/build
           {
             echo "### Free Pascal 3.2.2 build"
@@ -90,6 +91,7 @@ jobs:
             echo "- wsm-classify: compiled"
             echo "- wsm-partition: compiled"
             echo "- wsm-profile: compiled"
+            echo "- wsm-preflight: compiled"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Validate report schema and Python parity at runtime
@@ -103,6 +105,9 @@ jobs:
         env:
           WSM_PROFILE_FPC_BINARY: tools/pascal/build/wsm-profile
         run: python3 tests/test_fpc_profile.py
+
+      - name: Check the FPC preflight verdict contract
+        run: python3 tests/test_fpc_preflight.py
 
       - name: Keep the compiled binaries
         if: always()

@@ -92,13 +92,14 @@ Collectors keep raw observations separate from derived recommendations. Recommen
 
 ## Native Free Pascal tools
 
-WSM provides four separate Guix packages to keep runtime closures small:
+WSM provides five separate Guix packages to keep runtime closures small:
 
 - `wsm-hwcheck-fpc` is a read-only PCI identity and direct-driver-binding collector. It emits the Hardware Evidence Report 1.1.0 envelope, but this slice collects PCI devices only; CPU, USB, block, DRM, firmware-log and functional-test facts remain uncollected rather than inferred.
 - `wsm-classify-fpc` produces the diagnostic subsystem summary under the same contract as `wsm_install/classification.py`. `certified` remains zero; the result is not installation authorization.
 - `wsm-partition-fpc` is a read-only GPT planner. It validates the whole-disk target, operator acknowledgement and size drift, then emits commands as data; it never invokes `sgdisk` or changes a partition table.
 - `wsm-profile-fpc` performs a preliminary semantic check of an evidence bundle: schema version, relative-path syntax, duplicate paths, artifact presence and at least one passing function. It is not a complete JSON Schema validator and does not verify SHA-256; it explicitly reports digest verification as `delegated`, so it does not replace the full Python validator.
+- `wsm-preflight-fpc` checks tools, Guix, privilege, mount-point availability, the system declaration, hardware-report presence and ISA before installation; it distinguishes `fail` from `not-run` and never changes the system.
 
-All four packages use `LicenseRef-Volnist` / `ВОЛЬНІСТЬ`. FPC is a build-time `native-input`, not a runtime dependency; none of these packages pulls in the Python interpreter.
+All five packages use `LicenseRef-Volnist` / `ВОЛЬНІСТЬ`. FPC is a build-time `native-input`, not a runtime dependency; none of these packages pulls in the Python interpreter.
 
 Build locally with FPC 3.2.2 using `make -C tools/pascal clean all`. Build all four Guix packages with `make build-fpc-packages`. The **Free Pascal build** workflow compiles all four executables, validates the Hardware Evidence Report 1.1.0 schema and compares the PCI collector and classifier with their Python references; it also runs CLI runtime tests for the partition planner and profile preflight reader. These packages are not considered verified until compilation and runtime checks pass.

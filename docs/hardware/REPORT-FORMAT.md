@@ -102,9 +102,10 @@
 - `wsm-classify-fpc` — діагностичний підсумок підсистем за тим самим контрактом, що й `wsm_install/classification.py`. `certified` завжди дорівнює нулю; результат не є дозволом на інсталяцію.
 - `wsm-partition-fpc` — read-only GPT-планувальник: формує команди як дані, перевіряє цільовий диск, підтвердження оператора та дрейф розміру; не виконує `sgdisk` і не змінює таблицю розділів.
 - `wsm-profile-fpc` — попередня семантична перевірка evidence bundle: версія формату, синтаксис відносних шляхів, дублікати, наявність артефактів і хоча б одна функція зі статусом `pass`. Це не повний JSON Schema validator і не перевіряє SHA-256; результат прямо позначає digest verification як `delegated`, тому пакет не замінює повний Python validator.
+- `wsm-preflight-fpc` — перевіряє інструменти, Guix, права доступу, точку монтування, опис системи, hardware report та ISA до інсталяції; розрізняє `fail` і `not-run` та не змінює систему.
 
-Усі чотири пакети використовують `LicenseRef-Volnist` / `ВОЛЬНІСТЬ`. FPC є лише build-time `native-input`, а не runtime dependency; жоден із пакетів не тягне Python interpreter.
+Усі п’ять пакетів використовують `LicenseRef-Volnist` / `ВОЛЬНІСТЬ`. FPC є лише build-time `native-input`, а не runtime dependency; жоден із пакетів не тягне Python interpreter.
 
-Збірка локально з установленим FPC 3.2.2: `make -C tools/pascal clean all`. Перевірка всіх чотирьох пакетів у Guix: `make build-fpc-packages`. Workflow **Free Pascal build** компілює всі чотири executable, перевіряє JSON Schema 1.1.0 і порівнює PCI-колектор та класифікатор з Python-reference; для partition/profile запускає CLI runtime-тести. До успішної компіляції й runtime перевірок пакети не вважаються перевіреними.
+Збірка локально з установленим FPC 3.2.2: `make -C tools/pascal clean all`. Перевірка усіх п’яти пакетів у Guix: `make build-fpc-packages`. Workflow **Free Pascal build** компілює усі п’ять executable, перевіряє JSON Schema 1.1.0 і порівнює PCI-колектор та класифікатор з Python-reference; для partition/profile запускає CLI runtime-тести. До успішної компіляції й runtime перевірок пакети не вважаються перевіреними.
 
 Це зменшений native backend, а не повна заміна Python-колектора. Розширювати його слід окремими зрізами — CPU/ISA, USB, block/storage, DRM/display та runtime diagnostics — кожен із parity-тестами до увімкнення в системному профілі.

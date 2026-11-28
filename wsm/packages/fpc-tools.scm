@@ -11,7 +11,7 @@
   #:use-module (wsm licenses)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-13)
-  #:export (wsm-hwcheck-fpc wsm-classify-fpc wsm-partition-fpc wsm-profile-fpc))
+  #:export (wsm-hwcheck-fpc wsm-classify-fpc wsm-partition-fpc wsm-profile-fpc wsm-preflight-fpc))
 
 (define (fpc-package-arguments make-target executable)
   (list
@@ -119,5 +119,26 @@ is used only at build time.")
 schema version, path safety, at least one passing function, duplicate paths
 and artifact presence. Digest verification is explicitly delegated; the
 reader does not write or execute anything.")
+    (home-page "https://github.com/juv4uk/wsm-desktop")
+    (license wsm-license)))
+
+(define-public wsm-preflight-fpc
+  (package
+    (name "wsm-preflight-fpc")
+    (version "0.1.1")
+    (source (local-file "../.." "wsm-desktop-source-fpc"
+                        #:recursive? #t
+                        #:select? (lambda (path _stat)
+                                    (not (any (lambda (skip)
+                                                (string-contains path skip))
+                                              '("/.git" "/__pycache__" "/build"))))))
+    (build-system gnu-build-system)
+    (native-inputs (list fpc))
+    (arguments (fpc-package-arguments "wsm-preflight" "wsm-preflight"))
+    (synopsis "Pre-install environment checks for WSM Desktop")
+    (description
+     "Checks tools, Guix, privilege, mount-point availability, system declaration,
+hardware-report presence and ISA before installation. It distinguishes fail
+from not-run and does not write or execute anything. FPC is build-time only.")
     (home-page "https://github.com/juv4uk/wsm-desktop")
     (license wsm-license)))

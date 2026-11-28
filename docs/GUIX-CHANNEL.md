@@ -17,9 +17,27 @@
 | Scheme module | Файл | Стан |
 |---|---|---|
 | `(wsm systems performance)` | `wsm/systems/performance.scm` | source-tree evaluation на pinned Guix; authenticated channel lookup потребує окремого Phase B bootstrap |
-| `(wsm packages wsm)` | `wsm/packages/wsm.scm` | package metadata використовує спільний авторський об’єкт `wsm-license` (`LicenseRef-Volnist`, `file://LICENSE`); оцінка збірки й релізу окрема |
+| `(wsm packages wsm)` | `wsm/packages/wsm.scm` | package metadata використовує спільний авторський об’єкт `wsm-license` (`LicenseRef-Volnist`, `file://LICENSE`); рецепт успішно зібрано системним Guix 1.5.0 2026-11-28 (EET), channel lookup/authentication — окремий Phase B |
 
 Не переносити модулі з `wsm/` без необхідності: цей шлях уже відповідає Scheme namespace `(wsm …)`. Файли `systems/*.scm` залишаються machine/release configurations, а не публічним API channel namespace.
+
+### Чому канал має власний self-build
+
+Стандартний збирач каналів Guix компілює **кожен** `.scm` під коренем checkout і очікує, що файл оголошує модуль, який відповідає його шляху. У WSM корінь містить конфігурації без `define-module` (`channels.lock.scm`, `systems/*.scm`, `ci/cuirass/*.scm`), тому звичайний `guix pull` каналу падає ще до компіляції пакетів: `no code for module (channels.lock)`. Варіант `(directory "wsm")` не підходить: він прибирає префікс `wsm` з імен модулів і ламає публічний API `(wsm packages wsm)`.
+
+Тому [`build-aux/build-self.scm`](../build-aux/build-self.scm) робить канал **source-only**: checkout симлінкується в `share/guile/site/3.0`, а `.go`-файли не створюються. Guile завантажує `.scm` напряму, тому корінь checkout лишається module root, `(wsm …)` namespace і відносні `local-file "../.."` не змінюються, а звичайний `-L .` і далі працює для source-tree перевірок. Спроба компілювати модулі з імпортованими модулями Guix у порожньому gexp-оточенні падає (`no code for module (guix build compile)`, потім `(git oid)`) — source-only форма уникає цього класу помилок і не змінює API каналу. Компіляцію можна додати пізніше через inferior з повним pinned Guix, коли будуватиметься trust bootstrap.
+
+### Виміряні перевірки 2026-11-28 (EET)
+
+Системний GNU Guix 1.5.0, обмеження `-M 2 -c 2`, локальний checkout:
+
+- `guix build -L <checkout> -e '(@ (wsm packages wsm) wsm-tools)'` — успішно, output `/gnu/store/vxhyad24yj0cp7c9xlfmd8b3yzf5c1k3-wsm-tools-0.1.0-rc6`;
+- `guix package -L <checkout> -p <isolated-profile> -e '(@ (wsm packages wsm) wsm-tools)'` — успішно, `wsm-hwcheck 0.3.0` запущено з профілю й повернуло read-only JSON report;
+- `guix repl -q -L <checkout> tests/guix/source-module-evaluation.scm` — `WSM-SOURCE-MODULE-EVAL-OK 3 services, channel package: wsm-tools 0.1.0-rc6`;
+- `guix time-machine -q -C <channels.scm> -M 2 -c 2 -- describe -f channels` — успішно: WSM channel завантажено як channel без `-L .` і без `--disable-authentication`, commit `82ad44d2ad64e3859385b3badaa73a4d5ec02281`;
+- той самий `guix time-machine … -- repl` з `(use-modules (wsm packages wsm))` — `CHANNEL-PACKAGE wsm-tools 0.1.0-rc6`; тобто source-only self-build справді відкриває публічний модуль через channel, а не лише через source-tree `-L .`.
+
+Канал WSM досі **не автентифікований** у криптографічному сенсі: у наведеному тесті офіційний Guix channel автентифікується за introduction, а WSM має лише звичайне завантаження без authorizations. Ці результати не означають authenticated channel, завантаження пакета як release input або hardware acceptance.
 
 ## Перший реліз: тільки H170
 
@@ -173,8 +191,10 @@ added here». Це **опис вмісту файлу, а не рішення в
 
 1. чи потрібен власний substitute-сервер узагалі (GitHub Pages / Releases / R2);
 2. хто володіє приватним ключем підпису і де він зберігається;
-3. чи вкладається розмір closure `wsm-tools` у ліміти хостингу — його **ніколи не
-   вимірювали**, бо пакет жодного разу не збирався.
+3. чи вкладається розмір closure `wsm-tools` у ліміти хостингу. Пакет
+   зібрано 2026-11-28 (EET), `guix size` показує **452.3 MiB** для
+   `/gnu/store/vxhyad24yj0cp7c9xlfmd8b3yzf5c1k3-wsm-tools-0.1.0-rc6`; це
+   вимірювання не є рішенням про публікацію.
 
 Доки на ці три питання немає відповіді, будь-який workflow для substitutes буде
 передчасним.
@@ -183,7 +203,7 @@ added here». Це **опис вмісту файлу, а не рішення в
 
 До появи owner-signed introduction CI може перевіряти Scheme API/evaluation сумісність WSM source tree з pinned Guix. Поточний smoke-test використовує `-L .`, тому module lookup іде з checkout репозиторію. Його успіх позначається тільки як `WSM-SOURCE-MODULE-EVAL-OK`; це **не** channel import і не authentication.
 
-Після Phase B потрібна окрема перевірка реального channel consumer: зафіксувати owner-approved WSM commit у H170 release lock, запустити стандартний `guix time-machine` без `-L .` і без `--disable-authentication`, а тоді імпортувати той самий public module. Цей тест не можна вмикати раніше підписаного introduction та підтвердженої authorizations chain.
+Після Phase B потрібна окрема **автентифікована** перевірка channel consumer: зафіксувати owner-approved WSM commit у H170 release lock, запустити стандартний `guix time-machine` без `-L .` і без `--disable-authentication`, а тоді імпортувати той самий public module. Її не можна вмикати раніше підписаного introduction та підтвердженої authorizations chain. Виміряний вище тест із локальним mirror справді завантажує WSM як channel, але не перевіряє owner chain, тому не є цим release gate.
 
 ## Release gates
 
