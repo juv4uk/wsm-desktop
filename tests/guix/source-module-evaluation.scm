@@ -9,6 +9,7 @@
 ;; from this list is a module nobody has checked.
 ;; scripts/check_scheme_module_coverage.py enforces that rule.
 (use-modules (guix packages)
+             (guix store)
              (gnu services)
              (ci cuirass images)
              (wsm systems performance)
@@ -40,6 +41,18 @@
   (error "Cuirass job module lacks the %graft? parameter"))
 (unless (procedure? (module-ref cuirass-images-module 'assq-ref))
   (error "Cuirass job module lacks the assq-ref binding"))
+
+;; Invoke the actual Cuirass entry point. This lowers the ISO derivation through
+;; Guix's image->job helper and validates the returned job record without
+;; building the ISO payload.
+(define cuirass-image-job-list
+  (cuirass-jobs (open-connection) '((system . "x86_64-linux"))))
+(unless (and (list? cuirass-image-job-list)
+             (= (length cuirass-image-job-list) 1)
+             (string=? (assq-ref (car cuirass-image-job-list) #:job-name)
+                       "wsm-live-minimal.x86_64-linux")
+             (string? (assq-ref (car cuirass-image-job-list) #:derivation)))
+  (error "Cuirass custom job did not produce the expected x86_64 ISO job"))
 
 ;; Load the service fragment as a real Guix configuration to catch renamed
 ;; service modules/fields and validate its adjacent local-file reference.
