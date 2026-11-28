@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import io
 import json
 import shutil
@@ -156,6 +157,7 @@ class QemuBootSmokeTests(unittest.TestCase):
             self.assertEqual(result, 0)
             payload = json.loads(stdout.getvalue())
             self.assertEqual(payload["mode"], "dry-run")
+            self.assertEqual(payload["iso_sha256"], hashlib.sha256(iso.read_bytes()).hexdigest())
             self.assertFalse(payload["host_device_passthrough"])
             self.assertFalse(payload["network_enabled"])
             self.assertFalse(payload["efi_variable_store"])
@@ -203,7 +205,7 @@ class QemuBootSmokeTests(unittest.TestCase):
                 result = main(["--iso", str(iso), "--boot-marker", "WSM-LIVE-READY"])
             self.assertEqual(result, 0)
             payload = json.loads(stdout.getvalue())
-            self.assertEqual(payload["iso_sha256"], sha256_of(iso))
+            self.assertEqual(payload["iso_sha256"], hashlib.sha256(iso.read_bytes()).hexdigest())
             self.assertTrue(payload["boot_confirmed"])
             self.assertTrue(payload["qemu_timed_out"])
             self.assertEqual(payload["serial_output_tail"], "booting\nWSM-LIVE-READY\n")
