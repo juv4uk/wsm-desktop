@@ -228,8 +228,12 @@ manifest = {
         "locked_version": os.environ["WSM_GUIX_LOCKED_VERSION"],
         "resolved_channels_file": channels.name,
         "resolved_channels_sha256": digest(channels),
+        "resolved_channels_bytes": channels.stat().st_size,
         "channel_resolution_log": channels_log.name,
         "channel_resolution_log_sha256": digest(channels_log),
+        "channel_resolution_log_bytes": channels_log.stat().st_size,
+        # The manifest is written only after the locked describe command succeeds.
+        "channel_resolution_exit_status": 0,
         "authentication_policy": (
             "Guix time-machine default; --disable-authentication is not passed. "
             "Inspect channel-resolution.log for trust warnings."

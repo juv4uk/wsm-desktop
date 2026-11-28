@@ -119,6 +119,24 @@ jobs:
           SIZE="$(stat -c '%s' "$DIST/$ISO_NAME")"
           echo "ISO size: $SIZE bytes ($(( SIZE / 1048576 )) MiB)"
           cp "$WSM_ISO_DIR/manifest.json" "$DIST/build-manifest.json"
+          cp "$WSM_ISO_DIR/channels.resolved.scm" "$DIST/channels.resolved.scm"
+          cp "$WSM_ISO_DIR/channel-resolution.log" "$DIST/channel-resolution.log"
+          # The builder's source commit must be the workflow's exact checkout,
+          # not merely a self-consistent commit recorded by a separate manifest.
+          python3 - "$DIST/build-manifest.json" "$GITHUB_SHA" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          source = manifest.get("source")
+          commit = source.get("commit") if isinstance(source, dict) else None
+          if commit != sys.argv[2]:
+              raise SystemExit(
+                  f"release source commit {commit!r} does not match workflow GITHUB_SHA {sys.argv[2]!r}"
+              )
+          print(f"release source commit matches GITHUB_SHA: {commit}")
+          PY
           cp docs/RELEASE-MINIMAL-LIVE.md "$DIST/RELEASE-NOTES.md"
           echo "release_dist=$DIST" >> "$GITHUB_ENV"
           echo "release_iso=$ISO_NAME" >> "$GITHUB_ENV"
@@ -206,7 +224,8 @@ jobs:
             "build_manifest_sha256":sha(bp),
             "boot_evidence":{"bios_sha256":sha(root/"boot-bios.json"),"uefi_sha256":sha(root/"boot-uefi.json")}}
           (root/"release-manifest.json").write_text(json.dumps(manifest,ensure_ascii=False,indent=2,sort_keys=True)+"\n",encoding="utf-8")
-          files=[iso,bp,root/"release-manifest.json",root/"boot-bios.json",root/"boot-uefi.json"]
+          files=[iso,bp,root/"release-manifest.json",root/"boot-bios.json",root/"boot-uefi.json",
+                 root/"channels.resolved.scm",root/"channel-resolution.log"]
           (root/"SHA256SUMS").write_text("".join(f"{sha(p)}  {p.name}\n" for p in files),encoding="utf-8")
           PY
           (cd "$release_dist" && sha256sum -c SHA256SUMS)
@@ -271,7 +290,8 @@ jobs:
           if not split:
               covered.append(root / iso_name)
           covered += [root / "build-manifest.json", manifest_path,
-                      root / "boot-bios.json", root / "boot-uefi.json"]
+                      root / "boot-bios.json", root / "boot-uefi.json",
+                      root / "channels.resolved.scm", root / "channel-resolution.log"]
           if split:
               sidecar = root / "ISO-CHECKSUMS.sha256"
               sidecar.write_text(
@@ -289,6 +309,11 @@ jobs:
           print("checksums rewritten for", artifact["published_as"])
           PY
           ls -la "$release_dist"
+
+      - name: Перевірити повний evidence bundle перед завантаженням
+        run: |
+          set -euo pipefail
+          python scripts/check_release_readiness.py "$release_dist"
 
       - name: Створити чернетку релізу та завантажити assets
         env:
@@ -309,6 +334,8 @@ jobs:
             "$release_dist/release-manifest.json"
             "$release_dist/boot-bios.json"
             "$release_dist/boot-uefi.json"
+            "$release_dist/channels.resolved.scm"
+            "$release_dist/channel-resolution.log"
           )
           if [ "$RELEASE_EXISTS" = "true" ]; then
             # Resume only a draft tied to this exact source commit. Remove every
