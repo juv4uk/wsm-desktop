@@ -17,6 +17,7 @@ from wsm_install.executor import (  # noqa: E402
     execute,
 )
 from wsm_install.install_steps import TRUSTED_TOOLS, Step  # noqa: E402
+from wsm_install.admission import admit  # noqa: E402
 from wsm_install.disk_identity import (  # noqa: E402
     DiskIdentity,
     IdentityError,
@@ -444,6 +445,82 @@ class DiskIdentityTests(unittest.TestCase):
     def test_a_different_live_medium_does_not_block_the_target(self) -> None:
         expected = capture(FakeDiskObserver(), "/dev/nvme0n1")
         require_unchanged(expected, FakeDiskObserver(live="/dev/sdb1"))
+
+
+class AdmissionChainTests(unittest.TestCase):
+    """identity -> admissibility -> consent -> postcondition, reported not applied."""
+
+    PLAN = [
+        Step(["/usr/sbin/sgdisk", "-n", "2:0:+64G", "/dev/nvme0n1"], "partition", destructive=True),
+        Step(["/usr/sbin/mkfs.ext4", "-F", "/dev/nvme0n1p2"], "format root", destructive=True),
+        Step(["/usr/bin/mount", "/dev/nvme0n1p2", "/mnt"], "mount root"),
+    ]
+
+    def _identity(self) -> DiskIdentity:
+        return capture(FakeDiskObserver(), "/dev/nvme0n1")
+
+    def _report(self, steps=None, *, consent=True, disk_observer=None, observer=None, expected=None):
+        return admit(
+            steps or self.PLAN,
+            "/dev/nvme0n1",
+            expected_identity=expected or self._identity(),
+            disk_observer=disk_observer or FakeDiskObserver(),
+            observer=observer or FakeObserver(),
+            consent_for=(lambda index, step, digest: consent),
+        )
+
+    def test_a_fully_approved_plan_is_admitted(self) -> None:
+        report = self._report()
+        self.assertEqual(report.status, "admitted", report.reason)
+        self.assertEqual(len(report.plan_digest), 64)
+        self.assertTrue(all(step.status == "admitted" for step in report.steps))
+
+    def test_refused_consent_blocks_only_the_destructive_step(self) -> None:
+        report = self._report(consent=False)
+        self.assertEqual(report.status, "refused")
+        self.assertEqual([step.status for step in report.steps], ["refused", "refused", "admitted"])
+        self.assertIn("consent.missing", report.steps[0].reason)
+
+    def test_an_inadmissible_command_is_refused_before_consent_is_asked(self) -> None:
+        asked: list[int] = []
+        plan = [Step(["/bin/sh", "-c", "true"], "untrusted", destructive=True)]
+        report = admit(
+            plan,
+            "/dev/nvme0n1",
+            expected_identity=self._identity(),
+            disk_observer=FakeDiskObserver(),
+            observer=FakeObserver(),
+            consent_for=lambda index, step, digest: asked.append(index) or True,
+        )
+        self.assertEqual(report.status, "refused")
+        self.assertIn("inadmissible", report.steps[0].reason)
+        self.assertEqual(asked, [], "consent must not be requested for a command that can never run")
+
+    def test_disk_drift_refuses_the_whole_plan(self) -> None:
+        drifted = DiskIdentity(
+            path="/dev/nvme0n1", major_minor="8:0", size_bytes=500107862016,
+            removable=False, partitions=("/dev/nvme0n1p1",),
+        )
+        report = self._report(expected=drifted)
+        self.assertEqual(report.status, "refused")
+        self.assertEqual(report.steps, ())
+        self.assertIn("identity.drift", report.reason)
+
+    def test_a_failed_postcondition_refuses_the_step(self) -> None:
+        report = self._report(observer=FakeObserver(fs="vfat"))
+        self.assertEqual(report.status, "refused")
+        self.assertIn("failed", report.steps[1].reason)
+
+    def test_a_step_without_a_postcondition_refuses_the_plan(self) -> None:
+        plan = [Step(["/usr/sbin/partprobe", "/dev/nvme0n1"], "re-read")]
+        report = self._report(steps=plan)
+        self.assertEqual(report.status, "refused")
+        self.assertIn("unverified", report.steps[0].reason)
+
+    def test_every_step_carries_its_digest(self) -> None:
+        report = self._report()
+        self.assertTrue(all(len(step.step_digest) == 64 for step in report.steps))
+        self.assertEqual(len({step.step_digest for step in report.steps}), len(report.steps))
 
 
 if __name__ == "__main__":
