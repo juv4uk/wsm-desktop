@@ -139,7 +139,8 @@ class InstallModeTests(unittest.TestCase):
             )
         self.assertEqual(result.returncode, 2)
         self.assertIn("install.tool-unavailable", result.stderr)
-        self.assertIn("found 0", result.stderr)
+        self.assertIn("tool.missing", result.stderr)
+        self.assertIn("no executable", result.stderr)
 
     def test_btrfs_and_xfs_are_refused_by_first_guix_preview(self) -> None:
         for filesystem in ("btrfs", "xfs"):
