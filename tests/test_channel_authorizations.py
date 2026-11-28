@@ -190,7 +190,7 @@ class ChannelAuthorizationsTests(unittest.TestCase):
         )
         self.write_authorizations(text)
         found = checker.problems(self.root, keyring_dir=self.keyring)
-        self.assertTrue(any("properties must be a list" in item for item in found), found)
+        self.assertTrue(any("malformed key/value metadata" in item for item in found), found)
 
     def test_empty_authorization_list_is_refused(self) -> None:
         self.write_authorizations("(authorizations (version 0) ())")
