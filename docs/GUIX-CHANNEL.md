@@ -143,6 +143,22 @@ Bootstrap має бути виконаний власником ключа. Ни
 
 Після Phase B потрібна окрема перевірка реального channel consumer: зафіксувати owner-approved WSM commit у H170 release lock, запустити стандартний `guix time-machine` без `-L .` і без `--disable-authentication`, а тоді імпортувати той самий public module. Цей тест не можна вмикати раніше підписаного introduction та підтвердженої authorizations chain.
 
+### Діагностичний CLI smoke до Phase B
+
+`make check-guix-eval` запускає `scripts/check-wsm-channel-set.sh` на
+фактичному `channels/wsm.scm` через Guix CLI:
+
+- звичайний `guix time-machine -C channels/wsm.scm -- describe -f channels`
+  має відмовити саме через відсутній owner-signed WSM introduction або
+  authorization; network, parse чи branch error не зараховується;
+- окремий виклик із `--disable-authentication` використовується лише для
+  діагностики та перевіряє, що набір містить `guix` і `wsm`;
+- результат явно лишається `WSM_CHANNEL_AUTHENTICATION=NOT_TESTED`.
+
+Цей smoke не автентифікує канал, не створює Phase B artifacts і не дозволяє
+додавати WSM до production/release locks. Він лише тестує межу відмови до
+виконання owner-local bootstrap.
+
 ## Release gates
 
 | Рівень | Що доводить | Чого не доводить |
