@@ -105,6 +105,12 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           [ "$failed" -eq 0 ] || exit 1
 
+      # Паритет: дві реалізації одного звіту варті чогось лише тоді, коли
+      # щось їх порівнює. Тест збирає програму ще раз (дешево), запускає її
+      # і Python-колектор на тому самому sysfs і порівнює поля.
+      - name: Compare the native collector with the Python one
+        run: python3 tests/test_pascal_parity.py -v
+
       - name: Keep the compiled binaries
         if: always()
         uses: actions/upload-artifact@v7
