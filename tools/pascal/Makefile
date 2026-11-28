@@ -6,7 +6,7 @@
 
 FPC ?= fpc
 FPCFLAGS ?= -Mobjfpc -Sh -O2 -vewn
-TARGETS = wsm-hwcheck wsm-classify wsm-partition
+TARGETS = wsm-hwcheck wsm-classify wsm-partition wsm-profile
 
 all: $(TARGETS)
 
@@ -18,6 +18,9 @@ wsm-classify: wsm_classify.pas
 
 wsm-partition: wsm_partition.pas
 	$(FPC) $(FPCFLAGS) -owsw-partition wsm_partition.pas
+
+wsm-profile: wsm_profile.pas
+	$(FPC) $(FPCFLAGS) -owsw-profile wsm_profile.pas
 
 clean:
 	rm -f $(TARGETS) *.o *.ppu
