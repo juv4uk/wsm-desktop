@@ -56,7 +56,10 @@ class H170LinuxLibreOverlayTests(unittest.TestCase):
         self.assertIn("linux-libre-h170", workflow)
         self.assertIn("PACKAGE_EXPR='(@ (wsm packages linux-libre) linux-libre-h170)'", workflow)
         self.assertIn('--expression="$PACKAGE_EXPR"', workflow)
-        self.assertIn("guix hash --recursive --format=hex", workflow)
+        self.assertIn(
+            "guix time-machine -C channels.lock.scm -- hash --recursive --format=hex",
+            workflow,
+        )
         self.assertNotIn("guix archive --export", workflow)
         self.assertNotIn("guix publish", workflow)
         self.assertNotIn("actions/upload-artifact", workflow)
