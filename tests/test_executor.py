@@ -9,6 +9,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+SYSFS = Path("/sys/class/block")
 sys.path.insert(0, str(ROOT))
 
 from wsm_install.executor import (  # noqa: E402
@@ -984,8 +985,6 @@ class RealSysfsObserverTests(unittest.TestCase):
     answer. These tests pin the difference. They skip where the host has no sysfs
     rather than asserting something about the machine they happen to run on.
     """
-
-    SYSFS = Path("/sys/class/block")
 
     def test_an_unknown_device_is_none_and_not_an_empty_inventory(self) -> None:
         observer = SysfsDiskObserver()
