@@ -70,6 +70,8 @@ begin
   Driver := TJSONObject(DriverData);
 
   Status := Str(Driver, 'status');
+  if Status = '' then
+    Status := 'unknown';
   Bound := Trim(Str(Driver, 'bound_driver'));
   Candidate := Trim(Str(Driver, 'candidate'));
 
@@ -150,10 +152,18 @@ begin
       Continue;
     Item := TJSONObject(ItemData);
     Status := Str(Item, 'status');
+    if Status = '' then
+      Status := 'unknown';
 
     ResultItem := TJSONObject.Create;
-    ResultItem.Add('device_id', Str(Device, 'device_id'));
-    ResultItem.Add('capability', Str(Item, 'capability'));
+    if Str(Device, 'device_id') = '' then
+      ResultItem.Add('device_id', '?')
+    else
+      ResultItem.Add('device_id', Str(Device, 'device_id'));
+    if Str(Item, 'capability') = '' then
+      ResultItem.Add('capability', 'unknown')
+    else
+      ResultItem.Add('capability', Str(Item, 'capability'));
     ResultItem.Add('reported_status', Status);
     ResultItem.Add('evidence_state', FunctionalTestState(Status));
 
@@ -177,7 +187,10 @@ var
   EvidenceTarget: TJSONArray;
 begin
   Result := TJSONObject.Create;
-  Result.Add('device_id', Str(Device, 'device_id'));
+  if Str(Device, 'device_id') = '' then
+    Result.Add('device_id', '?')
+  else
+    Result.Add('device_id', Str(Device, 'device_id'));
 
   DriverSource := Device.Find('driver');
   if DriverSource is TJSONObject then
