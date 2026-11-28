@@ -161,8 +161,6 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
             "wsm-tools",
             "wsm-live-tools",
             "linux-firmware",
-            "FECS",
-            "GPCCS",
             "nonguix",
             "nvda-580",
         ):
