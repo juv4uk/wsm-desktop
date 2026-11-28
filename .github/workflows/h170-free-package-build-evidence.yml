@@ -1,0 +1,91 @@
+name: H170 Free package build evidence — no export
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: h170-free-package-build-evidence
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build the pinned H170 Free package set (metadata only)
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Install Guix
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y guix
+          sudo systemctl enable --now guix-daemon.service
+          guix --version
+
+      - name: Verify the exact Free channel lock
+        run: |
+          set -euo pipefail
+          description="$(guix time-machine -C channels.lock.scm -- describe)"
+          printf '%s\n' "$description"
+          grep -q '4e5195be20d9b124df8a8bb69213412236e4668e' <<< "$description"
+          {
+            echo "## H170 Free package-set build"
+            echo
+            echo "- Source commit: $GITHUB_SHA"
+            echo "- Guix lock: 4e5195be20d9b124df8a8bb69213412236e4668e"
+            echo "- Manifest: ci/packages/h170-free.scm"
+            echo "- Distribution: DISABLED (no NAR, artifact, Release, Pages, or substitute upload)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build package manifest in the ephemeral runner store
+        run: |
+          set -euo pipefail
+          paths_file="$(mktemp)"
+          trap 'rm -f "$paths_file"' EXIT
+          guix time-machine -C channels.lock.scm -- build \
+            -m ci/packages/h170-free.scm --no-grafts > "$paths_file"
+          mapfile -t store_paths < "$paths_file"
+          if [ "\${#store_paths[@]}" -eq 0 ]; then
+            echo "No package store paths were produced." >&2
+            exit 1
+          fi
+
+          {
+            echo
+            echo "### Built store roots"
+            echo
+            echo "| Store path | Output bytes | Recursive SHA-256 (not NAR hash) |"
+            echo "| --- | ---: | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          for store_path in "\${store_paths[@]}"; do
+            case "$store_path" in
+              /gnu/store/*) ;;
+              *) echo "Unexpected Guix build output: $store_path" >&2; exit 1 ;;
+            esac
+            test -e "$store_path"
+            output_bytes="$(du -sb "$store_path" | cut -f1)"
+            output_hash="$(guix time-machine -C channels.lock.scm -- hash --recursive --format=hex "$store_path")"
+            printf '| %s | %s | %s |\n' "$store_path" "$output_bytes" "$output_hash" >> "$GITHUB_STEP_SUMMARY"
+            {
+              echo
+              echo "#### Closure size for $store_path"
+              echo
+              echo '---'
+              guix time-machine -C channels.lock.scm -- size --sort=closure "$store_path"
+              echo '---'
+            } >> "$GITHUB_STEP_SUMMARY"
+          done
+
+          {
+            echo
+            echo "Result: \${#store_paths[@]} store roots built or substituted successfully."
+            echo "The runner store is ephemeral. No package archive or downloadable binary was produced."
+          } >> "$GITHUB_STEP_SUMMARY"
