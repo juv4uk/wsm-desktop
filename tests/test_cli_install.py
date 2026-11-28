@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import json
 import subprocess
 import sys
@@ -40,6 +42,25 @@ class InstallModeTests(unittest.TestCase):
             self.assertEqual(_tool_prefixes_for_running_system(), GUIX_PROFILE_PREFIXES)
         with patch.object(Path, "is_dir", side_effect=[False, False]):
             self.assertIsNone(_tool_prefixes_for_running_system())
+
+    def test_env_check_receives_the_same_guix_tool_paths_as_the_planner(self) -> None:
+        from wsm_install import cli
+
+        paths = ("/run/current-system/profile/sbin/sgdisk",)
+        args = argparse.Namespace(
+            mount_point="/mnt",
+            system_file=Path("systems/desktop.scm"),
+            report=None,
+        )
+        output = io.StringIO()
+        with (
+            patch("wsm_install.cli._tool_paths_for_running_system", return_value=paths),
+            patch("wsm_install.preflight_env.run", return_value={"overall": "pass"}) as env_run,
+            contextlib.redirect_stdout(output),
+        ):
+            result = cli._run_env_check(args)
+        self.assertEqual(result, 0)
+        self.assertEqual(env_run.call_args.kwargs["paths"], paths)
 
     def test_install_planner_receives_the_guix_profile_prefixes(self) -> None:
         from wsm_install import cli
