@@ -16,13 +16,7 @@
   #:use-module (guix packages)
   #:use-module (guix gexp)
   #:use-module (gnu packages linux)
-  #:use-module (ice-9 ftw)
   #:export (linux-libre-h170))
-
-(define %h170-nouveau-atomic-patch
-  (or (search-path %load-path
-                   "wsm/packages/patches/linux-libre-h170-nouveau-atomic.patch")
-      (error "H170 Nouveau atomic patch is missing from the WSM channel")))
 
 (define-public linux-libre-h170
   (package
@@ -33,5 +27,10 @@
        (inherit (package-source linux-libre))
        (patches
         (append (origin-patches (package-source linux-libre))
-                (list (local-file %h170-nouveau-atomic-patch
+                ;; A relative local-file resolves against the directory of *this*
+                ;; file, so the patch is found whether the module is loaded from the
+                ;; checkout, from a channel, or from the store. The previous version
+                ;; searched %load-path for a repository-relative path, which only
+                ;; works while "." happens to be on the load path.
+                (list (local-file "patches/linux-libre-h170-nouveau-atomic.patch"
                                   "linux-libre-h170-nouveau-atomic.patch"))))))))

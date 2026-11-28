@@ -62,7 +62,11 @@ class H170LinuxLibreOverlayTests(unittest.TestCase):
         self.assertIn("(inherit (package-source linux-libre))", scheme)
         self.assertIn("(origin-patches (package-source linux-libre))", scheme)
         self.assertIn("(append (origin-patches", scheme)
-        self.assertIn("search-path %load-path", scheme)
+        # The patch is resolved as a relative local-file, which Guix resolves against
+        # the directory of this module — not by searching %load-path, which only works
+        # while "." happens to be on it.
+        self.assertIn('(local-file "patches/linux-libre-h170-nouveau-atomic.patch"', scheme)
+        self.assertNotIn("search-path %load-path", scheme)
         self.assertIn('(name "linux-libre-h170")', scheme)
 
     def test_overlay_does_not_add_proprietary_driver_or_firmware_packages(self) -> None:
