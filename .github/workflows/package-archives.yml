@@ -8,6 +8,8 @@ name: WSM H170 Free package archives
 
 on:
   push:
+    branches:
+      - "publish/h170-free/**"
     tags:
       - "packages-*"
   workflow_dispatch:
