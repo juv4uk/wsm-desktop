@@ -44,7 +44,7 @@ jobs:
           {
             echo "## H170 Free package plan evaluated"
             echo ""
-            echo "- Source commit: `$GITHUB_SHA`"
+            echo "- Source commit: $GITHUB_SHA"
             echo "- Channel lock: `channels.lock.scm`"
             echo "- Manifest: `drivers/profiles/h170-free-packages.scm`"
             echo "- Mode: read-only dry-run; no NAR export or publication"
