@@ -82,8 +82,8 @@ jobs:
           fi
           sudo chmod 0600 /etc/guix/signing-key.sec
           sudo chmod 0644 /etc/guix/signing-key.pub
-          test -s /etc/guix/signing-key.sec
-          test -s /etc/guix/signing-key.pub
+          sudo test -s /etc/guix/signing-key.sec
+          sudo test -s /etc/guix/signing-key.pub
           chmod 700 "$RUNNER_TEMP"
           mkdir -m 700 "$RUNNER_TEMP/h170-release"
           sudo install -m 0644 /etc/guix/signing-key.pub "$RUNNER_TEMP/h170-release/signing-key.pub"
