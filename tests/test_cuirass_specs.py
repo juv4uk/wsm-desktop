@@ -89,6 +89,18 @@ class SpecsTests(unittest.TestCase):
         self.assertIn("make-channel-introduction", self.text)
 
 
+class ConflictMarkerTests(unittest.TestCase):
+    def test_cuirass_scheme_sources_have_no_unresolved_merge_markers(self) -> None:
+        for path in (SPECS, IMAGES, SERVICE):
+            with self.subTest(path=path.name):
+                text = path.read_text(encoding="utf-8")
+                self.assertNotRegex(
+                    text,
+                    r"(?m)^(?:<{7}|={7}|>{7})",
+                    f"unresolved merge marker in {path.relative_to(ROOT)}",
+                )
+
+
 class JobModuleTests(unittest.TestCase):
     def setUp(self) -> None:
         self.text = code_only(IMAGES.read_text(encoding="utf-8"))
