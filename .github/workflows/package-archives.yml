@@ -3,6 +3,7 @@ name: WSM package archives
 
 # Ручна збірка власного WSM-пакета. Публікується лише draft Release або Actions artifact.
 # Це не substitute cache і не потребує ключа Guix narinfo.
+# ВЛАСНИК ДАВ ДОЗВІЛ 2026-11-28 на публікацію саме власних WSM package outputs.
 on:
   workflow_dispatch:
     inputs:
@@ -89,6 +90,14 @@ jobs:
             archives/guix-channels.txt
             archives/PROVENANCE.txt
           retention-days: 30
+
+      - name: Note that no draft release was requested
+        if: inputs.attach_to_draft == ''
+        run: |
+          {
+            echo "no draft release to attach to; package remains an Actions artifact"
+            echo "WSM_PACKAGE_ATTACHED_TO=none"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Attach the pack to an existing draft release
         if: inputs.attach_to_draft != ''
