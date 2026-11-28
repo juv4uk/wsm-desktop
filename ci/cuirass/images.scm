@@ -1,68 +1,29 @@
 ;; SPDX-License-Identifier: LicenseRef-Volnist
 ;;
-;; A Cuirass job module: the live image, built by Guix, on the pinned channels.
+;; Cuirass custom job for the WSM minimal live ISO.
 ;;
-;; Cuirass resolves this module through the channel root, so the namespace must
-;; match the file path: `ci/cuirass/images.scm' is `(ci cuirass images)'.
-;; An earlier revision named it `(wsm ci images)' and pointed the spec at that
-;; name - Cuirass would have failed to resolve it, because `wsm/' holds only
-;; packages and systems.
-;;
-<<<<<<< HEAD
-;; `system-image' is the procedure that turns an <image> record into a
-;; derivation. It takes the image, not the operating system, has no #:target
-;; keyword, and is monadic - so the store plumbing below is required, not
-;; decorative.
-=======
-;; This module lives under ci/ rather than wsm/ on purpose: wsm/ is the public
-;; channel namespace, and every module there must be loadable by the channel's
-;; evaluation test. A CI helper is not part of the channel's API. Because of that,
-;; its module name must match this path — a channel with no `directory` resolves
-;; (wsm X) to <checkout>/wsm/X.scm, so a `(wsm ci images)` name here would look for
-;; wsm/ci/images.scm and find nothing.
->>>>>>> origin/main
+;; Cuirass supplies a plural 'systems' argument. Reuse Guix's own
+;; arguments->systems and image->job helpers so this job follows the pinned
+;; Guix CI API and produces the same ISO9660 image type as the release workflow.
 
 (define-module (ci cuirass images)
-  #:use-module (guix store)
-  #:use-module (guix monads)
-  #:use-module (guix derivations)
   #:use-module (gnu ci)
   #:use-module (gnu system image)
-  #:use-module (gnu system)
-  #:use-module (ice-9 match)
+  #:use-module (guix packages)
   #:export (cuirass-jobs))
 
-(define (arguments->systems arguments)
-  "Return the list of systems named in ARGUMENTS.
-
-Cuirass passes `((channels . ...) (systems . (...)) (subset . ...))'. The key is
-`systems' and its value is a list; an earlier revision read `system' and
-silently ignored the specification's systems."
-  (match (assq-ref arguments 'systems)
-    (#f (list (%current-system)))
-    ((? list? systems) systems)
-    (system (list system))))
-
-(define (profile-image profile)
-  "Build the <image> record for PROFILE, reading the profile from the channel."
-  (image-with-os efi-disk-image (primitive-load profile)))
-
 (define* (image-jobs store systems #:key (profile "systems/live-minimal.scm"))
-  "One job per system: the live image, lowered in that system."
-  (map (lambda (system)
-         (let* ((name (string->symbol
-                       (string-append "wsm-live-minimal." system)))
-                (image (profile-image profile))
-                (drv (run-with-store store
-                       (mbegin %store-monad
-                         (set-guile-for-build (default-guile))
-                         (lower-object (system-image image) system)))))
-           (derivation->job name drv)))
-       systems))
+  "Build one ISO9660 image job for each requested system."
+  ;; Resolve the profile from the WSM channel revision Cuirass fetched.
+  (let ((image (image-with-os iso9660-image (primitive-load profile))))
+    (map (lambda (system)
+           (image->job store image
+                       #:name "wsm-live-minimal"
+                       #:system system))
+         systems)))
 
 (define (cuirass-jobs store arguments)
-  "Register Cuirass jobs for the WSM live image."
-  ;; Grafting is meant to happen on the user's machine; Guix's own image job
-  ;; does the same.
+  "Register the WSM live ISO jobs requested by Cuirass."
+  ;; These are the same no-graft semantics used by Guix's built-in image jobs.
   (parameterize ((%graft? #f))
     (image-jobs store (arguments->systems arguments))))
