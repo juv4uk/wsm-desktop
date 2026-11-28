@@ -78,6 +78,7 @@ class SubstituteWorkflowTests(unittest.TestCase):
         self.assertNotIn("vars.GUIX_SIGNING_PUBLIC_KEY", self.text)
         self.assertNotIn("signing-key.sec", self.text.split("gh release upload", 1)[-1])
         self.assertEqual(self.data["permissions"]["attestations"], "write")
+        self.assertEqual(self.data["permissions"]["artifact-metadata"], "write")
 
     def test_public_key_and_provenance_are_published_and_attested(self) -> None:
         prepare = self.step("Prepare immutable Release assets and Pages metadata")["run"]
