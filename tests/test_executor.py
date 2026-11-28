@@ -21,6 +21,7 @@ import importlib.util  # noqa: E402
 import tempfile  # noqa: E402
 
 from wsm_install.admission import admit  # noqa: E402
+from wsm_install.observers import FilesystemObserver, SysfsDiskObserver  # noqa: E402
 from wsm_install.tools import is_admissible_path, resolve  # noqa: E402
 from wsm_install.tool_map import TOOLS, EXECUTABLES, package  # noqa: E402
 from wsm_install.disk_identity import (  # noqa: E402
@@ -856,6 +857,64 @@ class SingleToolMapTests(unittest.TestCase):
         for name in TOOLS:
             with self.subTest(tool=name):
                 self.assertTrue(package(name).strip(), f"{name} has no owning package")
+
+
+class SysfsObserverTests(unittest.TestCase):
+    """The real observers answer from sysfs and /proc, never from PATH or a command."""
+
+    def _disk(self, root: Path, name: str, *, dev: str = "259:0", sectors: int = 1953525168,
+              removable: str = "0", parts: tuple[str, ...] = ("nvme0n1p1", "nvme0n1p2")) -> None:
+        block = root / "class" / "block" / name
+        block.mkdir(parents=True)
+        (block / "dev").write_text(dev + "\n", encoding="utf-8")
+        (block / "size").write_text(str(sectors) + "\n", encoding="utf-8")
+        (block / "removable").write_text(removable + "\n", encoding="utf-8")
+        for part in parts:
+            (block / part).mkdir()
+
+    def test_identity_is_read_from_sysfs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._disk(root, "nvme0n1", sectors=1000, removable="1")
+            observer = SysfsDiskObserver(sys_root=root)
+            identity = observer.block_identity("/dev/nvme0n1")
+            self.assertEqual(identity["major_minor"], "259:0")
+            self.assertEqual(identity["size_bytes"], 1000 * 512)
+            self.assertIs(identity["removable"], True)
+
+    def test_an_unknown_device_is_none_not_an_exception(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            self.assertIsNone(SysfsDiskObserver(sys_root=Path(temporary)).block_identity("/dev/nope"))
+
+    def test_partitions_are_listed_from_the_block_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._disk(root, "sda", parts=("sda1", "sda2", "sdaa"))
+            observer = SysfsDiskObserver(sys_root=root)
+            self.assertEqual(observer.partitions("/dev/sda"), ("/dev/sda1", "/dev/sda2", "/dev/sdaa"))
+
+    def test_the_live_device_comes_from_the_root_mount(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            mounts = Path(temporary) / "mounts"
+            mounts.write_text(
+                "/dev/sdb1 / ext4 rw 0 0\n/dev/sda2 /mnt ext4 rw 0 0\n", encoding="utf-8"
+            )
+            self.assertEqual(SysfsDiskObserver(mounts=mounts).live_device(), "/dev/sdb1")
+
+    def test_a_non_device_root_reports_none_rather_than_a_guess(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            mounts = Path(temporary) / "mounts"
+            mounts.write_text("overlay / overlay rw 0 0\n", encoding="utf-8")
+            self.assertIsNone(SysfsDiskObserver(mounts=mounts).live_device())
+
+    def test_the_filesystem_observer_refuses_to_guess_a_filesystem(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            mounts = Path(temporary) / "mounts"
+            mounts.write_text("/dev/sda1 /mnt ext4 rw 0 0\n", encoding="utf-8")
+            observer = FilesystemObserver(mounts=mounts)
+            self.assertIsNone(observer.filesystem_of("/dev/sda1"))
+            self.assertTrue(observer.is_mounted("/mnt"))
+            self.assertFalse(observer.is_mounted("/elsewhere"))
 
 
 if __name__ == "__main__":

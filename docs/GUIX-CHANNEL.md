@@ -135,6 +135,29 @@ Bootstrap має бути виконаний власником ключа. Ни
 
 **Критична властивість історії:** кожен commit після introduction має бути підписаний ключем, дозволеним у `.guix-authorizations` його батьківського commit. Merge commit має бути підписаний ключем, дозволеним в обох батьківських гілках. Тому до Phase B слід узгодити signed fast-forward/rebase workflow; звичайний GitHub-generated merge commit не можна автоматично вважати authenticated. Не вмикати branch protection / required authentication, доки owner не перевірив повний шлях на тестовій гілці.
 
+### Чому наявні підписи не зараховуються (виміряно 2026-11-28)
+
+Історія `main` **уже частково підписана**, і саме тому це небезпечне місце:
+
+```text
+git log --format="%G? %GK" -40 origin/main
+  21  E  B5690EEEBB952194   ← ключ GitHub web-flow
+  19  N  (без підпису)
+```
+
+Ключ `B5690EEEBB952194` належить GitHub (committer `GitHub <noreply@github.com>`),
+не власнику. Наслідки:
+
+- **«коміт підписаний» ≠ «коміт автентичний»** — статус `E` означає лише, що
+  підпис валідний, а не що його поставив авторизований розробник;
+- **додати цей fingerprint у `.guix-authorizations` означало б авторизувати
+  ключ GitHub**, тобто дозволити будь-якому веб-мерджу від імені акаунта;
+- після introduction **звичайний PR-мердж через веб ламає канал**: merge commit
+  підписує GitHub, а не власник. Потрібен signed rebase/fast-forward.
+
+Тому кількість підписів в історії не є аргументом «канал майже готовий»: вона
+показує рівно те, проти чого написаний цей розділ.
+
 Після introduction кожен commit у каналі має бути підписаний авторизованим ключем. Не використовувати непідписані GitHub-generated merge commits у захищеній історії; узгодити signed fast-forward/rebase workflow та правила GitHub перед вмиканням channel release. Не використовувати `--disable-authentication` для acceptance.
 
 ## Що перевіряє CI до trust bootstrap

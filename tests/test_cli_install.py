@@ -257,5 +257,49 @@ class ClassificationSummaryTests(unittest.TestCase):
         self.assertIn("--profile-evidence is accepted only", result.stderr)
 
 
+class AdmissionReportTests(unittest.TestCase):
+    """--admission says what APPLY would require, and offers no approval itself."""
+
+    def build(self, *extra: str) -> subprocess.CompletedProcess:
+        return run_cli(
+            "--report", str(FIXTURE),
+            "--install",
+            "--target-disk", "/dev/nvme0n1",
+            "--target-size-bytes", str(256 * GIB),
+            "--acknowledge-disk", "/dev/nvme0n1",
+            *extra,
+        )
+
+    def test_the_report_is_absent_unless_asked(self) -> None:
+        result = self.build()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("admission", json.loads(result.stdout))
+
+    def test_the_report_answers_on_any_host(self) -> None:
+        """The report must be valid whether or not the host happens to have the disk.
+
+        A GitHub runner is a VM whose boot disk is /dev/nvme0n1, so the target may be
+        a real block device there and absent here. Asserting either outcome would make
+        the test depend on the machine; what must hold everywhere is the shape of the
+        answer and that nothing destructive is ever admitted.
+        """
+        result = self.build("--admission")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        admission = json.loads(result.stdout)["admission"]
+        self.assertIn(admission["status"], {"refused", "admitted"})
+        self.assertIn("reason", admission)
+        if admission["status"] == "refused" and not admission["steps"]:
+            self.assertTrue(admission["reason"], "a refusal must say why")
+
+    def test_a_preview_never_reports_a_destructive_step_as_admitted(self) -> None:
+        """Whenever the plan can be judged, no destructive step may come back admitted."""
+        result = self.build("--admission")
+        admission = json.loads(result.stdout)["admission"]
+        for step in admission.get("steps", []):
+            if step["destructive"]:
+                self.assertNotEqual(step["status"], "admitted")
+                self.assertIn("consent", step["reason"])
+
+
 if __name__ == "__main__":
     unittest.main()
