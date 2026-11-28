@@ -9,6 +9,8 @@ on:
       - ".guix-authorizations"
       - "channels.lock.scm"
       - "tests/guix/**"
+      - "tests/test_cuirass_specs.py"
+      - "ci/cuirass/**"
       - "docs/GUIX-CHANNEL.md"
       - "channels/**"
       - "systems/**/*.scm"
@@ -32,7 +34,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Кожен прогін `guix time-machine` інакше заново витягує checkout каналу.
+      # Кожен прогін guix time-machine інакше заново витягує checkout каналу.
       # Ключ — сам lock, тому зміна каналу природно інвалідовує кеш, а решта
       # прогонів його перевикористовує. Так робить Guix CI у Bitcoin Core.
       - name: Restore Guix checkout cache
