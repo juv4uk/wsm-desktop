@@ -23,19 +23,22 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from wsm_install.executor import ExecutorError, execute
-from wsm_install.install_steps import Step
+from wsm_install.install_steps import (
+    SYSTEM_PROFILE_ROOT,
+    TRUSTED_TOOLS,
+    Step,
+    TrustedToolResolutionError,
+    resolve_trusted_tool,
+)
 from wsm_install.partition import DEVICE_PATH
 
-# Commands recognized by the plan validator. This list is not an execution
-# permission while APPLY remains disabled. Absolute paths avoid PATH ambiguity.
-ALLOWED_PROGRAMS = frozenset({
-    "/usr/sbin/partprobe",
-    "/usr/bin/udevadm",
-    "/usr/sbin/mkfs.ext4",
-    "/usr/sbin/mkfs.fat",
-    "/usr/bin/mount",
-    "/usr/bin/mkdir",
-})
+# Commands recognized by the plan validator. Only the exact Guix system
+# profile bin/sbin paths are accepted; FHS paths and bare PATH names are not.
+ALLOWED_PROGRAMS = frozenset(
+    str(SYSTEM_PROFILE_ROOT / directory / executable)
+    for directory in ("bin", "sbin")
+    for executable in TRUSTED_TOOLS.values()
+)
 
 SHELL_METACHARACTERS = frozenset("|&;<>()$`\\\"'\n\r")
 MAX_STEPS = 32
@@ -57,8 +60,19 @@ def validate_command(command: Sequence[str]) -> None:
     if program not in ALLOWED_PROGRAMS:
         raise AgentError(
             "agent.not-allowed",
-            f"{program!r} is not in the agent allowlist; this plan contains an "
-            "unrecognized command form",
+            f"{program!r} is not in the Guix system-profile allowlist",
+        )
+    try:
+        resolved = resolve_trusted_tool(Path(program).name)
+    except TrustedToolResolutionError as exc:
+        raise AgentError(
+            "agent.tool-unavailable",
+            f"{exc.code}: {exc.message}",
+        ) from exc
+    if resolved != program:
+        raise AgentError(
+            "agent.tool-identity",
+            f"{program!r} is not the uniquely resolved system-profile entry",
         )
     for argument in command[1:]:
         if not isinstance(argument, str):
