@@ -43,14 +43,28 @@
 
 ## Наслідки
 
-- `package-archives.yml` увімкнений: ручний запуск, архів `guix pack`, чернетка
-  релізу, звіт про збій на коміті.
-- **Виправлено 2026-11-28:** запобіжників `if: false` більше немає — обидва
-  workflow увімкнені. Твердження в попередній редакції цього ADR, що
-  `substitutes.yml` «лишається вимкненим», було правдивим на момент написання й
-  стало хибним через кілька хвилин.
-- `substitutes.yml` увімкнений, але **не може працювати без ключа**: останній
-  прогін упав саме на кроці перевірки ключа. Це не політика, а відсутність
-  ключа підпису — фізична перешкода.
-- Політичні тести перевіряють, що substitutes не публікуються без ключа і що
-  збій лишає читабельну причину.
+- `package-archives.yml` лишається окремим ручним шляхом лише для власного
+  `wsm-tools`: `guix pack` на pinned `channels.lock.scm`, SHA-256 та provenance,
+  Actions artifact на 30 днів; прикріплення можливе лише до явно вказаного
+  наявного Draft Release. Перший публічний pre-release `wsm-tools 0.1.0-rc6`
+  уже зібрано й перевірено workflow run `46117970977` з вихідного commit
+  `0a9865b0bdb4a22ba29d2a6625cd830ef4712e5d`; archive SHA-256:
+  `c4df62eecb221bbfaac1acadfde24e431a6e0ab848b59acdc8d734f4a4400c10`.
+  Це self-contained pack, не substitute cache; його release body не заявляє
+  OSI/FSDG approval чи фізичну H170/GP107 acceptance.
+- `substitutes.yml` — незалежний H170 Free upstream cache для фіксованого
+  11-пакетного manifest. Після PR #790 він генерує ephemeral Guix key на
+  кожному тимчасовому runner; private key не залишає runner, public key та
+  provenance/attestation публікуються поруч із versioned NAR assets. Це не
+  постійний WSM signer і не додає `wsm-tools` до upstream Free manifest.
+- PR #790 усунув залежність H170 Free cache від відсутніх довгострокових
+  repository secrets/variables; попередня невдала спроба не є результатом
+  поточного workflow після цієї зміни.
+- H170 Free та WSM-owned пакети мають різні scope й provenance. Жоден із цих
+  механізмів не дозволяє включати Nonguix, proprietary NVIDIA driver,
+  NVIDIA firmware або Intel microcode до Free closure.
+- Автентифікований WSM channel lookup залишається окремим Phase B завданням:
+  `guix pack -L .` з pinned офіційним Guix source tree не видається за
+  authenticated channel consumer.
+- Політичні тести перевіряють розділення каналів, межі складу пакунків і
+  читабельне повідомлення про збій.

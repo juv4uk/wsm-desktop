@@ -1,32 +1,47 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-name: H170 Free package plan (read-only)
+name: WSM package archives
 
-# Binary publication is handled only by the fixed H170 Free substitute workflow
-# and the separately reviewed linux-libre-h170 release workflow.
-# This manual workflow is a read-only package-plan check: no user package input,
-# no archive export, no artifact upload, and no Release/Pages write.
-
+# ВЛАСНИК ДАВ ДОЗВІЛ: owner-authorized manual pack for WSM-owned wsm-tools.
+# This is not the upstream H170 Free substitute cache.
 on:
   workflow_dispatch:
+    inputs:
+      attach_to_draft:
+        description: "Optional existing Draft Release tag; empty keeps an Actions artifact only"
+        type: string
+        required: false
+        default: ""
 
 permissions:
-  contents: read
+  contents: write
+  attestations: write
+  id-token: write
+  artifact-metadata: write
 
 concurrency:
-  group: h170-free-package-plan
-  cancel-in-progress: true
+  group: wsm-package-archives
+  cancel-in-progress: false
 
 jobs:
-  plan:
+  archive:
     if: ${{ github.ref == 'refs/heads/main' }}
-    name: Evaluate the fixed H170 Free package manifest
+    name: Build and pack wsm-tools
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - name: Checkout exact source
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
-      - name: Install GNU Guix
+      - name: Use the GNU Guix project's authenticated Codeberg mirror
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --global url."https://codeberg.org/guix/guix.git".insteadOf "https://git.guix.gnu.org/guix.git"
+          echo "Guix fetch transport uses the project's Codeberg mirror; the lock and authentication remain unchanged." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Guix
         run: |
           set -euo pipefail
           sudo apt-get update
@@ -34,28 +49,105 @@ jobs:
           sudo systemctl enable --now guix-daemon.service
           guix --version
 
-      - name: Evaluate the fixed H170 Free package plan
+      - name: Evaluate and build the WSM package pack on the locked Guix
+        id: build
+        shell: bash
         run: |
           set -euo pipefail
-          python3 tests/test_h170_free_package_manifest.py
-          guix time-machine -C channels.lock.scm -- \
-            build --dry-run --no-grafts \
-            --manifest=drivers/profiles/h170-free-packages.scm
+          mkdir -p archives
+          guix time-machine -C channels.lock.scm -- describe -f channels > archives/guix-channels.txt
+          pack_output="$(guix time-machine -C channels.lock.scm -- \
+            pack -L "$GITHUB_WORKSPACE" --format=tarball -C gzip \
+            --symlink=/opt/wsm/bin=bin \
+            --expression='(begin (use-modules (wsm packages wsm)) wsm-tools)' \
+            --no-grafts)"
+          pack_store_path="$(printf '%s\n' "$pack_output" | tail -n 1)"
+          case "$pack_store_path" in
+            /gnu/store/*.tar.gz|/gnu/store/*.tar.zst) ;;
+            *) echo "refusing unexpected Guix pack output: $pack_store_path" >&2; exit 1 ;;
+          esac
+          test -f "$pack_store_path"
+          output="archives/wsm-tools-0.1.0-rc7-${GITHUB_SHA:0:12}.tar.gz"
+          cp -- "$pack_store_path" "$output"
+          cp -- LICENSE archives/LICENSE
+          listing="$(tar -tzf "$output")"
+          printf '%s\n' "$listing" | grep -E '/bin/wsm-hwcheck$'
+          printf '%s\n' "$listing" | grep -E '/bin/wsm-install$'
+          printf '%s\n' "$listing" | grep -E '/bin/wsm-install-live$'
+          printf '%s\n' "$listing" | grep -E '/share/doc/wsm-tools/LICENSE$'
           {
-            echo "## H170 Free package plan evaluated"
-            echo ""
-            echo "- Source commit: `$GITHUB_SHA`"
-            echo "- Channel lock: `channels.lock.scm`"
-            echo "- Manifest: `drivers/profiles/h170-free-packages.scm`"
-            echo "- Mode: read-only dry-run; no NAR export or publication"
-            echo "- Binary publication: `substitutes.yml`"
-          } >> "$GITHUB_STEP_SUMMARY"
+            echo "Package: wsm-tools"
+            echo "Package version: 0.1.0-rc7"
+            echo "Source commit: $GITHUB_SHA"
+            echo "Guix version: $(guix --version | head -n1)"
+            echo "Guix channel lock SHA-256: $(sha256sum channels.lock.scm | cut -d ' ' -f1)"
+            echo "Pack file: $(basename "$output")"
+            echo "Pack SHA-256: $(sha256sum "$output" | cut -d ' ' -f1)"
+            echo "Package metadata license: LicenseRef-Volnist (file://LICENSE)"
+            echo "The exact LICENSE text is included in the runtime pack at share/doc/wsm-tools/LICENSE and attached separately."
+            echo "No OSI or GNU FSDG classification is claimed."
+            echo "This is a self-contained Guix pack, not a substitute cache."
+          } > archives/PROVENANCE.txt
+          (
+            cd archives
+            sha256sum "$(basename "$output")" LICENSE guix-channels.txt PROVENANCE.txt > SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
+          echo "pack_path=$output" >> "$GITHUB_OUTPUT"
+          cat archives/PROVENANCE.txt | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - name: Summarize package-plan failure
+      - name: Attest the exact package and provenance files
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            archives/*.tar.gz
+            archives/LICENSE
+            archives/SHA256SUMS
+            archives/guix-channels.txt
+            archives/PROVENANCE.txt
+
+      - name: Keep the package as a workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: wsm-tools-0.1.0-rc7-${{ github.sha }}
+          path: |
+            archives/*.tar.gz
+            archives/LICENSE
+            archives/SHA256SUMS
+            archives/guix-channels.txt
+            archives/PROVENANCE.txt
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Attach the pack to an explicitly named existing Draft Release
+        if: inputs.attach_to_draft != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.attach_to_draft }}
+        run: |
+          set -euo pipefail
+          is_draft="$(gh release view "$TAG" --json isDraft --jq '.isDraft')"
+          if [ "$is_draft" != "true" ]; then
+            echo "refusing: $TAG is not a draft release" >&2
+            exit 1
+          fi
+          gh release upload "$TAG" archives/*.tar.gz archives/LICENSE archives/SHA256SUMS \
+            archives/guix-channels.txt archives/PROVENANCE.txt --clobber
+          mkdir -p "$RUNNER_TEMP/wsm-pack-readback"
+          gh release download "$TAG" --dir "$RUNNER_TEMP/wsm-pack-readback"
+          cp archives/SHA256SUMS "$RUNNER_TEMP/wsm-pack-readback/SHA256SUMS.expected"
+          (
+            cd "$RUNNER_TEMP/wsm-pack-readback"
+            sha256sum -c SHA256SUMS.expected
+          )
+          echo "WSM_PACKAGE_ATTACHED_TO=$TAG" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Report package build or publication failure
         if: failure()
         run: |
           {
-            echo "## H170 Free package plan failed"
-            echo "The exact failed command and diagnostic are in the preceding step logs."
-            echo "No binary artifact, Release asset, or substitute was published."
+            echo "## WSM wsm-tools pack failed"
+            echo "Commit: $GITHUB_SHA"
+            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "No successful package publication is claimed."
           } >> "$GITHUB_STEP_SUMMARY"
