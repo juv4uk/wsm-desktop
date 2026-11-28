@@ -85,6 +85,7 @@ class SubstituteWorkflowTests(unittest.TestCase):
         self.assertIn("URL:", run)
         self.assertIn("curl -fsSL", run)
         self.assertIn("nar/", run)
+        self.assertIn("/var/cache/publish/nar", run)
 
     def test_archives_go_to_a_release_and_metadata_to_pages(self) -> None:
         self.assertIn("gh release upload substitutes", self.text)
@@ -95,10 +96,10 @@ class SubstituteWorkflowTests(unittest.TestCase):
         """wsm-tools is local; bare package-name lookup only searches Guix channels."""
         run = self.step("Зібрати пакети каналу")["run"]
         self.assertIn(
-            "guix time-machine -C channels.lock.scm -- build "
-            "--no-substitutes -f wsm/packages/wsm.scm",
+            "guix time-machine -C channels.lock.scm -- build --no-substitutes",
             run,
         )
+        self.assertIn("-L . -e '(@ (wsm packages wsm) wsm-tools)'", run)
         self.assertNotIn("guix build --no-substitutes $PACKAGES", run)
 
 
