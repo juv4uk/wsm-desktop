@@ -101,3 +101,15 @@ jobs:
           new_body="$(gh release view wsm-tools-0.1.0-rc6-0a9865b0bdb4-run-46117970977 --repo "$GITHUB_REPOSITORY" --json body --jq .body)"
           printf '%s' "$new_body" | grep -F "LicenseRef-Volnist"
           echo "Both release descriptions updated and read back successfully." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Summarize release metadata repair failure
+        if: failure()
+        shell: bash
+        run: |
+          {
+            echo "## WSM release metadata repair failed"
+            echo ""
+            echo "Source commit: $GITHUB_SHA"
+            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "No release metadata is claimed as repaired."
+          } >> "$GITHUB_STEP_SUMMARY"
