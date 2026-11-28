@@ -53,7 +53,13 @@ class SubstituteWorkflowTests(unittest.TestCase):
         self.assertIn("--manifest=drivers/profiles/h170-free-packages.scm", build)
         self.assertIn("--dry-run", build)
         self.assertIn("--no-grafts", build)
-        self.assertIn("-ne 11", build)
+        self.assertIn('-lt 11', build)
+        self.assertIn("11 manifest roots", build)
+        bake = self.step("Bake signed NARs into the local substitute cache")["run"]
+        self.assertIn("EXPECTED_STORE_PATH_COUNT", bake)
+        self.assertIn('-eq "$EXPECTED_STORE_PATH_COUNT"', bake)
+        prepare = self.step("Prepare immutable Release assets and Pages metadata")["run"]
+        self.assertIn("EXPECTED_STORE_PATH_COUNT", prepare)
 
     def test_the_package_manifest_excludes_owned_and_nonfree_payloads(self) -> None:
         manifest = (ROOT / "drivers" / "profiles" / "h170-free-packages.scm").read_text(encoding="utf-8")
