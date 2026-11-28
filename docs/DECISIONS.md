@@ -19,6 +19,7 @@
 
 | Тема | Канонічне завдання | Канонічний документ / PR | Owner | Статус | Superseded / примітка |
 | --- | --- | --- | --- | --- | --- |
+| Публікація власних пакетів каналу | [#367](https://github.com/juv4uk/wsm-desktop/issues/367) | [ADR 0010](decisions/0010-publish-own-packages.md) | власник | `accepted` | Вказівка власника (2026-11-28, двічі): публікувати власні пакети. Лише вручну, лише чернетка, без ключа підпису. |
 | Політика, записана англійською | — (вказівка власника, 2026-11-28) | [REVOKED-ENGLISH-POLICY](decisions/REVOKED-ENGLISH-POLICY.md) | власник | `accepted` | Рішення, записані англійською в коді чи конфігурації, не мають сили, доки власник не підтвердив їх українською. |
 | Перший системний backend WSM | [#2](https://github.com/juv4uk/wsm-desktop/issues/2) | [ADR 0004](decisions/0004-nix-guix-backend-strategy.md), [ADR 0001](decisions/0001-guix-as-system-foundation.md) | architecture / обидва агенти | `accepted` — GNU Guix перший backend; Nix відкладено | Nix/NixOS не відкинуто, але не входить у перший підтримуваний шлях. Автентифікований channel lock і відтворюваність лишаються окремою задачею [#39](https://github.com/juv4uk/wsm-desktop/issues/39). |
 | Вільність за замовчуванням і nonfree-політика | [#180](https://github.com/juv4uk/wsm-desktop/issues/180) | [ADR 0003](decisions/0003-free-by-default.md) | web agent | `accepted` | Nonguix живе лише в окремому Compatibility-профілі; вільний шлях не залежить від nonfree. |
