@@ -43,8 +43,24 @@
 
 ## Наслідки
 
-- `package-archives.yml` увімкнений: ручний запуск, архів `guix pack`, чернетка
-  релізу, звіт про збій на коміті.
-- `substitutes.yml` лишається вимкненим із запобіжником `if: false`.
-- Політичні тести оновлені: замість «архів вимкнено» вони перевіряють, що
-  substitutes не публікуються і що збій лишає читабельну причину.
+- `package-archives.yml` — окремий ручний шлях лише для власного
+  `wsm-tools`: `guix pack` на pinned `channels.lock.scm`, SHA-256 та provenance,
+  Actions artifact на 30 днів; прикріплення можливе лише до явно вказаного
+  наявного Draft Release. Workflow не створює публічний Release і не потребує
+  Guix signing key. Публікація очікує успішного locked Guix evaluation та build.
+- `substitutes.yml` — незалежний H170 Free upstream cache для фіксованого
+  11-пакетного manifest. Після PR #790 він генерує ephemeral Guix key на
+  кожному тимчасовому runner; private key не залишає runner, public key та
+  provenance/attestation публікуються поруч із versioned NAR assets. Це не
+  постійний WSM signer і не додає `wsm-tools` до upstream Free manifest.
+- PR #790 усунув залежність H170 Free cache від відсутніх довгострокових
+  repository secrets/variables; попередня невдала спроба не є результатом
+  поточного workflow після цієї зміни.
+- H170 Free та WSM-owned пакети мають різні scope й provenance. Жоден із цих
+  механізмів не дозволяє включати Nonguix, proprietary NVIDIA driver,
+  NVIDIA firmware або Intel microcode до Free closure.
+- Автентифікований WSM channel lookup залишається окремим Phase B завданням:
+  `guix pack -L .` з pinned офіційним Guix source tree не видається за
+  authenticated channel consumer.
+- Політичні тести перевіряють розділення каналів, межі складу пакунків і
+  читабельне повідомлення про збій.
