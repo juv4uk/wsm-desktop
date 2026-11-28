@@ -55,4 +55,12 @@
   (name 'wsm-live-minimal-image)
   (priority 1)
   (build '(custom (ci cuirass images)))
+  (channels (list %wsm-guix-channel %wsm-channel)))
+
+ ;; Build the fixed upstream-only H170 Free package set. The custom job resolves
+ ;; one package derivation per manifest root; it does not publish NARs.
+ (specification
+  (name 'h170-free-upstream-packages)
+  (priority 1)
+  (build '(custom (ci cuirass h170-free-packages)))
   (channels (list %wsm-guix-channel %wsm-channel))))
