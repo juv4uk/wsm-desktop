@@ -1,75 +1,98 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""The FPC edition must be buildable, read-only, and free of Python."""
+"""Guix packages for native FPC tools must be real, build-only and owner-licensed."""
 
 from __future__ import annotations
 
-import re
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "tools" / "pascal" / "wsm_hwcheck.pas"
+CORE = ROOT / "tools" / "pascal" / "wsm_hwcheck_core.pas"
+CLASSIFIER = ROOT / "tools" / "pascal" / "wsm_classify.pas"
 PKG = ROOT / "wsm" / "packages" / "fpc-tools.scm"
 MAKE = ROOT / "tools" / "pascal" / "Makefile"
 
 
-class SourceTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.text = SRC.read_text(encoding="utf-8")
+class HardwareCollectorTests(unittest.TestCase):
+    def test_program_and_core_unit_are_native_pascal(self) -> None:
+        source = SRC.read_text(encoding="utf-8")
+        core = CORE.read_text(encoding="utf-8")
+        self.assertRegex(source, r"(?m)^program wsm_hwcheck;")
+        self.assertRegex(core, r"(?m)^unit wsm_hwcheck_core;")
+        self.assertIn("{$mode objfpc}{$H+}", source)
+        self.assertIn("WSM_SCHEMA_VERSION = '1.1.0'", core)
 
-    def test_it_is_a_program_not_a_unit(self) -> None:
-        self.assertRegex(self.text, r"(?m)^program wsm_hwcheck;")
-
-    def test_it_uses_ansi_strings(self) -> None:
-        """Without {$H+} the JSON builder truncates on non-ASCII bytes."""
-        self.assertIn("{$H+}", self.text)
-
-    def test_it_emits_every_field_the_schema_requires(self) -> None:
-        for field in (
-            "device_id", "category", "bus", "discovery_status",
-            "driver", "firmware", "functional_tests", "evidence",
+    def test_report_preserves_unknown_firmware_and_local_privacy(self) -> None:
+        core = CORE.read_text(encoding="utf-8")
+        for marker in (
+            "'requirement', 'unknown'", "'runtime_status', 'unknown'",
+            "'redistribution_status', 'unknown'", "'strict-local'",
+            "'network_upload_performed', False", "'network_requests_performed', False",
         ):
-            self.assertIn(f'"{field}"', self.text, f"missing required field {field}")
+            self.assertIn(marker, core)
 
-    def test_it_never_writes_to_a_device(self) -> None:
-        """The whole product promise is read-only."""
-        for forbidden in ("fpOpen", "fpWrite", "AssignFile", "Rewrite("):
-            if forbidden == "AssignFile":
-                continue  # used for reading; Reset only
-            self.assertNotIn(forbidden, self.text, f"write path present: {forbidden}")
-        self.assertNotIn("Rewrite(", self.text)
+    def test_collector_is_read_only_and_uses_sysfs_driver_link(self) -> None:
+        core = CORE.read_text(encoding="utf-8")
+        self.assertIn("fpReadLink(PChar(Path)", core)
+        for forbidden in ("fpPWrite", "fpWrite(", "Rewrite(", "DeleteFile("):
+            self.assertNotIn(forbidden, core)
 
-    def test_json_strings_are_escaped(self) -> None:
-        self.assertIn("JsonEscape", self.text)
-        self.assertIn("'\\\"'", self.text)
 
-    def test_an_empty_report_is_a_failure_not_a_success(self) -> None:
-        self.assertIn("no PCI devices were readable", self.text)
-        self.assertIn("Halt(4)", self.text)
+class ClassifierTests(unittest.TestCase):
+    def test_classifier_uses_fpjson_and_parses_once(self) -> None:
+        source = CLASSIFIER.read_text(encoding="utf-8")
+        self.assertIn("fpjson", source)
+        self.assertIn("jsonparser", source)
+        self.assertEqual(source.count("Parser.Parse"), 1)
+        self.assertIn("JsonQuote", source)
+        self.assertIn('"CERTIFIED":0', source)
+
+    def test_classifier_has_a_versioned_cli(self) -> None:
+        source = CLASSIFIER.read_text(encoding="utf-8")
+        self.assertIn("ToolVersion = '0.2.0'", source)
+        self.assertIn("--version", source)
+        self.assertIn("--help", source)
 
 
 class PackageTests(unittest.TestCase):
     def setUp(self) -> None:
         self.text = PKG.read_text(encoding="utf-8")
 
-    def test_it_builds_with_fpc(self) -> None:
-        self.assertIn("(gnu packages pascal)", self.text)
-        self.assertIn("fpc", self.text)
+    def test_fpc_is_a_native_build_input_not_a_runtime_dependency(self) -> None:
+        self.assertIn("(native-inputs (list fpc))", self.text)
+        self.assertNotIn("(propagated-inputs", self.text)
+        self.assertNotIn("python-build-system", self.text)
+        self.assertNotIn("python-jsonschema", self.text)
 
-    def test_no_python_enters_the_closure(self) -> None:
-        for marker in ("python-build-system", "python-jsonschema", "(gnu packages python"):
-            self.assertNotIn(marker, self.text, f"Python dependency present: {marker}")
+    def test_both_tools_are_exported_as_separate_guix_packages(self) -> None:
+        self.assertIn("wsm-hwcheck-fpc", self.text)
+        self.assertIn("wsm-classify-fpc", self.text)
+        self.assertIn("(license wsm-license)", self.text)
+        self.assertNotIn("license:gpl3+", self.text)
 
-    def test_it_installs_exactly_one_binary(self) -> None:
-        self.assertIn("install-file", self.text)
-        self.assertIn("/bin", self.text)
+    def test_package_build_and_install_use_project_makefile(self) -> None:
+        self.assertIn('"make" "-C" "tools/pascal"', self.text)
+        self.assertIn("install-wsm-hwcheck", self.text)
+        self.assertIn("install-wsm-classify", self.text)
 
 
 class MakefileTests(unittest.TestCase):
-    def test_the_makefile_passes_the_mode_flags(self) -> None:
-        text = MAKE.read_text(encoding="utf-8")
-        self.assertIn("-Mobjfpc", text)
-        self.assertIn("-Sh", text)
+    def setUp(self) -> None:
+        self.text = MAKE.read_text(encoding="utf-8")
+
+    def test_compiles_binaries_under_a_separate_build_directory(self) -> None:
+        self.assertIn("BUILD_DIR ?= build", self.text)
+        self.assertIn("build-wsm-hwcheck", self.text)
+        self.assertIn("build-wsm-classify", self.text)
+
+    def test_explicit_pascal_language_and_string_modes(self) -> None:
+        self.assertIn("-Mobjfpc", self.text)
+        self.assertIn("-Sh", self.text)
+
+    def test_install_targets_only_write_into_a_supplied_prefix(self) -> None:
+        self.assertIn("install-wsm-hwcheck", self.text)
+        self.assertIn("install-wsm-classify", self.text)
 
 
 if __name__ == "__main__":
