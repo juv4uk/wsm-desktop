@@ -204,27 +204,35 @@ class StartupBenchmarkTests(unittest.TestCase):
 
 
 class FreePascalBuildTests(unittest.TestCase):
-    """A Pascal file nothing compiles is source text, not a program."""
+    """Both native Pascal executables must compile and be checked at runtime."""
 
     WORKFLOW = ROOT / ".github" / "workflows" / "fpc-build.yml"
 
     def setUp(self) -> None:
         self.text = self.WORKFLOW.read_text(encoding="utf-8")
 
-    def test_the_toolchain_version_is_pinned_and_checked(self) -> None:
+    def test_the_toolchain_and_fcl_version_are_pinned_and_checked(self) -> None:
         self.assertIn("fp-compiler-3.2.2", self.text)
+        self.assertIn("fp-units-fcl-3.2.2", self.text)
         self.assertIn('test "$(fpc -iV)" = "3.2.2"', self.text)
 
-    def test_it_compiles_every_program_in_the_tree(self) -> None:
-        self.assertIn("git ls-files '*.lpr'", self.text)
-        self.assertIn("fpc -O2", self.text)
+    def test_it_compiles_both_pascal_programs_from_the_makefile(self) -> None:
+        self.assertIn("make -C tools/pascal clean all", self.text)
+        self.assertIn("test -x tools/pascal/build/wsm-hwcheck", self.text)
+        self.assertIn("test -x tools/pascal/build/wsm-classify", self.text)
+        self.assertNotIn("git ls-files '*.lpr'", self.text)
 
-    def test_a_compile_error_fails_the_run(self) -> None:
-        self.assertIn("Free Pascal refused to compile", self.text)
-        self.assertIn("exit 1", self.text)
+    def test_a_compile_or_parity_error_fails_the_run(self) -> None:
+        self.assertIn("make -C tools/pascal clean all", self.text)
+        self.assertIn("python3 tests/test_fpc_package.py", self.text)
+        self.assertIn("if: failure()", self.text)
+        self.assertIn("Report compiler or parity failure", self.text)
 
-    def test_it_does_not_claim_success_when_there_is_nothing_to_build(self) -> None:
-        self.assertIn("WSM_FPC_PROGRAMS=0", self.text)
+    def test_the_workflow_does_not_report_success_without_both_binaries(self) -> None:
+        self.assertIn("test -x tools/pascal/build/wsm-hwcheck", self.text)
+        self.assertIn("test -x tools/pascal/build/wsm-classify", self.text)
+        self.assertNotIn("WSM_FPC_PROGRAMS=0", self.text)
+
 
 
 class PascalSourceContractTests(unittest.TestCase):
