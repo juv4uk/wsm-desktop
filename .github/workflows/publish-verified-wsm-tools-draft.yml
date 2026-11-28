@@ -1,0 +1,90 @@
+# SPDX-License-Identifier: LicenseRef-Volnist
+name: Publish verified WSM tools Draft (one-time)
+
+on:
+  push:
+    branches:
+      - "publish/wsm-tools/promote-rc6-20261128"
+
+permissions:
+  contents: write
+  attestations: read
+
+concurrency:
+  group: publish-verified-wsm-tools-rc6-20261128
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: ${{ github.ref == 'refs/heads/publish/wsm-tools/promote-rc6-20261128' }}
+    name: Verify and publish the existing WSM tools Draft
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Verify exact Draft assets, SHA-256, zstd and GitHub attestation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: wsm-tools-0.1.0-rc6-b9fbead9ef8f-run-46118912229
+        run: |
+          set -euo pipefail
+          READBACK="$RUNNER_TEMP/wsm-tools-draft-readback"
+          mkdir -p "$READBACK"
+
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')" = "true"
+          test "$(gh release view "$RELEASE_TAG" --json isPrerelease --jq '.isPrerelease')" = "true"
+
+          gh release download "$RELEASE_TAG" --dir "$READBACK"
+          cd "$READBACK"
+
+          sha256sum -c SHA256SUMS
+          zstd -t wsm-tools-pack.tar.zst
+
+          CONTENTS="$RUNNER_TEMP/wsm-tools-pack-contents.txt"
+          tar --use-compress-program=unzstd -tf wsm-tools-pack.tar.zst > "$CONTENTS"
+          grep -E '(^|/)wsm-hwcheck$' "$CONTENTS"
+          grep -E '(^|/)wsm-install$' "$CONTENTS"
+          grep -E '(^|/)wsm-install-live$' "$CONTENTS"
+
+          grep -F "Package: wsm-tools" PROVENANCE.txt
+          grep -F "Package version: 0.1.0-rc6" PROVENANCE.txt
+          grep -F "Source commit: b9fbead9ef8f5dd54bb96a442e3fec6fff6bcf0c" PROVENANCE.txt
+          grep -F "LicenseRef-Volnist / ВОЛЬНІСТЬ / file://LICENSE" PROVENANCE.txt
+          grep -F "OSI/FSDG claim: none" PROVENANCE.txt
+          grep -F "4e5195be20d9b124df8a8bb69213412236e4668e" channels.lock.scm
+
+          gh attestation verify wsm-tools-pack.tar.zst \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/wsm-tools-publish-once.yml" \
+            --source-ref "refs/heads/publish/wsm-tools/2026-11-28-rc7" \
+            --source-digest "b9fbead9ef8f5dd54bb96a442e3fec6fff6bcf0c" \
+            --format json > "$RUNNER_TEMP/wsm-tools-attestation-verification.json"
+
+          echo "Draft assets, SHA-256, zstd, package contents, exact source and attestation: PASS" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish the verified prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: wsm-tools-0.1.0-rc6-b9fbead9ef8f-run-46118912229
+        run: |
+          set -euo pipefail
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease \
+            --title "WSM wsm-tools 0.1.0-rc6 (verified and attested)"
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')" = "false"
+          test "$(gh release view "$RELEASE_TAG" --json isPrerelease --jq '.isPrerelease')" = "true"
+          {
+            echo "## Published WSM tools prerelease"
+            echo "https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG"
+            echo "Draft promotion followed successful read-back, SHA-256, zstd, payload and attestation verification."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Report failure without publishing
+        if: failure()
+        run: |
+          {
+            echo "## WSM tools prerelease promotion failed"
+            echo "The existing Draft was not promoted unless every verification step passed."
+            echo "Release tag: wsm-tools-0.1.0-rc6-b9fbead9ef8f-run-46118912229"
+          } >> "$GITHUB_STEP_SUMMARY"
