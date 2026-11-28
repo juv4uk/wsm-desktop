@@ -34,6 +34,22 @@ guix time-machine -C channels/wsm.scm --disable-authentication -- describe
 introduction. Релізні збірки й далі використовують `channels.lock.scm` із
 точними commit-ами.
 
+## Набір каналів WSM (не release lock)
+
+`wsm.scm` додає WSM до канонічного `%default-channels` із `(guix channels)`. Офіційний Guix channel не копіюється в окремий record: branch та introduction залишаються авторитетними в самій версії Guix. WSM іде за `main`, але поки не має власного introduction, тому звичайна автентифікація має відмовити:
+
+```sh
+guix time-machine -C channels/wsm.scm -- describe -f channels
+```
+
+Діагностичне читання:
+
+```sh
+guix time-machine -C channels/wsm.scm --disable-authentication -- describe -f channels
+```
+
+**Увага:** `--disable-authentication` лише підтверджує, що Guix прочитав набір каналів `guix,wsm`. Це завжди `WSM_CHANNEL_AUTHENTICATION=NOT_TESTED`; ця команда заборонена для release, installer та production. Цей файл не є release lock і не замінює owner-signed Phase B. Для релізів використовуються окремі pinned locks із точними commit-ами.
+
 ## Compatibility
 
 `compatibility.lock.scm` — pin Guix + Nonguix для окремого Compatibility
