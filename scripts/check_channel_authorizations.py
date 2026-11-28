@@ -404,7 +404,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("root", nargs="?", default=".", help="repository root")
     parser.add_argument(
         "--keyring-dir",
-        type=Path,
+        type=lambda value: Path(value) if value else None,
         help="path to a local checkout of the channel keyring branch",
     )
     parser.add_argument(
