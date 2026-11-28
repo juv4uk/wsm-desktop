@@ -1,0 +1,177 @@
+# SPDX-License-Identifier: LicenseRef-Volnist
+name: One-time WSM tools Guix pack publication (Codeberg mirror)
+
+on:
+  push:
+    branches:
+      - "publish/wsm-tools/2026-11-28-rc6-v2"
+
+permissions:
+  contents: write
+  attestations: write
+  id-token: write
+  artifact-metadata: write
+
+concurrency:
+  group: wsm-tools-pack-rc6-v2
+  cancel-in-progress: false
+
+jobs:
+  pack:
+    if: ${{ github.ref == 'refs/heads/publish/wsm-tools/2026-11-28-rc6-v2' && github.event.before == '4f3ea730407858cba9292ce5eeba55fc52c73273' }}
+    name: Build, attest and draft-release WSM-owned wsm-tools
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Use the GNU Guix project's authenticated Codeberg mirror
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --global url."https://codeberg.org/guix/guix.git".insteadOf "https://git.guix.gnu.org/guix.git"
+          echo "Guix transport mirror: https://codeberg.org/guix/guix.git" >> "$GITHUB_STEP_SUMMARY"
+          echo "The exact pinned Guix commit and authenticated introduction are unchanged." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Guix
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y guix
+          sudo systemctl enable --now guix-daemon.service
+          guix --version
+
+      - name: Evaluate the exact lock and build the self-contained package
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p archives
+          guix time-machine -C channels.lock.scm -- describe -f channels > archives/guix-channels.txt
+          pack_output="$(guix time-machine -C channels.lock.scm -- \
+            pack -L "$GITHUB_WORKSPACE" --format=tarball -C gzip \
+            --symlink=/opt/wsm/bin=bin \
+            --expression='(begin (use-modules (wsm packages wsm)) wsm-tools)' \
+            --no-grafts)"
+          pack_store_path="$(printf '%s\n' "$pack_output" | tail -n 1)"
+          case "$pack_store_path" in
+            /gnu/store/*.tar.gz|/gnu/store/*.tar.zst) ;;
+            *) echo "refusing unexpected Guix pack output: $pack_store_path" >&2; exit 1 ;;
+          esac
+          test -f "$pack_store_path"
+          output="archives/wsm-tools-0.1.0-rc6-${GITHUB_SHA:0:12}.tar.gz"
+          cp -- "$pack_store_path" "$output"
+          cp -- LICENSE archives/LICENSE
+          listing="$(tar -tzf "$output")"
+          printf '%s\n' "$listing" | grep -E '/bin/wsm-hwcheck$'
+          printf '%s\n' "$listing" | grep -E '/bin/wsm-install$'
+          printf '%s\n' "$listing" | grep -E '/bin/wsm-install-live$'
+          printf '%s\n' "$listing" | grep -E '/share/doc/wsm-tools/LICENSE$'
+          {
+            echo "Package: wsm-tools"
+            echo "Package version: 0.1.0-rc6"
+            echo "Source commit: $GITHUB_SHA"
+            echo "Guix version: $(guix --version | head -n1)"
+            echo "Guix channel lock SHA-256: $(sha256sum channels.lock.scm | cut -d ' ' -f1)"
+            echo "Guix channels: archives/guix-channels.txt"
+            echo "Pack file: $(basename "$output")"
+            echo "Pack SHA-256: $(sha256sum "$output" | cut -d ' ' -f1)"
+            echo "Package license: LicenseRef-Volnist (file://LICENSE)"
+            echo "The exact license text is included in the runtime pack at share/doc/wsm-tools/LICENSE and attached separately."
+            echo "No OSI or GNU FSDG classification is claimed."
+            echo "This is a self-contained WSM package pack, not a Guix substitute cache."
+          } > archives/PROVENANCE.txt
+          (
+            cd archives
+            sha256sum "$(basename "$output")" LICENSE guix-channels.txt PROVENANCE.txt > SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
+          echo "pack_path=$output" >> "$GITHUB_OUTPUT"
+          cat archives/PROVENANCE.txt | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Attest the exact package and provenance
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            archives/*.tar.gz
+            archives/LICENSE
+            archives/SHA256SUMS
+            archives/guix-channels.txt
+            archives/PROVENANCE.txt
+
+      - name: Keep the package as a workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: wsm-tools-0.1.0-rc6-${{ github.sha }}
+          path: |
+            archives/*.tar.gz
+            archives/LICENSE
+            archives/SHA256SUMS
+            archives/guix-channels.txt
+            archives/PROVENANCE.txt
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Create a Draft Release with the verified package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          short_sha="${GITHUB_SHA:0:12}"
+          tag="wsm-tools-0.1.0-rc6-${short_sha}-run-${GITHUB_RUN_ID}"
+          cat > archives/RELEASE-NOTES.md <<'EOF'
+          # WSM tools 0.1.0-rc6 — Guix package
+
+          **Draft pre-release:** owner-authorized WSM-owned package output.
+
+          Assets include the self-contained Guix pack, the exact WSM license text, SHA-256 checksums, pinned Guix channel description and provenance. GitHub Artifact Attestation covers the exact artifact digests.
+
+          The package contains wsm-hwcheck, wsm-install and wsm-install-live; it is not a substitute cache and does not contain the upstream H170 kernel/Mesa closure, Nonguix, proprietary NVIDIA modules or NVIDIA firmware.
+
+          LicenseRef-Volnist is the WSM project license identifier. No OSI/FSDG classification or upstream Guix acceptance is claimed.
+
+          This package-build result does not certify physical H170/GP107 runtime behavior.
+          EOF
+          (
+            cd archives
+            sha256sum RELEASE-NOTES.md >> SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
+          gh release create "$tag" \
+            archives/*.tar.gz archives/LICENSE archives/SHA256SUMS \
+            archives/guix-channels.txt archives/PROVENANCE.txt archives/RELEASE-NOTES.md \
+            --title "WSM tools 0.1.0-rc6 — Guix pack" \
+            --notes-file archives/RELEASE-NOTES.md \
+            --target "$GITHUB_SHA" --draft --prerelease
+          echo "release_tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Read back the Draft Release and verify every checksum
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="wsm-tools-0.1.0-rc6-${GITHUB_SHA:0:12}-run-${GITHUB_RUN_ID}"
+          mkdir -p "$RUNNER_TEMP/wsm-tools-readback"
+          gh release download "$tag" --dir "$RUNNER_TEMP/wsm-tools-readback"
+          cp archives/SHA256SUMS "$RUNNER_TEMP/wsm-tools-readback/SHA256SUMS.expected"
+          (
+            cd "$RUNNER_TEMP/wsm-tools-readback"
+            sha256sum -c SHA256SUMS.expected
+            tar -tzf "wsm-tools-0.1.0-rc6-${GITHUB_SHA:0:12}.tar.gz" | grep -E '/share/doc/wsm-tools/LICENSE$'
+          )
+          test "$(gh release view "$tag" --json isDraft --jq '.isDraft')" = "true"
+          echo "Verified Draft Release: $tag" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Report publication failure
+        if: failure()
+        run: |
+          {
+            echo "## WSM tools Guix pack build or publication failed"
+            echo "Commit: $GITHUB_SHA"
+            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "No successful publication is claimed."
+          } >> "$GITHUB_STEP_SUMMARY"

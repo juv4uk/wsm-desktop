@@ -58,13 +58,16 @@
                                           #$(version-major+minor
                                              (package-version python))
                                           "/site-packages"))
-                     (bin (string-append out "/bin")))
+                     (bin (string-append out "/bin"))
+                     (doc (string-append out "/share/doc/wsm-tools")))
                 (copy-recursively "wsm_hwcheck"
                                   (string-append site "/wsm_hwcheck"))
                 (copy-recursively "wsm_install"
                                   (string-append site "/wsm_install"))
                 (copy-recursively "schemas"
                                   (string-append site "/schemas"))
+                (mkdir-p doc)
+                (copy-file "LICENSE" (string-append doc "/LICENSE"))
                 (mkdir-p bin)
                 (copy-file "scripts/wsm-hwcheck.sh"
                            (string-append bin "/wsm-hwcheck"))
@@ -84,4 +87,6 @@ against a versioned schema, and drafts a diagnostic-only installation plan for
 the GNU Guix backend.  Nothing in this package writes to a block device, invokes
 a system backend, or requires root.")
     (home-page "https://github.com/juv4uk/wsm-desktop")
-    (license gpl3+)))
+    (license (license "ВОЛЬНІСТЬ"
+                      "file://LICENSE"
+                      "LicenseRef-Volnist; see docs/LICENSING.md. source license only; no OSI/FSDG claim."))))
