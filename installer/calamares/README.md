@@ -25,7 +25,7 @@ Minimal Live для слабкого обладнання може не міст
 | Планування та deployment | Єдиний WSM Guix backend |
 | Bootloader і system activation | Guix/WSM backend; без паралельного Calamares bootloader writer |
 
-Calamares є frontend та workflow host-ом. Він не створює окремий системний backend. WSM jobmodules передають спільному backend-у типізовані дані, а не довільний shell text.
+Calamares є frontend та workflow host-ом. Він не створює окремий системний backend. WSM jobmodules передають спільному backend-у типізовані дані, а не довільний shell text. Calamares може показувати UI вибору цілі й розмітки, але його built-in job-и не мають самостійно змінювати partition table або файлові системи. Якщо стандартний partition module не може віддати read-only typed plan без виконання запису, WSM має використати власний adapter/view або інший plan-export шлях; не можна обходити єдиний backend.
 
 ## Поточний стан
 
