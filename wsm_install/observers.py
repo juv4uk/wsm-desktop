@@ -32,11 +32,20 @@ class SysfsDiskObserver:
         self.mounts = Path(mounts)
 
     def _block_dir(self, path: str) -> Path | None:
-        name = os.path.basename(path)
-        if not name:
+        """Resolve only a canonical /dev whole-device path to its sysfs object."""
+        if not isinstance(path, str) or not path.startswith("/dev/"):
+            return None
+        name = path[len("/dev/"):]
+        if not name or "/" in name or name in {".", ".."}:
             return None
         candidate = self.sys_root / "class" / "block" / name
-        return candidate if candidate.is_dir() else None
+        if not candidate.is_dir():
+            return None
+        # A partition has its own top-level sysfs block object too. It is not
+        # an admissible whole-disk target for disk identity capture.
+        if (candidate / "partition").is_file():
+            return None
+        return candidate
 
     def block_identity(self, path: str) -> dict[str, object] | None:
         directory = self._block_dir(path)
@@ -56,17 +65,42 @@ class SysfsDiskObserver:
             "removable": removable,
         }
 
-    def partitions(self, path: str) -> Sequence[str]:
+    def partitions(self, path: str) -> Sequence[str] | None:
+        """Return only real sysfs partition children; None means topology is unreadable."""
         directory = self._block_dir(path)
         if directory is None:
-            return ()
-        name = os.path.basename(path)
-        found = sorted(
-            entry.name
-            for entry in directory.iterdir()
-            if entry.is_dir() and entry.name != name and entry.name.startswith(name)
-        )
-        return tuple(f"/dev/{entry}" for entry in found)
+            return None
+        try:
+            parent = directory.resolve(strict=True)
+            entries = tuple(directory.iterdir())
+        except (OSError, RuntimeError):
+            return None
+
+        found: list[str] = []
+        for entry in entries:
+            try:
+                if not entry.is_dir():
+                    continue
+                resolved = entry.resolve(strict=True)
+            except (OSError, RuntimeError):
+                # A disappearing or broken sysfs entry cannot be treated as a partition.
+                continue
+            # A real /sys partition resolves to an immediate child of the disk's
+            # sysfs directory and exposes the kernel's "partition" attribute.
+            # A similarly prefixed sibling such as sdaa does not.
+            if resolved.parent != parent:
+                continue
+            marker = resolved / "partition"
+            if not marker.is_file():
+                continue
+            try:
+                number = int(marker.read_text(encoding="utf-8").strip())
+            except (OSError, UnicodeError, ValueError):
+                return None
+            if number <= 0:
+                return None
+            found.append(entry.name)
+        return tuple(f"/dev/{entry}" for entry in sorted(found))
 
     def live_device(self) -> str | None:
         """The block device backing `/`, or None when it is not a plain device.
@@ -117,8 +151,10 @@ class FilesystemObserver:
                 return True
         return False
 
-    def partitioned_disks(self) -> Sequence[str]:
-        return ()
+    def partitioned_disks(self) -> Sequence[str] | None:
+        # This observer intentionally has no partition-table source yet. An empty
+        # tuple would mean "observed no partitioned disks"; None means "unverified".
+        return None
 
     def path_exists(self, path: str) -> bool:
         return os.path.exists(path)

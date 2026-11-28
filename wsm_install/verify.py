@@ -44,7 +44,7 @@ class Observer(Protocol):
 
     def is_mounted(self, path: str) -> bool: ...
 
-    def partitioned_disks(self) -> Sequence[str]: ...
+    def partitioned_disks(self) -> Sequence[str] | None: ...
 
     def path_exists(self, path: str) -> bool: ...
 
@@ -74,7 +74,10 @@ def _verify_partition_table(step: Step, observer: Observer) -> Verification:
     disk = _device_argument(step)
     if disk is None:
         return _unverified("the partition-table step names no device; nothing to verify")
-    disks = tuple(observer.partitioned_disks())
+    observed = observer.partitioned_disks()
+    if observed is None:
+        return _unverified("partition-table inventory is unavailable; the postcondition cannot be read")
+    disks = tuple(observed)
     if disk in disks:
         return Verification("verified", f"{disk} is present in the observed partition-table set")
     return Verification("failed", f"{disk} is absent; observed disks: {', '.join(disks) or 'none'}")
