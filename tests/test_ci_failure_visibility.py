@@ -33,6 +33,15 @@ def steps_of(workflow: Path) -> list[dict]:
     return result
 
 
+def all_jobs_disabled(workflow: Path) -> bool:
+    """A workflow whose every job is statically disabled cannot fail at runtime."""
+    jobs = (document_of(workflow).get("jobs") or {})
+    return bool(jobs) and all(
+        str(job.get("if", "")).strip() in {"${{ false }}", "false"}
+        for job in jobs.values()
+    )
+
+
 def inline_failure_reporter(workflow: Path) -> bool:
     return any(
         "failure()" in str(step.get("if", ""))
@@ -240,6 +249,7 @@ class CiFailureVisibilityTests(unittest.TestCase):
             workflow.name
             for workflow in sorted(WORKFLOWS.glob("*.yml"))
             if workflow not in TRUSTED_WORKFLOWS | {TRUSTED_REPORTER}
+            and not all_jobs_disabled(workflow)
             and not inline_failure_reporter(workflow)
         ]
         self.assertEqual(
@@ -247,6 +257,13 @@ class CiFailureVisibilityTests(unittest.TestCase):
             [],
             "these workflows fail without leaving a readable cause: " + ", ".join(missing),
         )
+
+    def test_disabled_distribution_workflows_do_not_need_failure_reporters(self) -> None:
+        for name in ("substitutes.yml", "package-archives.yml"):
+            workflow = WORKFLOWS / name
+            with self.subTest(workflow=name):
+                self.assertTrue(all_jobs_disabled(workflow))
+
 
     def test_scan_finds_all_three_trusted_workflow_files(self) -> None:
         self.assertTrue(CI.is_file())
