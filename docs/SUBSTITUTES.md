@@ -72,3 +72,10 @@ curl -fsS <PAGES_URL>/signing-key.pub | sudo guix archive --authorize
 - доступність окремого WSM-owned каналу чи його автентифікованого ланцюжка Phase B.
 
 ISO, NAR та інші результати збірки не комітяться у звичайні Git-гілки.
+
+
+## Власний WSM package pack (ADR 0010)
+
+WSM-owned `wsm-tools` розповсюджується окремо від H170 Free upstream substitute cache. Після злиття відповідного workflow на `main` ручний **WSM package archives** запуск збирає лише `wsm-tools` через `guix pack` на `channels.lock.scm`, додає runtime closure, GitHub build attestation, SHA-256 і provenance та створює окремий Draft Release. Він не додає власні пакети у 11-root upstream manifest, не створює substitute endpoint і не генерує Guix signing key.
+
+Package metadata зберігає фактичне `LicenseRef-Volnist` / `ВОЛЬНІСТЬ` / `file://LICENSE`; це не є заявою про OSI або GNU FSDG approval. Пакетний Draft не містить стороннього ядра Linux, Mesa, Nonguix, proprietary NVIDIA або firmware. Перевірка package build не доводить фізичну сумісність H170/GP107.
