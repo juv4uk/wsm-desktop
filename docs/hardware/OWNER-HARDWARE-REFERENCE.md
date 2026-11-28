@@ -85,7 +85,7 @@ channel, Linux-libre чи повний склад саме цієї H170 кон�
 
 ### Що вже доведено у GP107 research
 
-- [Матриця можливостей](https://github.com/juv4uk/gp107-nvidia-re/blob/master/docs/05-gp107-capability-matrix.md)
+- [Матриця можливостей](https://github.com/juv4uk/gp107-nvidia-re/blob/0b57472737ac29cad5061bc66c86ff08b6aa97c6/docs/05-gp107-capability-matrix.md)
   розділяє runtime-proven, statically proven, interpretation та UNPROVEN.
   Вона не стверджує, що RM probes відкрили BAR0/MMIO або довели повний
   GPU command submission.
@@ -96,16 +96,16 @@ channel, Linux-libre чи повний склад саме цієї H170 кон�
   до dispatch (**procedural deviation**). Тому це історичний device-level
   runtime fact, а не clean acceptance, поточний benchmark baseline чи доказ
   для H170; повторний експеримент потребує окремого owner-approved plan.
-- [Порівняння NVK/NVIDIA](https://github.com/juv4uk/gp107-nvidia-re/blob/master/docs/17-vulkan-compute-benchmark-open-vs-proprietary.md)
+- [Порівняння NVK/NVIDIA](https://github.com/juv4uk/gp107-nvidia-re/blob/0b57472737ac29cad5061bc66c86ff08b6aa97c6/docs/17-vulkan-compute-benchmark-open-vs-proprietary.md)
   має три повтори обох стеків, але було зняте до виправлень benchmark
   harness. [Документ надійності](https://github.com/juv4uk/gp107-nvidia-re/blob/0b57472737ac29cad5061bc66c86ff08b6aa97c6/docs/18-procedural-deviation-and-benchmark-reliability.md)
   прямо позначає ці цифри як історичні, не як поточний acceptance baseline.
-- [Надійна NVIDIA baseline](https://github.com/juv4uk/gp107-nvidia-re/blob/master/docs/20-reliability-baseline-proprietary.md)
+- [Надійна NVIDIA baseline](https://github.com/juv4uk/gp107-nvidia-re/blob/0b57472737ac29cad5061bc66c86ff08b6aa97c6/docs/20-reliability-baseline-proprietary.md)
   дає median-of-three: 20,310 ns / 2.4201 GB/s для 4,096 елементів;
   1,267,551 ns / 9.9269 GB/s для 1 Mi; 10,616,000 ns / 9.4822 GB/s
   для 8 Mi. Це proprietary ICD 580.196.11 і HOST_VISIBLE|HOST_COHERENT
   шлях, а не VRAM bandwidth.
-- [Матриця workgroup × batching](https://github.com/juv4uk/gp107-nvidia-re/blob/master/docs/21-proprietary-performance-matrix.md)
+- [Матриця workgroup × batching](https://github.com/juv4uk/gp107-nvidia-re/blob/0b57472737ac29cad5061bc66c86ff08b6aa97c6/docs/21-proprietary-performance-matrix.md)
   містить 108 успішних NVIDIA runtime points. Вона вказує на помітний
   submit overhead для малих задач і workload-залежний вплив local size.
 - [DEVICE_LOCAL transfer/compute](https://github.com/juv4uk/gp107-nvidia-re/blob/0b57472737ac29cad5061bc66c86ff08b6aa97c6/docs/22-device-local-transfer-and-compute-phases.md)
