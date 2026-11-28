@@ -526,6 +526,16 @@ def problems(directory: Path, metadata_only: bool = False) -> list[str]:
             found.append(f"{name} has boot_confirmed false")
         if record.get("guest_installer_execution") is not True:
             found.append(f"{name} has guest_installer_execution false")
+        if record.get("serial_clean") is not True:
+            found.append(f"{name} has serial_clean false or missing")
+        failure_markers = record.get("serial_failure_markers")
+        if (
+            not isinstance(failure_markers, list)
+            or any(not isinstance(marker, str) or not marker for marker in failure_markers)
+        ):
+            found.append(f"{name} serial_failure_markers is missing or malformed")
+        elif failure_markers:
+            found.append(f"{name} contains serial failure markers: {', '.join(failure_markers)}")
         boot_iso_sha = record.get("iso_sha256")
         if not isinstance(boot_iso_sha, str) or SHA256.fullmatch(boot_iso_sha) is None:
             found.append(f"{name} iso_sha256 is missing or malformed")
