@@ -28,7 +28,10 @@ class PackageArchivesWorkflowTests(unittest.TestCase):
 
     def test_manual_main_only_with_scoped_write_permission(self) -> None:
         self.assertEqual(set(self.events), {"workflow_dispatch"})
-        self.assertEqual(self.data["permissions"], {"contents": "write"})
+        self.assertEqual(self.data["permissions"]["contents"], "write")
+        self.assertEqual(self.data["permissions"]["attestations"], "write")
+        self.assertEqual(self.data["permissions"]["id-token"], "write")
+        self.assertEqual(self.data["permissions"]["artifact-metadata"], "write")
         self.assertEqual(self.job["if"], "${{ github.ref == 'refs/heads/main' }}")
 
     def test_only_the_wsm_owned_package_is_built_from_the_locked_source(self) -> None:
@@ -52,7 +55,7 @@ class PackageArchivesWorkflowTests(unittest.TestCase):
         self.assertIn("guix-channels.txt", build)
 
     def test_optional_release_attachment_requires_an_existing_draft(self) -> None:
-        attach = self.step("Attach the pack to an existing draft release")
+        attach = self.step("Attach the pack to an explicitly named existing Draft Release")
         self.assertIn("inputs.attach_to_draft != ''", attach["if"])
         self.assertIn("--json isDraft", attach["run"])
         self.assertIn('!= "true"', attach["run"])
@@ -65,9 +68,9 @@ class PackageArchivesWorkflowTests(unittest.TestCase):
                 self.assertNotIn(marker, self.text)
 
     def test_failure_report_does_not_claim_a_publication(self) -> None:
-        step = self.step("Повідомити причину збою")
+        step = self.step("Report package build or publication failure")
         self.assertIn("failure()", str(step.get("if")))
-        self.assertIn("No binary package is claimed as published", step["run"])
+        self.assertIn("No successful package publication is claimed", step["run"])
 
 
 if __name__ == "__main__":
