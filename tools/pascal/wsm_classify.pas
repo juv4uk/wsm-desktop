@@ -24,6 +24,7 @@ uses
 const
   LevelKnown = 'KNOWN';
   LevelUnknown = 'UNKNOWN';
+  ToolVersion = '0.2.0';
 
 type
   TSubsystemMap = record
@@ -53,6 +54,18 @@ begin
   Result := '';
   if Obj.IndexOfName(Key) >= 0 then
     Result := Obj.Get(Key, '');
+end;
+
+function JsonQuote(const Value: string): string;
+var
+  Item: TJSONString;
+begin
+  Item := TJSONString.Create(Value);
+  try
+    Result := Item.AsJSON;
+  finally
+    Item.Free;
+  end;
 end;
 
 { The collector writes `bound_driver' for built-in drivers that have no module
@@ -154,7 +167,7 @@ begin
     Inc(Count);
     if Ids <> '' then
       Ids := Ids + ',';
-    Ids := Ids + '"' + Str(Device, 'device_id') + '=' + State + '"';
+    Ids := Ids + JsonQuote(Str(Device, 'device_id') + '=' + State);
 
     if not ((State = 'driver-bound-not-tested') or (State = 'candidate-only')) then
       AllGood := False;
@@ -192,18 +205,33 @@ end;
 var
   Text: TStringList;
   Parser: TJSONParser;
+  ParsedData: TJSONData;
   Root: TJSONObject;
   Devices: TJSONArray;
   First: Boolean;
   KnownCount, UnknownCount: Integer;
   I: Integer;
 begin
+  if (ParamCount = 1) and ((ParamStr(1) = '--help') or (ParamStr(1) = '-h')) then
+  begin
+    WriteLn('wsm-classify ', ToolVersion, ' — native Free Pascal hardware classifier');
+    WriteLn('usage: wsm-classify REPORT.json');
+    WriteLn('       wsm-classify --version');
+    Halt(0);
+  end;
+  if (ParamCount = 1) and (ParamStr(1) = '--version') then
+  begin
+    WriteLn('wsm-classify ', ToolVersion);
+    Halt(0);
+  end;
   if ParamCount <> 1 then
   begin
     WriteLn(StdErr, 'usage: wsm-classify REPORT.json');
     Halt(2);
   end;
 
+  Root := nil;
+  ParsedData := nil;
   Text := TStringList.Create;
   try
     try
@@ -220,12 +248,14 @@ begin
     try
       try
         Parser := TJSONParser.Create(Text.Text);
-        if not (Parser.Parse is TJSONObject) then
+        ParsedData := Parser.Parse;
+        if not (ParsedData is TJSONObject) then
         begin
           WriteLn(StdErr, 'wsm-classify: report is not a JSON object');
           Halt(4);
         end;
-        Root := TJSONObject(Parser.Parse);
+        Root := TJSONObject(ParsedData);
+        ParsedData := nil;
       except
         on E: Exception do
         begin
@@ -261,6 +291,8 @@ begin
       Write('named capability. This summary does not authorise a plan."');
       WriteLn('}');
     finally
+      Root.Free;
+      ParsedData.Free;
       Parser.Free;
     end;
   finally
