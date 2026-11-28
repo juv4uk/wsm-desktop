@@ -89,3 +89,18 @@ The fixtures stay in the 1.0.0 format on purpose: they prove that an old report 
 ## Implementation guidance
 
 Collectors keep raw observations separate from derived recommendations. Recommendations reference evidence and state confidence. Never change an unknown status into a failure simply because a lookup source or optional utility is unavailable.
+
+## Native Free Pascal packages
+
+WSM provides six separate Guix packages with explicit runtime boundaries:
+
+- `wsm-hwcheck-fpc` is a read-only PCI identity and direct-driver-binding collector; it does not infer other device classes.
+- `wsm-classify-fpc` is a diagnostic classifier and never claims `CERTIFIED` without a complete coverage manifest.
+- `wsm-partition-fpc` is a GPT planner that emits commands as JSON data; it never opens a block device, invokes `sgdisk` or changes a partition table.
+- `wsm-profile-fpc` performs a preliminary evidence-bundle check for schema version, relative-path safety, duplicate paths, artifact presence and at least one passing function. It is not the full JSON Schema/SHA-256 validator and explicitly marks digest verification as `delegated`.
+- `wsm-preflight-fpc` performs read-only installation prerequisite checks and distinguishes `fail` from `not-run`.
+- `wsm-install-fpc` is the frontend. Its five reader packages are explicit runtime inputs and their executables are exposed beside the frontend through symlinks.
+
+All six packages use the project's `LicenseRef-Volnist` / `ВОЛЬНІСТЬ` license. FPC is a build-time `native-input`; Python is not in the readers' runtime closures. Build the programs with `make -C tools/pascal clean all` and all Guix packages against the pinned channel with `make build-fpc-packages`.
+
+The **Free Pascal build** workflow compiles all six executables with FPC 3.2.2, checks collector/classifier schema and parity, and runs runtime tests for the partition planner and profile reader. Do not treat these packages as verified until the CI run passes.

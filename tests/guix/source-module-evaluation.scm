@@ -8,7 +8,8 @@
 ;; where source modules are evaluated by Guix for real, so a module missing
 ;; from this list is a module nobody has checked.
 ;; scripts/check_scheme_module_coverage.py enforces that rule.
-(use-modules (guix licenses)
+(use-modules (srfi srfi-1)
+             (guix licenses)
              (guix packages)
              (gnu packages linux)
              (wsm licenses)
@@ -34,6 +35,23 @@
                        "LicenseRef-Volnist; власна ліцензія WSM Desktop.")
              (eq? (package-license wsm-tools) wsm-license))
   (error "WSM Guix license metadata does not preserve LicenseRef-Volnist"))
+
+;; Evaluate all native FPC packages and preserve their runtime dependency boundary.
+(define fpc-packages
+  (list wsm-hwcheck-fpc wsm-classify-fpc wsm-partition-fpc
+        wsm-profile-fpc wsm-preflight-fpc wsm-install-fpc))
+(unless (equal? (map package-name fpc-packages)
+                '("wsm-hwcheck-fpc" "wsm-classify-fpc" "wsm-partition-fpc"
+                  "wsm-profile-fpc" "wsm-preflight-fpc" "wsm-install-fpc"))
+  (error "FPC package definitions are incomplete or out of order"))
+(unless (every (lambda (package)
+                 (eq? (package-license package) wsm-license))
+               fpc-packages)
+  (error "FPC packages must preserve LicenseRef-Volnist"))
+(unless (= (length (package-inputs wsm-install-fpc)) 5)
+  (error "FPC installer must have five explicit runtime reader inputs"))
+(unless (= (length (package-native-inputs wsm-install-fpc)) 1)
+  (error "FPC compiler must remain a build-time input only"))
 
 ;; Evaluate the ordinary live profile as well as the standalone channel module.
 (primitive-load "systems/live-iso.scm")

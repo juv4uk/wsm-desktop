@@ -89,6 +89,21 @@
 
 Колектори тримають сирі спостереження окремо від похідних рекомендацій. Рекомендації посилаються на докази й зазначають впевненість. Ніколи не перетворюйте статус `unknown` на відмову лише тому, що джерело пошуку або необов'язкова утиліта недоступні.
 
+## Нативні пакети Free Pascal
+
+WSM має шість окремих Guix-пакетів із чіткими межами runtime-залежностей:
+
+- `wsm-hwcheck-fpc` — read-only колектор PCI identity та безпосереднього driver binding; інші класи пристроїв не виводяться з припущень.
+- `wsm-classify-fpc` — діагностичний класифікатор; не видає `CERTIFIED` без повного coverage manifest.
+- `wsm-partition-fpc` — GPT-планувальник, що повертає JSON-план із командами як даними; не відкриває block device, не запускає `sgdisk` і не змінює таблицю розділів.
+- `wsm-profile-fpc` — попередня перевірка evidence bundle: версія схеми, безпека відносних шляхів, дублікати, наявність артефактів і хоча б одна пройдена функція. Це не повний JSON Schema/SHA-256 validator; digest прямо позначається як `delegated`.
+- `wsm-preflight-fpc` — read-only перевірка передумов системи; розрізняє `fail` та `not-run`.
+- `wsm-install-fpc` — frontend. П’ять reader-пакетів є явними runtime inputs; їхні виконувані файли доступні поруч із frontend через symlink-и.
+
+Усі шість пакетів використовують власну ліцензію `LicenseRef-Volnist` / `ВОЛЬНІСТЬ`. FPC є тільки build-time `native-input`; Python не потрапляє в runtime closure reader-пакетів. Збірка програм: `make -C tools/pascal clean all`; збірка Guix-пакетів на pinned channel: `make build-fpc-packages`.
+
+Workflow **Free Pascal build** компілює всі шість виконуваних файлів на FPC 3.2.2, перевіряє schema/parity колектора й класифікатора та запускає runtime-тести для partition/profile. Пакети не слід вважати перевіреними до успішного CI-запуску.
+
 ---
 
 Англійський переклад цього документа: [REPORT-FORMAT.en.md](REPORT-FORMAT.en.md). Канонічною є українська версія.
