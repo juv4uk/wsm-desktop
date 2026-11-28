@@ -67,16 +67,32 @@ class SysfsDiskObserver:
         }
 
     def partitions(self, path: str) -> Sequence[str]:
+        """Return only child block objects carrying a positive sysfs partition number."""
         directory = self._block_dir(path)
         if directory is None:
             return ()
-        name = os.path.basename(path)
-        found = sorted(
-            entry.name
-            for entry in directory.iterdir()
-            if entry.is_dir() and entry.name != name and entry.name.startswith(name)
-        )
-        return tuple(f"/dev/{entry}" for entry in found)
+
+        found: list[tuple[int, str]] = []
+        try:
+            entries = tuple(directory.iterdir())
+        except OSError:
+            return ()
+
+        for entry in entries:
+            try:
+                if not entry.is_dir():
+                    continue
+                marker = entry / "partition"
+                if not marker.is_file():
+                    continue
+                number = int(marker.read_text(encoding="utf-8").strip())
+            except (OSError, ValueError):
+                continue
+            if number > 0:
+                found.append((number, entry.name))
+
+        found.sort()
+        return tuple(f"/dev/{name}" for _, name in found)
 
     def live_device(self) -> str | None:
         """The block device backing `/`, or None when it is not a plain device.
