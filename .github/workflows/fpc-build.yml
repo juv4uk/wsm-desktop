@@ -63,9 +63,9 @@ jobs:
             git ls-files '*.pas' '*.pp' '*.lpr' | grep -v '^third_party/' | sort || true
           )
           if [ "${#pascal_sources[@]}" -eq 0 ]; then
-            echo "No Pascal sources in the tree; nothing to compile."
+            echo "::error::No Pascal sources in the tree; refusing a false-green build."
             echo "WSM_FPC_SOURCES=0" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
+            exit 1
           fi
 
           programs=()
