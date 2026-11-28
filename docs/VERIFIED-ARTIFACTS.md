@@ -2,7 +2,7 @@
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Статус: записи для rc2 (не перевірено завантаження) і rc6 (перевірено повністю), станом на 2026-11-28
+- Статус: rc2 — завантаження не перевірено; rc6 — workflow acceptance пройшло, локальний незалежний вердикт неповний; станом на 2026-11-28
 - Перевірка: `scripts/verify_live_release.py`
 - Збірка й публікація: `.github/workflows/release-minimal-live.yml` (єдиний конвеєр образу)
 - Машиночитний вердикт: [`artifacts/iso-verdict-0.1.0-rc2-live-iso.json`](artifacts/iso-verdict-0.1.0-rc2-live-iso.json)
@@ -18,7 +18,7 @@
 ## `WSM-Desktop-0.1.0-rc6-Minimal-Live.iso`
 
 **Джерело:** чернетка релізу `0.1.0-rc6-minimal-live` (не опублікована).
-**Статус:** перевірено; публікація потребує рішення власника.
+**Статус:** release workflow acceptance — **pass** (run `46095631648`); незалежний локальний verifier — **incomplete**; публікація потребує рішення власника.
 
 Це **перший** носій проєкту, для якого доведено не лише завантаження, а й
 роботу інсталятора всередині гостьової системи.
@@ -61,9 +61,7 @@ boot-свідченнях стояло `guest_installer_execution: false`. То�
 
 [`artifacts/iso-verdict-0.1.0-rc6-minimal-live.json`](artifacts/iso-verdict-0.1.0-rc6-minimal-live.json)
 
-`overall: incomplete` — чесний результат: у середовищі перевірки немає QEMU,
-тому `boot-bios` і `boot-uefi` стоять `not-run`. Самі ці два факти доводить
-конвеєр, і його свідчення наведені вище.
+`overall: incomplete` — це вердикт саме незалежного локального запуску `verify_live_release.py`: у тому середовищі QEMU не було запущено, тому локальні критерії `boot-bios` і `boot-uefi` лишилися `not-run`. Це не скасовує окремого успішного workflow acceptance: BIOS/UEFI boot і обидва installer markers підтверджені GitHub Actions run [`46095631648`](https://github.com/juv4uk/wsm-desktop/actions/runs/46095631648) для source commit `1fa19879ec780e372cce9a6bb4c13f613d01ec9f`. Машиночитний запис зберігає ці джерела окремо в полі `workflow_evidence`; локальне `overall` навмисно не підвищене до `pass`.
 
 ## `wsm-desktop-kde-hardened-20261125.iso`
 
