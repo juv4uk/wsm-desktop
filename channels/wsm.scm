@@ -2,28 +2,36 @@
 ;;
 ;; WSM channel set: the official Guix channel plus this repository as a channel.
 ;;
-;; This is a development channel set, not a release lock. The official Guix
-;; channel is inherited from %default-channels so Guix supplies its built-in
-;; introduction and default branch. WSM follows main but has no introduction
-;; yet; ordinary authenticated use must therefore fail closed until the owner
-;; completes the signed-introduction/.guix-authorizations/keyring bootstrap.
+;; СТАН: WSM канал не автентифікований. Він не має власного introduction.
+;; Без owner-signed introduction-коміту, .guix-authorizations і keyring-гілки
+;; звичайний Guix має відмовити в автентифікації цього каналу.
 ;;
-;; Diagnostic only (never use in a release or installer workflow):
+;; Офіційний канал Guix явно закріплений за рухомою гілкою master і має
+;; canonical introduction GNU Guix. Не використовуйте branch #f тут: без
+;; commit pin це не floating branch, і Guix не може визначити channel commit.
+;;
+;; Діагностичні команди:
 ;;
 ;;   guix time-machine -C channels/wsm.scm -- describe -f channels
 ;;   guix time-machine -C channels/wsm.scm --disable-authentication -- describe -f channels
 ;;
-;; The second command deliberately disables the authentication check and is
-;; not evidence that the WSM channel is authenticated.
-;;
-;; Keep this expression aligned with channels/free.scm and compatibility.scm:
-;; one explicit WSM channel added to %default-channels.
+;; Друга команда вимикає authentication і ніколи не є production/release gate.
+;; Її результат повинен залишатися WSM_CHANNEL_AUTHENTICATION=NOT_TESTED.
 
-(use-modules (guix channels))
+(list
+ ;; Офіційний GNU Guix channel; introduction збігається з channels.lock.scm.
+ (channel
+  (name 'guix)
+  (url "https://git.guix.gnu.org/guix.git")
+  (branch "master")
+  (introduction
+   (make-channel-introduction
+    "9edb3f66fd807b096b48283debdcddccfea34bad"
+    (openpgp-fingerprint
+     "BBB0 2DDF 2CEA F6A8 0D1D  E643 A2A0 6DF2 A33A 54FA"))))
 
-(cons*
+ ;; WSM — рухома гілка main без introduction до завершення owner trust bootstrap.
  (channel
   (name 'wsm)
   (url "https://github.com/juv4uk/wsm-desktop")
-  (branch "main"))
- %default-channels)
+  (branch "main")))
