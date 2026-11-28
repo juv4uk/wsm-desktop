@@ -27,20 +27,24 @@ jobs:
           sudo systemctl enable --now guix-daemon.service
           guix --version
       - name: Зібрати власний пакет і його залежності через guix pack
+        id: build
         run: |
           set -euo pipefail
           OUT="$GITHUB_WORKSPACE/archives"
           mkdir -p "$OUT"
           cp channels.lock.scm "$OUT/channels.lock.scm"
           cp wsm/packages/wsm.scm "$OUT/wsm-package-definition.scm"
+          cp LICENSE "$OUT/LICENSE"
           guix time-machine -C channels.lock.scm -- describe > "$OUT/guix-channel-description.txt"
           ( cd "$OUT" && sha256sum channels.lock.scm wsm-package-definition.scm > CHANNEL-INPUTS.sha256 )
 
           PACK_LOG="$OUT/guix-pack.stdout"
           PACK_ERR="$OUT/guix-pack.stderr"
           guix time-machine -C channels.lock.scm -- \
-            pack --format=tarball --no-grafts -L . wsm-tools \
-            > "$PACK_LOG" 2> "$PACK_ERR"
+            pack -L . --format=tarball \
+            --symlink=/opt/wsm/bin=bin \
+            --expression='(begin (use-modules (wsm packages wsm)) wsm-tools)' \
+            --no-grafts > "$PACK_LOG" 2> "$PACK_ERR"
           PACK_PATH="$(grep -E '^/gnu/store/[^[:space:]]+-pack\.tar\.gz$' "$PACK_LOG" | tail -n 1)"
           if [ -z "$PACK_PATH" ] || [ ! -f "$PACK_PATH" ]; then
             echo "Не вдалося визначити створений guix pack tarball." >&2
@@ -50,6 +54,7 @@ jobs:
 
           cp "$PACK_PATH" "$OUT/wsm-tools-pack.tar.gz"
           tar -tzf "$OUT/wsm-tools-pack.tar.gz" >/dev/null
+          echo "pack_path=$OUT/wsm-tools-pack.tar.gz" >> "$GITHUB_OUTPUT"
           {
             echo "Пакет: wsm-tools"
             echo "Тип: власний пакет каналу WSM"
@@ -58,6 +63,8 @@ jobs:
             echo "Репозиторій: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
             echo "Guix: pinned channels.lock.scm"
             echo "Package definition: wsm/packages/wsm.scm"
+            echo "Package metadata license: LicenseRef-Volnist (file://LICENSE)"
+            echo "Guix version: $(guix --version | head -n 1)"
             echo "Pack store path: $PACK_PATH"
             echo "Підписний ключ і substitute-сервер: не використовуються"
             echo ""
@@ -66,7 +73,7 @@ jobs:
           (
             cd "$OUT"
             sha256sum wsm-tools-pack.tar.gz channels.lock.scm \
-              wsm-package-definition.scm CHANNEL-INPUTS.sha256 \
+              wsm-package-definition.scm LICENSE CHANNEL-INPUTS.sha256 \
               guix-channel-description.txt PROVENANCE.txt > SHA256SUMS
           )
           cat > "$OUT/RELEASE-NOTES.md" <<'EOF'
@@ -84,6 +91,177 @@ jobs:
             echo "Пакетний набір: лише wsm-tools."
             cat "$OUT/PROVENANCE.txt"
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Перевірити команди в pack
+        env:
+          PACK_PATH: ${{ steps.build.outputs.pack_path }}
+        run: |
+          set -euo pipefail
+          tar -tzf "$PACK_PATH" | grep -E '/bin/wsm-hwcheck        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          OUT="$GITHUB_WORKSPACE/archives"
+          RELEASE_TAG="wsm-tools-draft-${GITHUB_RUN_NUMBER}"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Відмовляюся перезаписувати наявний реліз $RELEASE_TAG" >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" \
+            "$OUT/wsm-tools-pack.tar.gz" \
+            "$OUT/channels.lock.scm" \
+            "$OUT/wsm-package-definition.scm" \
+            "$OUT/LICENSE" \
+            "$OUT/CHANNEL-INPUTS.sha256" \
+            "$OUT/guix-channel-description.txt" \
+            "$OUT/PROVENANCE.txt" \
+            "$OUT/SHA256SUMS" \
+            --title "WSM wsm-tools (draft ${GITHUB_RUN_NUMBER})" \
+            --notes-file "$OUT/RELEASE-NOTES.md" \
+            --draft \
+            --target "$SHA"
+          IS_DRAFT="$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')"
+          test "$IS_DRAFT" = "true"
+          READBACK="$RUNNER_TEMP/wsm-tools-readback"
+          mkdir -p "$READBACK"
+          gh release download "$RELEASE_TAG" --dir "$READBACK"
+          (
+            cd "$READBACK"
+            sha256sum -c SHA256SUMS
+            tar -tzf wsm-tools-pack.tar.gz >/dev/null
+          )
+          echo "Чернетку $RELEASE_TAG створено й перевірено. Вона залишається Draft." \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Повідомити причину збою
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          BODY="$(mktemp)"
+          {
+            echo "### WSM package archives: збірку не завершено"
+            echo ""
+            echo "Commit: $GITHUB_SHA"
+            echo ""
+            echo "Реліз не оголошується успішним. Перевір перший помилковий крок workflow."
+            ls -lah archives 2>&1 || true
+            df -h / || true
+          } > "$BODY"
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
+            -F body=@"$BODY" >/dev/null || true
+
+          tar -tzf "$PACK_PATH" | grep -E '/bin/wsm-install        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          OUT="$GITHUB_WORKSPACE/archives"
+          RELEASE_TAG="wsm-tools-draft-${GITHUB_RUN_NUMBER}"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Відмовляюся перезаписувати наявний реліз $RELEASE_TAG" >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" \
+            "$OUT/wsm-tools-pack.tar.gz" \
+            "$OUT/channels.lock.scm" \
+            "$OUT/wsm-package-definition.scm" \
+            "$OUT/LICENSE" \
+            "$OUT/CHANNEL-INPUTS.sha256" \
+            "$OUT/guix-channel-description.txt" \
+            "$OUT/PROVENANCE.txt" \
+            "$OUT/SHA256SUMS" \
+            --title "WSM wsm-tools (draft ${GITHUB_RUN_NUMBER})" \
+            --notes-file "$OUT/RELEASE-NOTES.md" \
+            --draft \
+            --target "$SHA"
+          IS_DRAFT="$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')"
+          test "$IS_DRAFT" = "true"
+          READBACK="$RUNNER_TEMP/wsm-tools-readback"
+          mkdir -p "$READBACK"
+          gh release download "$RELEASE_TAG" --dir "$READBACK"
+          (
+            cd "$READBACK"
+            sha256sum -c SHA256SUMS
+            tar -tzf wsm-tools-pack.tar.gz >/dev/null
+          )
+          echo "Чернетку $RELEASE_TAG створено й перевірено. Вона залишається Draft." \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Повідомити причину збою
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          BODY="$(mktemp)"
+          {
+            echo "### WSM package archives: збірку не завершено"
+            echo ""
+            echo "Commit: $GITHUB_SHA"
+            echo ""
+            echo "Реліз не оголошується успішним. Перевір перший помилковий крок workflow."
+            ls -lah archives 2>&1 || true
+            df -h / || true
+          } > "$BODY"
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
+            -F body=@"$BODY" >/dev/null || true
+
+          tar -tzf "$PACK_PATH" | grep -E '/bin/wsm-install-live        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          OUT="$GITHUB_WORKSPACE/archives"
+          RELEASE_TAG="wsm-tools-draft-${GITHUB_RUN_NUMBER}"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Відмовляюся перезаписувати наявний реліз $RELEASE_TAG" >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" \
+            "$OUT/wsm-tools-pack.tar.gz" \
+            "$OUT/channels.lock.scm" \
+            "$OUT/wsm-package-definition.scm" \
+            "$OUT/LICENSE" \
+            "$OUT/CHANNEL-INPUTS.sha256" \
+            "$OUT/guix-channel-description.txt" \
+            "$OUT/PROVENANCE.txt" \
+            "$OUT/SHA256SUMS" \
+            --title "WSM wsm-tools (draft ${GITHUB_RUN_NUMBER})" \
+            --notes-file "$OUT/RELEASE-NOTES.md" \
+            --draft \
+            --target "$SHA"
+          IS_DRAFT="$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')"
+          test "$IS_DRAFT" = "true"
+          READBACK="$RUNNER_TEMP/wsm-tools-readback"
+          mkdir -p "$READBACK"
+          gh release download "$RELEASE_TAG" --dir "$READBACK"
+          (
+            cd "$READBACK"
+            sha256sum -c SHA256SUMS
+            tar -tzf wsm-tools-pack.tar.gz >/dev/null
+          )
+          echo "Чернетку $RELEASE_TAG створено й перевірено. Вона залишається Draft." \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Повідомити причину збою
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          BODY="$(mktemp)"
+          {
+            echo "### WSM package archives: збірку не завершено"
+            echo ""
+            echo "Commit: $GITHUB_SHA"
+            echo ""
+            echo "Реліз не оголошується успішним. Перевір перший помилковий крок workflow."
+            ls -lah archives 2>&1 || true
+            df -h / || true
+          } > "$BODY"
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
+            -F body=@"$BODY" >/dev/null || true
+
+
       - name: Створити чернетку релізу й перевірити завантажені файли
         env:
           GH_TOKEN: ${{ github.token }}
@@ -100,6 +278,7 @@ jobs:
             "$OUT/wsm-tools-pack.tar.gz" \
             "$OUT/channels.lock.scm" \
             "$OUT/wsm-package-definition.scm" \
+            "$OUT/LICENSE" \
             "$OUT/CHANNEL-INPUTS.sha256" \
             "$OUT/guix-channel-description.txt" \
             "$OUT/PROVENANCE.txt" \
