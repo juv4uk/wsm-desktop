@@ -427,6 +427,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ValueError as exc:
         print(f"qemu-boot-smoke: {exc}", file=sys.stderr)
         return 2
+    # Hash once and bind every later evidence mode to these exact ISO bytes.
+    iso_sha256 = sha256_of(iso)
 
     qemu = shutil.which("qemu-system-x86_64") or "qemu-system-x86_64"
     qemu_img = shutil.which("qemu-img") or "qemu-img"
@@ -472,7 +474,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(json.dumps({
                 "mode": "dry-run",
                 "iso": str(iso),
-                "iso_sha256": sha256_of(iso),
+                "iso_sha256": iso_sha256,
                 "firmware": args.firmware,
                 "temporary_directory": str(work),
                 "qcow2_path": str(qcow2),
@@ -529,7 +531,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = {
             "mode": "qemu-boot-smoke",
             "iso": str(iso),
-            "iso_sha256": sha256_of(iso),
+            "iso_sha256": iso_sha256,
             "boot_confirmed": marker_seen,
             "boot_marker_configured": bool(args.boot_marker),
             "qemu_timed_out": captured.timed_out,
