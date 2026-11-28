@@ -22,7 +22,7 @@ URL: nar/gzip/{STORE_BASENAME}
 Compression: gzip
 FileHash: sha256:1z9k4m2q0x8v3n7p5r6t1y2u3i4o5a6s7d8f9g0h1j2k3l4m5n6o7p8q9r0s
 FileSize: 4194304
-NarHash: sha256:0a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9
+NarHash: sha256:0a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b2c3d4e5f60718293a4b5c6d7e8f9
 NarSize: 8388608
 References: 5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d-wsm-tools-0.2.0
 Deriver: 4a5b6c7d8e9f0a1b2c3d4e5f607182934a5b6c7d8e9f0a1b2c3d4e5f60718293-wsm-tools-0.2.0.drv
@@ -68,13 +68,25 @@ class RewriteTests(unittest.TestCase):
     def test_duplicate_url_fields_are_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "found 2"):
             rewrite_url(
-                "URL: nar/gzip/a\nURL: nar/gzip/b\n",
+                "URL: nar/gzip/a\nURL: nar/gzip/b\nCompression: gzip\n",
                 "https://example.invalid",
             )
 
+    def test_missing_compression_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Compression"):
+            rewrite_url("URL: nar/gzip/a\n", "https://example.invalid")
+
+    def test_url_and_compression_must_agree(self) -> None:
+        bad = NARINFO.replace("URL: nar/gzip/", "URL: nar/zstd/")
+        with self.assertRaisesRegex(ValueError, "layout"):
+            rewrite_url(bad, "https://example.invalid")
+
     def test_unsafe_empty_nar_basename_is_rejected(self) -> None:
-        with self.assertRaisesRegex(ValueError, "no usable NAR basename"):
-            rewrite_url("URL: nar/gzip/\n", "https://example.invalid")
+        with self.assertRaisesRegex(ValueError, "layout"):
+            rewrite_url(
+                "URL: nar/gzip/\nCompression: gzip\n",
+                "https://example.invalid",
+            )
 
     def test_cache_subdirectories_are_flattened_for_pages(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -101,6 +113,25 @@ class RewriteTests(unittest.TestCase):
                 convert_directory(
                     source, Path(tmp) / "pages", "https://example.invalid"
                 )
+
+    def test_existing_destination_is_not_overwritten(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "cache"
+            (source / "gzip").mkdir(parents=True)
+            (source / "gzip" / f"{STORE_BASENAME}.narinfo").write_text(
+                NARINFO, encoding="utf-8"
+            )
+            destination = Path(tmp) / "pages"
+            destination.mkdir()
+            existing = destination / f"{STORE_BASENAME}.narinfo"
+            existing.write_text("previous generation", encoding="utf-8")
+            with self.assertRaises(FileExistsError):
+                convert_directory(
+                    source, destination, "https://example.invalid/release"
+                )
+            self.assertEqual(
+                existing.read_text(encoding="utf-8"), "previous generation"
+            )
 
 
 if __name__ == "__main__":
