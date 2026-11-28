@@ -77,6 +77,10 @@
                 (for-each (lambda (name)
                             (chmod (string-append bin "/" name) #o555))
                           '("wsm-hwcheck" "wsm-install" "wsm-install-live"))))))))
+    ;; Closure budget: the first published pack was 399 MB of store, of which
+    ;; ~226 MB was three separate Python builds. python-minimal is the first
+    ;; cut; the next build measures whether it worked.
+    ;;
     ;; python-minimal, not python: the full interpreter drags its own
     ;; test suite and development headers into every consumer's closure.
     ;; The published pack carried three separate Python builds (~226 MB of
