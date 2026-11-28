@@ -23,7 +23,7 @@ GNU Guix System — єдиний system/package backend першого WSM previ
 
 
 
-**Межа реалізації:** ця послідовність є цільовим lifecycle-контрактом, а не твердженням, що всі фази вже реалізовані. Поточні `wsm_install` partition/layout/backend модулі повертають діагностичні дані та argv; вони не виконують `APPLY`, `mkfs`, mount або `guix system init`. Absolute tool paths не доводять, що потрібні executables присутні в live image: до locked Guix package-closure/build + QEMU перевірки вони мають статус `not-assessed`. Див. #170 та #251.
+**Межа реалізації:** ця послідовність є цільовим lifecycle-контрактом, а не твердженням, що всі фази вже реалізовані. Поточні `wsm_install` partition/layout/backend модулі повертають діагностичні дані та argv; вони не виконують `APPLY`, `mkfs`, mount або `guix system init`. На звичайному non-Guix host read-only preview може містити лише allowlisted logical tool names; це не виконуваний план і не доказ наявності інструментів. На фактичній Guix System інструменти мають однозначно резолвитись тільки в `/run/current-system/profile/bin` або `sbin`; відсутність чи дубльований executable означає fail-closed. До locked Guix package-closure/build + QEMU перевірки наявність tools у live ISO має статус `not-assessed`. Див. #170, #251 та PR #574.
 
 ## Обов'язкова послідовність
 
