@@ -263,5 +263,5 @@ check-tests:
 # This is technical validation only; the package is not in a live profile and is not public-shippable.
 check-installer-gui-guix:
 	$(GUIX) time-machine -C channels.lock.scm -L . -- build -L . -f wsm/packages/installer.scm
-	$(GUIX) time-machine -C channels.lock.scm -L . -- shell -L . -f wsm/packages/installer.scm -- env -u PYTHONPATH -u PYTHONHOME sh -c 'test -n "${QML_IMPORT_PATH}" -a -n "${QT_PLUGIN_PATH}" && exec env QT_QPA_PLATFORM=offscreen wsm-installer --smoke-test'
+	$(GUIX) time-machine -C channels.lock.scm -L . -- shell -L . -f wsm/packages/installer.scm -- env -u PYTHONPATH -u PYTHONHOME sh -c 'printenv QML_IMPORT_PATH | grep -q . && printenv QT_PLUGIN_PATH | grep -q . && exec env QT_QPA_PLATFORM=offscreen wsm-installer --smoke-test'
 	$(GUIX) time-machine -C channels.lock.scm -L . -- shell python python-pyside-6 qtdeclarative kirigami python-jsonschema -- env PYTHONPATH=. QT_QPA_PLATFORM=offscreen python3 tests/guix/installer_navigation.py
