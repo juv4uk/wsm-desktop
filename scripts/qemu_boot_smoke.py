@@ -468,15 +468,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             ovmf_vars=ovmf_vars,
         )
 
+        # Bind both dry-run and real boot evidence to the same ISO bytes.
+        # The image is streamed in bounded chunks; it is never read into memory.
+        iso_sha = sha256_of(iso)
+
         if args.dry_run:
             print(json.dumps({
                 "mode": "dry-run",
                 "iso": str(iso),
-            # Without this the boot evidence is not bound to any particular
-            # image: two different builds would produce equally "confirmed"
-            # JSON files.
-            "iso_sha256": sha256_of(iso),
-                "iso_sha256": sha256_of(iso),
+                "iso_sha256": iso_sha,
                 "firmware": args.firmware,
                 "temporary_directory": str(work),
                 "qcow2_path": str(qcow2),
@@ -533,6 +533,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = {
             "mode": "qemu-boot-smoke",
             "iso": str(iso),
+            "iso_sha256": iso_sha,
             "boot_confirmed": marker_seen,
             "boot_marker_configured": bool(args.boot_marker),
             "qemu_timed_out": captured.timed_out,
