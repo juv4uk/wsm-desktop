@@ -16,7 +16,8 @@
             wsm-cpu-isa-fpc
             wsm-partition-fpc
             wsm-profile-fpc
-            wsm-preflight-fpc))
+            wsm-preflight-fpc
+            wsm-install-fpc))
 
 ;; Guix passes absolute entry paths to select? for recursive local-file sources.
 ;; Keep only the owner licence and the Pascal source/build directory.
@@ -151,5 +152,29 @@ explicitly delegated and never claimed as complete.")
      "Inspects required tools, privileges, an unused mount point, a Guix system
 declaration, a supplied hardware report and x86-64 long-mode evidence. It
 reports pass, fail or not-run without executing installer operations.")
+    (supported-systems '("x86_64-linux"))
+    (license wsm-license)))
+
+(define-public wsm-install-fpc
+  (package
+    (name "wsm-install-fpc")
+    (version "0.1.0")
+    (source wsm-fpc-source)
+    (build-system gnu-build-system)
+    (arguments (wsm-fpc-arguments "build-install" "test-install" "install-install"))
+    (native-inputs (list fpc))
+    ;; The frontend resolves these sibling commands through PATH when they
+    ;; are not next to the installer binary. Keep the runtime graph native.
+    (propagated-inputs
+     (list wsm-preflight-fpc
+           wsm-hwcheck-fpc
+           wsm-classify-fpc
+           wsm-partition-fpc))
+    (home-page "https://github.com/juv4uk/wsm-desktop")
+    (synopsis "Native WSM installer frontend")
+    (description
+     "Sequences preflight, hardware collection, classification and partition
+planning. It uses only the named reader executables, never a shell, and leaves
+the partition plan unapplied for operator review.")
     (supported-systems '("x86_64-linux"))
     (license wsm-license)))
