@@ -22,6 +22,8 @@
 
 ## Чому зараз не можна
 
+Перевірка знаходить чотирнадцять причин у трьох класах:
+
 `scripts/check_publication_readiness.py` відмовляє з двома причинами:
 
 1. **#367 — ліцензія.** `wsm/packages/wsm.scm` оголошує `(license gpl3+)`, тоді
@@ -31,9 +33,16 @@
 2. **Немає `.guix-authorizations`.** Непідписаний канал можна збирати локально,
    але не можна оголошувати автентифікованим і не можна пінити в release lock.
 
+3. **#367 у трьох файлах, не в одному.** Крім `wsm/packages/wsm.scm`,
+   `(license:gpl3+)` стоїть у `systems/live-iso.scm` і `systems/live-compat.scm`.
+   Публікація будь-якого з них розповсюджує код під хибними метаданими.
+
 Окремо стоїть **#586**: жодного NVIDIA GP107 firmware у Free чи Compatibility
-channel/ISO без письмового owner/legal clearance для конкретної distribution
-model. Перевірка це теж ловить — по коду `channels/free.scm`, не по згадках.
+channel/ISO без письмового owner/legal clearance. Перевірка ловить це **по
+коду**: `(nongnu packages nvidia)`, `(firmware nvidia-firmware)`,
+`linux-firmware` у `systems/live-compat.scm` і `systems/compatibility.scm`.
+Коментарі відрізаються, а назва моделі в імені ядра (`linux-wsm-gp107`) за
+firmware не вважається — інакше перевірка давала б шість хибних спрацювань.
 
 ## Що можна робити вже
 
