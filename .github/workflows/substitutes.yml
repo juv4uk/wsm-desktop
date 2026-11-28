@@ -20,6 +20,7 @@ permissions:
   contents: write
   pages: write
   id-token: write
+  attestations: write
 
 concurrency:
   group: h170-free-substitutes
@@ -79,28 +80,18 @@ jobs:
           echo "$PROFILE/bin" >> "$GITHUB_PATH"
           guix --version | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - name: Validate owner-controlled substitute signing keys
-        env:
-          GUIX_SIGNING_KEY: ${{ secrets.GUIX_SIGNING_KEY }}
-          GUIX_SIGNING_PUBLIC_KEY: ${{ vars.GUIX_SIGNING_PUBLIC_KEY }}
+      - name: Create an ephemeral Guix signing key for this cache run
+        shell: bash
         run: |
           set -euo pipefail
-          if [ -z "${GUIX_SIGNING_KEY:-}" ] || [ -z "${GUIX_SIGNING_PUBLIC_KEY:-}" ]; then
-            {
-              echo "::error::Missing GUIX signing key material."
-              echo "Create the key pair on the owner-controlled machine with:"
-              echo "Generate the signing-key pair locally on the owner-controlled machine; then configure its private and public files as the repository secret and variable described below."
-              echo "Then configure repository secret GUIX_SIGNING_KEY from /etc/guix/signing-key.sec"
-              echo "and repository variable GUIX_SIGNING_PUBLIC_KEY from /etc/guix/signing-key.pub."
-            } | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
           sudo install -d -m 0700 /etc/guix
-          printf '%s\n' "$GUIX_SIGNING_KEY" | sudo tee /etc/guix/signing-key.sec >/dev/null
-          printf '%s\n' "$GUIX_SIGNING_PUBLIC_KEY" | sudo tee /etc/guix/signing-key.pub >/dev/null
+          sudo guix archive --generate-key
+          sudo test -s /etc/guix/signing-key.sec
+          sudo test -s /etc/guix/signing-key.pub
           sudo chmod 0600 /etc/guix/signing-key.sec
           sudo chmod 0644 /etc/guix/signing-key.pub
-          echo "Owner-controlled signing key pair was installed; key contents are not logged."
+          echo "A per-run signing key was generated on the ephemeral runner." >> "$GITHUB_STEP_SUMMARY"
+          echo "Only signing-key.pub may leave this runner; signing-key.sec is never copied, uploaded, or logged." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Record pinned Guix channel revision
         run: |
@@ -231,10 +222,64 @@ jobs:
             }
           done
 
+          (
+            cd "$RUNNER_TEMP"
+            sha256sum "${NARS[@]}" > ./site/SHA256SUMS
+          )
+          export NAR_ASSETS="$(printf '%s\n' "${NARS[@]}")"
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(".")
+          public_key = root / "site/signing-key.pub"
+          manifest = root / "drivers/profiles/h170-free-packages.scm"
+          payload = {
+              "schema": "wsm-h170-free-cache/1",
+              "source_commit": os.environ["GITHUB_SHA"],
+              "workflow_run_id": os.environ["GITHUB_RUN_ID"],
+              "workflow_run_url": (
+                  os.environ["GITHUB_SERVER_URL"] + "/" +
+                  os.environ["GITHUB_REPOSITORY"] + "/actions/runs/" +
+                  os.environ["GITHUB_RUN_ID"]
+              ),
+              "guix_lock_file": "channels.lock.scm",
+              "manifest_file": "drivers/profiles/h170-free-packages.scm",
+              "manifest_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
+              "signing_key_mode": "ephemeral-per-run",
+              "signing_public_key_sha256": hashlib.sha256(public_key.read_bytes()).hexdigest(),
+              "private_key_published": False,
+              "nar_assets": [Path(item).name for item in os.environ["NAR_ASSETS"].splitlines() if item],
+              "packages": 11,
+              "scope": "official upstream H170 Free package manifest only",
+          }
+          (root / "site/provenance.json").write_text(
+              json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+              encoding="utf-8",
+          )
+          PY
+          cp ./site/SHA256SUMS ./site/provenance.SHA256SUMS
+          (
+            cd ./site
+            sha256sum signing-key.pub provenance.json > metadata.SHA256SUMS
+          )
+
           gh release create "$CACHE_TAG" \
             --title "WSM H170 Free substitute cache ${GITHUB_RUN_NUMBER}" \
-            --notes "Pinned H170 Free upstream-only package cache. Source commit: ${GITHUB_SHA}. NAR assets are immutable; narinfo metadata is deployed separately to GitHub Pages."
-          gh release upload "$CACHE_TAG" "${NARS[@]}"
+            --notes "Pinned H170 Free upstream-only package cache. Source commit: ${GITHUB_SHA}. Signing key is ephemeral to this run; private key is not published. NAR assets are immutable; metadata is deployed separately to Pages."
+          gh release upload "$CACHE_TAG" "${NARS[@]}" ./site/signing-key.pub ./site/SHA256SUMS ./site/provenance.json ./site/metadata.SHA256SUMS
+
+      - name: Attest the exact NAR and cache metadata
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            /var/cache/guix/h170-free/nar/*.nar.zst
+            ./site/signing-key.pub
+            ./site/SHA256SUMS
+            ./site/provenance.json
+            ./site/metadata.SHA256SUMS
 
       - name: Upload Pages metadata
         uses: actions/upload-pages-artifact@v3
