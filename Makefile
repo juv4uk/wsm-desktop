@@ -112,6 +112,9 @@ check-licences:
 # Not part of `check` on purpose - a contributor without Guix must still pass.
 check-guix-eval:
 	$(GUIX) time-machine -C channels.lock.scm -- repl -L . tests/guix/source-module-evaluation.scm
+	# Package modules were never loaded by anything in CI: a definition that does not
+	# compile, or a licence record that does not resolve, passed every other check.
+	$(GUIX) time-machine -C channels.lock.scm -- repl -L . tests/guix/package-module-evaluation.scm
 	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/minimal.scm --dry-run
 	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/desktop.scm --dry-run
 	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/live.scm --dry-run
