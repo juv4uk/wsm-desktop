@@ -1,0 +1,11 @@
+H170 GP107 Linux-libre package release request
+Date: 2026-11-28
+Source commit: 7f34e74f57b18e4c8076a300ed725d73b69744fc
+Guix lock: channels.lock.scm
+WSM package: (wsm packages linux-libre) linux-libre-h170
+Upstream patch: ed7fb901fce31588bd12ab95adc36ebcb51bc8ea
+Publication: experimental GitHub pre-release
+Assets: signed NAR, complete patched source archive, recipe, patch, public key, provenance, SHA256SUMS
+Verification: local checksum verification and post-upload read-back verification
+
+This file is a workflow trigger marker only. Build outputs remain in the runner and GitHub Release assets; no binaries are committed to this branch.
