@@ -8,6 +8,8 @@
 
 - [GNU Guix](https://guix.gnu.org/) — офіційний сайт.
 - [GNU Guix Reference Manual](https://guix.gnu.org/manual/en/) — довідник.
+- [Binary Installation](https://guix.gnu.org/manual/en/html_node/Binary-Installation.html) — встановлення Guix package manager на вже наявний GNU/Linux distribution.
+- [Офіційний `guix-install.sh`](https://guix.gnu.org/guix-install.sh) — upstream-скрипт для foreign distribution; це не інсталятор повної Guix System.
 - [Invoking guix system](https://guix.gnu.org/manual/en/html_node/Invoking-guix-system.html) — build, init, vm та інші дії guix system.
 - [Channels](https://guix.gnu.org/manual/en/html_node/Channels.html) — канали, автентифікація та відтворення.
 - [Creating a channel](https://guix.gnu.org/manual/en/html_node/Creating-a-Channel.html) — вимоги до власного каналу та застереження щодо сумісності API.
