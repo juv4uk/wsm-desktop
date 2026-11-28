@@ -1,24 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""Every Scheme module under ``wsm/`` must be loaded by the Guix evaluation test.
+"""Every Scheme module under wsm/ must be loaded by the Guix evaluation test.
 
-The repository has two independent ways a module can be broken and only one of
-them is visible without Guix:
-
-* a *static* break (missing ``#:use-module``) is caught by
-  ``check_scheme_imports.py`` without Guix;
-* a *load* break - wrong module path, a name that Guix does not export, an
-  ``#:export`` of something undefined - appears only when Guix actually
-  evaluates the file, twenty minutes into a build.
-
-``tests/guix/source-module-evaluation.scm`` is the only place that evaluates
-source modules for real. If a new module is added and nobody adds it there, the
-evaluation keeps passing while covering less - the coverage silently shrinks and
-the test looks green.
-
-This checker keeps that from happening: it reads every ``define-module`` under
-``wsm/`` and requires the evaluation test to ``use-modules`` each one.
-
-It does not evaluate anything itself and does not replace the Guix run.
+The checker deliberately remains smaller than a Scheme parser. Before looking
+for module forms it masks lexical regions that cannot contain executable forms:
+line comments, nested block comments, strings, and character literals.
 """
 
 from __future__ import annotations
@@ -34,8 +19,84 @@ DEFINE_MODULE = re.compile(r"\(define-module\s+\(([^)]+)\)")
 USE_MODULES_HEAD = re.compile(r"\(use-modules\b")
 
 
+def mask_scheme_non_code(text: str) -> str:
+    """Blank comments, strings and character literals while preserving offsets.
+
+    Guile accepts nested #| ... |# comments. String escapes are consumed in
+    pairs so an escaped quote cannot accidentally end the string. Newlines are
+    preserved to keep diagnostics and source positions stable.
+    """
+    chars = list(text)
+    index = 0
+    block_depth = 0
+    in_string = False
+
+    def blank(position: int) -> None:
+        if text[position] != "\n":
+            chars[position] = " "
+
+    while index < len(text):
+        if in_string:
+            if text[index] == "\\":
+                blank(index)
+                index += 1
+                if index < len(text):
+                    blank(index)
+                    index += 1
+            elif text[index] == '"':
+                blank(index)
+                in_string = False
+                index += 1
+            else:
+                blank(index)
+                index += 1
+            continue
+
+        if block_depth:
+            if text.startswith("#|", index):
+                blank(index)
+                blank(index + 1)
+                block_depth += 1
+                index += 2
+            elif text.startswith("|#", index):
+                blank(index)
+                blank(index + 1)
+                block_depth -= 1
+                index += 2
+            else:
+                blank(index)
+                index += 1
+            continue
+
+        if text.startswith("#|", index):
+            blank(index)
+            blank(index + 1)
+            block_depth = 1
+            index += 2
+        elif text[index] == ";":
+            while index < len(text) and text[index] != "\n":
+                blank(index)
+                index += 1
+        elif text[index] == '"':
+            blank(index)
+            in_string = True
+            index += 1
+        elif text.startswith("#\\", index):
+            # Protect punctuation in literals such as #\), #\; and #\".
+            blank(index)
+            blank(index + 1)
+            index += 2
+            if index < len(text):
+                blank(index)
+                index += 1
+        else:
+            index += 1
+
+    return "".join(chars)
+
+
 def _balanced(text: str, start: int) -> str | None:
-    """Return the inside of the form whose '(' is at ``start``."""
+    """Return the inside of the form whose '(' is at start."""
     depth = 0
     for index in range(start, len(text)):
         char = text[index]
@@ -49,7 +110,7 @@ def _balanced(text: str, start: int) -> str | None:
 
 
 def _top_level_forms(block: str) -> list[str]:
-    """Every immediate ``(...)`` inside ``block``, as text."""
+    """Every immediate (...) inside block, as text."""
     forms: list[str] = []
     index = 0
     while index < len(block):
@@ -64,25 +125,27 @@ def _top_level_forms(block: str) -> list[str]:
     return forms
 
 
-def module_name(path: Path) -> str:
-    """``wsm/packages/wsm.scm`` -> ``wsm packages wsm``."""
-    return " ".join(path.with_suffix("").parts)
-
-
 def declared_modules(root: Path) -> dict[str, Path]:
-    """Module name -> file, taken from the file's own ``define-module``."""
+    """Module name -> file, taken from the file's own define-module."""
     found: dict[str, Path] = {}
     for path in sorted((root / MODULE_ROOT).rglob("*.scm")):
-        text = path.read_text(encoding="utf-8")
+        text = mask_scheme_non_code(path.read_text(encoding="utf-8"))
         match = DEFINE_MODULE.search(text)
         if match is None:
             continue
-        found[" ".join(match.group(1).split())] = path.relative_to(root)
+        module = " ".join(match.group(1).split())
+        relative = path.relative_to(root)
+        previous = found.get(module)
+        if previous is not None:
+            raise ValueError(
+                f"duplicate Scheme module {module!r}: {previous} and {relative}"
+            )
+        found[module] = relative
     return found
 
 
 def imported_modules(root: Path, test: Path = EVALUATION_TEST) -> set[str]:
-    text = (root / test).read_text(encoding="utf-8")
+    text = mask_scheme_non_code((root / test).read_text(encoding="utf-8"))
     imported: set[str] = set()
     for head in USE_MODULES_HEAD.finditer(text):
         block = _balanced(text, head.start())
@@ -94,7 +157,10 @@ def imported_modules(root: Path, test: Path = EVALUATION_TEST) -> set[str]:
 
 def check(root: Path, test: Path = EVALUATION_TEST) -> list[str]:
     """Return a problem line per module the evaluation test does not load."""
-    modules = declared_modules(root)
+    try:
+        modules = declared_modules(root)
+    except ValueError as error:
+        return [str(error)]
     if not modules:
         return [f"no (define-module ...) found under {MODULE_ROOT}/"]
     if not (root / test).is_file():
