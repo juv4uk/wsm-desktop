@@ -55,7 +55,7 @@ jobs:
             repl -L . tests/guix/source-module-evaluation.scm
           echo "WSM package records evaluated against the pinned official Guix source." >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Build the three native FPC packages
+      - name: Build the four native FPC packages
         shell: bash
         run: |
           set -euo pipefail
@@ -63,18 +63,26 @@ jobs:
           mkdir -p "$OUT"
           timeout 120m guix time-machine -C channels.lock.scm -- \
             build -L . --no-grafts --keep-going \
-            wsm-hwcheck-fpc wsm-classify-fpc wsm-cpu-isa-fpc \
+            wsm-hwcheck-fpc wsm-classify-fpc wsm-cpu-isa-fpc wsm-partition-fpc \
             | tee "$OUT/store-paths.txt"
 
           mapfile -t outputs < <(grep -E '^/gnu/store/[a-z0-9]{32}-' "$OUT/store-paths.txt")
-          test "${#outputs[@]}" -eq 3
+          test "${#outputs[@]}" -eq 4
           test -x "${outputs[0]}/bin/wsm-hwcheck"
           test -x "${outputs[1]}/bin/wsm-classify"
           test -x "${outputs[2]}/bin/wsm-cpu-isa"
+          test -x "${outputs[3]}/bin/wsm-partition"
 
           "${outputs[0]}/bin/wsm-hwcheck" --version
           "${outputs[1]}/bin/wsm-classify" --version
           "${outputs[2]}/bin/wsm-cpu-isa" --version
+          plan="$("${outputs[3]}/bin/wsm-partition" --disk /dev/sdz --size 20000000000 --firmware uefi --ack /dev/sdz)"
+          printf '%s\\n' "$plan" | grep -F '"executed":false' >/dev/null
+          set +e
+          "${outputs[3]}/bin/wsm-partition" --disk /dev/sdz1 --size 20000000000 --firmware uefi --ack /dev/sdz1 >/dev/null 2>&1
+          refusal_status=$?
+          set -e
+          test "$refusal_status" -eq 10
 
           {
             echo "## Native FPC Guix package build"
@@ -84,6 +92,7 @@ jobs:
             echo "| wsm-hwcheck-fpc | `${outputs[0]}` |"
             echo "| wsm-classify-fpc | `${outputs[1]}` |"
             echo "| wsm-cpu-isa-fpc | `${outputs[2]}` |"
+            echo "| wsm-partition-fpc | `${outputs[3]}` |"
             echo
             echo "The compiler is a native build input; no Python runtime is propagated."
             echo "No Release, substitute cache, or Git-branch binary was published."
