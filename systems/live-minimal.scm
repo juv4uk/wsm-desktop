@@ -73,6 +73,12 @@
            (requirement '(user-processes))
            (respawn? #f)
            (start #~(lambda ()
+                      ;; The wrapper runs `exec python3`, so the daemon's PATH
+                      ;; decides whether the installer can start at all. shepherd
+                      ;; does not guarantee the system profile on PATH, and a
+                      ;; missing python3 would look like a broken installer.
+                      (setenv "PATH"
+                              "/run/current-system/profile/bin:/run/current-system/bin:/usr/bin:/bin")
                       (define (announce text)
                         (catch #t
                           (lambda ()
@@ -82,15 +88,30 @@
                                 (newline port)
                                 (force-output port))))
                           (lambda _ #f)))
-                      (catch #t
-                        (lambda ()
-                          (let ((status
-                                 (system* "/run/current-system/profile/bin/wsm-install"
-                                          "--help")))
-                            (announce (if (zero? status)
-                                          "WSM_INSTALLER_OK"
-                                          "WSM_INSTALLER_FAIL:exit"))))
-                        (lambda _ (announce "WSM_INSTALLER_FAIL:missing")))
+                      ;; Two proofs, because they fail differently.
+                      ;;
+                      ;; `--help` runs the real wrapper and entrypoint, but it
+                      ;; never touches jsonschema, the schemas or the planner:
+                      ;; an image missing a propagated input would still print
+                      ;; help and look healthy.
+                      ;;
+                      ;; The import check covers exactly that, and nothing else.
+                      ;; Neither alone is enough; both together are what a real
+                      ;; run needs.
+                      (define (ok? . command)
+                        (catch #t
+                          (lambda () (zero? (apply system* command)))
+                          (lambda _ #f)))
+                      (cond
+                       ((not (ok? "/run/current-system/profile/bin/wsm-install" "--help"))
+                        (announce "WSM_INSTALLER_FAIL:exit"))
+                       ((not (ok? "/run/current-system/profile/bin/python3" "-c"
+                                   (string-append
+                                    "import jsonschema, wsm_install.cli, "
+                                    "wsm_install.classification, wsm_install.partition, "
+                                    "wsm_install.profile")))
+                        (announce "WSM_INSTALLER_FAIL:imports"))
+                       (else (announce "WSM_INSTALLER_OK")))
                       #t))
            (stop #~(const #t))))))
 

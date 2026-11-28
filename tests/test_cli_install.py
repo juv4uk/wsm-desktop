@@ -168,6 +168,33 @@ class InstallModeTests(unittest.TestCase):
             self.assertIn("write-plan.refused", result.stderr)
             self.assertEqual(report.read_bytes(), original)
 
+    def test_guided_preview_callback_takes_the_arguments_frontends_pass(self) -> None:
+        """The guided/TUI callback must accept (disk, size, firmware) and build a plan.
+
+        It used to call _run_install() with a single Namespace while that function
+        takes (args, report, report_bytes), so every interactive run raised
+        TypeError. The frontend tests inject their own callback, so nothing caught
+        it - this test calls the real one.
+        """
+        import argparse
+        import inspect
+
+        from wsm_install import cli
+
+        args = argparse.Namespace(
+            filesystem="ext4",
+            mount_point="/mnt",
+            system_file=Path("system.scm"),
+            backend="guix",
+        )
+        report = json.loads(FIXTURE.read_text(encoding="utf-8"))
+        preview = cli._installer_preview(args, report, FIXTURE.read_bytes())
+        self.assertEqual(len(inspect.signature(preview).parameters), 3)
+
+        with tempfile.NamedTemporaryFile() as disk:
+            result = preview(disk.name, 16 * GIB, "uefi")
+        self.assertIsInstance(result, int)
+
     def test_guided_execute_is_rejected_before_interaction(self) -> None:
         result = run_cli("--guided", "--execute", "--quiet")
         self.assertEqual(result.returncode, 2)

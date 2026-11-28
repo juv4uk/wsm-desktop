@@ -56,17 +56,11 @@ class InspectTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("authenticated: unknown by design", result.stdout)
 
-    def test_install_script_does_not_depend_on_savannah(self) -> None:
-        """The official installer is served by cgit, which refuses bots."""
-        script = (ROOT / "scripts" / "install-guix.sh").read_text(encoding="utf-8")
-        # Mentions in comments explain the history; only executable lines count.
-        code = [
-            line for line in script.splitlines()
-            if line.strip() and not line.strip().startswith("#")
-        ]
-        self.assertFalse([line for line in code if "guix-install.sh" in line])
-        self.assertIn("ftp.gnu.org", script)
-        self.assertIn("guix-daemon", script)
+    def test_foreign_distro_installer_remains_upstream_owned(self) -> None:
+        upstreams = (ROOT / "docs" / "UPSTREAMS.md").read_text(encoding="utf-8")
+        self.assertIn("https://guix.gnu.org/guix-install.sh", upstreams)
+        self.assertFalse((ROOT / "scripts" / "install-guix.sh").exists())
+        self.assertFalse((ROOT / ".github" / "workflows" / "guix-installer.yml").exists())
 
 
 if __name__ == "__main__":

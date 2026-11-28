@@ -209,7 +209,15 @@ def _hardware_note(args: argparse.Namespace) -> str:
     )
 
 
-def _installer_preview(args: argparse.Namespace):
+def _installer_preview(args: argparse.Namespace, report: dict[str, Any], report_bytes: bytes):
+    """Build the callback the guided and TUI frontends call on a chosen disk.
+
+    The report and its raw bytes are captured here rather than re-read: the
+    frontends only pick a disk, and re-loading the report inside a callback would
+    let the plan be built from different bytes than the ones that passed schema
+    validation in main().
+    """
+
     def preview(disk_path: str, size: int, firmware: str) -> int:
         return _run_install(argparse.Namespace(
             target_disk=disk_path,
@@ -222,12 +230,13 @@ def _installer_preview(args: argparse.Namespace):
             execute=False,
             quiet=True,
             write_plan=None,
-        ))
+            backend=args.backend,
+        ), report, report_bytes)
 
     return preview
 
 
-def _run_tui(args: argparse.Namespace) -> int:
+def _run_tui(args: argparse.Namespace, report: dict[str, Any], report_bytes: bytes) -> int:
     """Pseudo-graphical flow; preview only until a reviewed APPLY exists."""
     from wsm_install.guided import list_disks
     from wsm_install.tui import TerminalScreen, run_tui
@@ -237,9 +246,9 @@ def _run_tui(args: argparse.Namespace) -> int:
             "wsm-install: no terminal for pseudo-graphics; using the console preview",
             file=sys.stderr,
         )
-        return _run_guided(args)
+        return _run_guided(args, report, report_bytes)
 
-    preview = _installer_preview(args)
+    preview = _installer_preview(args, report, report_bytes)
     return run_tui(
         TerminalScreen(),
         list_disks(Path("/sys/block")),
@@ -248,11 +257,11 @@ def _run_tui(args: argparse.Namespace) -> int:
     )
 
 
-def _run_guided(args: argparse.Namespace) -> int:
+def _run_guided(args: argparse.Namespace, report: dict[str, Any], report_bytes: bytes) -> int:
     """Console flow: choose a disk and show a read-only preview."""
     from wsm_install.guided import list_disks, run_guided
 
-    preview = _installer_preview(args)
+    preview = _installer_preview(args, report, report_bytes)
     return run_guided(
         _Console(),
         list_disks(Path("/sys/block")),
@@ -454,9 +463,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.check_env:
         return _run_env_check(args)
     if args.tui:
-        return _run_tui(args)
+        return _run_tui(args, report, raw)
     if args.guided:
-        return _run_guided(args)
+        return _run_guided(args, report, raw)
     if args.install:
         assert raw is not None
         return _run_install(args, report, raw)

@@ -10,7 +10,9 @@
 
 Реліз містить:
 
-- `wsm-desktop-0.1.0-rc1-source.tar.gz` — вихідне дерево з фіксованого коміту;
+- `wsm-desktop-<версія>-source.tar.gz` — вихідне дерево з фіксованого коміту; точна
+  назва завжди береться зі сторінки релізу або з `RELEASE-INFO.json`, а не з
+  цього документа;
 - `SHA256SUMS` — checksum tarball;
 - `release-manifest.json` — точний `source_commit`, версія й розміри артефактів.
 
@@ -23,7 +25,7 @@
 - `jsonschema[format]==4.26.0` — з `requirements-install.txt` або з системного пакета;
 - опційно `/lib/modules/<kernel>/` та `journalctl` або `dmesg` для багатшої діагностики.
 
-Підготовка залежності може потребувати мережі. Після встановлення сам RC1 працює offline. Щоб не змінювати системний Python і уникнути обмежень PEP 668, рекомендовано віртуальне оточення:
+Підготовка залежності може потребувати мережі. Після встановлення сам колектор працює offline. Щоб не змінювати системний Python і уникнути обмежень PEP 668, рекомендовано віртуальне оточення:
 
 ```sh
 python3 -m venv ~/.venvs/wsm-preview
@@ -35,8 +37,9 @@ python3 -m venv ~/.venvs/wsm-preview
 
 ```sh
 sha256sum -c SHA256SUMS
-tar -xzf wsm-desktop-0.1.0-rc1-source.tar.gz
-cd wsm-desktop-0.1.0-rc1
+# Назва архіву залежить від версії релізу; візьміть її зі сторінки релізу.
+tar -xzf wsm-desktop-<версія>-source.tar.gz
+cd wsm-desktop-<версія>
 python3 scripts/wsm_hardware_check.py \
   --out "$HOME/wsm-check-$(date -u +%Y%m%dT%H%M%SZ)"
 ```

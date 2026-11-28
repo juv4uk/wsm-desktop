@@ -2,7 +2,7 @@
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Статус: **перший запис**, зроблено 2026-11-26
+- Статус: rc2 — завантаження не перевірено; rc6 — workflow acceptance пройшло, локальний незалежний вердикт неповний; станом на 2026-11-28
 - Перевірка: `scripts/verify_live_release.py`
 - Збірка й публікація: `.github/workflows/release-minimal-live.yml` (єдиний конвеєр образу)
 - Машиночитний вердикт: [`artifacts/iso-verdict-0.1.0-rc2-live-iso.json`](artifacts/iso-verdict-0.1.0-rc2-live-iso.json)
@@ -14,6 +14,54 @@
 
 Походження артефакту (хто і з якого коміту його зібрав) — окреме питання, і воно
 розібране в [RELEASE-PROVENANCE.md](RELEASE-PROVENANCE.md).
+
+## `WSM-Desktop-0.1.0-rc6-Minimal-Live.iso`
+
+**Джерело:** чернетка релізу `0.1.0-rc6-minimal-live` (не опублікована).
+**Статус:** release workflow acceptance — **pass** (run `46095631648`); незалежний локальний verifier — **incomplete**; публікація потребує рішення власника.
+
+Це **перший** носій проєкту, для якого доведено не лише завантаження, а й
+роботу інсталятора всередині гостьової системи.
+
+### Що перевірено
+
+| Перевірка | Результат |
+| --- | --- |
+| Контрольна сума | **збігається**: `59dad1c0f987401ab3644c6cf93445f22ff7fbfae6b47010c2611dcaa5702f99` |
+| Розмір | 911 370 240 байт (869 MiB) |
+| Формат | справжній ISO9660 (`CD001`) |
+| Завантажувальні записи | El Torito з обома прошивками |
+| Завантаження в BIOS | **pass**, маркер `WSM_LIVE_READY` |
+| Завантаження в UEFI | **pass**, маркер `WSM_LIVE_READY` |
+| **Запуск інсталятора в гості** | **pass**, маркер `WSM_INSTALLER_OK` |
+| Вміст | `wsm_install`, `tui.py`, `guided.py`, `agent.py`, `classification.py` |
+
+Маніфест релізу: `acceptance: {bios: pass, uefi: pass, installer: pass}`.
+
+### Чому це важливо
+
+У попередніх носіях приймання перевіряло лише маркер завантаження, і в
+boot-свідченнях стояло `guest_installer_execution: false`. Тобто «система
+стартує» і «в системі є робочий інсталятор» були різними фактами, і другий не
+перевірявся — саме так одного разу вийшов образ без трьох frontend-ів.
+
+Тепер live-профіль запускає справжній entrypoint і окремо перевіряє імпорти,
+а конвеєр вимагає обидва маркери в обох прошивках.
+
+### Межа доказу
+
+`WSM_INSTALLER_OK` означає: обгортка й entrypoint стартують, а `jsonschema`,
+`wsm_install.cli`, `classification`, `partition` і `profile` імпортуються.
+
+Це **не** доводить, що TUI малюється: для цього потрібен термінал. І не
+доводить, що встановлення на конкретне залізо пройде — для цього потрібен
+профіль із evidence.
+
+### Машиночитний вердикт
+
+[`artifacts/iso-verdict-0.1.0-rc6-minimal-live.json`](artifacts/iso-verdict-0.1.0-rc6-minimal-live.json)
+
+`overall: incomplete` — це вердикт саме незалежного локального запуску `verify_live_release.py`: у тому середовищі QEMU не було запущено, тому локальні критерії `boot-bios` і `boot-uefi` лишилися `not-run`. Це не скасовує окремого успішного workflow acceptance: BIOS/UEFI boot і обидва installer markers підтверджені GitHub Actions run [`46095631648`](https://github.com/juv4uk/wsm-desktop/actions/runs/46095631648) для source commit `1fa19879ec780e372cce9a6bb4c13f613d01ec9f`. Машиночитний запис зберігає ці джерела окремо в полі `workflow_evidence`; локальне `overall` навмисно не підвищене до `pass`.
 
 ## `wsm-desktop-kde-hardened-20261125.iso`
 

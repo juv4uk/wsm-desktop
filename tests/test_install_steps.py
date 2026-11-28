@@ -230,5 +230,83 @@ class ForeignDataTests(unittest.TestCase):
         )
 
 
+class ToolPrefixTests(unittest.TestCase):
+    """The plan can bind its tools to the image's own prefixes."""
+
+    def _layout(self):
+        disk = Disk("/dev/nvme0n1", 256 * GIB, has_existing_data=True)
+        return plan(disk, "uefi", acknowledgement="/dev/nvme0n1")
+
+    def _prefixes(self, root: Path, *, skip: str | None = None) -> tuple[str, ...]:
+        bindir = root / "profile" / "bin"
+        bindir.mkdir(parents=True, exist_ok=True)
+        for name in ("sgdisk", "partprobe", "udevadm", "mkfs.ext4", "mkfs.fat", "mount", "mkdir"):
+            if name == skip:
+                continue
+            target = bindir / name
+            target.write_text("#!/bin/sh\n", encoding="utf-8")
+            target.chmod(0o755)
+        return (str(bindir),)
+
+    def test_steps_use_the_resolved_prefix(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as temporary:
+            prefixes = self._prefixes(Path(temporary))
+            steps = plan_steps(self._layout(), tool_prefixes=prefixes)
+            self.assertTrue(all(step.command[0].startswith(prefixes[0]) for step in steps))
+
+    def test_a_missing_tool_is_a_refusal_not_a_fallback(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as temporary:
+            prefixes = self._prefixes(Path(temporary), skip="sgdisk")
+            with self.assertRaises(Refused) as caught:
+                plan_steps(self._layout(), tool_prefixes=prefixes)
+            self.assertEqual(caught.exception.code, "tool.missing")
+
+    def test_without_prefixes_the_table_paths_are_used(self) -> None:
+        steps = plan_steps(self._layout())
+        self.assertTrue(all(step.command[0].startswith("/") for step in steps))
+        self.assertIn(TRUSTED_TOOLS["sgdisk"], [step.command[0] for step in steps])
+
+
+class BackendCommandBindingTests(unittest.TestCase):
+    """The handoff can pin its channel set and must not take a half-specified path."""
+
+    def test_the_default_shape_is_unchanged(self) -> None:
+        command = backend_command(layout(), "systems/desktop.scm")
+        self.assertEqual(command, ["guix", "system", "init", "systems/desktop.scm", "/mnt"])
+
+    def test_a_lock_pins_the_channel_set_through_time_machine(self) -> None:
+        command = backend_command(
+            layout(), "systems/desktop.scm", "/mnt",
+            lock="channels/compatibility.lock.scm",
+        )
+        self.assertEqual(
+            command,
+            [
+                "guix", "time-machine", "-C", "channels/compatibility.lock.scm", "--",
+                "system", "init", "systems/desktop.scm", "/mnt",
+            ],
+        )
+
+    def test_an_absolute_guix_path_is_used_as_given(self) -> None:
+        command = backend_command(
+            layout(), "systems/desktop.scm", guix_path="/run/current-system/profile/bin/guix"
+        )
+        self.assertEqual(command[0], "/run/current-system/profile/bin/guix")
+
+    def test_a_bare_guix_path_is_refused(self) -> None:
+        with self.assertRaises(Refused) as caught:
+            backend_command(layout(), "systems/desktop.scm", guix_path="guix")
+        self.assertEqual(caught.exception.code, "backend.guix-path")
+
+    def test_a_lock_that_is_not_scheme_is_refused(self) -> None:
+        with self.assertRaises(Refused) as caught:
+            backend_command(layout(), "systems/desktop.scm", lock="channels.lock.txt")
+        self.assertEqual(caught.exception.code, "backend.lock")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -23,12 +23,14 @@
              (gnu system nss)
              (gnu packages linux))
 
-;; Варіант профілю. Один профіль — один активний GPU-драйвер.
-;; Ніколи не змішуйте nouveau і пропрієтарний nvidia в одному boot profile.
-;;   'free           — лише офіційний Guix, Linux-libre, upstream Mesa
-;;   'compatibility  — додає Nonguix і пропрієтарний драйвер, явний opt-in
-(define profile-variant 'free)
-
+;; Цей шаблон створює лише H170 Free candidate:
+;; офіційний Guix + Linux-libre + upstream Mesa.
+;; Один boot profile має один активний GPU-драйвер. Не змішуйте nouveau
+;; і пропрієтарний nvidia в одному boot profile.
+;;
+;; Compatibility — окрема конфігурація з власним channel lock, non-libre
+;; kernel та driver path; вона не вмикається змінною або перемикачем у цьому
+;; шаблоні. Для GP107 firmware distribution gate залишається окремим.
 (operating-system
   (host-name "ЗАМІНИТИ")
   (timezone "ЗАМІНИТИ")

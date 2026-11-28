@@ -46,6 +46,32 @@
 
 Команда guix system vm будує VM-образ/запускний скрипт відповідно до параметрів Guix. Вона не встановлює систему на фізичний диск.
 
+## Guix package manager на наявному GNU/Linux
+
+Коли потрібно встановити **лише package manager GNU Guix** на вже наявний
+foreign GNU/Linux distribution, використовуйте офіційний upstream
+[`guix-install.sh`](https://guix.gnu.org/guix-install.sh), а не окремий
+WSM-owned root bootstrap:
+
+```sh
+cd /tmp
+wget https://guix.gnu.org/guix-install.sh
+chmod +x guix-install.sh
+less guix-install.sh
+sudo ./guix-install.sh
+```
+
+Це root-level операція, яка налаштовує Guix store та daemon. Застосовуйте її
+лише на системі, де Guix ще не встановлено, після перевірки поточного скрипта
+та офіційної [Binary Installation документації](https://guix.gnu.org/manual/en/html_node/Binary-Installation.html).
+Не запускайте цей foreign-distro installer поверх наявної Guix installation.
+
+Цей шлях **не встановлює повну Guix System**: для неї призначено окремий
+[System Installation розділ](https://guix.gnu.org/manual/en/html_node/System-Installation.html)
+та Guix System installer flow. Він також не створює WSM channel
+`.guix-authorizations`, introduction commit, keyring чи authenticated consumer.
+WSM CI/release workflow налаштовує власний одноразовий runner окремо.
+
 ## Фіксація каналів
 
 Перед відтворюваним експериментом збережіть опис реально використаних каналів:

@@ -17,6 +17,8 @@ postconditions, recovery evidence, and disposable-QEMU acceptance.
 """
 from __future__ import annotations
 
+from wsm_install.tool_map import EXECUTABLES
+
 import json
 import sys
 from pathlib import Path
@@ -28,14 +30,10 @@ from wsm_install.partition import DEVICE_PATH
 
 # Commands recognized by the plan validator. This list is not an execution
 # permission while APPLY remains disabled. Absolute paths avoid PATH ambiguity.
-ALLOWED_PROGRAMS = frozenset({
-    "/usr/sbin/partprobe",
-    "/usr/bin/udevadm",
-    "/usr/sbin/mkfs.ext4",
-    "/usr/sbin/mkfs.fat",
-    "/usr/bin/mount",
-    "/usr/bin/mkdir",
-})
+# Derived from the single tool map (#645). The previous hand-written set omitted
+# sgdisk, so the planner could emit a partition-table step that this validator
+# refused: two lists, one truth, and the truth was whichever module you read.
+ALLOWED_PROGRAMS = EXECUTABLES
 
 SHELL_METACHARACTERS = frozenset("|&;<>()$`\\\"'\n\r")
 MAX_STEPS = 32
