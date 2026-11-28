@@ -54,6 +54,14 @@ class SubstituteWorkflowTests(unittest.TestCase):
         self.assertNotIn("github.event.inputs", self.text)
         self.assertNotIn("PACKAGES=", self.text)
 
+    def test_guix_fetch_uses_the_project_mirror_without_disabling_authentication(self) -> None:
+        step = self.step("Use the GNU Guix project's authenticated Codeberg mirror")
+        self.assertEqual(step["uses"], None)
+        self.assertIn("https://codeberg.org/guix/guix-mirror", step["run"])
+        self.assertIn("git.guix.gnu.org/guix.git", step["run"])
+        self.assertIn("channels.lock.scm", self.text)
+        self.assertNotIn("--disable-authentication", self.text)
+
     def test_build_uses_the_exact_locked_manifest(self) -> None:
         build = self.step("Evaluate and build the fixed H170 Free manifest")["run"]
         self.assertIn("guix time-machine -C channels.lock.scm", build)
