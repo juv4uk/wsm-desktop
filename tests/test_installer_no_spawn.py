@@ -166,5 +166,123 @@ class InstallerNoSpawnTest(unittest.TestCase):
         self.assertEqual(scan(fine), [])
 
 
+# --- second axis: writing to a device without spawning anything -------------
+#
+# The spawn guard above stops the installer from running mkfs. It does not stop
+# it from opening /dev/vda for writing and doing the work itself, which needs no
+# process at all. These checks close the obvious half of that gap.
+
+OPEN_CALLS = {"open", "io.open", "Path.open", "os.open", "io.FileIO", "os.fdopen"}
+
+
+def _is_device_path(node: ast.expr) -> bool:
+    """A literal that names a device or a sysfs entry."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        text = node.value
+        return text.startswith("/dev/") or text.startswith("/sys/") or text == "/dev"
+    return False
+
+
+def _write_intent(node: ast.Call, name: str) -> bool:
+    """True when the call can write.
+
+    For open()/Path.open()/io.open() the default mode is "r", so a missing mode is
+    a read. For os.open()/io.FileIO() the mode is a flags integer, and when it is
+    not visible we assume the unsafe case rather than guessing.
+    """
+    saw_mode = False
+    for argument in node.args[1:3]:
+        if isinstance(argument, ast.Constant) and isinstance(argument.value, str):
+            saw_mode = True
+            if any(flag in argument.value for flag in ("w", "a", "x", "+")):
+                return True
+        elif isinstance(argument, ast.Attribute) and argument.attr == "O_RDONLY":
+            saw_mode = True
+    for keyword in node.keywords:
+        if keyword.arg == "mode" and isinstance(keyword.value, ast.Constant):
+            value = keyword.value.value
+            if isinstance(value, str):
+                saw_mode = True
+                if any(flag in value for flag in ("w", "a", "x", "+")):
+                    return True
+    if saw_mode:
+        return False
+    return name in {"os.open", "io.FileIO"}
+
+
+def _call_name(node: ast.Call, aliases: dict[str, str]) -> str | None:
+    func = node.func
+    if isinstance(func, ast.Name):
+        return aliases.get(func.id, func.id)
+    if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+        module = aliases.get(func.value.id, func.value.id)
+        return f"{module}.{func.attr}"
+    return None
+
+
+def scan_device_writes(source: str) -> list[str]:
+    """Return one finding per way to reach a device for writing.
+
+    Raw descriptors are not forbidden by themselves: guix_deploy._write_new_file
+    uses os.open with O_EXCL|O_NOFOLLOW to create a private file safely, and a
+    blanket ban would push people away from that pattern. What is forbidden is
+    naming a device or a sysfs path with write intent.
+    """
+    tree = ast.parse(source)
+    aliases: dict[str, str] = {}
+    findings: list[str] = []
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                aliases[alias.asname or alias.name.split(".")[0]] = alias.name
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            for alias in node.names:
+                aliases[alias.asname or alias.name] = f"{node.module}.{alias.name}"
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not node.args:
+            continue
+        name = _call_name(node, aliases)
+        if name not in OPEN_CALLS:
+            continue
+        if not _is_device_path(node.args[0]):
+            continue
+        if _write_intent(node, name):
+            findings.append(f"line {node.lineno}: opens a device for writing ({name})")
+    return findings
+
+
+class InstallerNoDeviceWriteTest(unittest.TestCase):
+    """A static scan, and it says what it cannot see.
+
+    It catches a device named as a literal with write intent. It does not catch
+    open(dev, "r+b") where dev is a variable, because nothing static can. That
+    limit is the reason a runtime audit hook remains the right long-term fix; this
+    test closes the case that gets written by accident.
+    """
+
+    def test_no_device_is_opened_for_writing(self) -> None:
+        offenders: list[str] = []
+        for directory in GUARDED_DIRS:
+            for path in sorted((ROOT / directory).rglob("*.py")):
+                findings = scan_device_writes(path.read_text(encoding="utf-8"))
+                offenders.extend(
+                    f"{path.relative_to(ROOT)}: {finding}" for finding in findings
+                )
+        self.assertEqual(offenders, [], "installer must not write to a device directly")
+
+    def test_the_device_scan_catches_a_literal_device_open(self) -> None:
+        bad = 'def zap():\n    open("/dev/vda", "r+b")\n'
+        self.assertTrue(scan_device_writes(bad))
+
+    def test_the_device_scan_catches_a_raw_descriptor(self) -> None:
+        self.assertTrue(scan_device_writes("import os\nos.open('/dev/vda', os.O_RDWR)\n"))
+
+    def test_the_device_scan_allows_reading_a_sysfs_value(self) -> None:
+        fine = 'value = open("/sys/class/drm/card0/device/vendor").read()\n'
+        self.assertEqual(scan_device_writes(fine), [])
+
+
 if __name__ == "__main__":
     unittest.main()
