@@ -25,7 +25,7 @@
   ;; load only when Guix evaluates it.
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-13)
-  #:export (wsm-hwcheck-fpc wsm-classify-fpc wsm-partition-fpc))
+  #:export (wsm-hwcheck-fpc wsm-classify-fpc wsm-partition-fpc wsm-profile-fpc))
 
 (define-public wsm-hwcheck-fpc
   (package
@@ -55,7 +55,8 @@
                      (bin (string-append out "/bin")))
                 (install-file "tools/pascal/wsm-hwcheck" bin)
                 (install-file "tools/pascal/wsm-classify" bin)
-                (install-file "tools/pascal/wsm-partition" bin)))))))
+                (install-file "tools/pascal/wsm-partition" bin)
+                (install-file "tools/pascal/wsm-profile" bin)))))))
     (synopsis "Read-only PCI hardware reader for WSM Desktop, built with FPC")
     (description
      "A native binary that reads PCI identity and driver binding from sysfs and
@@ -86,3 +87,14 @@ CERTIFIED is never emitted because report v1 has no coverage manifest.")))
      "Builds a partition layout or refuses with a reason.  It plans and stops:
 it never runs sgdisk, never opens a block device and never writes.  The sgdisk
 invocations are emitted as data for a caller that holds the consent chain.")))
+
+(define-public wsm-profile-fpc
+  (package
+    (inherit wsm-hwcheck-fpc)
+    (name "wsm-profile-fpc")
+    (synopsis "Evidence bundle reader for WSM Desktop, built with FPC")
+    (description
+     "Checks an evidence bundle before an installation profile is accepted:
+schema version, path safety, at least one passing function, duplicate paths and
+artifact presence.  Digest verification is deliberately delegated and the
+output says so, so no caller mistakes this for a full check.")))
