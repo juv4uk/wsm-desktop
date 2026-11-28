@@ -51,6 +51,15 @@ def inline_failure_reporter(workflow: Path) -> bool:
     )
 
 
+def inline_summary_reporter(workflow: Path) -> bool:
+    """Recognize read-only step-summary diagnostics as visible failure reporting."""
+    return any(
+        "failure()" in str(step.get("if", ""))
+        and "$GITHUB_STEP_SUMMARY" in str(step.get("run", ""))
+        for step in steps_of(workflow)
+    )
+
+
 def exact_open_main_prs(
     candidates: list[dict],
     *,
@@ -252,12 +261,19 @@ class CiFailureVisibilityTests(unittest.TestCase):
             if workflow not in TRUSTED_WORKFLOWS | {TRUSTED_REPORTER}
             and not all_jobs_disabled(workflow)
             and not inline_failure_reporter(workflow)
+            and not inline_summary_reporter(workflow)
         ]
         self.assertEqual(
             missing,
             [],
             "these workflows fail without leaving a readable cause: " + ", ".join(missing),
         )
+
+    def test_h170_package_evidence_uses_read_only_step_summary(self) -> None:
+        workflow = WORKFLOWS / "h170-free-core-build-evidence.yml"
+        self.assertTrue(inline_summary_reporter(workflow))
+        self.assertFalse(inline_failure_reporter(workflow))
+        self.assertEqual(document_of(workflow).get("permissions"), {"contents": "read"})
 
     def test_disabled_distribution_workflows_do_not_need_failure_reporters(self) -> None:
         # `substitutes.yml` left this set on 2026-11-28, when the owner approved
