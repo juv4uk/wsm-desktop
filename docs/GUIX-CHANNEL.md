@@ -93,14 +93,46 @@ Wi-Fi, Bluetooth, Thunderbolt, webcam та інша неінвентаризов
 
 Наявність `.guix-channel` сама по собі **не** робить канал authenticated. У репозиторії ще немає підтвердженого WSM `.guix-authorizations`, signed introduction commit і публічного keyring branch. Тому зараз не можна рекламувати WSM channel як криптографічно автентифікований або включати його до production release lock.
 
-Bootstrap має бути виконаний власником ключа:
+Bootstrap має бути виконаний власником ключа. Нижче — точний формат і порядок локальної операції; placeholders не можна копіювати як готові значення.
 
-1. Вибрати/підтвердити OpenPGP signing key і перевірити його повний fingerprint локально. Приватний ключ ніколи не передавати в репозиторій або чат.
-2. Створити `.guix-authorizations` із цим fingerprint.
-3. Додати експортований **публічний** ключ як `.key` до окремої orphan-гілки `keyring`.
-4. Зробити підписаний OpenPGP Git commit, який уперше додає `.guix-authorizations`; саме він стає introduction commit.
-5. Перевірити історію командою `guix git authenticate <commit> <fingerprint>`, потім виконати реальний `guix time-machine` із WSM channel та звичайною authentication.
-6. Опублікувати introduction commit і fingerprint у цьому документі та в release notes.
+1. Перевірити локальні secret keys та повний fingerprint, включно з signing subkey:
+   ```sh
+   gpg --list-secret-keys --keyid-format=long --with-subkey-fingerprint
+   ```
+   Вибрати ключ, яким реально підписуватиметься introduction commit. Перевірити його повний fingerprint локально; короткий key ID не підходить.
+2. Створити `.guix-authorizations` у форматі Guix. Для одного owner key структура така:
+   ```scheme
+   (authorizations
+    (version 0)
+    (("FULL OPENPGP FINGERPRINT WITH SPACES"
+      (name "WSM channel owner"))))
+   ```
+   Замінити placeholder на повний fingerprint ключа з попереднього кроку. Це публічна інформація; приватний ключ ніколи не передавати в репозиторій або чат.
+3. Експортувати **лише публічний** ключ у файл із розширенням `.key`. Перевірити fingerprint:
+   ```sh
+   FPR='FULL OPENPGP FINGERPRINT WITH SPACES'
+   KEY_NAME="$(printf '%s' "$FPR" | tr -d ' ')"
+   gpg --armor --export "$FPR" > "/tmp/$KEY_NAME.key"
+   gpg --show-keys --with-fingerprint "/tmp/$KEY_NAME.key"
+   ```
+4. Додати цей `.key` до окремої orphan-гілки `keyring` (рекомендовано саме orphan branch), запушити її та перевірити, що GitHub містить лише публічні ключі у `.key`-файлах. Не додавати приватні keyring exports, GPG home, revocation certificates або інші секрети.
+5. Повернутися до авторитетної WSM гілки, перевірити чистий worktree і створити **підписаний** commit, який уперше додає `.guix-authorizations`:
+   ```sh
+   git status --short
+   git add .guix-authorizations
+   git -c user.signingkey="$FPR" commit -S -m "security(guix): introduce channel authorizations"
+   INTRO="$(git rev-parse HEAD)"
+   ```
+   Не використовувати GitHub web editor, REST contents API або непідписаний PR merge для introduction commit: вони не виконують owner-local OpenPGP signing.
+6. Перевірити локальну історію та keyring:
+   ```sh
+   git log -1 --show-signature --format=fuller "$INTRO"
+   guix git authenticate "$INTRO" "$FPR"
+   ```
+   Переконатися, що команда завершилася з exit code 0 без `--disable-authentication`, і перевірити звичайний `guix time-machine` consumer на окремому тимчасовому channels file.
+7. Лише після успішної перевірки опублікувати introduction commit і fingerprint у цьому документі та release notes, а точний WSM commit внести в окремі release locks.
+
+**Критична властивість історії:** кожен commit після introduction має бути підписаний ключем, дозволеним у `.guix-authorizations` його батьківського commit. Merge commit має бути підписаний ключем, дозволеним в обох батьківських гілках. Тому до Phase B слід узгодити signed fast-forward/rebase workflow; звичайний GitHub-generated merge commit не можна автоматично вважати authenticated. Не вмикати branch protection / required authentication, доки owner не перевірив повний шлях на тестовій гілці.
 
 Після introduction кожен commit у каналі має бути підписаний авторизованим ключем. Не використовувати непідписані GitHub-generated merge commits у захищеній історії; узгодити signed fast-forward/rebase workflow та правила GitHub перед вмиканням channel release. Не використовувати `--disable-authentication` для acceptance.
 
