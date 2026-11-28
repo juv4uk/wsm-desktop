@@ -39,7 +39,7 @@
 
 Кожен запуск створює окрему пару ключів командою `guix archive --generate-key` на тимчасовій GitHub-hosted VM. Це одноразова ідентичність конкретного cache release, а не постійний ключ WSM.
 
-Приватний `/etc/guix/signing-key.sec` використовується лише на runner для підпису NAR; він не записується в артефакти, Release, Pages, репозиторій або журнали. Після завершення job тимчасова VM видаляється. Відкритий `signing-key.pub` публікується разом із NAR, контрольними сумами й `provenance.json`. GitHub artifact attestation додатково пов'язує ці файли з workflow run та вихідним commit. Guix зберігає ключі у `/etc/guix/signing-key.pub` і `/etc/guix/signing-key.sec`; приватний ключ необхідно тримати в секреті. <Cite ref="turn743802search12"/>
+Приватний `/etc/guix/signing-key.sec` використовується лише на runner для підпису NAR; він не записується в артефакти, Release, Pages, репозиторій або журнали. Після завершення job тимчасова VM видаляється. Відкритий `signing-key.pub` публікується разом із NAR, контрольними сумами й `provenance.json`. GitHub artifact attestation додатково пов'язує ці файли з workflow run та вихідним commit. Guix зберігає ключі у `/etc/guix/signing-key.pub` і `/etc/guix/signing-key.sec`; приватний ключ необхідно тримати в секреті. Джерело: [GNU Guix Reference Manual — `guix archive`](https://guix.gnu.org/manual/en/guix.html#Invoking-guix-archive).
 
 Тому відкритий ключ змінюється з кожним cache release. Перед використанням клієнт має завантажити відповідний Release, перевірити `SHA256SUMS`, provenance та GitHub attestation, порівняти його публічний ключ із `signing-key.pub` у метаданих Pages і лише тоді авторизувати:
 
@@ -47,7 +47,7 @@
 sudo guix archive --authorize < signing-key.pub
 ```
 
-Цей режим дозволяє опублікувати перший перевірюваний кеш без довготривалого приватного ключа в GitHub Secrets. Він не створює сталу ідентичність substitute-сервера: кожен новий ключ треба перевірити й авторизувати окремо. Не авторизуйте ключ лише тому, що файл доступний за URL. Guix відхиляє імпорт, якщо підпис недійсний або ключ не авторизований. <Cite ref="turn743802search12"/>
+Цей режим дозволяє опублікувати перший перевірюваний кеш без довготривалого приватного ключа в GitHub Secrets. Він не створює сталу ідентичність substitute-сервера: кожен новий ключ треба перевірити й авторизувати окремо. Не авторизуйте ключ лише тому, що файл доступний за URL. Guix відхиляє імпорт, якщо підпис недійсний або ключ не авторизований. Джерело: [GNU Guix Reference Manual — `guix archive`](https://guix.gnu.org/manual/en/guix.html#Invoking-guix-archive).
 
 Новий незмінний cache release має назву `h170-free-cache-<workflow-run-number>`. Workflow запускається після злиття релевантних змін у `main` або вручну з `main`; довільний список пакетів через workflow input не приймається.
 
