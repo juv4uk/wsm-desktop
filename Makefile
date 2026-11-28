@@ -116,6 +116,7 @@ check-guix-eval:
 	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/desktop.scm --dry-run
 	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/live.scm --dry-run
 	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/live-minimal.scm --dry-run
+	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/h170.scm --dry-run
 	$(MAKE) check-compatibility-eval
 	$(GUIX) time-machine -C channels.lock.scm -L . -- home -L . build systems/home.scm --dry-run
 
