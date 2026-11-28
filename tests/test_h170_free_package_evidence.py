@@ -40,18 +40,14 @@ class H170FreePackageEvidenceTests(unittest.TestCase):
         self.assertIn("ed7fb901fce31588bd12ab95adc36ebcb51bc8ea", self.manifest)
         self.assertIn("#514", self.manifest)
 
-    def test_workflow_runs_only_for_relevant_pull_requests_or_manual_dispatch(self) -> None:
+    def test_workflow_is_manual_only_and_guarded_to_main(self) -> None:
         events = self.workflow["on"]
-        self.assertEqual(set(events), {"pull_request", "workflow_dispatch"})
-        paths = set(events["pull_request"]["paths"])
-        self.assertEqual(
-            paths,
-            {
-                ".github/workflows/h170-free-core-build-evidence.yml",
-                "ci/packages/h170-free-core.scm",
-                "channels.lock.scm",
-            },
-        )
+        self.assertEqual(set(events), {"workflow_dispatch"})
+        self.assertIn('GITHUB_EVENT_NAME" != "workflow_dispatch', self.workflow_text)
+        self.assertIn('GITHUB_REF" != "refs/heads/main', self.workflow_text)
+        concurrency = self.workflow["concurrency"]
+        self.assertEqual(concurrency["group"], "h170-free-core-package-evidence-main")
+        self.assertEqual(str(concurrency["cancel-in-progress"]).lower(), "false")
 
     def test_workflow_uses_read_only_permissions_and_exact_official_lock(self) -> None:
         self.assertEqual(self.workflow["permissions"], {"contents": "read"})
