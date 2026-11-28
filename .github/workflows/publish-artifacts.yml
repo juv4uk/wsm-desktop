@@ -32,6 +32,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Use the GNU Guix project's authenticated Codeberg mirror
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Transport-only rewrite; channels.lock.scm and Guix authentication stay unchanged.
+          git config --global url."https://codeberg.org/guix/guix.git".insteadOf "https://git.guix.gnu.org/guix.git"
+          echo "Using authenticated Codeberg mirror for the pinned GNU Guix channel." >> "$GITHUB_STEP_SUMMARY"
+
       - name: Встановити Guix
         run: |
           set -euo pipefail
