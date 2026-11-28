@@ -35,6 +35,21 @@ class InstallerMarkerTests(unittest.TestCase):
         self.assertIn("/run/current-system/profile/bin/wsm-install", profile)
         self.assertIn("system*", profile)
 
+    def test_the_selfcheck_proves_the_imports_not_just_help(self) -> None:
+        """--help never touches jsonschema; a missing input would still pass."""
+        profile = (ROOT / "systems" / "live-minimal.scm").read_text(encoding="utf-8")
+        self.assertIn("WSM_INSTALLER_FAIL:imports", profile)
+        self.assertIn("import jsonschema", profile)
+
+    def test_every_imported_module_exists_in_this_tree(self) -> None:
+        """The image imports what the repository has; a rename would break it."""
+        profile = (ROOT / "systems" / "live-minimal.scm").read_text(encoding="utf-8")
+        for module in ("wsm_install.cli", "wsm_install.classification",
+                       "wsm_install.partition", "wsm_install.profile"):
+            with self.subTest(module=module):
+                self.assertIn(module, profile)
+                self.assertTrue((ROOT / (module.replace(".", "/") + ".py")).is_file())
+
     def test_acceptance_requires_the_installer_marker(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "release-minimal-live.yml").read_text(encoding="utf-8")
         self.assertEqual(workflow.count("--installer-marker WSM_INSTALLER_OK"), 2)
