@@ -1,25 +1,13 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""Refuse to publish Guix packages while the project's own blockers stand.
+"""Check actual package metadata and record scoped publication exceptions.
 
-Publishing is the one action in this repository that leaves the machine: a
-channel consumers pull from, or a binary cache they substitute from. Once it is
-out, it cannot be recalled, and a licence mistake is not a bug you fix in the
-next commit.
+The WSM-owned package uses LicenseRef-Volnist metadata. The owner has removed
+the process gates for an unsigned Git channel and for the independent Free
+package/cache lane. The Compatibility/NVIDIA firmware payload remains outside
+that lane; a waiver never grants rights from a third-party rights holder.
 
-The repository already records two blockers that no amount of engineering can
-close, because both are owner decisions:
-
-* **#367** — `wsm-tools` declares `(license gpl3+)` while the repository is
-  under `LicenseRef-Volnist`. The project's own rule is explicit: do not publish
-  it as a release-ready channel package, and do not mask the problem by swapping
-  the identifier.
-* **#586** — no NVIDIA GP107 firmware may be included in or redistributed with
-  the Free or Compatibility channel/ISO without written owner/legal clearance
-  for the exact distribution model.
-
-This checker reads the repository and reports what is still open. It is not a
-substitute for the owner's decision; it exists so that decision cannot be
-skipped by accident.
+This checker reports raw findings and marks recorded owner decisions as waived.
+It does not authenticate a Git channel or certify physical hardware.
 """
 
 from __future__ import annotations
@@ -195,8 +183,7 @@ def main(argv: list[str] | None = None) -> int:
     if not blocking:
         print(
             "publication-readiness: no blocking items remain"
-            + ("; some were waived by the owner" if waived else "")
-            + " — the owner's go-ahead is still required to publish"
+            + ("; waived facts are still reported above" if waived else "")
         )
         return 0
 

@@ -1,11 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""Publication must be refused while the owner's decisions are open.
+"""Publication checks real metadata and keeps scoped owner waivers visible.
 
-Publishing leaves the machine and cannot be recalled. Two blockers in this
-repository are owner decisions, not engineering tasks: the licence mismatch
-(#367) and the absence of a signed channel introduction. The checker exists so
-neither can be skipped by accident — and, just as important, so it does not
-pretend they are closed.
+The license mismatch is resolved with LicenseRef-Volnist. An unsigned Git
+channel and nonfree Compatibility payload are separate from the signed Free
+binary-cache lane; owner waivers must be reported, never silently erased.
 """
 
 from __future__ import annotations
@@ -138,23 +136,18 @@ class PublicationReadinessTests(unittest.TestCase):
         )
         self.assertEqual(checker.problems(self.root), [])
 
-    def test_the_real_repository_is_currently_blocked(self) -> None:
-        """#367 was resolved via option (a); the other blockers still stand.
-
-        The licence mismatch no longer appears: every package definition now
-        carries the custom `<license>` object. What remains is the unsigned
-        channel and the nonfree Compatibility definitions (#586). If this test
-        ever fails because there are no blockers at all, the owner has closed
-        both — and the policy text should be updated in the same change.
-        """
+    def test_real_repository_license_is_consistent_and_scoped_findings_are_waived(self) -> None:
         found = checker.problems(ROOT)
-        self.assertTrue(found, "no blockers at all; update the publication policy text")
-        self.assertFalse(
-            any("#367" in item for item in found),
-            "#367 reappeared: a package definition declares a licence that "
-            "contradicts the repository licence",
-        )
-        self.assertTrue(any("guix-authorizations" in item for item in found), found)
+        self.assertFalse(any("#367" in item for item in found), found)
+        waivers = checker.read_waivers(ROOT)
+        self.assertIn("firmware-586", waivers)
+        self.assertIn("channel-unsigned", waivers)
+        unwaived = []
+        for item in found:
+            identifier = item[1 : item.index("]")] if item.startswith("[") else ""
+            if not identifier or identifier not in waivers:
+                unwaived.append(item)
+        self.assertEqual(unwaived, [], f"unwaived publication findings: {unwaived}")
 
 
 if __name__ == "__main__":
