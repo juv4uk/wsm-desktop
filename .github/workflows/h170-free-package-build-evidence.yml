@@ -52,7 +52,7 @@ jobs:
           guix time-machine -C channels.lock.scm -- build \
             -m ci/packages/h170-free.scm --no-grafts > "$paths_file"
           mapfile -t store_paths < "$paths_file"
-          if [ "\${#store_paths[@]}" -eq 0 ]; then
+          if [ "${#store_paths[@]}" -eq 0 ]; then
             echo "No package store paths were produced." >&2
             exit 1
           fi
@@ -65,7 +65,7 @@ jobs:
             echo "| --- | ---: | --- |"
           } >> "$GITHUB_STEP_SUMMARY"
 
-          for store_path in "\${store_paths[@]}"; do
+          for store_path in "${store_paths[@]}"; do
             case "$store_path" in
               /gnu/store/*) ;;
               *) echo "Unexpected Guix build output: $store_path" >&2; exit 1 ;;
@@ -86,6 +86,6 @@ jobs:
 
           {
             echo
-            echo "Result: \${#store_paths[@]} store roots built or substituted successfully."
+            echo "Result: ${#store_paths[@]} store roots built or substituted successfully."
             echo "The runner store is ephemeral. No package archive or downloadable binary was produced."
           } >> "$GITHUB_STEP_SUMMARY"
