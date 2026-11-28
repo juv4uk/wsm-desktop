@@ -176,9 +176,9 @@ def parse_authorizations(text: str) -> list[str]:
     parsed: list[str] = []
     seen: set[str] = set()
     for number, entry in enumerate(entries, 1):
-        if not isinstance(entry, list) or len(entry) < 2:
+        if not isinstance(entry, list) or not entry:
             raise ValueError(
-                f"authorization entry {number} must begin with a fingerprint and key/value metadata"
+                f"authorization entry {number} must begin with a fingerprint"
             )
         raw_fingerprint = entry[0]
         if not isinstance(raw_fingerprint, SchemeString):
@@ -212,6 +212,65 @@ def parse_authorizations(text: str) -> list[str]:
         parsed.append(fingerprint)
 
     return parsed
+
+def historical_authorization_fingerprints(root: Path, current_text: str) -> set[str]:
+    """Collect every fingerprint ever authorized on this channel history through HEAD.
+
+    Guix requires the keyring branch to retain public exports for historical
+    authorization entries, including keys that are no longer in the current file.
+    A shallow or unavailable Git history cannot prove that set and fails closed.
+    """
+    authorized = set(parse_authorizations(current_text))
+
+    try:
+        shallow = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--is-shallow-repository"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+        if shallow.returncode != 0:
+            raise ValueError(
+                "AUTH_HISTORY_CHECK=NOT_RUN: repository history is unavailable"
+            )
+        if shallow.stdout.strip().lower() == "true":
+            raise ValueError(
+                "AUTH_HISTORY_CHECK=NOT_RUN: shallow clone cannot prove historical key retention"
+            )
+
+        history = subprocess.run(
+            ["git", "-C", str(root), "log", "--format=%H", "HEAD", "--", ".guix-authorizations"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+        if history.returncode != 0:
+            detail = history.stderr.strip() or f"exit status {history.returncode}"
+            raise ValueError(f"AUTH_HISTORY_CHECK=NOT_RUN: git log failed: {detail}")
+
+        for commit in filter(None, history.stdout.splitlines()):
+            snapshot = subprocess.run(
+                ["git", "-C", str(root), "show", f"{commit}:.guix-authorizations"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=30,
+            )
+            if snapshot.returncode != 0:
+                detail = snapshot.stderr.strip() or f"exit status {snapshot.returncode}"
+                raise ValueError(
+                    f"AUTH_HISTORY_CHECK=NOT_RUN: cannot read authorization history at {commit}: {detail}"
+                )
+            authorized.update(parse_authorizations(snapshot.stdout))
+    except subprocess.TimeoutExpired as error:
+        raise ValueError("AUTH_HISTORY_CHECK=NOT_RUN: git history inspection timed out") from error
+    except OSError as error:
+        raise ValueError(f"AUTH_HISTORY_CHECK=NOT_RUN: cannot execute git: {error}") from error
+
+    return authorized
+
 
 def key_file_fingerprints(keyring_dir: Path) -> dict[str, str]:
     """Map primary fingerprints to .key file paths from the explicit keyring checkout."""
@@ -280,9 +339,10 @@ def problems(
         return []
 
     try:
-        listed_entries = parse_authorizations(read(authorizations))
+        current_authorizations = read(authorizations)
+        authorized = historical_authorization_fingerprints(root, current_authorizations)
     except (OSError, UnicodeError, ValueError) as error:
-        return [f".guix-authorizations is invalid: {error}"]
+        return [f".guix-authorizations/history is invalid: {error}"]
 
     if keyring_dir is None:
         return [
@@ -295,7 +355,6 @@ def problems(
     except (OSError, ValueError) as error:
         return [str(error)]
 
-    authorized = set(listed_entries)
     published = set(keys)
     found: list[str] = []
 
