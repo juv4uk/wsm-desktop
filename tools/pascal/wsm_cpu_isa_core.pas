@@ -25,7 +25,7 @@ function BuildEvidence(const CpuInfoPath, Architecture: string): TJSONObject;
 implementation
 
 uses
-  Classes, SysUtils, DateUtils, BaseUnix, Unix;
+  Classes, DateUtils, BaseUnix, Unix;
 
 const
   V2Features: array[0..6] of string = (
@@ -134,7 +134,7 @@ begin
 end;
 
 procedure ReadCpuInfoFlags(const CpuInfoPath: string;
-  CommonFlags, FirstProcessorFields: TStrings; out ProcessorCount: Integer);
+  CommonFlags, FirstProcessorFields: TStringList; out ProcessorCount: Integer);
 var
   Content: TStringList;
   Blocks, Tokens, FlagSet: TStringList;
