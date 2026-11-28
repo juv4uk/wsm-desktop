@@ -143,7 +143,8 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
     def test_publication_has_manual_and_explicit_tag_entrypoints(self) -> None:
         self.assertEqual(set(self.workflow["on"]), {"push", "workflow_dispatch"})
         self.assertEqual(self.workflow["on"]["push"]["tags"], ["packages-*"])
-        self.assertNotIn("branches:", self.text)
+        self.assertEqual(self.workflow["on"]["push"]["branches"], ["publish/h170-free/**"])
+        self.assertIn("--prerelease", self.text)
 
     def test_the_archive_key_is_ephemeral_not_a_repository_secret(self) -> None:
         self.assertIn("guix archive --generate-key", self.text)
