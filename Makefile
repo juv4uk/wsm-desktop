@@ -19,6 +19,8 @@ check-syntax:
 check-scheme-imports:
 	$(PYTHON) scripts/check_scheme_imports.py
 	$(PYTHON) tests/test_scheme_imports.py
+	$(PYTHON) scripts/check_scheme_module_coverage.py
+	$(PYTHON) tests/test_scheme_module_coverage.py
 
 check-state:
 	$(PYTHON) tests/test_state_ownership.py
