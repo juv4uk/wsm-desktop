@@ -862,15 +862,29 @@ class SingleToolMapTests(unittest.TestCase):
 class SysfsObserverTests(unittest.TestCase):
     """The real observers answer from sysfs and /proc, never from PATH or a command."""
 
-    def _disk(self, root: Path, name: str, *, dev: str = "259:0", sectors: int = 1953525168,
-              removable: str = "0", parts: tuple[str, ...] = ("nvme0n1p1", "nvme0n1p2")) -> None:
+    def _disk(
+        self,
+        root: Path,
+        name: str,
+        *,
+        dev: str = "259:0",
+        sectors: int = 1953525168,
+        removable: str = "0",
+        parts: tuple[str, ...] = ("nvme0n1p1", "nvme0n1p2"),
+        partition_numbers: dict[str, int] | None = None,
+    ) -> None:
         block = root / "class" / "block" / name
         block.mkdir(parents=True)
         (block / "dev").write_text(dev + "\n", encoding="utf-8")
         (block / "size").write_text(str(sectors) + "\n", encoding="utf-8")
         (block / "removable").write_text(removable + "\n", encoding="utf-8")
         for part in parts:
-            (block / part).mkdir()
+            part_dir = block / part
+            part_dir.mkdir()
+            if partition_numbers and part in partition_numbers:
+                (part_dir / "partition").write_text(
+                    str(partition_numbers[part]) + "\n", encoding="utf-8"
+                )
 
     def test_identity_is_read_from_sysfs(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -886,12 +900,46 @@ class SysfsObserverTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             self.assertIsNone(SysfsDiskObserver(sys_root=Path(temporary)).block_identity("/dev/nope"))
 
-    def test_partitions_are_listed_from_the_block_directory(self) -> None:
+    def test_noncanonical_paths_do_not_alias_a_sysfs_basename(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            self._disk(root, "sda", parts=("sda1", "sda2", "sdaa"))
+            self._disk(root, "sda")
             observer = SysfsDiskObserver(sys_root=root)
-            self.assertEqual(observer.partitions("/dev/sda"), ("/dev/sda1", "/dev/sda2", "/dev/sdaa"))
+            for path in ("sda", "/tmp/sda", "/dev/disk/by-id/sda", "/dev/../sda"):
+                with self.subTest(path=path):
+                    self.assertIsNone(observer.block_identity(path))
+
+    def test_a_partition_node_is_not_accepted_as_a_whole_disk(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            partition = root / "class" / "block" / "sda1"
+            partition.mkdir(parents=True)
+            (partition / "partition").write_text("1\n", encoding="utf-8")
+            (partition / "dev").write_text("8:1\n", encoding="utf-8")
+            (partition / "size").write_text("100\n", encoding="utf-8")
+            (partition / "removable").write_text("0\n", encoding="utf-8")
+            observer = SysfsDiskObserver(sys_root=root)
+            self.assertIsNone(observer.block_identity("/dev/sda1"))
+
+    def test_only_sysfs_partition_objects_are_listed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._disk(
+                root,
+                "sda",
+                parts=("sda1", "sda2", "sdaa", "sda3"),
+                partition_numbers={"sda1": 1, "sda2": 2},
+            )
+            # A name prefix alone is not a partition, and malformed metadata
+            # must not be promoted into disk topology.
+            (root / "class" / "block" / "sda" / "sda3" / "partition").write_text(
+                "not-a-number\n", encoding="utf-8"
+            )
+            observer = SysfsDiskObserver(sys_root=root)
+            self.assertEqual(
+                observer.partitions("/dev/sda"),
+                ("/dev/sda1", "/dev/sda2"),
+            )
 
     def test_the_live_device_comes_from_the_root_mount(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
