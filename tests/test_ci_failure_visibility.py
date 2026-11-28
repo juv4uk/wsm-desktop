@@ -64,6 +64,7 @@ class CiFailureVisibilityTests(unittest.TestCase):
         script = str(steps[0].get("run", ""))
         self.assertIn("actions/runs/$SOURCE_RUN_ID", script)
         self.assertIn("pulls?state=all&head=", script)
+        self.assertIn("GITHUB_REPOSITORY%%/*", script)
         self.assertIn("head.sha == $sha", script)
         self.assertIn("issues/$PR_NUMBER/comments", script)
         self.assertIn("HEAD_REPOSITORY", script)
