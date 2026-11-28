@@ -240,7 +240,22 @@ jobs:
             cd "$OUT"
             sha256sum -c SHA256SUMS
           )
-          echo "$GITHUB_SHA" > "$OUT/wsm-source-commit.txt"
+          gh release create "$TAG" \\
+            "$OUT/linux-libre-h170-closure.nar" \\
+            "$OUT/linux-libre-h170-source.tar.xz" \\
+            "$OUT/signing-key.pub" \\
+            "$OUT/provenance.json" \\
+            "$OUT/closure.paths.txt" \\
+            "$OUT/closure-size.txt" \\
+            "$OUT/resolved-channels.scm" \\
+            "$OUT/channels-lock.sha256" \\
+            "$OUT/wsm-source-commit.txt" \\
+            "$OUT/guix-channel-commit.txt" \\
+            "$OUT/SHA256SUMS" \\
+            "$OUT/RELEASE-NOTES.md" \\
+            --title "H170 Free Linux-libre $PACKAGE_VERSION ($SHORT_SHA)" \\
+            --notes-file "$OUT/RELEASE-NOTES.md" \\
+            --target "$GITHUB_SHA"
           mkdir -p "$RUNNER_TEMP/h170-readback"
           gh release download "$TAG" --dir "$RUNNER_TEMP/h170-readback"
           (
