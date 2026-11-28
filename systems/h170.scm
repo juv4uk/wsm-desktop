@@ -85,7 +85,7 @@
 ;;
 ;; Налаштування, специфічні для цієї плати, і їхні джерела:
 ;;   evidence-config: nvme <- systems/wsm-gp107.modconfig:7
-;;   evidence-config: nouveau.atomic=0 <- drivers/profiles/h170-free.json:388
+;;   evidence-config: nouveau.atomic=0 <- drivers/profiles/h170-free.json:396
 
 (use-modules (gnu)
              (gnu packages linux)
