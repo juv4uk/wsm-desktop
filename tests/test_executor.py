@@ -679,5 +679,37 @@ class ToolResolutionTests(unittest.TestCase):
         self.assertIn("prefix", reason)
 
 
+class ProfilePathAdmissibilityTests(unittest.TestCase):
+    """A Guix image has no /usr, so the same tool must be admissible from a profile."""
+
+    def test_a_profile_resolved_tool_is_admissible(self) -> None:
+        admissible, reason = admissible_executable(
+            Step(["/run/current-system/profile/sbin/sgdisk", "-p", "/dev/nvme0n1"], "partition")
+        )
+        self.assertTrue(admissible, reason)
+
+    def test_a_tool_in_a_random_directory_is_still_refused(self) -> None:
+        admissible, reason = admissible_executable(Step(["/tmp/sgdisk", "-p", "/dev/nvme0n1"], "partition"))
+        self.assertFalse(admissible)
+        self.assertIn("not admitted", reason)
+
+    def test_a_traversal_that_lands_back_in_a_prefix_is_refused(self) -> None:
+        admissible, reason = admissible_executable(
+            Step(["/usr/sbin/../tmp/sgdisk", "-p", "/dev/nvme0n1"], "partition")
+        )
+        self.assertFalse(admissible)
+
+    def test_an_untrusted_basename_in_a_profile_is_refused(self) -> None:
+        admissible, reason = admissible_executable(
+            Step(["/run/current-system/profile/bin/sh", "-c", "true"], "shell")
+        )
+        self.assertFalse(admissible)
+        self.assertIn("allowlist", reason)
+
+    def test_the_host_path_from_the_table_still_works(self) -> None:
+        admissible, reason = admissible_executable(STEPS[0])
+        self.assertTrue(admissible, reason)
+
+
 if __name__ == "__main__":
     unittest.main()
