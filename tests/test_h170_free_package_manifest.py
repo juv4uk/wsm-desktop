@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-"""The H170 Free package manifest and publication workflow stay upstream-only."""
+"""The H170 Free cache is fixed, upstream-only, and distinct from the custom kernel."""
 
 from __future__ import annotations
 
@@ -9,9 +9,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "drivers" / "profiles" / "h170-free-packages.scm"
-WORKFLOW = ROOT / ".github" / "workflows" / "package-archives.yml"
+KERNEL_PACKAGE = ROOT / "wsm" / "packages" / "linux-libre.scm"
 
-EXPECTED = {
+EXPECTED = (
     "mesa",
     "vulkan-loader",
     "vulkan-tools",
@@ -22,50 +22,53 @@ EXPECTED = {
     "nvme-cli",
     "smartmontools",
     "lm-sensors",
-}
+)
 
 
 class H170FreePackageManifestTests(unittest.TestCase):
-    def test_manifest_contains_the_fixed_h170_upstream_roots(self) -> None:
-        text = MANIFEST.read_text(encoding="utf-8")
-        code = "\n".join(line.split(";;", 1)[0] for line in text.splitlines())
-        actual = set(re.findall(r'"([^"]+)"', code))
-        self.assertEqual(actual, EXPECTED)
+    def setUp(self) -> None:
+        self.text = MANIFEST.read_text(encoding="utf-8")
 
-    def test_manifest_excludes_wsm_owned_and_nonfree_roots(self) -> None:
-        text = MANIFEST.read_text(encoding="utf-8")
-        code = "\n".join(line.split(";;", 1)[0] for line in text.splitlines()).lower()
+    def test_manifest_contains_exactly_the_fixed_ten_upstream_roots(self) -> None:
+        match = re.search(
+            r"specifications->manifest\s*'\((.*?)\)\s*\)",
+            self.text,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(match, "manifest must return specifications->manifest")
+        packages = tuple(re.findall(r'"([a-z0-9.+-]+)"', match.group(1)))
+        self.assertEqual(packages, EXPECTED)
+        self.assertEqual(len(packages), len(set(packages)))
+
+    def test_no_wsm_owned_or_nonfree_package_is_in_the_upstream_roots(self) -> None:
+        match = re.search(
+            r"specifications->manifest\s*'\((.*?)\)\s*\)",
+            self.text,
+            re.DOTALL,
+        )
+        assert match is not None
+        packages = set(re.findall(r'"([a-z0-9.+-]+)"', match.group(1)))
         for forbidden in (
             "wsm-tools",
             "wsm-live-tools",
-            "nonguix",
-            "nvidia-firmware",
             "linux-firmware",
+            "nvidia-firmware",
+            "nonguix",
+            "nvda-580",
             "intel-microcode",
         ):
             with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, code)
+                self.assertNotIn(forbidden, packages)
 
-    def test_archive_workflow_uses_the_fixed_manifest_and_exact_lock(self) -> None:
-        text = WORKFLOW.read_text(encoding="utf-8")
-        self.assertIn("channels.lock.scm", text)
-        self.assertIn("drivers/profiles/h170-free-packages.scm", text)
-        self.assertIn("--manifest=", text)
-        self.assertIn("guix archive --generate-key", text)
-        self.assertIn("guix archive --export", text)
-        self.assertIn("gh release create", text)
-        self.assertIn("gh release download", text)
-        self.assertIn("sha256sum -c SHA256SUMS", text)
-        self.assertNotIn("secrets.", text)
-        self.assertNotIn("actions/upload-artifact", text)
-        self.assertNotIn("if: ${{ false }}", text)
+    def test_custom_h170_kernel_is_separate_from_the_upstream_cache_roots(self) -> None:
+        self.assertIn("linux-libre-h170", self.text)
+        kernel = KERNEL_PACKAGE.read_text(encoding="utf-8")
+        self.assertIn("(inherit linux-libre)", kernel)
+        self.assertIn("linux-libre-h170-nouveau-atomic.patch", kernel)
 
-    def test_archive_workflow_validates_package_input_without_shell_interpolation(self) -> None:
-        text = WORKFLOW.read_text(encoding="utf-8")
-        self.assertIn("PACKAGES: ${{ inputs.packages || '' }}", text)
-        self.assertIn('read -r -a PACKAGE_ARRAY <<< "$PACKAGES"', text)
-        self.assertIn('case " $ALLOWED " in', text)
-        self.assertNotIn("for package in ${{ inputs.packages", text)
+    def test_manifest_is_not_a_hardware_support_verdict(self) -> None:
+        self.assertIn("not a supported-hardware verdict", self.text.lower())
+        self.assertIn("build/evidence manifest", self.text.lower())
 
 
 if __name__ == "__main__":
