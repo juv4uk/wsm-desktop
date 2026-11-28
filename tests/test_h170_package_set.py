@@ -74,13 +74,13 @@ class H170FreePackageSetTests(unittest.TestCase):
         self.assertIn("10de:1c82", gpu["pci_ids"])
         self.assertEqual(gpu["firmware"]["requirement"], "required")
         compat_gpu = next(item for item in compat["devices"] if item["device_id"] == "nvidia-gtx-1050-ti-compat")
-        self.assertEqual(compat_gpu["package_resolution"], "not-assessed")
+        self.assertEqual(compat_gpu["driver_candidates"][0]["package_resolution"], "not-assessed")
 
     def test_documentation_records_the_kms_and_firmware_limits(self) -> None:
         text = DOC.read_text(encoding="utf-8").lower()
         self.assertIn("linux-libre 7.3.5", text)
         self.assertIn("atomic-kms", text)
-        self.assertIn("fe cs", text.replace(" ", ""))
+        self.assertIn("fecs/gpccs", text.replace(" ", ""))
         self.assertIn("#367", text)
         self.assertIn("#586", text)
         self.assertIn("not-published", text)
@@ -121,7 +121,8 @@ class H170FreePackageSetTests(unittest.TestCase):
         text = DOC.read_text(encoding="utf-8").lower()
         self.assertIn("compatibility", text)
         self.assertIn("not part of free", text)
-        self.assertIn("no nonguix", text)
+        self.assertIn("nonguix", text)
+        self.assertIn("not imported", text)
 
 
 if __name__ == "__main__":
