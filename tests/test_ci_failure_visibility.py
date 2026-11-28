@@ -24,7 +24,9 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 
 # Something that writes where a reader without auth can see it.
-REPORTS = re.compile(r"gh api .*commits/\$GITHUB_SHA/comments|gh pr comment|gh issue comment")
+REPORTS = re.compile(
+    r"gh api .*commits/\$GITHUB_SHA/comments|gh pr comment|gh issue comment|GITHUB_STEP_SUMMARY"
+)
 
 
 def steps_of(workflow: Path) -> list[dict]:
