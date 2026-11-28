@@ -126,5 +126,40 @@ class ReleaseAcceptanceTimeoutTests(unittest.TestCase):
                 int(step["timeout-minutes"]), 15,
                 f"acceptance step {name!r} may not wait longer than 15 minutes",
             )
+
+class PackageArchiveWorkflowTests(unittest.TestCase):
+    """An archive workflow must not become a distribution channel by accident."""
+
+    WORKFLOW = ROOT / ".github" / "workflows" / "package-archives.yml"
+
+    def text(self) -> str:
+        return self.WORKFLOW.read_text(encoding="utf-8")
+
+    def test_it_runs_only_when_a_person_asks(self) -> None:
+        text = self.text()
+        self.assertIn("workflow_dispatch:", text)
+        self.assertNotIn("tags:", text)
+        self.assertNotIn("branches:", text)
+
+    def test_it_publishes_no_release_asset_and_no_signing_key(self) -> None:
+        text = self.text()
+        for forbidden in ("gh release upload", "secrets.", "guix archive --generate-key", "git push"):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, text)
+
+    def test_the_archive_is_built_on_the_release_lock(self) -> None:
+        self.assertIn("guix time-machine -C channels.lock.scm", self.text())
+
+    def test_the_artifact_is_kept_with_a_checksum(self) -> None:
+        text = self.text()
+        self.assertIn("actions/upload-artifact@v7", text)
+        self.assertIn("sha256sum wsm-tools.nar", text)
+        self.assertIn("retention-days: 30", text)
+
+    def test_it_says_why_it_is_not_a_substitute_server(self) -> None:
+        text = self.text().lower()
+        self.assertIn("not a substitute server", text)
+        self.assertIn("#741", text)
+
 if __name__ == "__main__":
     unittest.main()
