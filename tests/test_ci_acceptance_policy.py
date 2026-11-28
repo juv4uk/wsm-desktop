@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import unittest
 
 import yaml
@@ -128,56 +129,85 @@ class ReleaseAcceptanceTimeoutTests(unittest.TestCase):
             )
 
 class PackageArchiveWorkflowTests(unittest.TestCase):
-    """The owner allowed publication; these are the limits that still hold."""
+    """The first distribution lane follows the accepted ADR 0010 boundaries."""
 
     WORKFLOW = ROOT / ".github" / "workflows" / "package-archives.yml"
 
     def setUp(self) -> None:
         self.text = self.WORKFLOW.read_text(encoding="utf-8")
         self.workflow = yaml.load(self.text, Loader=yaml.BaseLoader)
+        self.job = self.workflow["jobs"]["archive"]
+        self.steps = self.job["steps"]
 
-    def test_the_job_is_not_disabled_any_more(self) -> None:
-        self.assertNotEqual(self.workflow["jobs"]["archive"].get("if"), "${{ false }}")
+    def step(self, name: str) -> dict:
+        for item in self.steps:
+            if name in item.get("name", ""):
+                return item
+        raise AssertionError(f"workflow step not found: {name}")
 
-    def test_the_owner_permission_is_recorded_in_the_file(self) -> None:
-        self.assertIn("ВЛАСНИК ДАВ ДОЗВІЛ", self.text)
+    def test_publication_is_manual_only(self) -> None:
+        self.assertEqual(set(self.workflow["on"]), {"workflow_dispatch"})
+        self.assertNotIn("push:", self.text)
+        self.assertNotIn("schedule:", self.text)
+        self.assertEqual(self.job["if"], "github.ref == 'refs/heads/main'")
 
-    def test_workflow_starts_only_deliberately(self) -> None:
-        """Two deliberate entry points, no branch trigger: nothing appears unasked."""
-        self.assertEqual(set(self.workflow["on"]), {"push", "workflow_dispatch"})
-        self.assertEqual(self.workflow["on"]["push"]["tags"], ["packages-*"])
-        self.assertNotIn("branches:", self.text)
-
-    def test_no_signing_key_is_created_or_read_here(self) -> None:
-        for forbidden in ("secrets.", "guix archive --generate-key", "signing-key"):
+    def test_only_the_owner_package_is_packed(self) -> None:
+        build = self.step("Зібрати власний пакет")["run"]
+        self.assertIn("wsm-tools", build)
+        self.assertIn("pack --format=tarball", build)
+        self.assertIn("-L .", build)
+        for forbidden in (
+            "linux-libre",
+            "mesa",
+            "nonguix",
+            "nvda-580",
+            "linux-firmware",
+            "wsm-live-tools",
+        ):
             with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, self.text)
+                self.assertNotIn(forbidden, build)
 
-    def test_publication_is_limited_to_a_verified_draft(self) -> None:
-        self.assertIn("--json isDraft", self.text)
-        self.assertIn("refusing: $TAG is not a draft release", self.text)
-        self.assertNotIn("gh release create", self.text)
+    def test_package_selection_is_not_user_controlled_shell_input(self) -> None:
+        self.assertNotIn("inputs.packages", self.text)
+        self.assertNotIn("github.event.inputs", self.text)
+        self.assertNotIn("for package in $" + "{{", self.text)
+        self.assertNotIn("PACKAGES=", self.text)
+
+    def test_guix_pack_uses_the_locked_channel_and_no_signing_key(self) -> None:
+        build = self.step("Зібрати власний пакет")["run"]
+        self.assertIn("guix time-machine -C channels.lock.scm", build)
+        self.assertNotIn("guix archive", self.text)
+        self.assertNotIn("signing-key", self.text)
+        self.assertNotIn("GUIX_SIGNING_KEY", self.text)
+        self.assertNotIn("secrets.", self.text)
+
+    def test_release_is_created_as_draft_only_and_never_published(self) -> None:
+        release = self.step("Створити чернетку релізу")["run"]
+        self.assertIn("gh release create", release)
+        self.assertIn("--draft", release)
+        self.assertIn('test "$IS_DRAFT" = "true"', release)
         self.assertNotIn("--draft=false", self.text)
+        self.assertNotIn("gh release edit", self.text)
+        self.assertNotIn("--prerelease", self.text)
 
-    def test_the_archives_are_built_on_the_release_lock(self) -> None:
-        self.assertIn("guix time-machine -C channels.lock.scm", self.text)
+    def test_archive_and_provenance_are_verified_after_upload(self) -> None:
+        release = self.step("Створити чернетку релізу")["run"]
+        self.assertIn("gh release download", release)
+        self.assertIn("sha256sum -c SHA256SUMS", release)
+        self.assertIn("tar -tzf wsm-tools-pack.tar.gz", release)
+        self.assertIn("PROVENANCE.txt", self.text)
+        self.assertIn("CHANNEL-INPUTS.sha256", self.text)
 
-    def test_a_package_name_that_is_not_a_name_is_refused(self) -> None:
-        self.assertIn("*[!A-Za-z0-9._+-]*", self.text)
-        self.assertIn("refusing odd package name", self.text)
+    def test_failure_is_reported_without_claiming_success(self) -> None:
+        failures = [
+            item for item in self.steps
+            if item.get("if") == "failure()"
+            and "commits/$GITHUB_SHA/comments" in item.get("run", "")
+        ]
+        self.assertEqual(len(failures), 1)
 
-    def test_a_tag_push_attaches_to_the_newest_draft(self) -> None:
-        """One pushed tag must be enough to put the archives in front of a person."""
-        text = self.text
-        self.assertIn("gh release list", text)
-        self.assertIn("select(.isDraft)", text)
-        self.assertIn('TAG="${REQUESTED:-}"', text)
 
-    def test_no_draft_means_the_archives_stay_in_the_artifact(self) -> None:
-        """Attaching nowhere must be a recorded outcome, not a silent failure."""
-        text = self.text
-        self.assertIn("no draft release to attach to", text)
-        self.assertIn("WSM_PACKAGE_ATTACHED_TO=none", text)
+
 
 if __name__ == "__main__":
     unittest.main()
