@@ -182,6 +182,21 @@ class _Console:
         return line.rstrip("\n")
 
 
+def _tool_prefixes_for_running_system() -> tuple[str, ...] | None:
+    """Use the Guix profile paths in the live image; keep host preview FHS-only.
+
+    The presence of the system profile is an explicit filesystem fact, not a
+    PATH lookup. In a booted WSM Guix image the planner and guest closure probe
+    therefore resolve the same two prefixes. On a foreign development host the
+    historical fixed FHS preview paths remain available.
+    """
+    from wsm_install.tools import GUIX_PROFILE_PREFIXES
+
+    if any(Path(prefix).is_dir() for prefix in GUIX_PROFILE_PREFIXES):
+        return GUIX_PROFILE_PREFIXES
+    return None
+
+
 def _run_env_check(args: argparse.Namespace) -> int:
     """Check the environment before a disk is touched."""
     from wsm_install.preflight_env import run as run_env_check
@@ -334,7 +349,12 @@ def _run_install(
             acknowledgement=args.acknowledge_disk,
             expected_size_bytes=args.target_size_bytes,
         )
-        steps = plan_steps(layout, args.filesystem, args.mount_point)
+        steps = plan_steps(
+            layout,
+            args.filesystem,
+            args.mount_point,
+            tool_prefixes=_tool_prefixes_for_running_system(),
+        )
         command = backend_command(layout, args.system_file, args.mount_point)
     except Refused as exc:
         print(f"wsm-install: {exc.code}: {exc.message}", file=sys.stderr)
