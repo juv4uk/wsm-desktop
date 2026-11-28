@@ -54,11 +54,18 @@ jobs:
             exit 1
           fi
 
-      - name: Install Guix and archive compression
+      - name: Install Guix, prepare the ephemeral archive key, and start the daemon
         run: |
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y guix zstd
+          sudo systemctl stop guix-daemon.service || true
+          sudo install -d -m 700 /etc/guix
+          if ! sudo test -s /etc/guix/signing-key.sec || ! sudo test -s /etc/guix/signing-key.pub; then
+            sudo guix archive --generate-key
+          fi
+          sudo test -s /etc/guix/signing-key.sec
+          sudo test -s /etc/guix/signing-key.pub
           sudo systemctl enable --now guix-daemon.service
           guix --version
 
@@ -73,9 +80,21 @@ jobs:
 
           PACKAGES=(linux-libre mesa)
           STORE_PATHS=()
-          printf 'package\tstore_path\tnar_sha256\n' > "$OUT/store-paths.tsv"
+          mkdir -p "$OUT/package-info"
+          printf 'package\tstore_path\tderivation_path\tnar_sha256\n' > "$OUT/store-paths.tsv"
 
           for package in "${PACKAGES[@]}"; do
+            package_info="$OUT/package-info/$package.rec"
+            guix time-machine -C channels.lock.scm -- show "$package" > "$package_info"
+            grep -Eq '^name:[[:space:]]+' "$package_info"
+            grep -Eq '^license:[[:space:]]+[^[:space:]]' "$package_info"
+
+            derivation_path="$(guix time-machine -C channels.lock.scm -- build --derivations --no-grafts "$package")"
+            case "$derivation_path" in
+              /gnu/store/*.drv) ;;
+              *) echo "unexpected derivation path for $package: $derivation_path" >&2; exit 1 ;;
+            esac
+
             store_path="$(guix time-machine -C channels.lock.scm -- build --no-grafts "$package")"
             case "$store_path" in
               /gnu/store/*) ;;
@@ -83,7 +102,7 @@ jobs:
             esac
             STORE_PATHS+=("$store_path")
             nar_sha256="$(guix time-machine -C channels.lock.scm -- hash --recursive --format=hex "$store_path")"
-            printf '%s\t%s\t%s\n' "$package" "$store_path" "$nar_sha256" >> "$OUT/store-paths.tsv"
+            printf '%s\t%s\t%s\t%s\n' "$package" "$store_path" "$derivation_path" "$nar_sha256" >> "$OUT/store-paths.tsv"
           done
 
           guix time-machine -C channels.lock.scm -- size "${STORE_PATHS[@]}" > "$OUT/store-closure-size.txt"
@@ -101,9 +120,6 @@ jobs:
         run: |
           set -euo pipefail
           OUT="$GITHUB_WORKSPACE/archives"
-          if ! sudo test -s /etc/guix/signing-key.sec || ! sudo test -s /etc/guix/signing-key.pub; then
-            sudo guix archive --generate-key
-          fi
           sudo test -s /etc/guix/signing-key.sec
           sudo test -s /etc/guix/signing-key.pub
           sudo install -m 0644 /etc/guix/signing-key.pub "$OUT/signing-key.pub"
@@ -137,8 +153,14 @@ jobs:
             echo "Pinned Guix channel description:"
             cat "$OUT/guix-channel-description.txt"
             echo ""
-            echo "Package store paths and recursive NAR hashes:"
+            echo "Package store paths, derivations and recursive NAR hashes:"
             cat "$OUT/store-paths.tsv"
+            echo ""
+            echo "Pinned Guix package metadata (including effective license fields):"
+            for package in "${PACKAGES[@]}"; do
+              echo "#### $package"
+              cat "$OUT/package-info/$package.rec"
+            done
             echo ""
             echo "Store and closure size:"
             cat "$OUT/store-closure-size.txt"
@@ -196,6 +218,7 @@ jobs:
               bundle.size-bytes \
               provenance.txt \
               IMPORT.md \
+              package-info/*.rec \
               > SHA256SUMS
           )
 
@@ -231,6 +254,7 @@ jobs:
             "$OUT/guix-channel-description.txt" \
             "$OUT/store-paths.tsv" \
             "$OUT/store-closure-size.txt" \
+            "$OUT"/package-info/*.rec \
             "$OUT/bundle.sha256" \
             "$OUT/bundle.size-bytes" \
             "$OUT/provenance.txt" \
