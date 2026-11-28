@@ -78,7 +78,7 @@ modules, update firmware, or modify target devices.")
     (synopsis "Conservative Free Pascal hardware evidence classifier")
     (description
      "Reads a WSM hardware evidence report and emits conservative subsystem
-evidence states. A subsystem is KNOWN only when every observed device has a
+evidence states. A subsystem is KNOWN only when each observed device has a
 bound driver or a candidate and no functional test failed. CERTIFIED remains
 zero because the current report has no complete coverage manifest.")
     (supported-systems '("x86_64-linux"))
