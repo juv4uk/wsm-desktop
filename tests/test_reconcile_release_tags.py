@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 import unittest
 from pathlib import Path
 
@@ -12,6 +13,7 @@ SCRIPT = ROOT / "scripts" / "reconcile_release_tags.py"
 SPEC = importlib.util.spec_from_file_location("reconcile_release_tags", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
 MODULE = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = MODULE
 SPEC.loader.exec_module(MODULE)
 
 RESTORE = MODULE.RESTORE_RELEASE_TAGS
