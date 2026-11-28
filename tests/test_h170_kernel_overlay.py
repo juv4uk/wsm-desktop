@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 import unittest
 from pathlib import Path
 
@@ -13,6 +14,36 @@ MATRIX = ROOT / "docs" / "hardware" / "H170-FIRMWARE-MATRIX.md"
 
 
 class H170LinuxLibreOverlayTests(unittest.TestCase):
+    def test_patch_hunk_line_counts_match_the_unified_diff(self) -> None:
+        patch = PATCH.read_text(encoding="utf-8").splitlines()
+        hunk_re = re.compile(r"^@@ -(?:[0-9]+)(?:,([0-9]+))? \\+(?:[0-9]+)(?:,([0-9]+))? @@")
+        hunks = [index for index, line in enumerate(patch) if hunk_re.match(line)]
+        self.assertTrue(hunks, "the upstream patch must contain unified-diff hunks")
+        for position, start in enumerate(hunks):
+            match = hunk_re.match(patch[start])
+            assert match is not None
+            expected_old = int(match.group(1) or "1")
+            expected_new = int(match.group(2) or "1")
+            end = hunks[position + 1] if position + 1 < len(hunks) else len(patch)
+            old_count = 0
+            new_count = 0
+            for line in patch[start + 1:end]:
+                if line == "-- ":
+                    break
+                if line.startswith(" "):
+                    old_count += 1
+                    new_count += 1
+                elif line.startswith("-"):
+                    old_count += 1
+                elif line.startswith("+"):
+                    new_count += 1
+                elif line.startswith("\\\\"):
+                    continue
+                else:
+                    break
+            self.assertEqual(old_count, expected_old, f"old hunk count mismatch at line {start + 1}")
+            self.assertEqual(new_count, expected_new, f"new hunk count mismatch at line {start + 1}")
+
     def test_patch_is_the_upstream_gp107_atomic_modesetting_fix(self) -> None:
         patch = PATCH.read_text(encoding="utf-8")
         self.assertIn(
