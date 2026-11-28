@@ -85,7 +85,7 @@ jobs:
           from pathlib import Path
 
           source = Path("drivers/profiles/h170-free-packages.scm").read_text(encoding="utf-8")
-          match = re.search(r"specifications->manifest\\s*'\\((.*?)\\)\\s*\\)", source, re.DOTALL)
+          match = re.search(r"specifications->manifest\s*'\((.*?)\)\s*\)", source, re.DOTALL)
           if match is None:
               raise SystemExit("H170 Free manifest does not contain specifications->manifest")
           packages = re.findall(r'"([a-z0-9.+-]+)"', match.group(1))
@@ -96,16 +96,15 @@ jobs:
           )
           if tuple(packages) != expected:
               raise SystemExit(f"unexpected H170 Free package manifest: {packages!r}")
-          print("\\n".join(packages))
+          print("\n".join(packages))
           PY
           mapfile -t PACKAGES < "$OUT/packages.txt"
           test "${#PACKAGES[@]}" -eq 11
           STORE_PATHS=()
-          mkdir -p "$OUT/package-info"
           printf 'package\tstore_path\tderivation_path\tnar_sha256\n' > "$OUT/store-paths.tsv"
 
           for package in "${PACKAGES[@]}"; do
-            package_info="$OUT/package-info/$package.rec"
+            package_info="$OUT/$package.package-info.rec"
             guix time-machine -C channels.lock.scm -- show "$package" > "$package_info"
             grep -Eq '^name:[[:space:]]+' "$package_info"
             grep -Eq '^license:[[:space:]]+[^[:space:]]' "$package_info"
@@ -181,7 +180,7 @@ jobs:
             echo "Pinned Guix package metadata (including effective license fields):"
             for package in "${PACKAGES[@]}"; do
               echo "#### $package"
-              cat "$OUT/package-info/$package.rec"
+              cat "$OUT/$package.package-info.rec"
             done
             echo ""
             echo "Store and closure size:"
@@ -242,7 +241,7 @@ jobs:
               bundle.size-bytes \
               provenance.txt \
               IMPORT.md \
-              package-info/*.rec \
+              *.package-info.rec \
               > SHA256SUMS
           )
 
@@ -280,7 +279,7 @@ jobs:
             "$OUT/guix-channel-description.txt" \
             "$OUT/store-paths.tsv" \
             "$OUT/store-closure-size.txt" \
-            "$OUT"/package-info/*.rec \
+            "$OUT"/*.package-info.rec \
             "$OUT/bundle.sha256" \
             "$OUT/bundle.size-bytes" \
             "$OUT/provenance.txt" \
