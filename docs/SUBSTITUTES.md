@@ -35,19 +35,19 @@
 - Phase B автентифікації WSM-каналу окремий від цього кешу: результати збираються з офіційного Guix lock, а не з WSM-owned модулів каналу. Phase B лишається обов'язковою перед тим, як просити користувачів довіряти або фіксувати віддалені ревізії WSM-owned каналу, наприклад майбутній пакет `linux-libre-h170`.
 - Nouveau atomic-KMS overlay у PR [#767](https://github.com/juv4uk/wsm-desktop/pull/767) — окремий кандидат. Він має пройти Scheme evaluation на точному lock і повну збірку ядра, перш ніж потрапити до майбутнього маніфесту кешу.
 
-## Налаштування ключа підпису
+## Підписний ключ кешу
 
-Субститути Guix підписуються. Workflow відмовляється від публікації, якщо owner-controlled пара ключів не налаштована.
+Кожен запуск створює окрему пару ключів командою `guix archive --generate-key` на тимчасовій GitHub-hosted VM. Це одноразова ідентичність конкретного cache release, а не постійний ключ WSM.
 
-На машині власника з Guix:
+Приватний `/etc/guix/signing-key.sec` використовується лише на runner для підпису NAR; він не записується в артефакти, Release, Pages, репозиторій або журнали. Після завершення job тимчасова VM видаляється. Відкритий `signing-key.pub` публікується разом із NAR, контрольними сумами й `provenance.json`. GitHub artifact attestation додатково пов'язує ці файли з workflow run та вихідним commit. Guix зберігає ключі у `/etc/guix/signing-key.pub` і `/etc/guix/signing-key.sec`; приватний ключ необхідно тримати в секреті. Джерело: [GNU Guix Reference Manual — `guix archive`](https://guix.gnu.org/manual/en/guix.html#Invoking-guix-archive).
+
+Тому відкритий ключ змінюється з кожним cache release. Перед використанням клієнт має завантажити відповідний Release, перевірити `SHA256SUMS`, provenance та GitHub attestation, порівняти його публічний ключ із `signing-key.pub` у метаданих Pages і лише тоді авторизувати:
 
 ```sh
-sudo guix archive --generate-key
-gh secret set GUIX_SIGNING_KEY --repo juv4uk/wsm-desktop < /etc/guix/signing-key.sec
-gh variable set GUIX_SIGNING_PUBLIC_KEY --repo juv4uk/wsm-desktop < /etc/guix/signing-key.pub
+sudo guix archive --authorize < signing-key.pub
 ```
 
-Приватний ключ зберігається лише як GitHub Actions secret `GUIX_SIGNING_KEY`; відкритий ключ — як repository Actions variable `GUIX_SIGNING_PUBLIC_KEY`. Не комітьте жоден із ключів і не вставляйте приватний ключ в issue, чат чи журнали workflow. Публічний ключ публікується разом із метаданими, щоб клієнти могли авторизувати його після перевірки provenance конкретного першого релізу.
+Цей режим дозволяє опублікувати перший перевірюваний кеш без довготривалого приватного ключа в GitHub Secrets. Він не створює сталу ідентичність substitute-сервера: кожен новий ключ треба перевірити й авторизувати окремо. Не авторизуйте ключ лише тому, що файл доступний за URL. Guix відхиляє імпорт, якщо підпис недійсний або ключ не авторизований. Джерело: [GNU Guix Reference Manual — `guix archive`](https://guix.gnu.org/manual/en/guix.html#Invoking-guix-archive).
 
 Новий незмінний cache release має назву `h170-free-cache-<workflow-run-number>`. Workflow запускається після злиття релевантних змін у `main` або вручну з `main`; довільний список пакетів через workflow input не приймається.
 

@@ -20,6 +20,8 @@ permissions:
   contents: write
   pages: write
   id-token: write
+  attestations: write
+  artifact-metadata: write
 
 concurrency:
   group: h170-free-substitutes
@@ -79,28 +81,18 @@ jobs:
           echo "$PROFILE/bin" >> "$GITHUB_PATH"
           guix --version | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - name: Validate owner-controlled substitute signing keys
-        env:
-          GUIX_SIGNING_KEY: ${{ secrets.GUIX_SIGNING_KEY }}
-          GUIX_SIGNING_PUBLIC_KEY: ${{ vars.GUIX_SIGNING_PUBLIC_KEY }}
+      - name: Create an ephemeral Guix signing key for this cache run
+        shell: bash
         run: |
           set -euo pipefail
-          if [ -z "${GUIX_SIGNING_KEY:-}" ] || [ -z "${GUIX_SIGNING_PUBLIC_KEY:-}" ]; then
-            {
-              echo "::error::Missing GUIX signing key material."
-              echo "Create the key pair on the owner-controlled machine with:"
-              echo "Generate the signing-key pair locally on the owner-controlled machine; then configure its private and public files as the repository secret and variable described below."
-              echo "Then configure repository secret GUIX_SIGNING_KEY from /etc/guix/signing-key.sec"
-              echo "and repository variable GUIX_SIGNING_PUBLIC_KEY from /etc/guix/signing-key.pub."
-            } | tee -a "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
           sudo install -d -m 0700 /etc/guix
-          printf '%s\n' "$GUIX_SIGNING_KEY" | sudo tee /etc/guix/signing-key.sec >/dev/null
-          printf '%s\n' "$GUIX_SIGNING_PUBLIC_KEY" | sudo tee /etc/guix/signing-key.pub >/dev/null
+          sudo guix archive --generate-key
+          sudo test -s /etc/guix/signing-key.sec
+          sudo test -s /etc/guix/signing-key.pub
           sudo chmod 0600 /etc/guix/signing-key.sec
           sudo chmod 0644 /etc/guix/signing-key.pub
-          echo "Owner-controlled signing key pair was installed; key contents are not logged."
+          echo "A per-run signing key was generated on the ephemeral runner." >> "$GITHUB_STEP_SUMMARY"
+          echo "Only signing-key.pub may leave this runner; signing-key.sec is never copied, uploaded, or logged." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Record pinned Guix channel revision
         run: |
@@ -127,8 +119,8 @@ jobs:
             exit 1
           fi
           mapfile -t STORE_PATHS < <(grep -E '^/gnu/store/[a-z0-9]{32}-' "$PATHS_FILE")
-          if [ "${#STORE_PATHS[@]}" -ne 11 ]; then
-            echo "::error::Expected 11 package outputs, got ${#STORE_PATHS[@]}"
+          if [ "${#STORE_PATHS[@]}" -lt 11 ]; then
+            echo "::error::Expected at least 11 store outputs for the 11 manifest roots, got ${#STORE_PATHS[@]}"
             cat "$PATHS_FILE" >&2
             exit 1
           fi
@@ -181,26 +173,46 @@ jobs:
             hash="${store_path##*/}"
             hash="${hash%%-*}"
             narinfo_url="http://127.0.0.1:3000/${hash}.narinfo"
+            info_file="$(mktemp)"
             baked=0
             for _ in $(seq 1 180); do
-              if curl -fsS "$narinfo_url" -o /dev/null; then
-                baked=1
-                break
+              if curl -fsS "$narinfo_url" -o "$info_file"; then
+                nar_url="$(sed -n 's/^URL: //p' "$info_file" | head -n 1)"
+                case "$nar_url" in
+                  nar/*) ;;
+                  *)
+                    echo "::error::narinfo for $store_path has no supported NAR URL: $nar_url"
+                    cat "$info_file" >&2
+                    exit 1
+                    ;;
+                esac
+                if curl -fsS "http://127.0.0.1:3000/$nar_url" -o /dev/null; then
+                  baked=1
+                  break
+                fi
               fi
               sleep 5
             done
+            rm -f "$info_file"
             if [ "$baked" -ne 1 ]; then
-              echo "::error::NAR cache baking timed out for $store_path"
+              echo "::error::NAR archive baking timed out for $store_path"
               tail -n 100 "$RUNNER_TEMP/guix-publish.log" >&2 || true
               exit 1
             fi
           done < "$PATHS_FILE"
 
+          EXPECTED_STORE_PATH_COUNT="$(grep -Ec '^/gnu/store/[a-z0-9]{32}-' "$PATHS_FILE")"
           NAR_COUNT="$(sudo find "$CACHE_DIR/nar" -type f -name '*.nar.zst' | wc -l)"
           INFO_COUNT="$(sudo find "$CACHE_DIR" -maxdepth 1 -type f -name '*.narinfo' | wc -l)"
-          [ "$NAR_COUNT" -eq 11 ] || { echo "Expected 11 NAR archives, got $NAR_COUNT"; exit 1; }
-          [ "$INFO_COUNT" -eq 11 ] || { echo "Expected 11 narinfo files, got $INFO_COUNT"; exit 1; }
-          echo "Baked $NAR_COUNT signed NAR archives and $INFO_COUNT narinfo records." \
+          [ "$NAR_COUNT" -eq "$EXPECTED_STORE_PATH_COUNT" ] || {
+            echo "Expected $EXPECTED_STORE_PATH_COUNT NAR archives for the built store outputs, got $NAR_COUNT"
+            exit 1
+          }
+          [ "$INFO_COUNT" -eq "$EXPECTED_STORE_PATH_COUNT" ] || {
+            echo "Expected $EXPECTED_STORE_PATH_COUNT narinfo records for the built store outputs, got $INFO_COUNT"
+            exit 1
+          }
+          echo "Baked $NAR_COUNT signed NAR archives and $INFO_COUNT narinfo records for $EXPECTED_STORE_PATH_COUNT store outputs across 11 manifest package roots." \
             | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Prepare immutable Release assets and Pages metadata
@@ -222,7 +234,11 @@ jobs:
           touch ./site/.nojekyll
 
           mapfile -t NARS < <(find /var/cache/guix/h170-free/nar -type f -name '*.nar.zst' | sort)
-          [ "${#NARS[@]}" -eq 11 ] || { echo "Expected 11 NAR assets, got ${#NARS[@]}"; exit 1; }
+          EXPECTED_STORE_PATH_COUNT="$(grep -Ec '^/gnu/store/[a-z0-9]{32}-' "$RUNNER_TEMP/h170-free-store-paths.txt")"
+          [ "${#NARS[@]}" -eq "$EXPECTED_STORE_PATH_COUNT" ] || {
+            echo "Expected $EXPECTED_STORE_PATH_COUNT NAR assets for the built store outputs, got ${#NARS[@]}"
+            exit 1
+          }
           for nar in "${NARS[@]}"; do
             size="$(stat -c '%s' "$nar")"
             [ "$size" -lt 2000000000 ] || {
@@ -231,10 +247,64 @@ jobs:
             }
           done
 
+          : > ./site/SHA256SUMS
+          for nar in "${NARS[@]}"; do
+            ( cd "$(dirname "$nar")" && sha256sum "$(basename "$nar")" ) >> ./site/SHA256SUMS
+          done
+          export NAR_ASSETS="$(printf '%s\n' "${NARS[@]}")"
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(".")
+          public_key = root / "site/signing-key.pub"
+          manifest = root / "drivers/profiles/h170-free-packages.scm"
+          payload = {
+              "schema": "wsm-h170-free-cache/1",
+              "source_commit": os.environ["GITHUB_SHA"],
+              "workflow_run_id": os.environ["GITHUB_RUN_ID"],
+              "workflow_run_url": (
+                  os.environ["GITHUB_SERVER_URL"] + "/" +
+                  os.environ["GITHUB_REPOSITORY"] + "/actions/runs/" +
+                  os.environ["GITHUB_RUN_ID"]
+              ),
+              "guix_lock_file": "channels.lock.scm",
+              "manifest_file": "drivers/profiles/h170-free-packages.scm",
+              "manifest_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
+              "signing_key_mode": "ephemeral-per-run",
+              "signing_public_key_sha256": hashlib.sha256(public_key.read_bytes()).hexdigest(),
+              "private_key_published": False,
+              "nar_assets": [Path(item).name for item in os.environ["NAR_ASSETS"].splitlines() if item],
+              "packages": 11,
+              "scope": "official upstream H170 Free package manifest only",
+          }
+          (root / "site/provenance.json").write_text(
+              json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+              encoding="utf-8",
+          )
+          PY
+          cp ./site/SHA256SUMS ./site/provenance.SHA256SUMS
+          (
+            cd ./site
+            sha256sum signing-key.pub provenance.json > metadata.SHA256SUMS
+          )
+
           gh release create "$CACHE_TAG" \
             --title "WSM H170 Free substitute cache ${GITHUB_RUN_NUMBER}" \
-            --notes "Pinned H170 Free upstream-only package cache. Source commit: ${GITHUB_SHA}. NAR assets are immutable; narinfo metadata is deployed separately to GitHub Pages."
-          gh release upload "$CACHE_TAG" "${NARS[@]}"
+            --notes "Pinned H170 Free upstream-only package cache. Source commit: ${GITHUB_SHA}. Signing key is ephemeral to this run; private key is not published. NAR assets are immutable; metadata is deployed separately to Pages."
+          gh release upload "$CACHE_TAG" "${NARS[@]}" ./site/signing-key.pub ./site/SHA256SUMS ./site/provenance.json ./site/metadata.SHA256SUMS
+
+      - name: Attest the exact NAR and cache metadata
+        uses: actions/attest@v4
+        with:
+          subject-path: |
+            /var/cache/guix/h170-free/nar/*.nar.zst
+            ./site/signing-key.pub
+            ./site/SHA256SUMS
+            ./site/provenance.json
+            ./site/metadata.SHA256SUMS
 
       - name: Upload Pages metadata
         uses: actions/upload-pages-artifact@v3

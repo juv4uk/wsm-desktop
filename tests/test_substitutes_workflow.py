@@ -53,7 +53,13 @@ class SubstituteWorkflowTests(unittest.TestCase):
         self.assertIn("--manifest=drivers/profiles/h170-free-packages.scm", build)
         self.assertIn("--dry-run", build)
         self.assertIn("--no-grafts", build)
-        self.assertIn("-ne 11", build)
+        self.assertIn('-lt 11', build)
+        self.assertIn("11 manifest roots", build)
+        bake = self.step("Bake signed NARs into the local substitute cache")["run"]
+        self.assertIn("EXPECTED_STORE_PATH_COUNT", bake)
+        self.assertIn('-eq "$EXPECTED_STORE_PATH_COUNT"', bake)
+        prepare = self.step("Prepare immutable Release assets and Pages metadata")["run"]
+        self.assertIn("EXPECTED_STORE_PATH_COUNT", prepare)
 
     def test_the_package_manifest_excludes_owned_and_nonfree_payloads(self) -> None:
         manifest = (ROOT / "drivers" / "profiles" / "h170-free-packages.scm").read_text(encoding="utf-8")
@@ -68,12 +74,28 @@ class SubstituteWorkflowTests(unittest.TestCase):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, manifest)
 
-    def test_signing_key_is_owner_controlled_and_pair_is_required(self) -> None:
-        step = self.step("Validate owner-controlled substitute signing keys")
-        self.assertIn("secrets.GUIX_SIGNING_KEY", str(step))
-        self.assertIn("vars.GUIX_SIGNING_PUBLIC_KEY", str(step))
-        self.assertIn("exit 1", step["run"])
-        self.assertNotIn("guix archive --generate-key", step["run"])
+    def test_signing_key_is_ephemeral_and_private_material_never_leaves_runner(self) -> None:
+        step = self.step("Create an ephemeral Guix signing key for this cache run")
+        self.assertIn("sudo guix archive --generate-key", step["run"])
+        self.assertIn("/etc/guix/signing-key.sec", step["run"])
+        self.assertIn("/etc/guix/signing-key.pub", step["run"])
+        self.assertIn("ephemeral runner", step["run"])
+        self.assertNotIn("secrets.GUIX_SIGNING_KEY", self.text)
+        self.assertNotIn("vars.GUIX_SIGNING_PUBLIC_KEY", self.text)
+        self.assertNotIn("signing-key.sec", self.text.split("gh release upload", 1)[-1])
+        self.assertEqual(self.data["permissions"]["attestations"], "write")
+        self.assertEqual(self.data["permissions"]["artifact-metadata"], "write")
+
+    def test_public_key_and_provenance_are_published_and_attested(self) -> None:
+        prepare = self.step("Prepare immutable Release assets and Pages metadata")["run"]
+        self.assertIn("./site/signing-key.pub", prepare)
+        self.assertIn("./site/provenance.json", prepare)
+        self.assertIn("./site/SHA256SUMS", prepare)
+        self.assertIn("private_key_published", prepare)
+        self.assertIn("ephemeral-per-run", prepare)
+        self.assertIn("./site/signing-key.pub", self.text)
+        self.assertIn("actions/attest@v4", self.text)
+        self.assertIn("subject-path:", self.text)
 
     def test_guix_publish_uses_the_explicit_key_pair_and_cache(self) -> None:
         step = self.step("Bake signed NARs into the local substitute cache")["run"]
@@ -82,6 +104,10 @@ class SubstituteWorkflowTests(unittest.TestCase):
         self.assertIn("--public-key=/etc/guix/signing-key.pub", step)
         self.assertIn("--private-key=/etc/guix/signing-key.sec", step)
         self.assertIn("narinfo_url", step)
+        self.assertIn("sed -n 's/^URL: //p'", step)
+        self.assertIn('case "$nar_url" in', step)
+        self.assertIn("nar/*)", step)
+        self.assertIn('curl -fsS "http://127.0.0.1:3000/$nar_url"', step)
         self.assertIn("baked", step)
 
     def test_release_assets_and_pages_are_both_deployed(self) -> None:
@@ -90,6 +116,9 @@ class SubstituteWorkflowTests(unittest.TestCase):
         self.assertIn("actions/upload-pages-artifact@v3", self.text)
         self.assertIn("actions/deploy-pages@v4", self.text)
         self.assertIn("h170-free-cache-", self.text)
+        self.assertIn("signing-key.pub", self.text)
+        self.assertIn("SHA256SUMS", self.text)
+        self.assertIn("provenance.json", self.text)
 
     def test_failure_is_reported_without_claiming_success(self) -> None:
         step = self.step("Report publication failure")
