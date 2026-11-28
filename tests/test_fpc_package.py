@@ -51,8 +51,6 @@ class SourceTests(unittest.TestCase):
         self.assertIn("PCI sysfs inventory is unavailable", core)
         self.assertIn("Warnings.Add", core)
         self.assertNotIn("Halt(4)", self.text)
-
-
 class PackageTests(unittest.TestCase):
     def setUp(self) -> None:
         self.text = PKG.read_text(encoding="utf-8")
