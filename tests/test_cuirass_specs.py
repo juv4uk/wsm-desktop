@@ -95,7 +95,7 @@ class JobModuleTests(unittest.TestCase):
     def test_the_module_is_outside_the_channel_namespace(self) -> None:
         """wsm/ is the channel API; a CI helper is not part of it."""
         self.assertFalse((ROOT / "wsm" / "ci").exists())
-        self.assertIn("(wsm ci images)", self.text)
+        self.assertIn("(ci cuirass images)", self.text)
 
 
 class ServiceFragmentTests(unittest.TestCase):
