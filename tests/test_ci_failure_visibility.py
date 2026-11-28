@@ -6,10 +6,10 @@ in a place that can be read without authorisation: task logs need auth, so an
 agent without it sees only "Process completed with exit code 2" and spends a
 whole run guessing.
 
-The principle was written after exactly that happened, and only the release
-workflow implemented it. `ci.yml` and `guix-profile-evaluation.yml` did not —
-the second one being a 180-minute Guix evaluation, where guessing is most
-expensive.
+The principle was written after exactly that happened. A failure is reported
+either as a commit comment (when the workflow has a safe write capability) or
+in the GitHub Actions job summary. The summary route keeps untrusted PR
+evaluation workflows read-only instead of granting them token write access.
 
 So the rule is checked, not remembered.
 """
@@ -23,8 +23,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 
-# Something that writes where a reader without auth can see it.
-REPORTS = re.compile(r"gh api .*commits/\$GITHUB_SHA/comments|gh pr comment|gh issue comment")
+# A readable commit comment or the GitHub Actions job summary.
+# The summary route keeps untrusted PR evaluation workflows read-only.
+REPORTS = re.compile(
+    r"gh api .*commits/\$GITHUB_SHA/comments|gh pr comment|gh issue comment|GITHUB_STEP_SUMMARY"
+)
 
 
 def steps_of(workflow: Path) -> list[dict]:
