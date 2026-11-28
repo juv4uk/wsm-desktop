@@ -161,7 +161,7 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
     def test_the_artifact_is_kept_with_a_checksum(self) -> None:
         text = self.text()
         self.assertIn("actions/upload-artifact@v7", text)
-        self.assertIn("sha256sum wsm-tools.nar", text)
+        self.assertIn('sha256sum "$package.nar"', text)
         self.assertIn("retention-days: 30", text)
 
     def test_it_says_why_it_is_not_a_substitute_server(self) -> None:
@@ -189,15 +189,41 @@ class ReleaseAssetAttachmentTests(unittest.TestCase):
         self.assertIn('refusing:', text)
         self.assertIn('exit 1', text)
 
-    def test_it_uploads_only_the_archive_and_its_checksum(self) -> None:
+    def test_it_uploads_only_nars_and_their_checksums(self) -> None:
         text = self.text()
-        self.assertIn('gh release upload "$TAG" wsm-tools.nar wsm-tools.nar.sha256', text)
+        self.assertIn('gh release upload "$TAG" archives/*.nar archives/*.nar.sha256', text)
 
     def test_it_never_publishes_a_release(self) -> None:
         text = self.text()
         for forbidden in ("gh release edit", "--draft=false", "gh release create"):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, text)
+
+
+class HardwarePackageSetTests(unittest.TestCase):
+    """One dispatch must be able to archive the set a specific machine needs."""
+
+    WORKFLOW = ROOT / ".github" / "workflows" / "package-archives.yml"
+
+    def text(self) -> str:
+        return self.WORKFLOW.read_text(encoding="utf-8")
+
+    def test_the_package_set_is_an_input_with_a_safe_default(self) -> None:
+        text = self.text()
+        self.assertIn("packages:", text)
+        self.assertIn('default: "wsm-tools"', text)
+
+    def test_each_package_is_built_and_exported_separately(self) -> None:
+        text = self.text()
+        self.assertIn("for package in ${{ inputs.packages }}", text)
+        self.assertIn('guix archive --export "$store_path"', text)
+        self.assertIn("archives/store-paths.txt", text)
+
+    def test_a_package_name_that_is_not_a_name_is_refused(self) -> None:
+        """The input reaches a shell loop; it must not carry paths or flags."""
+        text = self.text()
+        self.assertIn("*[!A-Za-z0-9._+-]*", text)
+        self.assertIn("refusing odd package name", text)
 
 if __name__ == "__main__":
     unittest.main()

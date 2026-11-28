@@ -16,6 +16,10 @@ name: WSM package archives
 #  * not automatic — `workflow_dispatch` only, no tag or branch trigger, because an
 #    archive that appears without a person asking for it is how unsigned binaries
 #    start circulating;
+# `packages` is what makes this useful for a specific machine: the owner's board needs
+# more than the installer package — the kernel, firmware and the open GPU stack — and
+# one dispatch should produce that whole set rather than one package at a time.
+#
 #  * not attached to a published release — `attach_to_draft` refuses anything that is
 #    not still a draft. A draft is the owner's to publish; a published release is
 #    already being distributed, and adding a binary to it after the fact is a
@@ -24,8 +28,12 @@ name: WSM package archives
 on:
   workflow_dispatch:
     inputs:
+      packages:
+        description: "Package variables to archive, space separated (default: wsm-tools)"
+        type: string
+        default: "wsm-tools"
       attach_to_draft:
-        description: "Existing DRAFT release tag to attach the archive to (empty: artifact only)"
+        description: "Existing DRAFT release tag to attach the archives to (empty: artifact only)"
         type: string
         default: ""
 
@@ -55,32 +63,41 @@ jobs:
           sudo systemctl enable --now guix-daemon.service
           guix --version
 
-      - name: Build on the release lock
+      - name: Build the requested packages on the release lock
         id: build
         run: |
           set -euo pipefail
-          # The same lock the release uses: an archive built from other channels is
-          # not the thing the image was built against.
-          store_path="$(guix time-machine -C channels.lock.scm -- \
-                          build -L . wsm-tools --no-grafts)"
-          echo "store_path=$store_path" >> "$GITHUB_OUTPUT"
-          echo "WSM_PACKAGE_STORE_PATH=$store_path" >> "$GITHUB_STEP_SUMMARY"
+          mkdir -p archives
+          : > archives/store-paths.txt
+          for package in ${{ inputs.packages }}; do
+            case "$package" in
+              *[!A-Za-z0-9._+-]*) echo "refusing odd package name: $package" >&2; exit 1 ;;
+            esac
+            store_path="$(guix time-machine -C channels.lock.scm -- \
+                            build -L . "$package" --no-grafts)"
+            printf '%s\t%s\n' "$package" "$store_path" >> archives/store-paths.txt
+            echo "WSM_PACKAGE_BUILT=$package $store_path" >> "$GITHUB_STEP_SUMMARY"
+          done
+          cat archives/store-paths.txt
 
-      - name: Export the closure as a nar
+      - name: Export each closure as a nar
         run: |
           set -euo pipefail
-          guix archive --export "${{ steps.build.outputs.store_path }}" > wsm-tools.nar
-          sha256sum wsm-tools.nar | tee wsm-tools.nar.sha256
-          ls -l wsm-tools.nar
-          echo "WSM_PACKAGE_NAR_SHA256=$(cut -d' ' -f1 wsm-tools.nar.sha256)" >> "$GITHUB_STEP_SUMMARY"
+          while IFS="$(printf '\t')" read -r package store_path; do
+            guix archive --export "$store_path" > "archives/$package.nar"
+            ( cd archives && sha256sum "$package.nar" > "$package.nar.sha256" )
+            ls -l "archives/$package.nar"
+          done < archives/store-paths.txt
+          cat archives/*.sha256
 
       - name: Keep the archive as a workflow artifact
         uses: actions/upload-artifact@v7
         with:
-          name: wsm-tools-nar
+          name: wsm-package-nars
           path: |
-            wsm-tools.nar
-            wsm-tools.nar.sha256
+            archives/*.nar
+            archives/*.nar.sha256
+            archives/store-paths.txt
           retention-days: 30
 
       - name: Attach the archive to a draft release
@@ -97,7 +114,7 @@ jobs:
             echo "refusing: $TAG is not a draft release" >&2
             exit 1
           fi
-          gh release upload "$TAG" wsm-tools.nar wsm-tools.nar.sha256 --clobber
+          gh release upload "$TAG" archives/*.nar archives/*.nar.sha256 --clobber
           echo "WSM_PACKAGE_ATTACHED_TO=$TAG" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Повідомити причину збою
