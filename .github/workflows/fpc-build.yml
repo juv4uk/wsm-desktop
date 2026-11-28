@@ -95,11 +95,15 @@ jobs:
           if [ "$failed" -eq 0 ]; then
             test -x build/fpc/wsm_hwcheck
             test -x build/fpc/wsm_classify
+            test -x build/fpc/wsm_cpu_isa
             echo "::group::Hardware collector schema and PCI parity"
             python3 tests/test_fpc_collector_parity.py || failed=$((failed + 1))
             echo "::endgroup::"
             echo "::group::Classifier behavior tests"
             python3 tests/test_fpc_classify_runtime.py || failed=$((failed + 1))
+            echo "::endgroup::"
+            echo "::group::CPU ISA contract tests"
+            python3 tests/test_fpc_cpu_isa_runtime.py || failed=$((failed + 1))
             echo "::endgroup::"
           fi
           ls -l build/fpc || true
