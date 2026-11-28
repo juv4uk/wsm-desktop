@@ -58,6 +58,7 @@
 | Канонічність документів | [#54](https://github.com/juv4uk/wsm-desktop/issues/54) | цей файл | local agent | proposed | Додати topic рядок тут замість нового процесного ADR. |
 | Походження релізних артефактів | — | [RELEASE-PROVENANCE.md](RELEASE-PROVENANCE.md) | — | `research` — не рішення | Вхідні дані для політики підпису образів (M6): атестації SLSA Build L2, SBOM, власний підпис. Рішення оформлюється окремим ADR. |
 | Принципи когерентності екосистеми | [#325](https://github.com/juv4uk/wsm-desktop/issues/325) | [PR #323](https://github.com/juv4uk/wsm-desktop/pull/323), [docs/ECOSYSTEM-PRINCIPLES.md](ECOSYSTEM-PRINCIPLES.md) | обидва агенти | `proposed` — не ратифіковано | Єдиний власник критеріїв когерентності; деталі команд, тестів, ліцензій і доказів залишаються у відповідних канонічних документах. |
+| Гейти без схвалення власника | — | [ADR 0011](decisions/0011-owner-revokes-two-unapproved-gates.md) | власник | **чинне** — пряма вказівка власника | Гейт #586 (firmware/nonfree) і вимога автентифікації каналу внесені PR без рев'ю і без підпису власника; за REVOKED-ENGLISH-POLICY сили рішення не мають. Право розповсюджувати бінарники NVIDIA цим не вирішено — це питання до правовласника. |
 
 ## Що не є темою для нового рядка
 
