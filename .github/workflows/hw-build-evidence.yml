@@ -1,28 +1,16 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
 name: WSM hardware package build evidence
 
-# Builds the package set a specific machine needs and records what happened, WITHOUT
-# retaining or distributing an exported package closure. This is the "ephemeral build evidence" that
-# package-archives.yml is allowed to become while #367 is open.
-#
-# Why this is not distribution: nothing is uploaded, attached or published. `guix build`
-# populates the runner's own store, the workflow writes sizes, hashes and versions into
-# the run summary, and the store disappears with the runner. A reader learns whether the
-# set builds on the locked channels; nobody receives a binary.
-#
-# What it answers for the owner's H170: does the set this board needs — the installer,
-# the kernel configuration, the firmware, the open GPU stack — actually build against
-# the pinned channels? That question can be answered today, and answering it is the
-# prerequisite for every later decision about publishing.
-#
-# Substitute publication and NAR export stay disabled until the owner settles #367,
-# channel trust, an endpoint and key custody. See docs/SUBSTITUTES.md.
+# Ephemeral build evidence only. No NAR file, Actions artifact, Release or Pages output.
+# The runner's store disappears after the job. Distribution remains disabled until #367,
+# channel trust, firmware rights (#586), endpoint and key custody are approved.
 
 on:
   workflow_dispatch:
     inputs:
       packages:
-        description: "Package variables to build, space separated"
+        description: "Guix package variables, separated by spaces"
+        required: false
         type: string
         default: "wsm-tools"
 
@@ -35,7 +23,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build the hardware package set (no export)
+    name: Build package set and report metadata (no retained NAR)
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
@@ -55,83 +43,46 @@ jobs:
       - name: Build each package on the release lock
         env:
           PACKAGES: ${{ inputs.packages }}
+        shell: bash
         run: |
           set -euo pipefail
-          case "$PACKAGES" in
-            *
-            echo "package list is empty" >&2
+          if [[ "$PACKAGES" == *$'\n'* || "$PACKAGES" == *$'\r'* ]]; then
+            echo "package list must be a single line" >&2
             exit 1
           fi
-          {
-            echo "| package | store path | nar size (bytes) |"
-            echo "| --- | --- | --- |"
-          } >> "$GITHUB_STEP_SUMMARY"
-          failures=0
-          for package in "${packages[@]}"; do
-            case "$package" in
-              ""|-*|*[!A-Za-z0-9._+-]*) echo "refusing odd package name: $package" >&2; exit 1 ;;
-            esac
-            if ! store_path="$(guix time-machine -C channels.lock.scm -- \
-                                 build -L . "$package" --no-grafts 2>&1)"; then
-              echo "| $package | BUILD FAILED | — |" >> "$GITHUB_STEP_SUMMARY"
-              echo "$store_path" >&2
-              failures=$((failures + 1))
-              continue
-            fi
-            # Serialize the NAR to an in-process pipe and count bytes. The stream is
-            # discarded by wc; it is never written to disk, retained, uploaded or published.
-            size="$(guix time-machine -C channels.lock.scm -- \
-                      archive --export "$store_path" 2>/dev/null | wc -c)"
-            echo "| $package | \`$store_path\` | $size |" >> "$GITHUB_STEP_SUMMARY"
-          done
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "NAR stream counted and discarded. No archive file or artifact was retained or published." >> "$GITHUB_STEP_SUMMARY"
-          [ "$failures" -eq 0 ] || { echo "$failures package(s) failed to build" >&2; exit 1; }
-
-      - name: Пояснити причину збою в summary
-        if: failure()
-        run: |
-          {
-            echo "### WSM hardware build evidence: збірка не завершилась"
-            echo ""
-            echo "Commit: `$GITHUB_SHA`"
-            echo ""
-            echo "Один або кілька пакетів набору не збираються на locked-каналах."
-            echo "Жодного NAR-файлу або завантажуваного артефакту не створено."
-            df -h / || true
-          } >> "$GITHUB_STEP_SUMMARY"
-\\n'*) echo "package list must be a single line" >&2; exit 1 ;;
-          esac
           read -r -a packages <<< "$PACKAGES"
-          if [ "${#packages[@]}" -eq 0 ]; then
+          if [[ "${#packages[@]}" -eq 0 ]]; then
             echo "package list is empty" >&2
             exit 1
           fi
           {
-            echo "| package | store path | nar size (bytes) |"
+            echo "| package | store path | NAR stream bytes |"
             echo "| --- | --- | --- |"
           } >> "$GITHUB_STEP_SUMMARY"
           failures=0
           for package in "${packages[@]}"; do
             case "$package" in
-              *[!A-Za-z0-9._+-]*) echo "refusing odd package name: $package" >&2; exit 1 ;;
+              ""|-*|*[!A-Za-z0-9._+-]*)
+                echo "refusing invalid package name: $package" >&2
+                exit 1
+                ;;
             esac
-            if ! store_path="$(guix time-machine -C channels.lock.scm -- \
-                                 build -L . "$package" --no-grafts 2>&1)"; then
+            if ! store_path="$(guix time-machine -C channels.lock.scm -- build -L . --no-grafts "$package")"; then
               echo "| $package | BUILD FAILED | — |" >> "$GITHUB_STEP_SUMMARY"
-              echo "$store_path" >&2
               failures=$((failures + 1))
               continue
             fi
-            # Serialize the NAR to an in-process pipe and count bytes. The stream is
-            # discarded by wc; it is never written to disk, retained, uploaded or published.
-            size="$(guix time-machine -C channels.lock.scm -- \
-                      archive --export "$store_path" 2>/dev/null | wc -c)"
-            echo "| $package | \`$store_path\` | $size |" >> "$GITHUB_STEP_SUMMARY"
+            # Count the serialized NAR through a process-local pipe. wc discards
+            # the stream; no NAR file or downloadable artifact is retained.
+            size="$(guix time-machine -C channels.lock.scm -- archive --export "$store_path" 2>/dev/null | wc -c | tr -d '[:space:]')"
+            echo "| $package | `$store_path` | $size |" >> "$GITHUB_STEP_SUMMARY"
           done
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "NAR stream counted and discarded. No archive file or artifact was retained or published." >> "$GITHUB_STEP_SUMMARY"
-          [ "$failures" -eq 0 ] || { echo "$failures package(s) failed to build" >&2; exit 1; }
+          echo "NAR stream counted and discarded; no archive file or artifact was retained or published." >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$failures" -ne 0 ]]; then
+            echo "$failures package(s) failed to build" >&2
+            exit 1
+          fi
 
       - name: Пояснити причину збою в summary
         if: failure()
