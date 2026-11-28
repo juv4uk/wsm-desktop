@@ -2,7 +2,7 @@
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Статус: **реалізовано, контракт v1** (`wsm_hwcheck/isa.py`, tool version `0.1.2`)
+- Статус: **реалізовано, контракт v1**: Python reference (`wsm_hwcheck/isa.py`) і native FPC CLI (`tools/pascal/wsm_cpu_isa.pas`, tool version `0.1.2`)
 - Критичний шлях: **ні** — дослідницький контракт поверх звіту v1.0.0
 - Задача: [#148](https://github.com/juv4uk/wsm-desktop/issues/148)
 - Батьківське рішення: [ADR 0007](../decisions/0007-clear-linux-principles.md)
@@ -81,9 +81,13 @@ firmware/build/runtime policy. Тому `highest_supported` у цьому арт
 ```sh
 python3 -m wsm_hwcheck.isa --compact
 python3 -m wsm_hwcheck.isa --report hw.json    # перехресна перевірка зі звітом
+wsm-cpu-isa --compact
+wsm-cpu-isa --report hw.json                   # native FPC CLI, той самий JSON-контракт
 ```
 
-На машині з іншою архітектурою (наприклад `aarch64`) модуль відмовляє з кодом
+Для Guix native build доступний окремий пакет `wsm-cpu-isa-fpc`; він встановлює лише `wsm-cpu-isa`, а FPC залишається build-time input.
+
+На машині з іншою архітектурою (наприклад `aarch64`) обидві реалізації відмовляють з кодом
 `isa.not-x86` до читання x86-specific `flags`: рівні x86-64 до неї не
 застосовні, і вигадувати відповідник не варто.
 
