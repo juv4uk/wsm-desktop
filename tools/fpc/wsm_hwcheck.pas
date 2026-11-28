@@ -43,6 +43,7 @@ type
     Device: string;       { 1c82 }
     ClassCode: string;    { 0x030000 }
     Driver: string;       { nvidia | '' }
+    Module: string;       { nvidia | '' — порожньо, якщо драйвер вбудований }
   end;
 
 var
@@ -93,6 +94,23 @@ begin
   Result := ExtractFileName(Base);
 end;
 
+{ Модуль ядра за прив'язаним драйвером. Порожній результат — не помилка:
+  драйвер може бути вбудований у ядро, і тоді symlink module просто відсутній.
+  Python-колектор фіксує це так само: status=bound без module. }
+function ReadModuleLink(const DevicePath: string): string;
+var
+  LinkTarget: array[0..1023] of Char;
+  Count: LongInt;
+begin
+  Result := '';
+  FillChar(LinkTarget, SizeOf(LinkTarget), 0);
+  Count := fpReadLink(DevicePath + '/driver/module', @LinkTarget[0], SizeOf(LinkTarget) - 1);
+  if Count <= 0 then
+    Exit;
+  LinkTarget[Count] := #0;
+  Result := ExtractFileName(string(PChar(@LinkTarget[0])));
+end;
+
 procedure ScanPciDevices;
 var
   Dir: TSearchRec;
@@ -114,6 +132,7 @@ begin
       Devices[DeviceCount].Device := ReadFirstLine(DevicePath + '/device');
       Devices[DeviceCount].ClassCode := ReadFirstLine(DevicePath + '/class');
       Devices[DeviceCount].Driver := ReadDriverLink(DevicePath);
+      Devices[DeviceCount].Module := ReadModuleLink(DevicePath);
       Inc(DeviceCount);
     until FindNext(Dir) <> 0;
   finally
@@ -169,7 +188,25 @@ begin
     WriteLn('      "vendor": "', JsonEscape(Devices[Index].Vendor), '",');
     WriteLn('      "device": "', JsonEscape(Devices[Index].Device), '",');
     WriteLn('      "class": "', JsonEscape(Devices[Index].ClassCode), '",');
-    WriteLn('      "driver": "', JsonEscape(Devices[Index].Driver), '"');
+    WriteLn('      "driver": {');
+    if Devices[Index].Driver = '' then
+      WriteLn('        "status": "none-known"')
+    else
+    begin
+      if Devices[Index].Module = '' then
+      begin
+        WriteLn('        "status": "bound",');
+        WriteLn('        "bound_driver": "', JsonEscape(Devices[Index].Driver), '"');
+      end
+      else
+      begin
+        WriteLn('        "status": "bound",');
+        WriteLn('        "bound_driver": "', JsonEscape(Devices[Index].Driver), '",');
+        WriteLn('        "module": "', JsonEscape(Devices[Index].Module), '",');
+        WriteLn('        "module_loaded": true');
+      end;
+    end;
+    WriteLn('      }');
     Write('    }');
     Separator := ',' + LineEnding;
   end;

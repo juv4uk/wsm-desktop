@@ -94,8 +94,21 @@ class FpcCollectorParityTests(unittest.TestCase):
         for address, pascal_device in pascal_pci.items():
             python_device = python_pci[address]
             identity = python_device.get("identity", {})
-            self.assertEqual(pascal_device["vendor"], identity.get("vendor_id", pascal_device["vendor"]).lower())
-            self.assertEqual(pascal_device["device"], identity.get("device_id", pascal_device["device"]).lower())
+            self.assertEqual(pascal_device["vendor"], identity.get("vendor_id", ""))
+            self.assertEqual(pascal_device["device"], identity.get("device_id", ""))
+            self.assertEqual(pascal_device["class"], identity.get("class_id", ""))
+            # Driver binding is the fact the GPU certification question turns on.
+            python_driver = python_device.get("driver", {})
+            self.assertEqual(
+                pascal_device["driver"]["status"], python_driver.get("status", ""),
+                f"{address}: driver status disagrees",
+            )
+            if pascal_device["driver"]["status"] == "bound":
+                self.assertEqual(
+                    pascal_device["driver"]["bound_driver"],
+                    python_driver.get("bound_driver", ""),
+                    f"{address}: bound driver disagrees",
+                )
 
     def test_the_source_says_it_was_not_compiled_where_it_was_written(self) -> None:
         """The file must not pretend to be verified."""
