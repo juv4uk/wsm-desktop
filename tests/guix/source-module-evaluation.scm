@@ -9,8 +9,10 @@
 ;; from this list is a module nobody has checked.
 ;; scripts/check_scheme_module_coverage.py enforces that rule.
 (use-modules (guix packages)
+             (gnu packages linux)
              (wsm systems performance)
-             (wsm packages wsm))
+             (wsm packages wsm)
+             (wsm packages linux-libre))
 
 (unless (and (list? %wsm-performance-services)
              (pair? %wsm-performance-services))
@@ -20,6 +22,20 @@
 ;; evaluated, and its header said so ("не зібрано й не перевірено").
 (unless (package? wsm-tools)
   (error "WSM package module did not export a package record for wsm-tools"))
+
+;; H170 Free overlay: preserve upstream kernel metadata and append exactly one patch.
+(unless (and (package? linux-libre-h170)
+             (string=? (package-name linux-libre-h170) "linux-libre-h170")
+             (string=? (package-version linux-libre-h170)
+                       (package-version linux-libre))
+             (equal? (package-license linux-libre-h170)
+                     (package-license linux-libre)))
+  (error "H170 kernel overlay diverges from the pinned linux-libre package"))
+
+(let ((base-patches (origin-patches (package-source linux-libre)))
+      (h170-patches (origin-patches (package-source linux-libre-h170))))
+  (unless (= (length h170-patches) (+ (length base-patches) 1))
+    (error "H170 kernel overlay must append exactly one patch to linux-libre")))
 
 (display "WSM-SOURCE-MODULE-EVAL-OK ")
 (display (length %wsm-performance-services))
