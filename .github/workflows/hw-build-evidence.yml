@@ -62,8 +62,9 @@ jobs:
             exit 1
           fi
           mapfile -t STORE_PATHS < <(grep -E '^/gnu/store/[a-z0-9]{32}-' "$PATHS_FILE")
-          if [ "${#STORE_PATHS[@]}" -ne 11 ]; then
-            echo "Expected 11 package outputs, got ${#STORE_PATHS[@]}" >&2
+          OUTPUT_COUNT="${#STORE_PATHS[@]}"
+          if [ "${#STORE_PATHS[@]}" -lt 11 ]; then
+            echo "Expected at least 11 store outputs for the 11 manifest specifications, got ${#STORE_PATHS[@]}" >&2
             cat "$PATHS_FILE" >&2
             exit 1
           fi
@@ -71,6 +72,8 @@ jobs:
             echo "## H170 Free package build evidence"
             echo ""
             echo "Input lock: channels.lock.scm (official Guix only)."
+            echo "Manifest package specifications: 11."
+            echo "Realized store outputs (including separate lib/doc outputs): $OUTPUT_COUNT."
             echo "Manifest: drivers/profiles/h170-free-packages.scm."
             echo ""
             echo "| package output | NAR SHA-256 |"
@@ -100,7 +103,7 @@ jobs:
           {
             echo "### H170 Free package build evidence: збірка не завершилась"
             echo ""
-            echo "Commit: `$GITHUB_SHA`"
+            echo "Commit: $GITHUB_SHA"
             echo ""
             echo "Pinned package evaluation або збірка завершилася помилкою."
             echo "Дивіться попередній крок для конкретної Guix помилки."
