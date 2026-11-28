@@ -61,10 +61,12 @@ class H170FreePackageManifestTests(unittest.TestCase):
         self.assertNotIn("actions/upload-artifact", text)
         self.assertNotIn("if: ${{ false }}", text)
 
-    def test_archive_workflow_does_not_accept_arbitrary_shell_package_input(self) -> None:
+    def test_archive_workflow_validates_package_input_without_shell_interpolation(self) -> None:
         text = WORKFLOW.read_text(encoding="utf-8")
-        self.assertNotIn("github.event.inputs.packages", text)
-        self.assertNotIn("inputs.packages", text)
+        self.assertIn("PACKAGES: ${{ inputs.packages || '' }}", text)
+        self.assertIn('read -r -a PACKAGE_ARRAY <<< "$PACKAGES"', text)
+        self.assertIn('case " $ALLOWED " in', text)
+        self.assertNotIn("for package in ${{ inputs.packages", text)
 
 
 if __name__ == "__main__":
