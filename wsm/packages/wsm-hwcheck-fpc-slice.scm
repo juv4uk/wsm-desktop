@@ -57,7 +57,9 @@
       ;; libc already in the store; validate-runpath would fail on a binary that
       ;; is in fact fine.
       #:validate-runpath? #f
-      #:modules '((guix build utils))
+      ;; #:modules is NOT overridden here: passing '((guix build utils)) replaces
+      ;; gnu-build-system's default module list, the builder loses
+      ;; (guix build gnu-build-system) and fails with "Unbound variable: gnu-build".
       #:phases
       #~(modify-phases %standard-phases
           (delete 'configure)
