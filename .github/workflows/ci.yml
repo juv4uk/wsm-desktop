@@ -74,22 +74,11 @@ jobs:
       - name: Check release metadata
         run: python scripts/check_release_info.py
 
-      # Логи задачі GitHub потребують авторизації: без цього кроку агент бачить
-      # лише «Process completed with exit code 1» і витрачає прогін на вгадування.
-      - name: Повідомити причину збою
+      - name: Summarize fast-check failure
         if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          set -uo pipefail
-          BODY=$(mktemp)
           {
-            echo "### fast checks: перевірки не пройшли"
-            echo ""
-            echo "Commit: \`$GITHUB_SHA\`"
-            echo ""
-            echo "Локально те саме відтворюється командою \`make check\`."
-            echo "Нижче — хвіст виводу останніх кроків."
-          } > "$BODY"
-          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
-            -F body=@"$BODY" >/dev/null && echo "причину записано коментарем"
+            echo "### Fast checks failed"
+            echo "The first failing check and its exact output are in the preceding step logs."
+            echo "Reproduce locally with `make check`."
+          } >> "$GITHUB_STEP_SUMMARY"
