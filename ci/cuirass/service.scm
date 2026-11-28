@@ -1,21 +1,17 @@
 ;; SPDX-License-Identifier: LicenseRef-Volnist
 ;;
-;; Run Cuirass on your own machine, with the WSM specifications.
+;; Cuirass service fragment for a dedicated WSM build host.
 ;;
-;; This is a fragment, not a full operating-system declaration: paste the
-;; `services' entry into the system that should host the build farm. A complete
-;; system definition would become a second source of truth for how WSM machines
-;; are configured.
+;; This is not part of the WSM desktop/live system. It is added to the
+;; services list of a separate Guix System build host.
 ;;
-;; Two corrections over the first revision of this file:
-;;   * `cuirass-service-type' lives in `(gnu services cuirass)', not
-;;     `(gnu services ci)' - the latter holds Laminar and Forgejo;
-;;   * `cuirass-configuration' has no `use-substitutes?' field; substitutes are
-;;     controlled by the daemon and by `fallback?'.
+;; cuirass-service-type lives in (gnu services cuirass). The pinned
+;; cuirass-configuration has no use-substitutes? field; substitutes are
+;; controlled by the Guix daemon and fallback? controls local build fallback.
 ;;
-;; The specifications are inlined as a gexp rather than loaded from a path: the
-;; service writes them into a build sandbox, where /run/current-system does not
-;; exist.
+;; Keep this job list narrow. A generic (channels wsm) build would enumerate
+;; every WSM package; do not enable it until issue #367 is resolved and an
+;; explicit package allowlist is approved. Substitute publication is separate.
 
 (use-modules (gnu services cuirass)
              (gnu services)
@@ -34,29 +30,24 @@
       "BBB0 2DDF 2CEA F6A8 0D1D  E643 A2A0 6DF2 A33A 54FA")))))
 
 (define %wsm-channel
+  ;; Development input only; not an owner-authenticated release lock.
   (channel
    (name 'wsm)
    (url "https://github.com/juv4uk/wsm-desktop")
    (branch "main")))
 
 (define %wsm-cuirass-specs
-  #~(list (specification
-           (name 'wsm-channel)
-           (priority 1)
-           (build '(channels wsm))
-           (channels (list #$%wsm-guix-channel #$%wsm-channel)))
-          (specification
-           (name 'wsm-live-minimal-image)
-           (priority 1)
-           (build '(custom (ci cuirass images)))
-           (channels (list #$%wsm-guix-channel #$%wsm-channel)))))
+  #~(list
+     (specification
+      (name 'wsm-live-minimal-image)
+      (priority 1)
+      (build '(custom (ci cuirass images)))
+      (channels (list #$%wsm-guix-channel #$%wsm-channel)))))
 
 (define wsm-cuirass-service
   (service cuirass-service-type
            (cuirass-configuration
             (host "localhost")
             (port 8081)
-            ;; Keep building locally when a substitute is missing, rather than
-            ;; failing the job.
             (fallback? #t)
             (specifications %wsm-cuirass-specs))))
