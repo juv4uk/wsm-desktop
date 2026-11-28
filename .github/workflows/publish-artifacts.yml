@@ -118,7 +118,7 @@ jobs:
             /gnu/store/*.tar.zst) ;;
             *) echo "refusing non-tarball output: $tarball" >&2; exit 1 ;;
           esac
-          name="h170-free-pack-$(git rev-parse --short HEAD).tar.zst"
+          name="h170-free-pack-$(git rev-parse --short=12 HEAD).tar.zst"
           cp "$tarball" "artifacts/$name"
           PACK_SHA256="$(sha256sum "artifacts/$name" | cut -d ' ' -f1)"
           PACK_SIZE="$(stat -c '%s' "artifacts/$name")"
