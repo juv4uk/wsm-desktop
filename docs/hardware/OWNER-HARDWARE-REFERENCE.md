@@ -104,7 +104,7 @@ channel, Linux-libre чи повний склад саме цієї H170 кон�
 - [Матриця workgroup × batching](https://github.com/juv4uk/gp107-nvidia-re/blob/master/docs/21-proprietary-performance-matrix.md)
   містить 108 успішних NVIDIA runtime points. Вона вказує на помітний
   submit overhead для малих задач і workload-залежний вплив local size.
-- [DEVICE_LOCAL transfer/compute](https://github.com/juv4uk/gp107-nvidia-re/blob/1b4c384c7b5ec8a0de43909641166152f83f5146/docs/22-device-local-transfer-and-compute-phases.md)
+- [DEVICE_LOCAL transfer/compute](https://github.com/juv4uk/gp107-nvidia-re/blob/8255da482af3c404147b5eefcb0ba0caaa43984a/docs/22-device-local-transfer-and-compute-phases.md)
   містить виправлений command stream із memory dependencies для H2D →
   compute → D2H та `memoryTypeBits` validation у коді, але build,
   synchronization-validation і новий фізичний rerun ще не прийняті.
