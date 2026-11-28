@@ -113,18 +113,18 @@ check-licences:
 check-guix-eval:
 	$(GUIX) time-machine -C channels.lock.scm -- repl -L . tests/guix/source-module-evaluation.scm
 	$(MAKE) check-fpc-guix-build
-
-# Build the two native FPC packages inside the exact locked Guix environment.
-# This exercises the package phases and verifies that FPC remains build-only;
-# unlike the system --dry-run checks below, this creates real store outputs.
-check-fpc-guix-build:
-	$(GUIX) time-machine -C channels.lock.scm -- build -L . wsm-hwcheck-fpc wsm-classify-fpc
 	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/minimal.scm --dry-run
 	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/desktop.scm --dry-run
 	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/live.scm --dry-run
 	$(GUIX) time-machine -C channels.lock.scm -L . -- system -L . build systems/live-minimal.scm --dry-run
 	$(MAKE) check-compatibility-eval
 	$(GUIX) time-machine -C channels.lock.scm -L . -- home -L . build systems/home.scm --dry-run
+
+# Build the two native FPC packages inside the exact locked Guix environment.
+# This exercises the package phases and verifies that FPC remains build-only;
+# unlike the system --dry-run checks above, this creates real store outputs.
+check-fpc-guix-build:
+	$(GUIX) time-machine -C channels.lock.scm -- build -L . wsm-hwcheck-fpc wsm-classify-fpc
 
 # Compatibility is opt-in and always uses its own authenticated Guix + Nonguix lock.
 # This target resolves the lock and evaluates the full system graph without building it.
