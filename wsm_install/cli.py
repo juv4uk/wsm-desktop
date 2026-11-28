@@ -16,6 +16,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 
 from .plan import build_plan, canonical_json, summarize_report
 from .profile import EvidenceUnavailable, load as load_profile_evidence
+from .report_schema import UnsupportedSchemaVersion, schema_path_for
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SCHEMA = ROOT / "schemas" / "hardware-report.schema.json"
@@ -484,8 +485,19 @@ def main(argv: list[str] | None = None) -> int:
         print(f"wsm-install: {error}", file=sys.stderr)
         return 2
 
+    schema_path = args.schema
+    if schema_path == DEFAULT_SCHEMA:
+        # A report is validated against the schema for the version it declares,
+        # so a 1.0.0 report keeps validating after 1.1.0 became current.
+        declared = report.get("schema_version") if isinstance(report, dict) else None
+        try:
+            schema_path = schema_path_for(declared)
+        except UnsupportedSchemaVersion as exc:
+            print(f"wsm-install: {exc}", file=sys.stderr)
+            return 2
+
     try:
-        schema = json.loads(args.schema.read_text(encoding="utf-8"))
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
         Draft202012Validator.check_schema(schema)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
         print(f"wsm-install: cannot load hardware report schema: {exc}", file=sys.stderr)
