@@ -291,6 +291,70 @@ class RuntimeParityTests(unittest.TestCase):
         validate_document(CLASSIFICATION_SCHEMA, payload)
         self.assertEqual(payload, classify(report))
 
+    def test_classifier_matches_python_for_boundary_evidence_states(self) -> None:
+        from wsm_install.classification import classify
+
+        report = {
+            "devices": [
+                {
+                    "device_id": "gpu-bound-built-in",
+                    "category": "gpu",
+                    "discovery_status": "discovered",
+                    "driver": {"status": "bound", "bound_driver": "nouveau"},
+                    "functional_tests": [
+                        {"capability": "display-mode", "status": "passed"},
+                    ],
+                    "firmware": {"requirement": "unknown", "runtime_status": "unknown"},
+                    "evidence": [],
+                },
+                {
+                    "device_id": "gpu-failed-render",
+                    "category": "gpu",
+                    "discovery_status": "discovered",
+                    "driver": {"status": "available-only", "candidate": "nouveau"},
+                    "functional_tests": [
+                        {"capability": "gpu-render", "status": "failed"},
+                    ],
+                    "firmware": {"requirement": "unknown", "runtime_status": "unknown"},
+                    "evidence": [],
+                },
+                {
+                    "device_id": "wifi-module-unbound",
+                    "category": "network",
+                    "discovery_status": "discovered",
+                    "driver": {
+                        "status": "module-loaded-unbound",
+                        "module": "iwlwifi",
+                        "module_loaded": True,
+                    },
+                    "functional_tests": [],
+                    "firmware": {"requirement": "unknown", "runtime_status": "unknown"},
+                    "evidence": [],
+                },
+                {
+                    "device_id": "unknown-device",
+                    "category": "other",
+                    "discovery_status": "unknown",
+                    "driver": None,
+                    "functional_tests": [],
+                    "firmware": {"requirement": "unknown", "runtime_status": "unknown"},
+                    "evidence": [],
+                },
+            ]
+        }
+        report_path = Path(self.temporary.name) / "classification-boundaries.json"
+        report_path.write_text(json.dumps(report), encoding="utf-8")
+        completed = subprocess.run(
+            [str(self.classifier), str(report_path)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        payload = json.loads(completed.stdout)
+        validate_document(CLASSIFICATION_SCHEMA, payload)
+        self.assertEqual(payload, classify(report))
+
     def test_classifier_refuses_malformed_json(self) -> None:
         report_path = Path(self.temporary.name) / "malformed.json"
         report_path.write_text("{not-json", encoding="utf-8")
