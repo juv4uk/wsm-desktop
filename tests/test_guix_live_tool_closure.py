@@ -46,6 +46,22 @@ class GuixLiveToolClosureTests(unittest.TestCase):
                 target.chmod(0o755)
                 self.assertEqual(str(target), resolve_trusted_tool(name, profile_root=profile))
 
+    def test_system_profile_symlink_to_store_executable_is_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            profile = root / "profile"
+            store_binary = root / "store" / "sgdisk"
+            profile_binary = profile / "bin" / "sgdisk"
+            store_binary.parent.mkdir(parents=True)
+            profile_binary.parent.mkdir(parents=True)
+            store_binary.write_text("#!/bin/sh\\nexit 0\\n", encoding="utf-8")
+            store_binary.chmod(0o555)
+            profile_binary.symlink_to(store_binary)
+            self.assertEqual(
+                str(profile_binary),
+                resolve_trusted_tool("sgdisk", profile_root=profile),
+            )
+
     def test_missing_or_non_executable_tool_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             profile = Path(temporary)
