@@ -17,14 +17,30 @@ name: WSM package archives
 #     (substitutes.yml), бо custody ключа не робиться мовчки в архівному job.
 #
 # `packages` — це те, що робить workflow корисним для конкретної машини: плата
-# власника потребує не лише інсталятора, а й ядра, firmware та відкритого стеку для
-# GP107, і один запуск має дати цей набір, а не п'ять окремих.
+# власника потребує не лише інсталятора, а й ядра та відкритого стеку для GP107, і
+# один запуск має дати цей набір, а не п'ять окремих.
+#
+# `manifest` — те, що робить цей набір перевірюваним. Список, набраний руками в
+# поле `packages`, неможливо ані переглянути перед відправкою, ані порівняти з
+# тим, що машина справді потребує. Тому набір живе у файлі
+# drivers/profiles/h170-publication-packages.scm, і один dispatch читає його:
+#
+#   * `manifest` непорожній — набір беруть із файлу, а `packages` ігнорується;
+#   * `manifest` порожній — працює старий шлях через `packages`.
+#
+# Імена з маніфесту витягує scripts/h170_package_manifest.py — не `sed`, щоб
+# витяг можна було перевірити тестом без Guix. Далі кожне ім'я збирається тим
+# самим `guix build` на тому самому lock-файлі, що й раніше.
 
 on:
   workflow_dispatch:
     inputs:
+      manifest:
+        description: "Manifest file listing the package set (default: the H170 manifest; empty: use `packages`)"
+        type: string
+        default: "drivers/profiles/h170-publication-packages.scm"
       packages:
-        description: "Package variables to archive, space separated (default: wsm-tools)"
+        description: "Package variables to archive, space separated (used only when `manifest` is empty)"
         type: string
         default: "wsm-tools"
       attach_to_draft:
@@ -58,12 +74,32 @@ jobs:
           sudo systemctl enable --now guix-daemon.service
           guix --version
 
-      - name: Build the requested packages on the release lock
+      - name: Resolve the package set from the manifest
+        env:
+          MANIFEST: ${{ inputs.manifest }}
+          PACKAGES: ${{ inputs.packages }}
         run: |
           set -euo pipefail
           mkdir -p archives
+          if [ -n "$MANIFEST" ]; then
+            python3 scripts/h170_package_manifest.py "$MANIFEST" > archives/packages.txt
+            echo "WSM_PACKAGE_SET_FROM=manifest $MANIFEST" >> "$GITHUB_STEP_SUMMARY"
+          else
+            printf '%s\n' $PACKAGES > archives/packages.txt
+            echo "WSM_PACKAGE_SET_FROM=inputs.packages" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ ! -s archives/packages.txt ]; then
+            echo "refusing an empty package set" >&2
+            exit 1
+          fi
+          cat archives/packages.txt
+
+      - name: Build the requested packages on the release lock
+        run: |
+          set -euo pipefail
           : > archives/store-paths.txt
-          for package in ${{ inputs.packages }}; do
+          while IFS= read -r package; do
+            [ -n "$package" ] || continue
             case "$package" in
               *[!A-Za-z0-9._+-]*) echo "refusing odd package name: $package" >&2; exit 1 ;;
             esac
@@ -71,7 +107,7 @@ jobs:
                             build -L . "$package" --no-grafts)"
             printf '%s\t%s\n' "$package" "$store_path" >> archives/store-paths.txt
             echo "WSM_PACKAGE_BUILT=$package $store_path" >> "$GITHUB_STEP_SUMMARY"
-          done
+          done < archives/packages.txt
           cat archives/store-paths.txt
 
       - name: Export each closure as a nar
@@ -91,6 +127,7 @@ jobs:
           path: |
             archives/*.nar
             archives/*.nar.sha256
+            archives/packages.txt
             archives/store-paths.txt
           retention-days: 30
 

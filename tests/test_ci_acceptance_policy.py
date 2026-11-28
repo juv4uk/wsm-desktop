@@ -165,5 +165,31 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
         self.assertIn("*[!A-Za-z0-9._+-]*", self.text)
         self.assertIn("refusing odd package name", self.text)
 
+    def test_a_manifest_input_names_the_whole_set(self) -> None:
+        """One dispatch must be able to build the set, not five separate ones."""
+        inputs = self.workflow["on"]["workflow_dispatch"]["inputs"]
+        self.assertIn("manifest", inputs)
+        self.assertEqual(inputs["manifest"]["type"], "string")
+        default = inputs["manifest"]["default"]
+        self.assertTrue(default, "the manifest input needs a default, or it is noise")
+        self.assertTrue(
+            (ROOT / default).is_file(),
+            f"the manifest default {default!r} does not exist in the repository",
+        )
+
+    def test_the_manifest_is_resolved_by_the_repository_reader(self) -> None:
+        """Shell must not parse Scheme, and the extraction must be testable."""
+        self.assertIn("scripts/h170_package_manifest.py", self.text)
+        self.assertIn("inputs.manifest", self.text)
+        self.assertNotIn("grep -o", self.text)
+        self.assertNotIn("sed -n", self.text)
+
+    def test_the_build_loop_reads_the_resolved_set(self) -> None:
+        """A resolved file nobody loops over would publish nothing."""
+        self.assertIn("archives/packages.txt", self.text)
+        self.assertIn("done < archives/packages.txt", self.text)
+        self.assertIn("inputs.packages", self.text)
+        self.assertIn("refusing an empty package set", self.text)
+
 if __name__ == "__main__":
     unittest.main()

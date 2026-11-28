@@ -18,6 +18,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
 SYSTEMS = ROOT / "systems"
 
@@ -860,6 +862,27 @@ EVIDENCE_CONFIG_LINE = re.compile(r"(?m)^;;[ \t]+evidence-config:\s*(\S+)\s*<-\s
 CITATION = re.compile(r"^(.+):(\d+)$")
 
 
+def referenced_package_names(code: str) -> list[str]:
+    """Package variables a system definition pulls in: its kernel plus its packages.
+
+    ``code`` is the definition with comments already removed. Raises ValueError
+    when the file names no kernel or does not extend its package list with
+    ``cons*``, because then there is nothing a manifest could be compared with.
+    """
+    names: list[str] = []
+    kernel = re.search(r"\(kernel\s+([a-z][\w+.-]*)\)", code)
+    if kernel is None:
+        raise ValueError("the definition must name its kernel")
+    names.append(kernel.group(1))
+    packages = re.search(r"\(packages\s+\(cons\*\s+(.*?)\)", code, re.DOTALL)
+    if packages is None:
+        raise ValueError("the definition must add packages with cons*")
+    # The inherited list is an accessor call, not a package name.
+    head = packages.group(1).split("(operating-system-packages")[0]
+    names.extend(re.findall(r"(?<![\w-])([a-z][\w+.-]*)(?![\w-])", head))
+    return [name for name in names if name != "cons*"]
+
+
 def without_comments(text: str) -> str:
     """Code only: whole-line comments dropped, comment tails cut off."""
     kept: list[str] = []
@@ -894,16 +917,10 @@ class H170SystemDefinitionTests(unittest.TestCase):
 
     def package_names(self) -> list[str]:
         """Package variables this definition actually pulls in: kernel + packages."""
-        names: list[str] = []
-        kernel = re.search(r"\(kernel\s+([a-z][\w+.-]*)\)", self.code)
-        self.assertIsNotNone(kernel, "the definition must name its kernel")
-        names.append(kernel.group(1))
-        packages = re.search(r"\(packages\s+\(cons\*\s+(.*?)\)", self.code, re.DOTALL)
-        self.assertIsNotNone(packages, "the definition must add packages with cons*")
-        # The inherited list is an accessor call, not a package name.
-        head = packages.group(1).split("(operating-system-packages")[0]
-        names.extend(re.findall(r"(?<![\w-])([a-z][\w+.-]*)(?![\w-])", head))
-        return [name for name in names if name != "cons*"]
+        try:
+            return referenced_package_names(self.code)
+        except ValueError as error:
+            self.fail(str(error))
 
     def assert_citation_names(self, citation: str, name: str) -> None:
         """A citation is evidence only while the cited line still names the thing."""
@@ -1018,6 +1035,168 @@ class H170SystemDefinitionTests(unittest.TestCase):
         self.assertGreaterEqual(len(self.package_names()), 2)
         self.assertTrue(cited_evidence(self.text, EVIDENCE_LINE))
         self.assertTrue(cited_evidence(self.text, EVIDENCE_CONFIG_LINE))
+
+
+H170_MANIFEST = ROOT / "drivers" / "profiles" / "h170-publication-packages.scm"
+MANIFEST_READER = ROOT / "scripts" / "h170_package_manifest.py"
+PACKAGE_ARCHIVES = ROOT / ".github" / "workflows" / "package-archives.yml"
+# The one package the machine needs that its operating-system expression cannot
+# name: the installer is a tool you run on the machine, not part of its closure.
+INSTALLER_PACKAGE = "wsm-tools"
+# `;; <why> — <name> <- <path>:<line>`, one line per entry.
+JUSTIFICATION_LINE = re.compile(
+    r"(?m)^[ \t]*;;[ \t]*(?P<why>.*?)[ \t]*(?P<name>[A-Za-z0-9._+-]+)"
+    r"[ \t]*<-[ \t]*(?P<path>[^\s,:]+):(?P<line>\d+)[ \t]*$"
+)
+
+
+def manifest_justifications(text: str) -> list[re.Match[str]]:
+    """Every `<name> <- <path>:<line>` justification comment in the manifest."""
+    return list(JUSTIFICATION_LINE.finditer(text))
+
+
+class H170PublicationManifestTests(unittest.TestCase):
+    """The publication set is one reviewable file, and it may not drift.
+
+    The dispatch form used to take a space-separated list typed by hand. Nothing
+    compared that list with the machine: a missing kernel or a stale installer
+    shipped silently, and a reviewer had nothing to read. So the set lives in
+    `drivers/profiles/h170-publication-packages.scm`, it is derived from
+    `systems/h170.scm` rather than from memory, and every entry has to carry the
+    one-line reason it exists.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        spec = importlib.util.spec_from_file_location(
+            "h170_package_manifest", MANIFEST_READER
+        )
+        assert spec is not None and spec.loader is not None
+        cls.reader = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.reader)
+
+    def setUp(self) -> None:
+        self.assertTrue(
+            H170_MANIFEST.is_file(), f"{H170_MANIFEST.name} is missing"
+        )
+        self.text = H170_MANIFEST.read_text(encoding="utf-8")
+        self.names = self.reader.package_names(self.text)
+        self.referenced = referenced_package_names(without_comments(profile(H170)))
+
+    def test_the_manifest_lists_exactly_the_packages_the_machine_needs(self) -> None:
+        """Exactly: every package the definition names, plus the installer."""
+        self.assertTrue(self.referenced, "the H170 definition names no packages")
+        expected = set(self.referenced) | {INSTALLER_PACKAGE}
+        self.assertEqual(
+            set(self.names),
+            expected,
+            "the manifest drifted from systems/h170.scm: missing "
+            f"{sorted(expected - set(self.names))}, unexpected "
+            f"{sorted(set(self.names) - expected)}",
+        )
+        self.assertEqual(
+            len(self.names), len(set(self.names)), "a package is listed twice"
+        )
+
+    def test_every_entry_carries_one_justification_line(self) -> None:
+        """A name with no reason next to it is a name nobody can review."""
+        matches = manifest_justifications(self.text)
+        justified = [match.group("name") for match in matches]
+        self.assertEqual(
+            sorted(justified),
+            sorted(self.names),
+            "each entry needs exactly one `<name> <- <path>:<line>` line, and no "
+            "justification may outlive the entry it documents",
+        )
+        for match in matches:
+            name = match.group("name")
+            with self.subTest(package=name):
+                self.assertTrue(
+                    match.group("why").strip(),
+                    f"{name}: the line says where, but not why this machine needs it",
+                )
+                path = ROOT / match.group("path")
+                self.assertTrue(
+                    path.is_file(),
+                    f"{name}: cited source {match.group('path')} does not exist",
+                )
+                lines = path.read_text(encoding="utf-8").splitlines()
+                number = int(match.group("line"))
+                self.assertLessEqual(
+                    number, len(lines), f"{name}: {match.group('path')} is shorter"
+                )
+                self.assertIn(
+                    name,
+                    lines[number - 1],
+                    f"{name}: {match.group('path')}:{number} no longer names it, so "
+                    "the justification no longer supports the entry",
+                )
+
+    def test_the_manifest_is_one_evaluable_manifest_form(self) -> None:
+        forms = read_forms(self.text)
+        self.assertEqual(len(forms), 1, "the manifest must be a single form")
+        self.assertTrue(
+            forms[0].lstrip().startswith("(specifications->manifest"),
+            "the file must evaluate to a Guix manifest, not to a bare list",
+        )
+
+    def test_the_manifest_stays_free(self) -> None:
+        """The Free channel cannot resolve these, and #514 forbids them anyway."""
+        lowered = "\n".join(
+            line for line in self.text.splitlines() if not line.strip().startswith(";")
+        ).lower()
+        for forbidden in (
+            "linux-firmware",
+            "nvidia",
+            "nongnu",
+            "nonguix",
+            "intel-microcode",
+            "wsm-gp107.modconfig",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, lowered)
+
+    def test_the_manifest_does_not_claim_the_set_was_built(self) -> None:
+        """A list of what to build is not evidence that it builds."""
+        self.assertIn("НЕ ЗІБРАНО", self.text)
+        for claim in (
+            "builds successfully",
+            "tested on hardware",
+            "verified on hardware",
+            "certified",
+            "guaranteed",
+        ):
+            with self.subTest(claim=claim):
+                self.assertNotIn(claim, self.text.lower())
+
+    def test_the_reader_refuses_what_the_workflow_would_refuse(self) -> None:
+        """The reader is a gate, not a formality: it must reject bad names."""
+        self.assertEqual(self.reader.package_names(self.text), self.names)
+        for bad, reason in (
+            ('(specifications->manifest (list "ok" "bad name"))', "odd"),
+            ('(specifications->manifest (list "a" "a"))', "duplicate"),
+            ('(specifications->manifest (list))', "no package names"),
+            ('(list "a")', "no (specifications->manifest"),
+        ):
+            with self.subTest(manifest=bad):
+                with self.assertRaises(self.reader.ManifestError) as caught:
+                    self.reader.package_names(bad)
+                self.assertIn(reason, str(caught.exception))
+
+    def test_the_publication_workflow_defaults_to_this_manifest(self) -> None:
+        """A manifest nobody dispatches is a file, not a published set."""
+        workflow = yaml.load(
+            PACKAGE_ARCHIVES.read_text(encoding="utf-8"), Loader=yaml.BaseLoader
+        )
+        manifest_input = workflow["on"]["workflow_dispatch"]["inputs"]["manifest"]
+        self.assertEqual(
+            manifest_input["default"], str(H170_MANIFEST.relative_to(ROOT))
+        )
+
+    def test_the_checks_are_not_vacuous(self) -> None:
+        self.assertGreaterEqual(len(self.names), 2)
+        self.assertGreaterEqual(len(self.referenced), 2)
+        self.assertGreaterEqual(len(manifest_justifications(self.text)), 2)
 
 
 if __name__ == "__main__":
