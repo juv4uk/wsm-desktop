@@ -71,10 +71,13 @@ class PackageTests(unittest.TestCase):
         for marker in ("python-build-system", "python-jsonschema", "(gnu packages python"):
             self.assertNotIn(marker, self.text, f"Python dependency present: {marker}")
 
-    def test_it_installs_both_native_tools_and_keeps_fpc_build_only(self) -> None:
+    def test_each_native_tool_has_a_separate_package_and_fpc_is_build_only(self) -> None:
         self.assertIn("(name \"wsm-hwcheck-fpc\")", self.text)
         self.assertIn("(name \"wsm-classify-fpc\")", self.text)
         self.assertIn("(name \"wsm-cpu-isa-fpc\")", self.text)
+        self.assertIn("(name \"wsm-partition-fpc\")", self.text)
+        self.assertIn("(name \"wsm-profile-fpc\")", self.text)
+        self.assertIn("(name \"wsm-preflight-fpc\")", self.text)
         self.assertIn("(native-inputs (list fpc))", self.text)
         self.assertIn("(license wsm-license)", self.text)
         self.assertIn("build-hwcheck", self.text)
@@ -83,6 +86,12 @@ class PackageTests(unittest.TestCase):
         self.assertIn("install-classify", self.text)
         self.assertIn("build-isa", self.text)
         self.assertIn("install-isa", self.text)
+        self.assertIn("build-partition", self.text)
+        self.assertIn("install-partition", self.text)
+        self.assertIn("build-profile", self.text)
+        self.assertIn("install-profile", self.text)
+        self.assertIn("build-preflight", self.text)
+        self.assertIn("install-preflight", self.text)
 
 
 class MakefileTests(unittest.TestCase):
