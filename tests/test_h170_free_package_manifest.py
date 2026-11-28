@@ -35,9 +35,9 @@ class H170FreeManifestTests(unittest.TestCase):
             "gptfdisk", "parted", "dosfstools", "e2fsprogs",
             "usbutils", "alsa-utils",
         }
-        match = re.search(r"\\(packages->manifest\\s*\\(list(.*?)\\)\\)", self.code, re.DOTALL)
+        match = re.search(r"\(packages->manifest\s*\(list(.*?)\)\)", self.code, re.DOTALL)
         self.assertIsNotNone(match)
-        roots = set(re.findall(r"\\b[a-z][a-z0-9+-]*\\b", match.group(1)))
+        roots = set(re.findall(r"\b[a-z][a-z0-9+-]*\b", match.group(1)))
         self.assertEqual(roots, expected)
         for package in expected:
             with self.subTest(package=package):
