@@ -51,9 +51,12 @@ class WsmPackageArchiveWorkflowTests(unittest.TestCase):
         self.assertIn("channels.lock.scm", build)
         self.assertIn("SHA256SUMS", build)
         self.assertIn("PROVENANCE.txt", build)
+        self.assertIn("cp -- LICENSE archives/LICENSE", build)
+        self.assertIn("LICENSE", self.text)
         artifact = self.step("Keep the package as a workflow artifact")
         self.assertIn("actions/upload-artifact@v7", artifact["uses"])
         self.assertEqual(artifact["with"]["retention-days"], "30")
+        self.assertIn("archives/LICENSE", artifact["with"]["path"])
 
     def test_only_an_existing_draft_release_can_receive_the_pack(self) -> None:
         step = self.step("Attach the pack to an existing draft release")
@@ -61,6 +64,7 @@ class WsmPackageArchiveWorkflowTests(unittest.TestCase):
         self.assertIn("isDraft", step["run"])
         self.assertIn('!= "true"', step["run"])
         self.assertNotIn("gh release create", self.text)
+        self.assertIn("archives/LICENSE", step["run"])
 
     def test_failure_is_visible_without_claiming_a_publication(self) -> None:
         step = self.step("Повідомити причину збою")
