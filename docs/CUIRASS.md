@@ -21,6 +21,12 @@ Cuirass — Guix-native evaluator/build farm. Він не замінює GitHub 
 
 Зелений Cuirass build означає лише, що derivation/closure зібрався. Він не означає, що ISO завантажується, що інсталятор працює або що можна публікувати RC.
 
+## Що Cuirass не доводить
+
+- Cuirass **не завантажує образ**: його job закінчується на derivation/closure build, без BIOS або UEFI boot.
+- Cuirass **не перевіряє інсталятор**: у job немає QEMU guest чи маркера `WSM_INSTALLER_OK`.
+- Він не створює serial crash evidence і не замінює #717, #700 чи release readiness checker.
+
 ## Чому зараз не можна реєструвати jobset
 
 WSM channel **не автентифікований**: немає owner-signed introduction, .guix-authorizations та перевіреного public keyring. Тому specs.scm навмисно містить OWNER_SIGNED_WSM_COMMIT_REQUIRED, а не рухому гілку main.

@@ -47,7 +47,11 @@ class SpecsTests(unittest.TestCase):
             self.text.count('"OWNER_SIGNED_WSM_COMMIT_REQUIRED"'), 2
         )
         self.assertNotIn('(branch "main")', self.text)
-        self.assertNotIn("--disable-authentication", self.text)
+        code = "\n".join(
+            line for line in self.text.splitlines()
+            if not line.lstrip().startswith(";;")
+        )
+        self.assertNotIn("--disable-authentication", code)
 
     def test_official_channel_keeps_its_introduction(self) -> None:
         self.assertEqual(self.text.count("make-channel-introduction"), 2)

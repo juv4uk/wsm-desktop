@@ -31,7 +31,7 @@
 ;; from ci/cuirass/images.scm without registering a jobset or authenticating WSM.
 (define %wsm-cuirass-service-smoke
   (service cuirass-service-type
-          (cuirass-configuration (specifications #~'())))
+          (cuirass-configuration (specifications #~'()))))
 
 (unless (and (procedure? arguments->systems)
              (procedure? image->job)
