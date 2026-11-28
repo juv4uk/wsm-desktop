@@ -52,6 +52,20 @@ def report_file(directory: Path) -> Path:
     return target
 
 
+def run_preview_module():
+    from unittest.mock import patch
+    from wsm_install.install_steps import TRUSTED_TOOLS
+
+    def synthetic_tool_path(name: str) -> str:
+        return f"/run/current-system/profile/bin/{TRUSTED_TOOLS[name]}"
+
+    with patch(
+        "wsm_install.install_steps.resolve_trusted_tool",
+        side_effect=synthetic_tool_path,
+    ):
+        return load_module().run()
+
+
 class DescriptorTests(unittest.TestCase):
     def test_module_desc_declares_a_python_job(self) -> None:
         import yaml
@@ -76,7 +90,7 @@ class FailureTests(unittest.TestCase):
 
     def test_missing_report_fails_closed(self) -> None:
         install_fake_libcalamares({"wsmTargetDisk": "/dev/nvme0n1", "wsmTargetSizeBytes": 256 * GIB, "wsmDryRun": True})
-        result = load_module().run()
+        result = run_preview_module()
         self.assertIsNotNone(result)
         message, details = result
         self.assertIn("report", message.lower())
@@ -148,7 +162,7 @@ class PreviewOutcomeTests(unittest.TestCase):
 
         install_fake_libcalamares(self.values(wsmDryRun=True))
         with patch("wsm_install.executor.execute", return_value=[] ) as execute:
-            result = load_module().run()
+            result = run_preview_module()
         self.assertIsNotNone(result)
         self.assertIn("not installed", result[0].lower())
         execute.assert_called_once()
@@ -160,7 +174,7 @@ class PreviewOutcomeTests(unittest.TestCase):
 
         install_fake_libcalamares(self.values(wsmDryRun=False))
         with patch("wsm_install.executor.execute") as execute:
-            result = load_module().run()
+            result = run_preview_module()
         self.assertIsNotNone(result)
         self.assertIn("APPLY is disabled", result[0])
         execute.assert_not_called()
@@ -170,7 +184,7 @@ class PreviewOutcomeTests(unittest.TestCase):
 
         install_fake_libcalamares(self.values())
         with patch("wsm_install.executor.execute") as execute:
-            result = load_module().run()
+            result = run_preview_module()
         self.assertIsNotNone(result)
         self.assertIn("APPLY is disabled", result[0])
         execute.assert_not_called()
