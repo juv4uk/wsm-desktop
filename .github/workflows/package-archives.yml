@@ -56,7 +56,7 @@ jobs:
           set -euo pipefail
           mkdir -p archives
           pack_output="$(guix time-machine -C channels.lock.scm -- \
-            pack -L "$GITHUB_WORKSPACE" --format=tarball \
+            pack -L "$GITHUB_WORKSPACE" --format=tarball -C gzip \
             --symlink=/opt/wsm/bin=bin \
             --expression='(begin (use-modules (wsm packages wsm)) wsm-tools)' \
             --no-grafts)"
@@ -66,7 +66,7 @@ jobs:
             *) echo "refusing unexpected Guix pack output: $pack_store_path" >&2; exit 1 ;;
           esac
           test -f "$pack_store_path"
-          output="archives/wsm-tools-${GITHUB_SHA:0:12}.${pack_store_path##*.}"
+          output="archives/wsm-tools-${GITHUB_SHA:0:12}.tar.gz"
           cp -- "$pack_store_path" "$output"
           cp -- LICENSE archives/LICENSE
           guix time-machine -C channels.lock.scm -- describe -f channels > archives/guix-channels.txt
