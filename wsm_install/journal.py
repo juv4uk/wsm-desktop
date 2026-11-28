@@ -52,14 +52,39 @@ class Journal:
         finally:
             os.close(descriptor)
 
-    def starting(self, index: int, total: int, command: Iterable[str], purpose: str) -> None:
+    def start_plan(self, plan_digest: str, disk: str) -> None:
+        """Record which plan this journal belongs to, before the first step.
+
+        Without this the journal says what happened but not what it was supposed to
+        happen to: two runs against the same disk look alike even when their plans
+        differ by one argument. The digest is the same value consent is bound to, so
+        a later reader can tell whether the steps recorded here were the steps that
+        were approved.
+        """
         self._append({
+            "event": "plan-bound",
+            "plan_digest": plan_digest,
+            "disk": disk,
+        })
+
+    def starting(
+        self,
+        index: int,
+        total: int,
+        command: Iterable[str],
+        purpose: str,
+        step_digest: str | None = None,
+    ) -> None:
+        entry: dict[str, Any] = {
             "event": "step-starting",
             "index": index,
             "total": total,
             "command": list(command),
             "purpose": purpose,
-        })
+        }
+        if step_digest is not None:
+            entry["step_digest"] = step_digest
+        self._append(entry)
 
     def finished(self, index: int, status: str, detail: str) -> None:
         self._append({

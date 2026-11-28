@@ -106,5 +106,35 @@ class RecoveryReportTests(unittest.TestCase):
         self.assertIn("may be in any state", report)
 
 
+class PlanBindingTests(unittest.TestCase):
+    """The journal must say which plan it belongs to, not only what happened."""
+
+    def test_the_plan_digest_is_recorded_before_the_first_step(self) -> None:
+        from wsm_install.plan_digest import plan_digest, step_digest
+
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "install.jsonl"
+            journal = Journal(path)
+            digest = plan_digest("/dev/nvme0n1", STEPS)
+            journal.start_plan(digest, "/dev/nvme0n1")
+            journal.starting(1, len(STEPS), STEPS[0].command, STEPS[0].purpose,
+                             step_digest=step_digest("/dev/nvme0n1", STEPS[0], 1))
+
+            entries = read_entries(path)
+            self.assertEqual(entries[0]["event"], "plan-bound")
+            self.assertEqual(entries[0]["plan_digest"], digest)
+            self.assertEqual(entries[0]["disk"], "/dev/nvme0n1")
+            self.assertEqual(entries[1]["step_digest"], step_digest("/dev/nvme0n1", STEPS[0], 1))
+
+    def test_a_step_without_a_digest_stays_readable(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "install.jsonl"
+            journal = Journal(path)
+            journal.starting(1, 1, STEPS[0].command, STEPS[0].purpose)
+            entry = read_entries(path)[0]
+            self.assertNotIn("step_digest", entry)
+            self.assertEqual(entry["event"], "step-starting")
+
+
 if __name__ == "__main__":
     unittest.main()
