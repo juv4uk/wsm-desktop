@@ -41,6 +41,8 @@ def build(directory: Path, installer_executed: bool = True) -> None:
     boot = {
         "boot_confirmed": True,
         "guest_installer_execution": installer_executed,
+        "serial_clean": True,
+        "serial_failure_markers": [],
         "iso_sha256": iso_sha256,
         "serial_output_tail": "...WSM_LIVE_READY...WSM_INSTALLER_OK...",
     }
@@ -329,6 +331,41 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertTrue(
             any("boot-uefi.json boot evidence iso_sha256 != release-manifest artifact sha256" in item
                 for item in found),
+            found,
+        )
+
+    def test_boot_evidence_without_serial_clean_is_refused(self) -> None:
+        path = self.directory / "boot-bios.json"
+        record = json.loads(path.read_text(encoding="utf-8"))
+        record.pop("serial_clean")
+        write_json(path, record)
+        rewrite_checksum(self.directory, "boot-bios.json")
+        manifest_path = self.directory / "release-manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["boot_evidence"]["bios_sha256"] = checker.sha256_of(path)
+        write_json(manifest_path, manifest)
+        rewrite_checksum(self.directory, "release-manifest.json")
+        found = checker.problems(self.directory)
+        self.assertTrue(
+            any("boot-bios.json has serial_clean false or missing" in item for item in found),
+            found,
+        )
+
+    def test_boot_evidence_with_serial_segfault_is_refused_even_with_markers(self) -> None:
+        path = self.directory / "boot-uefi.json"
+        record = json.loads(path.read_text(encoding="utf-8"))
+        record["serial_failure_markers"] = ["segfault"]
+        record["serial_clean"] = False
+        write_json(path, record)
+        rewrite_checksum(self.directory, "boot-uefi.json")
+        manifest_path = self.directory / "release-manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["boot_evidence"]["uefi_sha256"] = checker.sha256_of(path)
+        write_json(manifest_path, manifest)
+        rewrite_checksum(self.directory, "release-manifest.json")
+        found = checker.problems(self.directory)
+        self.assertTrue(
+            any("boot-uefi.json contains serial failure markers: segfault" in item for item in found),
             found,
         )
 
