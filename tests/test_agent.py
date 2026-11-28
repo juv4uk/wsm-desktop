@@ -17,6 +17,8 @@ sys.path.insert(0, str(ROOT))
 from wsm_install.agent import (  # noqa: E402
     ALLOWED_PROGRAMS,
     AgentError,
+    TRUSTED_PROFILE_ROOT,
+    TRUSTED_TOOLS,
     load_plan,
     run_plan,
     validate_command,
@@ -35,7 +37,7 @@ def plan(*commands: list[str], disk: str = "/dev/nvme0n1") -> dict:
     }
 
 
-GOOD = ["/usr/sbin/mkfs.ext4", "-F", "/dev/nvme0n1p2"]
+GOOD = [str(TRUSTED_PROFILE_ROOT / "sbin" / "mkfs.ext4"), "-F", "/dev/nvme0n1p2"]
 
 
 class AllowlistTests(unittest.TestCase):
@@ -50,10 +52,10 @@ class AllowlistTests(unittest.TestCase):
 
     def test_unknown_program_is_refused(self) -> None:
         with self.assertRaises(AgentError):
-            validate_command(["/usr/bin/dd", "if=/dev/zero", "of=/dev/nvme0n1"])
+            validate_command([str(TRUSTED_PROFILE_ROOT / "bin" / "dd"), "if=/dev/zero", "of=/dev/nvme0n1"])
 
     def test_btrfs_and_xfs_formatters_are_not_allowed_for_ext4_guix_target(self) -> None:
-        for formatter in ("/usr/sbin/mkfs.btrfs", "/usr/sbin/mkfs.xfs"):
+        for formatter in (str(TRUSTED_PROFILE_ROOT / "sbin" / "mkfs.btrfs"), str(TRUSTED_PROFILE_ROOT / "sbin" / "mkfs.xfs")):
             with self.subTest(formatter=formatter):
                 with self.assertRaises(AgentError) as caught:
                     validate_command([formatter, "-f", "/dev/nvme0n1p2"])
@@ -66,12 +68,12 @@ class AllowlistTests(unittest.TestCase):
 
     def test_shell_metacharacter_in_argument_is_refused(self) -> None:
         with self.assertRaises(AgentError) as caught:
-            validate_command(["/usr/bin/mount", "/dev/sda1; rm -rf /", "/mnt"])
+            validate_command([str(TRUSTED_PROFILE_ROOT / "bin" / "mount"), "/dev/sda1; rm -rf /", "/mnt"])
         self.assertEqual(caught.exception.code, "agent.shell-metacharacter")
 
     def test_command_substitution_is_refused(self) -> None:
         with self.assertRaises(AgentError):
-            validate_command(["/usr/bin/mount", "$(reboot)", "/mnt"])
+            validate_command([str(TRUSTED_PROFILE_ROOT / "bin" / "mount"), "$(reboot)", "/mnt"])
 
     def test_empty_command_is_refused(self) -> None:
         with self.assertRaises(AgentError):
@@ -173,6 +175,20 @@ class CliTests(unittest.TestCase):
         self.assertTrue(ALLOWED_PROGRAMS)
         for program in ALLOWED_PROGRAMS:
             self.assertTrue(program.startswith("/"), program)
+
+    def test_old_fhs_paths_are_refused(self) -> None:
+        for executable in ("/usr/sbin/partprobe", "/usr/bin/mount", "/usr/sbin/mkfs.ext4"):
+            with self.subTest(executable=executable):
+                with self.assertRaises(AgentError):
+                    validate_command([executable, "/dev/nvme0n1", "/mnt"])
+
+    def test_all_planner_tool_names_have_profile_path_candidates(self) -> None:
+        for binary in TRUSTED_TOOLS.values():
+            for directory in ("bin", "sbin"):
+                candidate = str(TRUSTED_PROFILE_ROOT / directory / binary)
+                self.assertIn(candidate, ALLOWED_PROGRAMS)
+        self.assertIn("sgdisk", TRUSTED_TOOLS)
+
 
 
 if __name__ == "__main__":
