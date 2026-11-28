@@ -218,7 +218,7 @@ class FreePascalBuildTests(unittest.TestCase):
     def test_it_compiles_all_six_programs_from_explicit_make_targets(self) -> None:
         self.assertIn("make -C tools/pascal clean all", self.text)
         for program in (
-            "wsm-hwcheck", "wsm-classify", "wsm-partition",
+            "wsm-hwcheck", "wsm-classify", "wsm-cpu-isa", "wsm-partition",
             "wsm-profile", "wsm-preflight", "wsm-install",
         ):
             with self.subTest(program=program):
@@ -231,7 +231,7 @@ class FreePascalBuildTests(unittest.TestCase):
         self.assertIn("test -x", self.text)
 
     def test_workflow_reports_only_programs_that_exist_after_build(self) -> None:
-        self.assertIn("for program in wsm-hwcheck wsm-classify wsm-partition wsm-profile wsm-preflight wsm-install", self.text)
+        self.assertIn("for program in wsm-hwcheck wsm-classify wsm-cpu-isa wsm-partition wsm-profile wsm-preflight wsm-install", self.text)
         self.assertNotIn("WSM_FPC_PROGRAMS=0", self.text)
 
     def setUp(self) -> None:

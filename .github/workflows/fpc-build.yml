@@ -44,7 +44,7 @@ concurrency:
 
 jobs:
   build:
-    name: Compile and verify six native FPC tools
+    name: Compile and verify seven native FPC tools
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -72,7 +72,7 @@ jobs:
         run: |
           set -euo pipefail
           make -C tools/pascal clean all
-          for program in wsm-hwcheck wsm-classify wsm-partition wsm-profile wsm-preflight wsm-install; do
+          for program in wsm-hwcheck wsm-classify wsm-cpu-isa wsm-partition wsm-profile wsm-preflight wsm-install; do
             test -x "tools/pascal/build/$program"
           done
           ls -lh tools/pascal/build
@@ -101,6 +101,11 @@ jobs:
         run: |
           python3 tests/test_fpc_preflight.py
           python3 tests/test_fpc_cli.py
+
+      - name: Test the native CPU ISA reader
+        env:
+          WSM_CPU_ISA_FPC_BINARY: tools/pascal/build/wsm-cpu-isa
+        run: python3 tests/test_fpc_cpu_isa.py
 
       - name: Keep the compiled binaries
         if: always()

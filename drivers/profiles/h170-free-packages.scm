@@ -37,6 +37,7 @@
    ;; could not.
    "wsm-hwcheck-fpc"
    "wsm-classify-fpc"
+   "wsm-cpu-isa-fpc"
    "wsm-partition-fpc"
    "wsm-profile-fpc"
    "wsm-preflight-fpc"

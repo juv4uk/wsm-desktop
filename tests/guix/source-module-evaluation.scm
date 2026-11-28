@@ -55,6 +55,26 @@
   (unless (= (length h170-patches) (+ (length base-patches) 1))
     (error "H170 kernel overlay must append exactly one patch to linux-libre")))
 
+
+;; Every native FPC tool is an evaluated package record and retains the
+;; owner's exact LicenseRef-Volnist metadata.
+(unless (and
+         (package? wsm-hwcheck-fpc)
+         (package? wsm-classify-fpc)
+         (package? wsm-cpu-isa-fpc)
+         (package? wsm-partition-fpc)
+         (package? wsm-profile-fpc)
+         (package? wsm-preflight-fpc)
+         (package? wsm-install-fpc)
+         (eq? (package-license wsm-hwcheck-fpc) wsm-license)
+         (eq? (package-license wsm-classify-fpc) wsm-license)
+         (eq? (package-license wsm-cpu-isa-fpc) wsm-license)
+         (eq? (package-license wsm-partition-fpc) wsm-license)
+         (eq? (package-license wsm-profile-fpc) wsm-license)
+         (eq? (package-license wsm-preflight-fpc) wsm-license)
+         (eq? (package-license wsm-install-fpc) wsm-license))
+  (error "FPC package records or LicenseRef-Volnist metadata are invalid"))
+
 (display "WSM-SOURCE-MODULE-EVAL-OK ")
 (display (length %wsm-performance-services))
 (display " services, channel package: ")
