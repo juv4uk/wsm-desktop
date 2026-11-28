@@ -253,14 +253,24 @@ end;
 
 function ValueIsObject(Value: TWsmJson; const Location: string): Boolean;
 begin
-  Result := (Value <> nil) and Value.IsObject;
+  // Absent is not wrong: a property that is not there is valid, and requiredness is
+  // RequireMembers' job. Without this, every optional object or array in a report —
+  // `display`, `cpu` — made a valid document invalid.
+  if Value = nil then
+    Exit(True);
+  Result := Value.IsObject;
   if not Result then
     AddSchemaError(Location, Format('%s is not of type ''object''', [Repr(Value)]));
 end;
 
 function ValueIsArray(Value: TWsmJson; const Location: string): Boolean;
 begin
-  Result := (Value <> nil) and Value.IsArray;
+  // Absent is not wrong: a property that is not there is valid, and requiredness is
+  // RequireMembers' job. Without this, every optional object or array in a report —
+  // `display`, `cpu` — made a valid document invalid.
+  if Value = nil then
+    Exit(True);
+  Result := Value.IsArray;
   if not Result then
     AddSchemaError(Location, Format('%s is not of type ''array''', [Repr(Value)]));
 end;
