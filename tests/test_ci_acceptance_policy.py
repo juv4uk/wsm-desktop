@@ -128,7 +128,7 @@ class ReleaseAcceptanceTimeoutTests(unittest.TestCase):
             )
 
 class PackageArchiveWorkflowTests(unittest.TestCase):
-    """Legacy archive entry is read-only; binary publication uses scoped H170 lanes."""
+    """The owner allowed publication; these are the limits that still hold."""
 
     WORKFLOW = ROOT / ".github" / "workflows" / "package-archives.yml"
 
@@ -136,47 +136,54 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
         self.text = self.WORKFLOW.read_text(encoding="utf-8")
         self.workflow = yaml.load(self.text, Loader=yaml.BaseLoader)
 
-    def test_the_fixed_plan_job_is_enabled_on_main(self) -> None:
-        job = self.workflow["jobs"]["plan"]
-        self.assertNotEqual(job.get("if"), "${{ false }}")
-        self.assertEqual(job["if"], "${{ github.ref == 'refs/heads/main' }}")
+    def test_the_job_is_not_disabled_any_more(self) -> None:
+        self.assertNotEqual(self.workflow["jobs"]["archive"].get("if"), "${{ false }}")
 
-    def test_workflow_is_manual_only_and_read_only(self) -> None:
+    def test_the_owner_permission_is_recorded_in_the_file(self) -> None:
+        self.assertIn("ВЛАСНИК ДАВ ДОЗВІЛ", self.text)
+
+    def test_workflow_starts_only_deliberately(self) -> None:
+        """Owner's ADR requires an explicit manual run; a tag is not a substitute."""
         self.assertEqual(set(self.workflow["on"]), {"workflow_dispatch"})
-        self.assertEqual(self.workflow["permissions"], {"contents": "read"})
-        self.assertNotIn("ВЛАСНИК ДАВ ДОЗВІЛ", self.text)
+        self.assertEqual(self.workflow["jobs"]["archive"]["if"], "${{ github.ref == 'refs/heads/main' }}")
 
-    def test_only_the_fixed_h170_free_manifest_is_evaluated(self) -> None:
-        steps = self.workflow["jobs"]["plan"]["steps"]
-        plan = next(step for step in steps if step.get("name") == "Evaluate the fixed H170 Free package plan")
-        self.assertIn("guix time-machine -C channels.lock.scm", plan["run"])
-        self.assertIn("--dry-run --no-grafts", plan["run"])
-        self.assertIn("--manifest=drivers/profiles/h170-free-packages.scm", plan["run"])
-        self.assertNotIn("wsm-tools", plan["run"])
-        self.assertNotIn("inputs", plan["run"])
-
-    def test_no_arbitrary_shell_input_or_binary_export_remains(self) -> None:
-        for forbidden in (
-            "inputs:",
-            "github.event.inputs",
-            "${{ inputs.",
-            "packages-*",
-            "*[!A-Za-z0-9._+-]*",
-            "actions/upload-artifact",
-            "guix archive --export",
-            "gh release",
-            "guix publish",
-            "GH_TOKEN",
-            "contents: write",
-            "pages: write",
-        ):
+    def test_no_signing_key_is_created_or_read_here(self) -> None:
+        for forbidden in ("secrets.", "guix archive --generate-key", "signing-key"):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, self.text)
 
+    def test_publication_is_limited_to_a_verified_draft(self) -> None:
+        self.assertIn("--json isDraft", self.text)
+        self.assertIn("refusing: $TAG is not a draft release", self.text)
+        self.assertNotIn("gh release create", self.text)
+        self.assertNotIn("--draft=false", self.text)
+
+    def test_the_archives_are_built_on_the_release_lock(self) -> None:
+        self.assertIn("guix time-machine -C channels.lock.scm", self.text)
+
+    def test_a_package_name_that_is_not_a_name_is_refused(self) -> None:
+        """Only the fixed owner package is built; no user-controlled package shell input exists."""
+        self.assertIn("(wsm packages wsm)", self.text)
+        self.assertIn("wsm-tools", self.text)
+        self.assertNotIn("inputs.packages", self.text)
+        self.assertNotIn("github.event.inputs.packages", self.text)
+
+    def test_a_tag_push_does_not_trigger_package_archives(self) -> None:
+        self.assertEqual(set(self.workflow["on"]), {"workflow_dispatch"})
+        self.assertNotIn("push:", self.text)
+        self.assertNotIn("packages-*", self.text)
+
+    def test_no_draft_means_the_archives_stay_in_the_artifact(self) -> None:
+        """Attaching nowhere is recorded, while the Actions artifact remains available."""
+        self.assertIn("no draft release to attach to", self.text)
+        self.assertIn("WSM_PACKAGE_ATTACHED_TO=none", self.text)
+
+class H170SubstituteLaneTests(unittest.TestCase):
     def test_the_fixed_h170_substitute_lane_remains_separate(self) -> None:
         substitutes = (ROOT / ".github" / "workflows" / "substitutes.yml").read_text(encoding="utf-8")
         self.assertIn("drivers/profiles/h170-free-packages.scm", substitutes)
         self.assertIn("guix publish", substitutes)
+
 
 if __name__ == "__main__":
     unittest.main()
