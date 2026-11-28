@@ -88,6 +88,13 @@ jobs:
       - name: Check installer tool closure
         run: python scripts/check_tool_closure.py --self-check
 
+      - name: Check the FPC parity harness
+        # The Pascal binary is built and compared with Guix in
+        # fpc-hwcheck-parity.yml. This step proves only that the harness reports a
+        # disagreement instead of skipping it, and that the fixtures exercise the
+        # three groups. It needs no Pascal compiler.
+        run: python tests/test_fpc_parity.py
+
       - name: Check profile evidence
         run: python scripts/check_profile_evidence.py
 

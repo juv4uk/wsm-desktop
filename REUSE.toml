@@ -8,7 +8,7 @@ SPDX-License-Identifier = "LicenseRef-Volnist"
 SPDX-FileCopyrightText = "2026 WSM Desktop authors"
 
 [[annotations]]
-path = ["*.scm", "**/*.scm", "*.py", "**/*.py", "Makefile", ".github/workflows/**"]
+path = ["*.scm", "**/*.scm", "*.py", "**/*.py", "*.pas", "**/*.pas", "*.lpr", "**/*.lpr", "Makefile", ".github/workflows/**"]
 precedence = "aggregate"
 SPDX-License-Identifier = "LicenseRef-Volnist"
 SPDX-FileCopyrightText = "2026 WSM Desktop authors"
