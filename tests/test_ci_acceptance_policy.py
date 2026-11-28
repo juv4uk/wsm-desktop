@@ -216,8 +216,21 @@ class FreePascalBuildTests(unittest.TestCase):
         self.assertIn('test "$(fpc -iV)" = "3.2.2"', self.text)
 
     def test_it_compiles_every_program_in_the_tree(self) -> None:
-        self.assertIn("git ls-files '*.lpr'", self.text)
+        """Discovery must follow the `program` keyword, not one file extension.
+
+        This assertion used to require the literal ``git ls-files '*.lpr'``,
+        which pinned the bug instead of the property: the tree has five
+        ``*.pas`` programs and no ``*.lpr`` at all, so the step printed "No
+        Pascal programs in the tree yet" and passed without compiling
+        anything. A test that demands the broken glob keeps the gate dead.
+        """
+        self.assertIn("'*.pas' '*.pp' '*.lpr'", self.text)
+        self.assertIn("program[[:space:]]", self.text)
         self.assertIn("fpc -O2", self.text)
+
+    def test_it_fails_when_sources_exist_but_no_program_is_found(self) -> None:
+        """An empty filter is a broken filter, not an empty tree."""
+        self.assertIn("none was recognised as a program", self.text)
 
     def test_a_compile_error_fails_the_run(self) -> None:
         self.assertIn("Free Pascal refused to compile", self.text)
