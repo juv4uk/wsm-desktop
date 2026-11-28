@@ -41,13 +41,16 @@ class SourceTests(unittest.TestCase):
             self.assertNotIn(forbidden, self.text, f"write path present: {forbidden}")
         self.assertNotIn("Rewrite(", self.text)
 
-    def test_json_strings_are_escaped(self) -> None:
-        self.assertIn("JsonEscape", self.text)
-        self.assertIn("'\\\"'", self.text)
+    def test_json_strings_are_escaped_by_the_standard_fcl_serializer(self) -> None:
+        self.assertIn("fpjson", self.text)
+        self.assertIn("Report.AsJSON", self.text)
+        self.assertIn("Report.FormatJSON", self.text)
 
-    def test_an_empty_report_is_a_failure_not_a_success(self) -> None:
-        self.assertIn("no PCI devices were readable", self.text)
-        self.assertIn("Halt(4)", self.text)
+    def test_missing_pci_sysfs_is_reported_as_unknown_evidence(self) -> None:
+        core = CORE.read_text(encoding="utf-8")
+        self.assertIn("PCI sysfs inventory is unavailable", core)
+        self.assertIn("Warnings.Add", core)
+        self.assertNotIn("Halt(4)", self.text)
 
 
 class PackageTests(unittest.TestCase):
