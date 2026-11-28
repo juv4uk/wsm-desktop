@@ -76,16 +76,21 @@ jobs:
           make -C tools/pascal clean all
           test -x tools/pascal/build/wsm-hwcheck
           test -x tools/pascal/build/wsm-classify
+          test -x tools/pascal/build/wsm-partition
           ls -lh tools/pascal/build
           {
             echo "### Free Pascal 3.2.2 build"
             echo ""
             echo "- wsm-hwcheck: compiled"
             echo "- wsm-classify: compiled"
+            echo "- wsm-partition: compiled"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Validate report schema and Python parity at runtime
         run: python3 tests/test_fpc_package.py
+
+      - name: Check the read-only partition planner contract
+        run: python3 tests/test_fpc_partition.py
 
       - name: Keep the compiled binaries
         if: always()
