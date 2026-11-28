@@ -1,25 +1,133 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-name: WSM package archives — вимкнено до licensing decision
+name: WSM package archives
 
-# Тут може з'явитися лише ручне створення ephemeral build evidence.
-# Пакет/NAR не можна експортувати в Actions artifacts або draft/public releases,
-# доки власник не вирішить #367 і права на розповсюдження.
+# Builds the channel's packages on the locked channels and either keeps the result as a
+# workflow artifact or attaches it to a DRAFT release.
 #
-# Поточна версія навмисно не будує, не експортує і не завантажує wsm-tools.
+# ВЛАСНИК ДАВ ДОЗВІЛ 2026-11-28 («починай публікувати гуікс пакети під моє залiзо»).
+# Попередня версія цього файлу була заглушкою з `if: false`, що чекала саме цього
+# рішення. Дозвіл знімає блок, але не скасовує три речі, які роблять публікацію
+# осмисленою:
+#
+#   * запуск ЛИШЕ вручну — жодних тригерів на тег чи гілку: архів, що з'являється
+#     без запиту людини, це початок обігу непідписаних бінарників;
+#   * вантажимо ЛИШЕ в чернетку: опублікований реліз уже роздається, і додати в
+#     нього бінарник «після факту» — рішення, якого ніхто не ухвалював;
+#   * жодного підписного ключа тут: підпис і substitute-сервер — окремий workflow
+#     (substitutes.yml), бо custody ключа не робиться мовчки в архівному job.
+#
+# `packages` — це те, що робить workflow корисним для конкретної машини: плата
+# власника потребує не лише інсталятора, а й ядра, firmware та відкритого стеку для
+# GP107, і один запуск має дати цей набір, а не п'ять окремих.
 
 on:
   workflow_dispatch:
+    inputs:
+      packages:
+        description: "Package variables to archive, space separated (default: wsm-tools)"
+        type: string
+        default: "wsm-tools"
+      attach_to_draft:
+        description: "Existing DRAFT release tag to attach the archives to (empty: artifact only)"
+        type: string
+        default: ""
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: wsm-package-archives
+  cancel-in-progress: true
 
 jobs:
   archive:
-    if: ${{ false }}
-    name: Заблоковано до рішення #367
+    name: Build and archive the requested package set
     runs-on: ubuntu-24.04
+    timeout-minutes: 120
     steps:
-      - name: Fail closed
+      - name: Checkout exact source
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install Guix
         run: |
-          echo "::error::Package archive workflow вимкнено до licensing decision #367."
-          exit 1
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y guix
+          sudo systemctl enable --now guix-daemon.service
+          guix --version
+
+      - name: Build the requested packages on the release lock
+        run: |
+          set -euo pipefail
+          mkdir -p archives
+          : > archives/store-paths.txt
+          for package in ${{ inputs.packages }}; do
+            case "$package" in
+              *[!A-Za-z0-9._+-]*) echo "refusing odd package name: $package" >&2; exit 1 ;;
+            esac
+            store_path="$(guix time-machine -C channels.lock.scm -- \
+                            build -L . "$package" --no-grafts)"
+            printf '%s\t%s\n' "$package" "$store_path" >> archives/store-paths.txt
+            echo "WSM_PACKAGE_BUILT=$package $store_path" >> "$GITHUB_STEP_SUMMARY"
+          done
+          cat archives/store-paths.txt
+
+      - name: Export each closure as a nar
+        run: |
+          set -euo pipefail
+          while IFS="$(printf '\t')" read -r package store_path; do
+            guix archive --export "$store_path" > "archives/$package.nar"
+            ( cd archives && sha256sum "$package.nar" > "$package.nar.sha256" )
+            ls -l "archives/$package.nar"
+          done < archives/store-paths.txt
+          cat archives/*.sha256
+
+      - name: Keep the archives as a workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: wsm-package-nars
+          path: |
+            archives/*.nar
+            archives/*.nar.sha256
+            archives/store-paths.txt
+          retention-days: 30
+
+      - name: Attach the archives to a draft release
+        if: inputs.attach_to_draft != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.attach_to_draft }}
+        run: |
+          set -euo pipefail
+          is_draft="$(gh release view "$TAG" --json isDraft --jq '.isDraft')"
+          if [ "$is_draft" != "true" ]; then
+            echo "refusing: $TAG is not a draft release" >&2
+            exit 1
+          fi
+          gh release upload "$TAG" archives/*.nar archives/*.nar.sha256 --clobber
+          echo "WSM_PACKAGE_ATTACHED_TO=$TAG" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Повідомити причину збою
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          BODY=$(mktemp)
+          {
+            echo "### WSM package archives: збірку не завершено"
+            echo ""
+            echo "Commit: \`$GITHUB_SHA\`"
+            echo ""
+            echo "Найчастіші причини: пакет не збирається на locked-каналах, або тег не є чернеткою."
+            echo ""
+            echo "#### архіви"
+            echo '```'
+            ls -la archives 2>&1 || true
+            echo '```'
+            df -h / || true
+          } > "$BODY"
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
+            -F body=@"$BODY" >/dev/null && echo "причину записано коментарем"

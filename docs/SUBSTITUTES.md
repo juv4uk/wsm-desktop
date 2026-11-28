@@ -1,10 +1,10 @@
-# Субститути WSM — технічний прототип, публікацію вимкнено
+# Субститути WSM — публікацію дозволено власником 2026-11-28
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Стан: **NOT_AUTHORIZED / NOT_PUBLISHED**
-- Workflow публікації: **вимкнений fail-closed guard**
-- Package/NAR export: **вимкнений до licensing decision #367**
+- Стан: **OWNER_APPROVED / MANUAL_ONLY**
+- Workflow публікації: **увімкнений, запуск лише вручну**
+- Package/NAR export: **увімкнений; рішення щодо #367 прийняв власник, issue лишається відкритим**
 - Підписний ключ: **не створений і не збережений у CI**
 - Cuirass: **окремий build coordinator; не є автоматичним substitute server**
 
@@ -12,7 +12,7 @@
 
 `scripts/narinfo_to_release_urls.py` — локальний конвертер URL у Guix narinfo. Він не створює ключі, не підписує дані, не збирає package closures і не публікує архіви.
 
-`.github/workflows/substitutes.yml` та `.github/workflows/package-archives.yml` тимчасово залишені як вимкнені декларації наміру. Обидва мають `if: ${{ false }}`, ручний тригер без автоматичного push-тригера, read-only permissions і не виконують жодної build/export/deploy дії.
+`.github/workflows/substitutes.yml` та `.github/workflows/package-archives.yml` увімкнені 2026-11-28 рішенням власника. Обидва запускаються **лише вручну**, без тригерів на push чи тег; жоден із них не створює й не читає підписний ключ, крім `substitutes.yml`, який бере його з секрету і без нього падає.
 
 ## Рішення, яких бракує
 

@@ -128,7 +128,7 @@ class ReleaseAcceptanceTimeoutTests(unittest.TestCase):
             )
 
 class PackageArchiveWorkflowTests(unittest.TestCase):
-    """Package builds and NAR export stay disabled until issue #367 is resolved."""
+    """The owner allowed publication; these are the limits that still hold."""
 
     WORKFLOW = ROOT / ".github" / "workflows" / "package-archives.yml"
 
@@ -136,26 +136,34 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
         self.text = self.WORKFLOW.read_text(encoding="utf-8")
         self.workflow = yaml.load(self.text, Loader=yaml.BaseLoader)
 
+    def test_the_job_is_not_disabled_any_more(self) -> None:
+        self.assertNotEqual(self.workflow["jobs"]["archive"].get("if"), "${{ false }}")
+
+    def test_the_owner_permission_is_recorded_in_the_file(self) -> None:
+        self.assertIn("ВЛАСНИК ДАВ ДОЗВІЛ", self.text)
+
     def test_workflow_is_manual_only(self) -> None:
         self.assertEqual(set(self.workflow["on"]), {"workflow_dispatch"})
+        self.assertNotIn("tags:", self.text)
+        self.assertNotIn("branches:", self.text)
 
-    def test_package_job_is_explicitly_disabled(self) -> None:
-        self.assertEqual(self.workflow["jobs"]["archive"]["if"], "${{ false }}")
-
-    def test_no_build_export_or_downloadable_artifact_exists(self) -> None:
-        for forbidden in (
-            "guix build wsm-tools",
-            "guix archive --export",
-            "actions/upload-artifact",
-            "gh release upload",
-            "actions/deploy-pages",
-        ):
+    def test_no_signing_key_is_created_or_read_here(self) -> None:
+        for forbidden in ("secrets.", "guix archive --generate-key", "signing-key"):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, self.text)
 
-    def test_workflow_records_the_licensing_gate(self) -> None:
-        self.assertIn("#367", self.text)
-        self.assertIn("розповсюдження", self.text.lower())
+    def test_publication_is_limited_to_a_verified_draft(self) -> None:
+        self.assertIn("--json isDraft", self.text)
+        self.assertIn("refusing: $TAG is not a draft release", self.text)
+        self.assertNotIn("gh release create", self.text)
+        self.assertNotIn("--draft=false", self.text)
+
+    def test_the_archives_are_built_on_the_release_lock(self) -> None:
+        self.assertIn("guix time-machine -C channels.lock.scm", self.text)
+
+    def test_a_package_name_that_is_not_a_name_is_refused(self) -> None:
+        self.assertIn("*[!A-Za-z0-9._+-]*", self.text)
+        self.assertIn("refusing odd package name", self.text)
 
 if __name__ == "__main__":
     unittest.main()
