@@ -402,8 +402,10 @@ begin
   end;
 end;
 
-{ jsonschema's "date": ^\d{4}-\d{2}-\d{2}$ and a real calendar date, with year
-  0 rejected by datetime.date.fromisoformat. }
+{ jsonschema's "date": ^\d(4)-\d(2)-\d(2)$ and a real calendar date, with
+  year 0 rejected by datetime.date.fromisoformat. The braces of the regex are
+  written as (4)/(2) because an opening brace inside a Pascal comment ends it early - this
+  exact defect was found by an independent review of this file. }
 function DateOk(const S: string): Boolean;
 var
   Y, M, D: Integer;

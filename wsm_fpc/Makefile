@@ -19,10 +19,10 @@ FPCFLAGS ?= -O2 -Sh -vw
 
 # Every program in this directory is built from its own source file; the units are
 # pulled in by the compiler as they are referenced.
-PROGRAMS = plan-digest schema-vectors
+PROGRAMS = plan-digest schema-vectors plan-vectors
 
 SOURCES = wsm_sha256.pas plan_digest.pas wsmcpufacts.pas wsmsteps.pas \
-          wsmbackend.pas \
+          wsmbackend.pas wsmplan.pas wsmplan_vectors.pas \
           wsmschema.pas wsmschema_vectors.pas
 
 .PHONY: all check install clean
@@ -36,12 +36,17 @@ plan-digest: plan_digest.pas wsm_sha256.pas
 schema-vectors: wsmschema_vectors.pas wsmschema.pas
 	$(FPC) $(FPCFLAGS) -o$@ $<
 
+# 143 checks: 38 golden vectors plus the constants decoded back and compared.
+plan-vectors: wsmplan_vectors.pas wsmplan.pas wsm_sha256.pas
+	$(FPC) $(FPCFLAGS) -o$@ $<
+
 # Each program carries its own vectors and exits non-zero when one differs, so
 # `check` is the same run as `all` - which is the point: the first compile on a
 # machine with FPC is also the verification.
 check: $(PROGRAMS)
 	./plan-digest
 	./schema-vectors
+	./plan-vectors
 
 install: $(PROGRAMS)
 	install -d $(DESTDIR)$(PREFIX)/bin
