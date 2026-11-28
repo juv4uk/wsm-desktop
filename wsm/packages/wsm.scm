@@ -84,4 +84,12 @@ against a versioned schema, and drafts a diagnostic-only installation plan for
 the GNU Guix backend.  Nothing in this package writes to a block device, invokes
 a system backend, or requires root.")
     (home-page "https://github.com/juv4uk/wsm-desktop")
-    (license gpl3+)))
+    ;; The repository is under ВОЛЬНІСТЬ (SPDX: LicenseRef-Volnist), not GPL-3+.
+    ;; Declaring gpl3+ was wrong in a way that mattered: a published package carried
+    ;; licence metadata that contradicted its own LICENSE file, and the release had to
+    ;; be superseded. Guix has no built-in record for a custom free licence, so it is
+    ;; declared as one, with the name and the URI a reader can follow.
+    (license (license:non-copyleft
+              "https://github.com/juv4uk/wsm-desktop/blob/main/LICENSE"
+              #:name "ВОЛЬНІСТЬ"
+              #:comment "Free use, study, modification and creation, on the condition of respecting the freedom of others. See LICENSE."))))

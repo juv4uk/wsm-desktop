@@ -448,5 +448,27 @@ class TagPatternTests(unittest.TestCase):
 
 
 
+class PackageLicenceMetadataTests(unittest.TestCase):
+    """A package must not declare a licence its own LICENSE file contradicts."""
+
+    def test_the_package_does_not_claim_gpl3(self) -> None:
+        package = (ROOT / "wsm" / "packages" / "wsm.scm").read_text(encoding="utf-8")
+        code = "\n".join(line.split(";", 1)[0] for line in package.splitlines())
+        self.assertNotIn("gpl3+", code)
+
+    def test_the_package_declares_the_repository_licence(self) -> None:
+        package = (ROOT / "wsm" / "packages" / "wsm.scm").read_text(encoding="utf-8")
+        self.assertIn("license:non-copyleft", package)
+        self.assertIn("ВОЛЬНІСТЬ", package)
+        self.assertIn("blob/main/LICENSE", package)
+
+    def test_the_declared_licence_matches_the_repository(self) -> None:
+        """REUSE.toml and the package must name the same licence."""
+        reuse = (ROOT / "REUSE.toml").read_text(encoding="utf-8")
+        self.assertIn("LicenseRef-Volnist", reuse)
+        licence_text = (ROOT / "LICENSE").read_text(encoding="utf-8")
+        self.assertIn("ВОЛЬНІСТЬ", licence_text)
+
+
 if __name__ == "__main__":
     unittest.main()
