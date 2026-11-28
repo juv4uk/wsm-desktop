@@ -7,9 +7,10 @@
 ;; written as a fragment on purpose - a complete system definition would become
 ;; a second source of truth for how WSM machines are configured.
 ;;
-;; What you get: a web interface on port 8081, a PostgreSQL-backed job history,
-;; and substitutes for anything the jobs build. What you do not get: QEMU boot
-;; acceptance. That stays in the release workflow.
+;; What you get: a loopback-only web interface and PostgreSQL-backed job history.
+;; The Guix daemon may consume its configured substitutes. This local build
+;; setup does not publish its own outputs; QEMU boot acceptance stays in the
+;; release workflow.
 
 (use-modules (gnu services cuirass)
              (gnu services)
