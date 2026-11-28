@@ -2,7 +2,7 @@
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Статус: **Cuirass job source виправляється й перевіряється проти pinned Guix; інстанс не запускався**
+- Статус: **runtime `NOT_RUN`; pinned-Guix job/service evaluation у CI; Cuirass instance не запускався**
 - Основні файли: [specifications](../ci/cuirass/specs.scm), [ISO job](../ci/cuirass/images.scm), [service](../ci/cuirass/service.scm)
 
 ## Ролі конвеєрів
@@ -11,7 +11,7 @@ Cuirass — Guix-native scheduler/evaluator/build coordinator. Він оціню
 
 | Що доводимо або публікуємо | Власник |
 | --- | --- |
-| Канал WSM та його пакети оцінюються на pinned Guix | Cuirass job `wsm-channel` |
+| Власні package builds усього WSM channel | **не зареєстровані** до рішення #367 та package allowlist |
 | Derivation live ISO створюється для запитаних systems | Cuirass custom job `wsm-live-minimal-image` |
 | ISO завантажується у BIOS та UEFI; інсталятор запускається в guest | release workflow із QEMU/OVMF |
 | ISO, release manifests, hashes та boot evidence публікуються | GitHub Releases |
@@ -28,11 +28,11 @@ Release workflow збирає `systems/live-minimal.scm` як `--image-type=iso9
 - `image->job` із `(gnu ci)` створює Cuirass image job і використовує штатний `system-image` lowering; ім’я формується як `wsm-live-minimal.<system>`.
 - Grafting вимкнено для відтворюваних build-farm jobs, як і в upstream Guix image jobs.
 
-Pinned Guix evaluation викликає `cuirass-jobs` з реальним `((systems . ("x86_64-linux")))`, відкриває store, знижує image derivation і перевіряє job name, system та `#:job-type`. Це не збирає важкий ISO payload і не доводить його QEMU boot.
+Pinned Guix evaluation викликає `cuirass-jobs` з реальним `((systems . ("x86_64-linux")))`, відкриває store, знижує image derivation і перевіряє job name, system та `#:job-type`. Profile path шукається в Guile load path каналу, а не від process CWD; regression test змінює CWD на `/tmp`. Це не збирає важкий ISO payload і не доводить його QEMU boot.
 
 ## Канали та межа довіри
 
-Офіційний Guix channel зафіксований за commit із `channels.lock.scm` та має channel introduction. WSM channel у поточній Cuirass service specification посилається на `main`. Це development input, а не owner-authenticated release lock.
+Офіційний Guix channel зафіксований за commit із `channels.lock.scm` та має channel introduction. WSM channel у поточній Cuirass service specification посилається на `main`. Це development input, а не owner-authenticated release lock. До підписаного bootstrap та точного release commit реєстрація Cuirass з нормальним channel authentication не пройшла; цей job не запускати й не обходити gate через `--disable-authentication`.
 
 До завершення підписаного bootstrap WSM channel (introduction/authorizations) та закріплення точного release commit не використовувати цей job як доказ довіреної release-збірки. Не обходити цей gate через `--disable-authentication`. Окрема Guix profile evaluation у CI перевіряє source API на pinned Guix, але не перевіряє віддалену автентифікацію WSM channel.
 
@@ -47,7 +47,7 @@ Pinned Guix evaluation викликає `cuirass-jobs` з реальним `((sy
 
 ### Обмеження Pages
 
-Офіційні ліміти GitHub Pages: опублікований сайт не може перевищувати **1 GB**, soft bandwidth limit — **100 GB на місяць**. Для branch-based публікації кожен NAR ще й є звичайним Git object: GitHub має hard limit **100 MiB на один Git-файл**. Тому `gh-pages` підходить лише для невеликого, allow-listed пакета/closure після виміру кожного NAR і сумарного сайту. Один файл понад 100 MiB не можна розбити на частини без зміни Guix substitute URL/формату; такий output треба виключити з Pages cache або розміщувати на Releases/іншому сумісному сервері. Ліміти та очікувану пропускну здатність потрібно контролювати в publisher.
+Офіційні ліміти GitHub Pages: опублікований сайт не може перевищувати **1 GB**, soft bandwidth limit — **100 GB на місяць**. Для branch-based публікації кожен NAR ще й є звичайним Git object: GitHub має hard limit **100 MB на один Git-файл**. Тому `gh-pages` підходить лише для невеликого, allow-listed пакета/closure після виміру кожного NAR і сумарного сайту. Один файл понад 100 MiB не можна розбити на частини без зміни Guix substitute URL/формату; такий output треба виключити з Pages cache або розміщувати на Releases/іншому сумісному сервері. Ліміти та очікувану пропускну здатність потрібно контролювати в publisher.
 
 Перш ніж увімкнути Pages:
 - створити окремий signing key для WSM substitute cache; приватний ключ зберігати лише в protected publishing environment/secret, public key версіонувати як безпечний trust anchor;
@@ -87,4 +87,6 @@ Web UI — `http://localhost:8081`. Він не має власної автен
 - **Не публікує substitute endpoint автоматично.** Потрібен окремий підписаний publisher/cache deployment.
 - **Не підтверджує фізичну сумісність H170/GTX 1050 Ti.** Для цього потрібне окреме owner-approved hardware evidence.
 
-Поточний стан чесний: код job/service і pinned Guix evaluation перевіряються в CI; сервер Cuirass, substitute publisher і фізичне приймання заліза ще не запущені.
+Поточний стан чесний: код job/service і pinned Guix evaluation перевіряються в CI; runtime Cuirass — `NOT_RUN`; substitute publisher і фізичне приймання заліза ще не запущені.
+
+Джерела для обмежень/формату: [GNU Guix — guix publish](https://guix.gnu.org/manual/en/html_node/Invoking-guix-publish.html), [Guix — getting substitutes from other servers](https://guix.gnu.org/manual/en/html_node/Getting-Substitutes-from-Other-Servers.html), [GitHub Pages limits](https://docs.github.com/en/pages/getting-started-with-github-pages/github-pages-limits), [GitHub repository limits](https://docs.github.com/en/repositories/creating-and-managing-repositories/repository-limits).
