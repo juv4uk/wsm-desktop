@@ -19,19 +19,18 @@ guix time-machine -C channels.lock.scm -- describe -f channels
 
 ## Набір каналів WSM (не lock)
 
-[`wsm.scm`](wsm.scm) — набір для розробки, який додає репозиторій WSM до
-штатного `%default-channels` Guix і робить `(wsm packages wsm)` доступним як
-канал, а не через `-L "$PWD"`. Офіційний Guix channel та його introduction
-успадковуються з інсталяції Guix; WSM канал іде за гілкою `main`, але поки
-не має власного introduction.
+[`wsm.scm`](wsm.scm) — набір для розробки, який об'єднує офіційний GNU Guix
+channel на рухомій гілці `master` із репозиторієм WSM на гілці `main`.
+Офіційний Guix channel містить canonical introduction; WSM поки не має
+власного introduction.
 
-Звичайна команда має відмовити саме на WSM trust bootstrap:
+Звичайна команда має відмовити на автентифікації WSM:
 
 ```sh
 guix time-machine -C channels/wsm.scm -- describe -f channels
 ```
 
-Діагностичне читання без автентифікації:
+Діагностичне читання без перевірки автентифікації:
 
 ```sh
 guix time-machine -C channels/wsm.scm --disable-authentication -- describe -f channels
