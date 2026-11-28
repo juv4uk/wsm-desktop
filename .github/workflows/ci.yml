@@ -40,6 +40,9 @@ jobs:
       - name: Check Compatibility channel lock
         run: python scripts/check_channels.py --lock channels/compatibility.lock.scm --policy compatibility
 
+      - name: Report WSM channel bootstrap artifacts
+        run: python scripts/check_channel_auth.py .
+
       # Кожен скрипт, який `make check-*` запускає, мусить запускатися і тут.
       # Інакше перевірка існує лише на машині того, хто її додав, а зелений CI
       # означає менше, ніж обіцяє. Паритет тримає tests/test_ci_parity.py.
