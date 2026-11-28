@@ -278,7 +278,7 @@ end;
 
 function BuildDevice(const Item: TDevice; const ObservedAt: string): TJSONObject;
 var
-  Identity, Driver, Evidence, EvidenceItem: TJSONObject;
+  Identity, Driver, EvidenceItem: TJSONObject;
   EvidenceArray: TJSONArray;
   DeviceId, Source, Summary: string;
 begin
@@ -339,15 +339,15 @@ function BuildReport(const Devices: TDeviceArray; const HasPciBus: Boolean): TJS
 var
   Epoch: Int64;
   ObservedAt, Architecture, KernelRelease, BootMode, BootEvidence: string;
-  Environment, Platform, Collectors, Collector, DeviceJson: TJSONObject;
-  DeviceArray, Warnings, Limitations, Redactions: TJSONArray;
+  Environment, Platform, Collector, DeviceJson: TJSONObject;
+  Collectors, DeviceArray, Warnings, Limitations, Redactions: TJSONArray;
   Privacy: TJSONObject;
   I: Integer;
 begin
   Epoch := DateTimeToUnix(Now, False);
   if Epoch < 0 then
     Epoch := 0;
-  ObservedAt := DateTimeToISO8601(UnixToDateTime(Epoch, True), True);
+  ObservedAt := FormatDateTime('yyyy"-"mm"-"dd"T"hh":"nn":"ss"Z"', UnixToDateTime(Epoch, True));
   ReadSystemIdentity(Architecture, KernelRelease);
   ReadBootMode(Architecture, BootMode, BootEvidence);
 
