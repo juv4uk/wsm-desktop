@@ -41,10 +41,29 @@ CATEGORY_TO_FUNCTION = {
 }
 
 
+def _bare_id(value: str) -> str:
+    """Normalise a PCI id part: lowercase, no 0x prefix, no padding."""
+    text = value.strip().lower()
+    if text.startswith("0x"):
+        text = text[2:]
+    return text
+
+
 def pci_ids_from(report: dict[str, Any]) -> list[str]:
+    """Collect PCI ids as vendor:device strings.
+
+    The collector writes the two halves separately (identity.vendor_id and
+    identity.device_id), so a reader that only looks for a combined
+    pci_id/vendor_device string finds nothing on a real report - which is how
+    hardware_signature came out empty while five PCI devices were present.
+    """
     found: set[str] = set()
     for device in report.get("devices", []):
         identity = device.get("identity") or {}
+        vendor = identity.get("vendor_id")
+        product = identity.get("device_id")
+        if isinstance(vendor, str) and isinstance(product, str):
+            found.add(f"{_bare_id(vendor)}:{_bare_id(product)}")
         for key in ("pci_id", "vendor_device", "vendor:device"):
             value = identity.get(key)
             if isinstance(value, str) and ":" in value:

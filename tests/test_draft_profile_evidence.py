@@ -3,6 +3,14 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+import draft_profile_evidence as drafter  # noqa: E402
+
 import hashlib
 import json
 import subprocess
@@ -429,6 +437,35 @@ class FormatCheckerVisibilityTests(unittest.TestCase):
             "collected_at" in joined or "format validation is unavailable" in joined,
             joined,
         )
+
+
+class PciIdFromReportTest(unittest.TestCase):
+    """The collector writes PCI ids as two halves; the drafter must read those.
+
+    It used to look only for a combined pci_id/vendor_device string, so a real
+    report with five PCI devices produced an empty hardware_signature.
+    """
+
+    def test_ids_are_built_from_the_two_halves(self) -> None:
+        report = {"devices": [{"identity": {"vendor_id": "0x10de", "device_id": "0x1C82"}}]}
+        self.assertEqual(drafter.pci_ids_from(report), ["10de:1c82"])
+
+    def test_a_combined_id_still_works(self) -> None:
+        report = {"devices": [{"identity": {"pci_id": "10DE:1C82"}}]}
+        self.assertEqual(drafter.pci_ids_from(report), ["10de:1c82"])
+
+    def test_a_device_without_identity_adds_nothing(self) -> None:
+        self.assertEqual(drafter.pci_ids_from({"devices": [{}, {"identity": {}}]}), [])
+
+    def test_the_real_fixture_yields_the_gpu(self) -> None:
+        import json
+
+        report = json.loads(
+            (ROOT / "tests" / "fixtures" / "hardware" / "desktop-observed.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertIn("10de:1c82", drafter.pci_ids_from(report))
 
 
 if __name__ == "__main__":
