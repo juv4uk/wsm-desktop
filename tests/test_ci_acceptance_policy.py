@@ -128,7 +128,7 @@ class ReleaseAcceptanceTimeoutTests(unittest.TestCase):
             )
 
 class PackageArchiveWorkflowTests(unittest.TestCase):
-    """Package builds and NAR export stay disabled until issue #367 is resolved."""
+    """Legacy archive entry is read-only; binary publication uses scoped H170 lanes."""
 
     WORKFLOW = ROOT / ".github" / "workflows" / "package-archives.yml"
 
@@ -136,26 +136,47 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
         self.text = self.WORKFLOW.read_text(encoding="utf-8")
         self.workflow = yaml.load(self.text, Loader=yaml.BaseLoader)
 
-    def test_workflow_is_manual_only(self) -> None:
+    def test_the_fixed_plan_job_is_enabled_on_main(self) -> None:
+        job = self.workflow["jobs"]["plan"]
+        self.assertNotEqual(job.get("if"), "${{ false }}")
+        self.assertEqual(job["if"], "${{ github.ref == 'refs/heads/main' }}")
+
+    def test_workflow_is_manual_only_and_read_only(self) -> None:
         self.assertEqual(set(self.workflow["on"]), {"workflow_dispatch"})
+        self.assertEqual(self.workflow["permissions"], {"contents": "read"})
+        self.assertNotIn("ВЛАСНИК ДАВ ДОЗВІЛ", self.text)
 
-    def test_package_job_is_explicitly_disabled(self) -> None:
-        self.assertEqual(self.workflow["jobs"]["archive"]["if"], "${{ false }}")
+    def test_only_the_fixed_h170_free_manifest_is_evaluated(self) -> None:
+        steps = self.workflow["jobs"]["plan"]["steps"]
+        plan = next(step for step in steps if step.get("name") == "Evaluate the fixed H170 Free package plan")
+        self.assertIn("guix time-machine -C channels.lock.scm", plan["run"])
+        self.assertIn("--dry-run --no-grafts", plan["run"])
+        self.assertIn("--manifest=drivers/profiles/h170-free-packages.scm", plan["run"])
+        self.assertNotIn("wsm-tools", plan["run"])
+        self.assertNotIn("inputs", plan["run"])
 
-    def test_no_build_export_or_downloadable_artifact_exists(self) -> None:
+    def test_no_arbitrary_shell_input_or_binary_export_remains(self) -> None:
         for forbidden in (
-            "guix build wsm-tools",
-            "guix archive --export",
+            "inputs:",
+            "github.event.inputs",
+            "${{ inputs.",
+            "packages-*",
+            "*[!A-Za-z0-9._+-]*",
             "actions/upload-artifact",
-            "gh release upload",
-            "actions/deploy-pages",
+            "guix archive --export",
+            "gh release",
+            "guix publish",
+            "GH_TOKEN",
+            "contents: write",
+            "pages: write",
         ):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, self.text)
 
-    def test_workflow_records_the_licensing_gate(self) -> None:
-        self.assertIn("#367", self.text)
-        self.assertIn("розповсюдження", self.text.lower())
+    def test_the_fixed_h170_substitute_lane_remains_separate(self) -> None:
+        substitutes = (ROOT / ".github" / "workflows" / "substitutes.yml").read_text(encoding="utf-8")
+        self.assertIn("drivers/profiles/h170-free-packages.scm", substitutes)
+        self.assertIn("guix publish", substitutes)
 
 if __name__ == "__main__":
     unittest.main()

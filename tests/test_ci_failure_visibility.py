@@ -43,9 +43,19 @@ def all_jobs_disabled(workflow: Path) -> bool:
 
 
 def inline_failure_reporter(workflow: Path) -> bool:
+    """Detect an inline comment writer; used for PR-controlled write-policy checks."""
     return any(
         "failure()" in str(step.get("if", ""))
         and REPORTS.search(str(step.get("run", "")))
+        for step in steps_of(workflow)
+    )
+
+
+def inline_summary_reporter(workflow: Path) -> bool:
+    """Accept a read-only GitHub step summary as a visible failure report."""
+    return any(
+        "failure()" in str(step.get("if", ""))
+        and "$GITHUB_STEP_SUMMARY" in str(step.get("run", ""))
         for step in steps_of(workflow)
     )
 
@@ -251,6 +261,7 @@ class CiFailureVisibilityTests(unittest.TestCase):
             if workflow not in TRUSTED_WORKFLOWS | {TRUSTED_REPORTER}
             and not all_jobs_disabled(workflow)
             and not inline_failure_reporter(workflow)
+            and not inline_summary_reporter(workflow)
         ]
         self.assertEqual(
             missing,
@@ -258,12 +269,15 @@ class CiFailureVisibilityTests(unittest.TestCase):
             "these workflows fail without leaving a readable cause: " + ", ".join(missing),
         )
 
-    def test_disabled_distribution_workflows_do_not_need_failure_reporters(self) -> None:
+    def test_no_distribution_workflow_is_left_disabled(self) -> None:
+        # Both distribution workflows left the disabled set on 2026-11-28, when the
+        # owner approved publication. Neither may quietly go back to `if: false`:
+        # a disabled workflow reports nothing and publishes nothing, so it would look
+        # safe while silently dropping the capability the owner asked for.
         for name in ("substitutes.yml", "package-archives.yml"):
             workflow = WORKFLOWS / name
             with self.subTest(workflow=name):
-                self.assertTrue(all_jobs_disabled(workflow))
-
+                self.assertFalse(all_jobs_disabled(workflow))
 
     def test_scan_finds_all_three_trusted_workflow_files(self) -> None:
         self.assertTrue(CI.is_file())

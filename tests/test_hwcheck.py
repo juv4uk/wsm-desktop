@@ -6,6 +6,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import shutil
 import tempfile
 import unittest
 import sys
@@ -19,7 +20,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from wsm_hwcheck.cli import main
-from wsm_hwcheck.collector import collect_report
+from wsm_hwcheck.collector import SCHEMA_VERSION, collect_report, parse_pci_ids
 from wsm_hwcheck.diagnostics import (
     KernelLogSnapshot,
     derive_driver_facts,
@@ -315,7 +316,8 @@ class HardwareCollectorTests(unittest.TestCase):
             ])
         self.assertEqual(result, 0)
         parsed = json.loads(output.getvalue())
-        self.assertEqual(parsed["schema_version"], "1.0.0")
+        self.assertEqual(parsed["schema_version"], SCHEMA_VERSION)
+        self.assertEqual(parsed["schema_version"], "1.1.0")
 
 
 class DriverAliasEvidenceTests(unittest.TestCase):
@@ -757,6 +759,426 @@ class VirtualizationCollectorTests(unittest.TestCase):
             ),
             "other",
         )
+
+
+class H170ProfileFactsTests(unittest.TestCase):
+    """The facts a Gigabyte GA-H170-Gaming 3 profile needs from a single run.
+
+    Every case builds a synthetic sysfs/procfs tree shaped like the owner's
+    machine: Skylake CPU, GP107 at 01:00.0 behind the iGPU, NVMe plus SATA
+    disks, one PCI NIC, UEFI firmware. A report that omits these facts forces a
+    second reboot into Linux to collect them, which is the expensive mistake
+    this collector exists to avoid.
+    """
+
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        self.sysfs = self.root / "sys"
+        self.proc = self.root / "proc"
+        self.sysfs.mkdir()
+        self.proc.mkdir()
+        self.pci_ids = self.root / "pci.ids"
+
+        write(self.proc, "cpuinfo", (
+            "processor\t: 0\n"
+            "vendor_id\t: GenuineIntel\n"
+            "cpu family\t: 6\n"
+            "model\t\t: 94\n"
+            "model name\t: Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz\n"
+            "stepping\t: 3\n"
+            "microcode\t: 0xf0\n"
+            "\n"
+            "processor\t: 1\n"
+            "vendor_id\t: GenuineIntel\n"
+            "cpu family\t: 6\n"
+            "model\t\t: 94\n"
+            "model name\t: Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz\n"
+            "stepping\t: 3\n"
+            "microcode\t: 0xf0\n"
+        ))
+
+        write(self.sysfs, "firmware/efi/fw_platform_size", "64\n")
+        write(self.sysfs, "class/dmi/id/sys_vendor", "Gigabyte Technology Co., Ltd.\n")
+        write(self.sysfs, "class/dmi/id/product_name", "GA-H170-Gaming 3\n")
+        write(self.sysfs, "class/dmi/id/board_vendor", "Gigabyte Technology Co., Ltd.\n")
+        write(self.sysfs, "class/dmi/id/board_name", "GA-H170-Gaming 3\n")
+        write(self.sysfs, "class/dmi/id/board_version", "x.x\n")
+        write(self.sysfs, "class/dmi/id/bios_vendor", "American Megatrends Inc.\n")
+        write(self.sysfs, "class/dmi/id/bios_version", "F22e\n")
+        write(self.sysfs, "class/dmi/id/bios_release", "5.12\n")
+        write(self.sysfs, "class/dmi/id/bios_date", "03/09/2018\n")
+
+        # Intel HD 530 (i915) is the boot VGA device; the discrete card is a
+        # 3D controller, which is why the PCI class matters for identification.
+        self.igpu = self.sysfs / "bus/pci/devices/0000:00:02.0"
+        write(self.igpu, "vendor", "0x8086\n")
+        write(self.igpu, "device", "0x1912\n")
+        write(self.igpu, "class", "0x030000\n")
+        write(self.igpu, "boot_vga", "1\n")
+        (self.igpu / "drm/card0").mkdir(parents=True)
+        self.bind_driver(self.igpu, "i915")
+
+        self.nvidia = self.sysfs / "bus/pci/devices/0000:01:00.0"
+        write(self.nvidia, "vendor", "0x10de\n")
+        write(self.nvidia, "device", "0x1c82\n")
+        write(self.nvidia, "subsystem_vendor", "0x1458\n")
+        write(self.nvidia, "subsystem_device", "0x3765\n")
+        write(self.nvidia, "revision", "0xa1\n")
+        write(self.nvidia, "class", "0x030200\n")
+        write(self.nvidia, "boot_vga", "0\n")
+        write(self.nvidia, "current_link_speed", "8.0 GT/s PCIe\n")
+        write(self.nvidia, "current_link_width", "16\n")
+        write(self.nvidia, "max_link_speed", "8.0 GT/s PCIe\n")
+        write(self.nvidia, "max_link_width", "16\n")
+        (self.nvidia / "drm/card1").mkdir(parents=True)
+        self.bind_driver(self.nvidia, "nouveau")
+
+        self.nic = self.sysfs / "bus/pci/devices/0000:03:00.0"
+        write(self.nic, "vendor", "0x1969\n")
+        write(self.nic, "device", "0xe0a1\n")
+        write(self.nic, "class", "0x020000\n")
+        self.bind_driver(self.nic, "alx")
+        self.netdev = self.sysfs / "class/net/enp3s0"
+        write(self.netdev, "operstate", "up\n")
+        write(self.netdev, "carrier", "1\n")
+        write(self.netdev, "speed", "1000\n")
+        write(self.netdev, "duplex", "full\n")
+        write(self.netdev, "mtu", "1500\n")
+        (self.netdev / "device").symlink_to(self.nic, target_is_directory=True)
+
+        nvme_controller = self.sysfs / "devices/pci0000:00/0000:00:1d.0/nvme/nvme0"
+        self.subsystem(nvme_controller, "nvme")
+        write(nvme_controller, "model", "Kingston SNV2S1000G\n")
+        self.nvme = self.sysfs / "block/nvme0n1"
+        write(self.nvme, "size", "1953525168\n")
+        (self.nvme / "device").symlink_to(nvme_controller, target_is_directory=True)
+        write(self.nvme, "queue/logical_block_size", "512\n")
+        write(self.nvme, "queue/physical_block_size", "512\n")
+        write(self.nvme, "queue/rotational", "0\n")
+        write(self.nvme, "removable", "0\n")
+        write(self.nvme, "ro", "0\n")
+        write(self.nvme, "nvme0n1p1/partition", "1\n")
+        write(self.nvme, "nvme0n1p1/start", "2048\n")
+        write(self.nvme, "nvme0n1p1/size", "1953523119\n")
+
+        ata_port = self.sysfs / "devices/pci0000:00/0000:00:17.0/ata1"
+        self.subsystem(ata_port, "ata")
+        scsi_target = ata_port / "host0/target0:0:0/0:0:0:0"
+        self.subsystem(scsi_target, "scsi")
+        write(scsi_target, "model", "Samsung SSD 850 EVO 120GB\n")
+        write(scsi_target, "vendor", "ATA\n")
+        self.sata = self.sysfs / "block/sda"
+        write(self.sata, "size", "234441648\n")
+        (self.sata / "device").symlink_to(scsi_target, target_is_directory=True)
+        write(self.sata, "queue/logical_block_size", "512\n")
+        write(self.sata, "queue/physical_block_size", "512\n")
+        write(self.sata, "queue/rotational", "0\n")
+        write(self.sata, "removable", "0\n")
+        write(self.sata, "ro", "0\n")
+        write(self.sata, "sda1/partition", "1\n")
+        write(self.sata, "sda1/start", "2048\n")
+        write(self.sata, "sda1/size", "233441280\n")
+
+        usb_device = self.sysfs / "devices/pci0000:00/0000:00:14.0/usb2/2-1"
+        self.subsystem(usb_device, "usb")
+        usb_target = usb_device / "2-1:1.0/host1/target1:0:0/1:0:0:0"
+        self.subsystem(usb_target, "scsi")
+        write(usb_target, "model", "Ultra USB Stick\n")
+        self.usb_disk = self.sysfs / "block/sdb"
+        write(self.usb_disk, "size", "15130624\n")
+        (self.usb_disk / "device").symlink_to(usb_target, target_is_directory=True)
+        write(self.usb_disk, "queue/logical_block_size", "512\n")
+        write(self.usb_disk, "queue/physical_block_size", "512\n")
+        write(self.usb_disk, "queue/rotational", "1\n")
+        write(self.usb_disk, "removable", "1\n")
+        write(self.usb_disk, "ro", "0\n")
+
+        self.pci_ids.write_text(
+            "# synthetic pci.ids for tests\n"
+            "1969  Qualcomm Atheros\n"
+            "\te0a1  Killer E2200 Gigabit Ethernet Controller\n"
+            "8086  Intel Corporation\n"
+            "\t1912  HD Graphics 530\n"
+            "10de  NVIDIA Corporation\n"
+            "\t1c82  GP107 [GeForce GTX 1050 Ti]\n"
+            "\t\t1458 3765  GV-N105TOC-4GD\n"
+            "C 03  Display controller\n"
+            "\t00  VGA compatible controller\n",
+            encoding="utf-8",
+        )
+
+    def tearDown(self) -> None:
+        self.temporary.cleanup()
+
+    # -- helpers ---------------------------------------------------------
+
+    def bind_driver(self, device: Path, name: str) -> None:
+        driver = self.sysfs / "bus/pci/drivers" / name
+        driver.mkdir(parents=True, exist_ok=True)
+        (device / "driver").symlink_to(driver, target_is_directory=True)
+
+    def subsystem(self, device: Path, bus: str) -> None:
+        target = self.sysfs / "bus" / bus
+        target.mkdir(parents=True, exist_ok=True)
+        device.mkdir(parents=True, exist_ok=True)
+        (device / "subsystem").symlink_to(target, target_is_directory=True)
+
+    def collect(self, **kwargs: object) -> dict:
+        kwargs.setdefault("pci_ids_paths", [self.pci_ids])
+        return collect_report(self.sysfs, self.proc, **kwargs)
+
+    def device(self, report: dict, device_id: str) -> dict:
+        return next(item for item in report["devices"] if item["device_id"] == device_id)
+
+    def validator(self) -> Draft202012Validator:
+        with SCHEMA_PATH.open(encoding="utf-8") as stream:
+            schema = json.load(stream)
+        Draft202012Validator.check_schema(schema)
+        return Draft202012Validator(schema, format_checker=FormatChecker())
+
+    def assert_valid(self, report: dict) -> None:
+        errors = list(self.validator().iter_errors(report))
+        self.assertEqual(
+            errors,
+            [],
+            "\n".join(f"{list(error.absolute_path)}: {error.message}" for error in errors),
+        )
+
+    # -- boot mode and firmware identity ---------------------------------
+
+    def test_boot_mode_is_uefi_from_the_efi_directory(self) -> None:
+        environment = self.collect()["environment"]
+        self.assertEqual(environment["boot_mode"], "uefi")
+        self.assertIn("/firmware/efi", environment["boot_mode_evidence"])
+
+    def test_boot_mode_is_bios_when_efi_is_absent_on_x86_dmi(self) -> None:
+        shutil.rmtree(self.sysfs / "firmware")
+        environment = self.collect()["environment"]
+        self.assertEqual(environment["boot_mode"], "bios")
+        self.assertIn("legacy BIOS", environment["boot_mode_evidence"])
+
+    def test_boot_mode_stays_unknown_without_efi_or_dmi(self) -> None:
+        shutil.rmtree(self.sysfs / "firmware")
+        shutil.rmtree(self.sysfs / "class" / "dmi")
+        report = self.collect()
+        self.assertEqual(report["environment"]["boot_mode"], "unknown")
+        self.assertNotIn("platform", report["environment"])
+        self.assert_valid(report)
+
+    def test_firmware_identity_carries_release_and_normalised_date(self) -> None:
+        platform_facts = self.collect()["environment"]["platform"]
+        self.assertEqual(platform_facts["bios_vendor"], "American Megatrends Inc.")
+        self.assertEqual(platform_facts["bios_version"], "F22e")
+        self.assertEqual(platform_facts["bios_release"], "5.12")
+        self.assertEqual(platform_facts["bios_date"], "2018-03-09")
+
+    def test_unparseable_bios_date_is_omitted_not_guessed(self) -> None:
+        write(self.sysfs, "class/dmi/id/bios_date", "00/00/0000\n")
+        report = self.collect()
+        platform_facts = report["environment"]["platform"]
+        self.assertNotIn("bios_date", platform_facts)
+        self.assertEqual(platform_facts["bios_version"], "F22e")
+        self.assert_valid(report)
+
+    # -- CPU revision ----------------------------------------------------
+
+    def test_cpu_reports_family_model_stepping_and_microcode(self) -> None:
+        cpu = self.device(self.collect(), "cpu-0")["cpu"]
+        self.assertEqual(cpu["family"], "6")
+        self.assertEqual(cpu["model_number"], "94")
+        self.assertEqual(cpu["stepping"], "3")
+        self.assertEqual(cpu["microcode"], "0xf0")
+        self.assertEqual(cpu["logical_processors"], 2)
+        self.assertNotIn("unavailable", cpu)
+
+    def test_cpu_microcode_falls_back_to_sysfs(self) -> None:
+        write(self.proc, "cpuinfo", (
+            "processor\t: 0\n"
+            "vendor_id\t: GenuineIntel\n"
+            "model name\t: Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz\n"
+        ))
+        write(self.sysfs, "devices/system/cpu/cpu0/microcode/version", "0xf4\n")
+        cpu = self.device(self.collect(), "cpu-0")["cpu"]
+        self.assertEqual(cpu["microcode"], "0xf4")
+
+    def test_cpu_without_microcode_source_is_unavailable(self) -> None:
+        write(self.proc, "cpuinfo", (
+            "processor\t: 0\n"
+            "vendor_id\t: GenuineIntel\n"
+            "model name\t: Intel(R) Core(TM) i5-6400 CPU @ 2.70GHz\n"
+        ))
+        report = self.collect()
+        cpu = self.device(report, "cpu-0")["cpu"]
+        self.assertNotIn("microcode", cpu)
+        self.assertIn("microcode", cpu["unavailable"])
+        self.assert_valid(report)
+
+    # -- GPU -------------------------------------------------------------
+
+    def test_gpu_pci_identity_and_bound_driver(self) -> None:
+        gpu = self.device(self.collect(), "pci-0000:01:00.0")
+        self.assertEqual(gpu["category"], "gpu")
+        self.assertEqual(gpu["identity"]["vendor_id"], "0x10de")
+        self.assertEqual(gpu["identity"]["device_id"], "0x1c82")
+        self.assertEqual(gpu["identity"]["subsystem_vendor_id"], "0x1458")
+        self.assertEqual(gpu["identity"]["class_id"], "0x030200")
+        self.assertEqual(gpu["driver"]["status"], "bound")
+        self.assertEqual(gpu["driver"]["bound_driver"], "nouveau")
+        self.assertEqual(gpu["gpu"]["boot_vga"], False)
+        self.assertEqual(gpu["gpu"]["drm_cards"], ["card1"])
+        self.assertEqual(gpu["gpu"]["pci_link"]["current_width"], 16)
+        self.assertEqual(gpu["gpu"]["pci_link"]["current_speed"], "8.0 GT/s PCIe")
+
+    def test_gpu_without_driver_is_none_known_not_unknown(self) -> None:
+        (self.nvidia / "driver").unlink()
+        report = self.collect()
+        gpu = self.device(report, "pci-0000:01:00.0")
+        self.assertEqual(gpu["driver"]["status"], "none-known")
+        self.assertNotIn("bound_driver", gpu["driver"])
+        self.assertIn("No driver symlink", gpu["driver"]["notes"])
+        self.assert_valid(report)
+
+    def test_gpu_without_readable_sources_lists_them_as_unavailable(self) -> None:
+        bare = self.sysfs / "bus/pci/devices/0000:02:00.0"
+        write(bare, "vendor", "0x10de\n")
+        write(bare, "device", "0x1c82\n")
+        write(bare, "class", "0x030000\n")
+        report = self.collect()
+        gpu = self.device(report, "pci-0000:02:00.0")["gpu"]
+        self.assertNotIn("boot_vga", gpu)
+        self.assertNotIn("drm_cards", gpu)
+        self.assertIn("boot_vga", gpu["unavailable"])
+        self.assertIn("drm_cards", gpu["unavailable"])
+        self.assertIn("pci_link.current_width", gpu["unavailable"])
+        self.assert_valid(report)
+
+    # -- NIC -------------------------------------------------------------
+
+    def test_network_interface_is_attributed_to_the_pci_function(self) -> None:
+        nic = self.device(self.collect(), "pci-0000:03:00.0")
+        self.assertEqual(nic["category"], "network")
+        self.assertEqual(nic["network"]["status"], "observed")
+        interface = nic["network"]["interfaces"][0]
+        self.assertEqual(interface["name"], "enp3s0")
+        self.assertEqual(interface["operstate"], "up")
+        self.assertEqual(interface["speed_mbps"], 1000)
+        self.assertEqual(interface["duplex"], "full")
+        self.assertEqual(interface["mtu"], 1500)
+        self.assertTrue(interface["carrier"])
+
+    def test_network_without_sysfs_class_net_is_unknown(self) -> None:
+        shutil.rmtree(self.sysfs / "class" / "net")
+        report = self.collect()
+        network = self.device(report, "pci-0000:03:00.0")["network"]
+        self.assertEqual(network["status"], "unknown")
+        self.assertEqual(network["interfaces"], [])
+        self.assertIn("interfaces", network["unavailable"])
+        self.assert_valid(report)
+
+    # -- storage ---------------------------------------------------------
+
+    def test_storage_topology_for_nvme(self) -> None:
+        storage = self.device(self.collect(), "block-nvme0n1")["storage"]
+        self.assertEqual(storage["capacity_bytes"], 1953525168 * 512)
+        self.assertEqual(storage["logical_block_size"], 512)
+        self.assertEqual(storage["physical_block_size"], 512)
+        self.assertEqual(storage["rotational"], False)
+        self.assertEqual(storage["removable"], False)
+        self.assertEqual(storage["read_only"], False)
+        self.assertEqual(storage["transport"], "nvme")
+        self.assertEqual(
+            storage["partitions"],
+            [{"name": "nvme0n1p1", "number": 1, "start_sector": 2048, "sectors": 1953523119}],
+        )
+
+    def test_storage_transport_separates_sata_from_usb(self) -> None:
+        report = self.collect()
+        self.assertEqual(self.device(report, "block-sda")["storage"]["transport"], "sata")
+        self.assertEqual(self.device(report, "block-sdb")["storage"]["transport"], "usb")
+        self.assertEqual(self.device(report, "block-sdb")["storage"]["removable"], True)
+
+    def test_storage_without_readable_sources_lists_them_as_unavailable(self) -> None:
+        bare = self.sysfs / "block/sdc"
+        write(bare, "device/model", "Bare Disk\n")
+        report = self.collect()
+        storage = self.device(report, "block-sdc")["storage"]
+        for fact in (
+            "capacity_bytes",
+            "logical_block_size",
+            "physical_block_size",
+            "rotational",
+            "removable",
+            "read_only",
+            "transport",
+        ):
+            self.assertIn(fact, storage["unavailable"])
+            self.assertNotIn(fact, storage)
+        self.assertEqual(storage["partitions"], [])
+        self.assert_valid(report)
+
+    # -- naming database -------------------------------------------------
+
+    def test_pci_ids_names_are_recorded_as_database_evidence(self) -> None:
+        report = self.collect()
+        gpu = self.device(report, "pci-0000:01:00.0")
+        self.assertEqual(gpu["identity"]["manufacturer"], "NVIDIA Corporation")
+        self.assertEqual(gpu["identity"]["model"], "GP107 [GeForce GTX 1050 Ti]")
+        database = [item for item in gpu["evidence"] if item["kind"] == "database-record"]
+        self.assertEqual(len(database), 1)
+        self.assertEqual(database[0]["source"], "pci.ids")
+        self.assertIn("10de:1c82", database[0]["summary"])
+        nic = self.device(report, "pci-0000:03:00.0")
+        self.assertEqual(nic["identity"]["model"], "Killer E2200 Gigabit Ethernet Controller")
+
+    def test_missing_pci_ids_database_leaves_names_unresolved(self) -> None:
+        report = self.collect(pci_ids_paths=[])
+        gpu = self.device(report, "pci-0000:01:00.0")
+        self.assertNotIn("model", gpu["identity"])
+        self.assertNotIn("manufacturer", gpu["identity"])
+        self.assertEqual(gpu["identity"]["vendor_id"], "0x10de")
+        self.assertEqual(gpu["identity"]["device_id"], "0x1c82")
+        self.assertFalse([
+            item for item in gpu["evidence"] if item["kind"] == "database-record"
+        ])
+        collector = next(
+            item for item in report["collectors"] if item["name"] == "wsm-pci-ids-database"
+        )
+        self.assertFalse(collector["available"])
+        self.assertTrue(any("pci.ids" in warning for warning in report["warnings"]))
+        self.assert_valid(report)
+
+    def test_pci_ids_parser_ignores_the_class_section(self) -> None:
+        table = parse_pci_ids(
+            "8086  Intel Corporation\n"
+            "\t1912  HD Graphics 530\n"
+            "C 03  Display controller\n"
+            "\t00  VGA compatible controller\n"
+        )
+        self.assertEqual(table, {"8086:1912": ("Intel Corporation", "HD Graphics 530")})
+
+    # -- whole report ----------------------------------------------------
+
+    def test_h170_shaped_report_matches_the_published_schema(self) -> None:
+        report = self.collect()
+        self.assertEqual(report["schema_version"], "1.1.0")
+        self.assert_valid(report)
+        self.assertFalse(report["privacy"]["network_requests_performed"])
+
+    def test_report_carries_no_hardware_addresses(self) -> None:
+        report = self.collect()
+        forbidden = {"serial", "serial_number", "mac", "mac_address", "wwn", "uuid"}
+
+        def walk(value: object) -> None:
+            if isinstance(value, dict):
+                for key, child in value.items():
+                    self.assertNotIn(key.lower(), forbidden)
+                    walk(child)
+            elif isinstance(value, list):
+                for child in value:
+                    walk(child)
+
+        walk(report)
 
 
 if __name__ == "__main__":

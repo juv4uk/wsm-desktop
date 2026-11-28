@@ -4,7 +4,7 @@
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Status: **initial schema proposal**
+- Status: **initial schema proposal; current revision 1.1.0**
 - Critical path: **yes** — preflight and the installer plan both consume this schema
 - Schema: [hardware-report.schema.json](../../schemas/hardware-report.schema.json)
 - Parent: [Issue #3](https://github.com/juv4uk/wsm-desktop/issues/3)
@@ -26,6 +26,23 @@ The first schema is 1.0.0 and targets JSON Schema Draft 2020-12.
 - Producers write the exact schema version. Consumers select the validator for that exact version and reject unsupported versions with an explanation rather than silently misreading them.
 
 The v1.0.0 schema sets `additionalProperties: false` for its closed objects. Therefore, a v1.0.0 consumer does **not** generically tolerate unknown properties. A new optional field is accepted only after the corresponding schema revision and consumer support are released. Do not advertise forward-field tolerance that the selected schema validator does not implement.
+
+### Current revision: 1.1.0
+
+The current published schema is **1.1.0** ([hardware-report.schema.json](../../schemas/hardware-report.schema.json)). It only adds optional fields, so a 1.0.0 report describes a subset of the format and stays valid.
+
+The frozen 1.0.0 copy sits beside it: [hardware-report-1.0.0.schema.json](../../schemas/hardware-report-1.0.0.schema.json). A report is validated against **the schema it declares** (`wsm_install/report_schema.py`), not against the current one: the current file pins `schema_version` to 1.1.0 and would reject a valid 1.0.0 report. A version that is not published is refused with the version named in the message rather than read approximately.
+
+What 1.1.0 adds:
+
+- `environment.boot_mode_evidence` - why `boot_mode` is what it is (which source was present or absent);
+- `environment.platform.bios_release`, and `bios_date` is now populated from DMI and normalised from `MM/DD/YYYY` into an ISO date;
+- `devices[].cpu` - `family`, `model_number`, `stepping`, `microcode`, `logical_processors`;
+- `devices[].gpu` - `boot_vga`, `drm_cards`, `pci_link`;
+- `devices[].network` - interfaces whose sysfs link resolves to exactly this PCI function;
+- `devices[].storage` - `capacity_bytes`, logical and physical sector sizes, `rotational`, `removable`, `read_only`, `transport`, `partitions`.
+
+Each of these objects carries `unavailable`: the facts no readable source provided. That is `unknown`, stated explicitly. A filled-in approximate value instead of `unavailable` is a defect, not a convenience.
 
 ## Evidence model
 
@@ -66,6 +83,8 @@ The fixtures in this directory are synthetic and contain no real machine report:
 - [desktop-observed.json](../../tests/fixtures/hardware/desktop-observed.json)
 - [missing-firmware.json](../../tests/fixtures/hardware/missing-firmware.json)
 - [unknown-incomplete.json](../../tests/fixtures/hardware/unknown-incomplete.json)
+
+The fixtures stay in the 1.0.0 format on purpose: they prove that an old report still validates against its own schema. The 1.1.0 facts are covered by the synthetic sysfs tree in `tests/test_hwcheck.py` and by the test documents in `tests/test_hardware_report.py`, not by a new fixture from a real machine.
 
 ## Implementation guidance
 

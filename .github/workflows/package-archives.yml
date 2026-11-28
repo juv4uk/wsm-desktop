@@ -1,11 +1,10 @@
 # SPDX-License-Identifier: LicenseRef-Volnist
-name: WSM package archives — вимкнено до licensing decision
+name: H170 Free package plan (read-only)
 
-# Тут може з'явитися лише ручне створення ephemeral build evidence.
-# Пакет/NAR не можна експортувати в Actions artifacts або draft/public releases,
-# доки власник не вирішить #367 і права на розповсюдження.
-#
-# Поточна версія навмисно не будує, не експортує і не завантажує wsm-tools.
+# Binary publication is handled only by the fixed H170 Free substitute workflow
+# and the separately reviewed linux-libre-h170 release workflow.
+# This manual workflow is a read-only package-plan check: no user package input,
+# no archive export, no artifact upload, and no Release/Pages write.
 
 on:
   workflow_dispatch:
@@ -13,13 +12,50 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: h170-free-package-plan
+  cancel-in-progress: true
+
 jobs:
-  archive:
-    if: ${{ false }}
-    name: Заблоковано до рішення #367
+  plan:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    name: Evaluate the fixed H170 Free package manifest
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
-      - name: Fail closed
+      - name: Checkout exact source
+        uses: actions/checkout@v7
+
+      - name: Install GNU Guix
         run: |
-          echo "::error::Package archive workflow вимкнено до licensing decision #367."
-          exit 1
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y guix
+          sudo systemctl enable --now guix-daemon.service
+          guix --version
+
+      - name: Evaluate the fixed H170 Free package plan
+        run: |
+          set -euo pipefail
+          python3 tests/test_h170_free_package_manifest.py
+          guix time-machine -C channels.lock.scm -- \
+            build --dry-run --no-grafts \
+            --manifest=drivers/profiles/h170-free-packages.scm
+          {
+            echo "## H170 Free package plan evaluated"
+            echo ""
+            echo "- Source commit: `$GITHUB_SHA`"
+            echo "- Channel lock: `channels.lock.scm`"
+            echo "- Manifest: `drivers/profiles/h170-free-packages.scm`"
+            echo "- Mode: read-only dry-run; no NAR export or publication"
+            echo "- Binary publication: `substitutes.yml`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Summarize package-plan failure
+        if: failure()
+        run: |
+          {
+            echo "## H170 Free package plan failed"
+            echo "The exact failed command and diagnostic are in the preceding step logs."
+            echo "No binary artifact, Release asset, or substitute was published."
+          } >> "$GITHUB_STEP_SUMMARY"

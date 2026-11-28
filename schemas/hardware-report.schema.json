@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/juv4uk/wsm-desktop/blob/main/schemas/hardware-report.schema.json",
   "title": "WSM Hardware Evidence Report",
-  "description": "Backend-neutral evidence report. Contains observations and test results, not an overall compatibility score.",
+  "description": "Backend-neutral evidence report. Contains observations and test results, not an overall compatibility score. 1.1.0 adds optional device objects (cpu, gpu, network, storage), boot_mode_evidence and platform.bios_release; a 1.0.0 report remains valid under schemas/hardware-report-1.0.0.schema.json.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -16,7 +16,8 @@
   ],
   "properties": {
     "schema_version": {
-      "const": "1.0.0"
+      "const": "1.1.0",
+      "description": "Report schema version. 1.0.0 documents validate against the frozen 1.0.0 schema; this file is the published 1.1.0 revision."
     },
     "report_id": {
       "type": "string",
@@ -97,8 +98,17 @@
             "bios_date": {
               "type": "string",
               "format": "date"
+            },
+            "bios_release": {
+              "type": "string",
+              "description": "DMI BIOS release string (sysfs:/class/dmi/id/bios_release)."
             }
           }
+        },
+        "boot_mode_evidence": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Why the boot mode was chosen: which read-only source was present or absent. Evidence, not a verdict about the firmware settings."
         }
       }
     },
@@ -595,6 +605,207 @@
                   "type": "string"
                 }
               }
+            }
+          }
+        },
+        "cpu": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Processor revision facts from procfs/sysfs; CPU flags live in wsm-cpu-isa/1.",
+          "properties": {
+            "family": {
+              "type": "string"
+            },
+            "model_number": {
+              "type": "string"
+            },
+            "stepping": {
+              "type": "string"
+            },
+            "microcode": {
+              "type": "string"
+            },
+            "logical_processors": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "unavailable": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Facts in this object that no readable source provided. A fact listed here is unknown; it is never replaced by a default or an assumption."
+            }
+          }
+        },
+        "gpu": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "GPU-specific sysfs facts for a PCI display function.",
+          "properties": {
+            "boot_vga": {
+              "type": "boolean"
+            },
+            "drm_cards": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "DRM card nodes owned by this PCI function."
+            },
+            "pci_link": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "current_speed": {
+                  "type": "string"
+                },
+                "current_width": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "max_speed": {
+                  "type": "string"
+                },
+                "max_width": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "unavailable": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Facts in this object that no readable source provided. A fact listed here is unknown; it is never replaced by a default or an assumption."
+            }
+          }
+        },
+        "network": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Interfaces that sysfs attributes to this PCI network function.",
+          "properties": {
+            "status": {
+              "enum": [
+                "observed",
+                "unknown"
+              ]
+            },
+            "interfaces": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "operstate": {
+                    "type": "string"
+                  },
+                  "carrier": {
+                    "type": "boolean"
+                  },
+                  "speed_mbps": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "duplex": {
+                    "type": "string"
+                  },
+                  "mtu": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                }
+              }
+            },
+            "unavailable": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Facts in this object that no readable source provided. A fact listed here is unknown; it is never replaced by a default or an assumption."
+            }
+          }
+        },
+        "storage": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Storage topology the installer needs: capacity, sector sizes, medium type, transport and the partitions sysfs exposes. Partition tables and filesystem types are not read.",
+          "properties": {
+            "capacity_bytes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "logical_block_size": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "physical_block_size": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "rotational": {
+              "type": "boolean"
+            },
+            "removable": {
+              "type": "boolean"
+            },
+            "read_only": {
+              "type": "boolean"
+            },
+            "transport": {
+              "enum": [
+                "nvme",
+                "sata",
+                "usb",
+                "mmc",
+                "virtio",
+                "scsi-other",
+                "unknown"
+              ]
+            },
+            "partitions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "number": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "start_sector": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "sectors": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              }
+            },
+            "unavailable": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Facts in this object that no readable source provided. A fact listed here is unknown; it is never replaced by a default or an assumption."
             }
           }
         }

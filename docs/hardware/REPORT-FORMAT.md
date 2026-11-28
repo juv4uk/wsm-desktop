@@ -2,7 +2,7 @@
 
 <!-- SPDX-License-Identifier: LicenseRef-Volnist -->
 
-- Статус: **початкова пропозиція схеми**
+- Статус: **початкова пропозиція схеми; поточна ревізія 1.1.0**
 - Критичний шлях: **так** — preflight і план інсталятора обидва споживають цю схему
 - Схема: [hardware-report.schema.json](../../schemas/hardware-report.schema.json)
 - Батьківське завдання: [#3](https://github.com/juv4uk/wsm-desktop/issues/3)
@@ -24,6 +24,23 @@
 - Виробники записують точну версію схеми. Споживачі обирають валідатор саме для цієї версії й відхиляють непідтримувані версії з поясненням, а не читають їх мовчки неправильно.
 
 Схема v1.0.0 встановлює `additionalProperties: false` для своїх закритих об'єктів. Тому споживач v1.0.0 **не** толерує невідомі властивості загалом. Нове необов'язкове поле приймається лише після випуску відповідної ревізії схеми й підтримки в споживачі. Не заявляйте сумісність із майбутніми полями, якої вибраний валідатор схеми не реалізує.
+
+### Поточна ревізія: 1.1.0
+
+Поточна опублікована схема — **1.1.0** ([hardware-report.schema.json](../../schemas/hardware-report.schema.json)). Вона додає лише необов'язкові поля, тому звіт 1.0.0 описує підмножину формату і лишається чинним.
+
+Заморожена копія 1.0.0 лежить поруч: [hardware-report-1.0.0.schema.json](../../schemas/hardware-report-1.0.0.schema.json). Звіт перевіряється **тією схемою, яку він сам оголошує** (`wsm_install/report_schema.py`), а не поточною: поточна пінить `schema_version` на 1.1.0 і відхилила б валідний звіт 1.0.0. Версія, якої немає серед опублікованих, відхиляється з назвою версії в повідомленні, а не читається «приблизно».
+
+Що додає 1.1.0:
+
+- `environment.boot_mode_evidence` — чому `boot_mode` саме такий (яке джерело було присутнє або відсутнє);
+- `environment.platform.bios_release`, а `bios_date` тепер заповнюється з DMI й нормалізується з `MM/DD/YYYY` у ISO-дату;
+- `devices[].cpu` — `family`, `model_number`, `stepping`, `microcode`, `logical_processors`;
+- `devices[].gpu` — `boot_vga`, `drm_cards`, `pci_link`;
+- `devices[].network` — інтерфейси, чий sysfs-зв'язок веде саме до цієї PCI-функції;
+- `devices[].storage` — `capacity_bytes`, розміри логічного й фізичного сектора, `rotational`, `removable`, `read_only`, `transport`, `partitions`.
+
+Кожен із цих об'єктів має `unavailable`: перелік фактів, яких жодне читабельне джерело не дало. Це і є `unknown`, виражений явно. Заповнене «приблизне» значення замість `unavailable` — дефект, а не зручність.
 
 ## Модель доказів
 
@@ -65,6 +82,8 @@
 - [desktop-observed.json](../../tests/fixtures/hardware/desktop-observed.json)
 - [missing-firmware.json](../../tests/fixtures/hardware/missing-firmware.json)
 - [unknown-incomplete.json](../../tests/fixtures/hardware/unknown-incomplete.json)
+
+Фікстури лишаються у форматі 1.0.0 навмисно: вони доводять, що старий звіт і далі проходить валідацію власною схемою. Факти 1.1.0 перевіряються синтетичним деревом sysfs у `tests/test_hwcheck.py` і тестовими документами в `tests/test_hardware_report.py`, а не новою фікстурою з реальної машини.
 
 ## Настанови щодо реалізації
 

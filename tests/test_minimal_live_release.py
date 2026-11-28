@@ -40,9 +40,9 @@ class MinimalLiveProfileTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertIn(path, package)
         self.assertIn("(propagated-inputs (list python python-jsonschema))", package)
-        # The version is not asserted as a literal: it moves with every release
-        # candidate, and pinning it here turned a routine bump into a red main.
-        # What matters is that the package carries a version of the expected shape.
+        # The literal used to be pinned here and went stale for three releases.
+        # The rule now lives in tests/test_package_version.py: the package
+        # version must be a prefix of the tag RELEASE-REQUEST.txt asks for.
         self.assertRegex(package, r'\(version "0\.1\.0-rc[0-9]+"\)')
 
     def test_release_workflow_has_size_and_two_firmware_gates(self) -> None:
