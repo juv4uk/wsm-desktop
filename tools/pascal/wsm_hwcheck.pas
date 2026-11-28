@@ -175,8 +175,11 @@ begin
   if D.SubsystemDeviceId <> '' then
     Write(',"subsystem_device_id":"', JsonEscape(D.SubsystemDeviceId), '"');
   Write('}');
+  { Словник статусів мусить бути той самий, що в Python-колекторі:
+    bound / none-known / unknown. «unbound» не зустрічається ніде в Python,
+    тому паритетний тест на ньому б падав — і правильно. }
   if D.Driver = '' then
-    Write(',"driver":{"status":"unbound"}')
+    Write(',"driver":{"status":"none-known"}')
   else
     Write(',"driver":{"status":"bound","module":"', JsonEscape(D.Driver), '"}');
   { The Python collector emits these three as explicit unknowns; a native
