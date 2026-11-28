@@ -17,16 +17,84 @@ FIXTURE = ROOT / "tests" / "fixtures" / "hardware" / "complete-machine.json"
 PARTIAL = ROOT / "tests" / "fixtures" / "hardware" / "desktop-observed.json"
 
 
+_CLI_RUNNER = r"""
+import runpy
+import sys
+from pathlib import Path
+import wsm_install.install_steps as install_steps
+
+profile_root = Path(sys.argv[1])
+original_plan_steps = install_steps.plan_steps
+
+def _plan_steps_with_profile(*args, **kwargs):
+    kwargs.setdefault("profile_root", profile_root)
+    return original_plan_steps(*args, **kwargs)
+
+install_steps.plan_steps = _plan_steps_with_profile
+sys.argv = ["wsm-install", *sys.argv[2:]]
+runpy.run_module("wsm_install", run_name="__main__")
+"""
+
+
+def _create_guix_profile(profile_root: Path) -> None:
+    """Build a disposable system-profile fixture for the real CLI entrypoint."""
+    from wsm_install.install_steps import TRUSTED_TOOLS
+
+    for index, binary in enumerate(TRUSTED_TOOLS.values()):
+        directory = "bin" if index % 2 == 0 else "sbin"
+        executable = profile_root / directory / binary
+        executable.parent.mkdir(parents=True, exist_ok=True)
+        executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        executable.chmod(0o755)
+
+
+def _run_cli_with_profile(
+    report: Path,
+    profile_root: Path,
+    *extra: str,
+    backend: str = "guix",
+) -> subprocess.CompletedProcess:
+    command = [
+        sys.executable,
+        "-c",
+        _CLI_RUNNER,
+        str(profile_root),
+        "--preflight",
+        "--dry-run",
+        "--report",
+        str(report),
+        "--backend",
+        backend,
+        *extra,
+    ]
+    return subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=ROOT,
+    )
+
+
 def run_cli(*extra: str, backend: str = "guix") -> subprocess.CompletedProcess:
     with tempfile.TemporaryDirectory() as temporary:
-        report = Path(temporary) / "report.json"
+        root = Path(temporary)
+        report = root / "report.json"
         report.write_text(FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
-        return subprocess.run(
-            [sys.executable, "-m", "wsm_install", "--preflight", "--dry-run",
-             "--report", str(report), "--backend", backend, *extra],
-            capture_output=True, text=True, check=False, cwd=ROOT,
-        )
+        profile_root = root / "profile"
+        _create_guix_profile(profile_root)
+        return _run_cli_with_profile(report, profile_root, *extra, backend=backend)
 
+
+def run_cli_with_report(
+    report: Path,
+    *extra: str,
+    backend: str = "guix",
+) -> subprocess.CompletedProcess:
+    with tempfile.TemporaryDirectory() as temporary:
+        profile_root = Path(temporary) / "profile"
+        _create_guix_profile(profile_root)
+        return _run_cli_with_profile(report, profile_root, *extra, backend=backend)
 
 class InstallModeTests(unittest.TestCase):
     def test_deferred_backends_are_rejected_by_cli(self) -> None:
@@ -152,17 +220,12 @@ class InstallModeTests(unittest.TestCase):
             report = Path(temporary) / "report.json"
             original = FIXTURE.read_bytes()
             report.write_bytes(original)
-            result = subprocess.run(
-                [
-                    sys.executable, "-m", "wsm_install",
-                    "--preflight", "--dry-run",
-                    "--report", str(report), "--backend", "guix",
-                    "--install", "--target-disk", "/dev/nvme0n1",
-                    "--target-size-bytes", str(256 * GIB),
-                    "--acknowledge-disk", "/dev/nvme0n1",
-                    "--write-plan", str(report), "--quiet",
-                ],
-                capture_output=True, text=True, check=False, cwd=ROOT,
+            result = run_cli_with_report(
+                report,
+                "--install", "--target-disk", "/dev/nvme0n1",
+                "--target-size-bytes", str(256 * GIB),
+                "--acknowledge-disk", "/dev/nvme0n1",
+                "--write-plan", str(report), "--quiet",
             )
             self.assertEqual(result.returncode, 2)
             self.assertIn("write-plan.refused", result.stderr)
