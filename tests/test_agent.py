@@ -10,6 +10,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -35,43 +36,59 @@ def plan(*commands: list[str], disk: str = "/dev/nvme0n1") -> dict:
     }
 
 
-GOOD = ["/usr/sbin/mkfs.ext4", "-F", "/dev/nvme0n1p2"]
+GOOD = ["/run/current-system/profile/bin/mkfs.ext4", "-F", "/dev/nvme0n1p2"]
+
+
+def synthetic_tool_path(name: str) -> str:
+    from wsm_install.install_steps import TRUSTED_TOOLS
+
+    return f"/run/current-system/profile/bin/{TRUSTED_TOOLS[name]}"
+
+
+def validate_command_with_test_profile(command):
+    with patch("wsm_install.agent.resolve_trusted_tool", side_effect=synthetic_tool_path):
+        return validate_command(command)
+
+
+def validate_plan_with_test_profile(document):
+    with patch("wsm_install.agent.resolve_trusted_tool", side_effect=synthetic_tool_path):
+        return validate_plan(document)
 
 
 class AllowlistTests(unittest.TestCase):
     def test_allowed_program_passes(self) -> None:
-        validate_command(GOOD)
+        validate_command_with_test_profile(GOOD)
 
     def test_shell_is_refused(self) -> None:
         """A compromised UI must not be able to run a shell through the agent."""
         with self.assertRaises(AgentError) as caught:
-            validate_command(["/bin/sh", "-c", "rm -rf /"])
+            validate_command_with_test_profile(["/bin/sh", "-c", "rm -rf /"])
         self.assertEqual(caught.exception.code, "agent.not-allowed")
 
     def test_unknown_program_is_refused(self) -> None:
         with self.assertRaises(AgentError):
-            validate_command(["/usr/bin/dd", "if=/dev/zero", "of=/dev/nvme0n1"])
+            validate_command_with_test_profile(["/run/current-system/profile/bin/dd", "if=/dev/zero", "of=/dev/nvme0n1"])
 
     def test_btrfs_and_xfs_formatters_are_not_allowed_for_ext4_guix_target(self) -> None:
-        for formatter in ("/usr/sbin/mkfs.btrfs", "/usr/sbin/mkfs.xfs"):
+        for formatter in ("/run/current-system/profile/bin/mkfs.btrfs", "/run/current-system/profile/bin/mkfs.xfs"):
             with self.subTest(formatter=formatter):
                 with self.assertRaises(AgentError) as caught:
-                    validate_command([formatter, "-f", "/dev/nvme0n1p2"])
+                    validate_command_with_test_profile([formatter, "-f", "/dev/nvme0n1p2"])
                 self.assertEqual(caught.exception.code, "agent.not-allowed")
 
     def test_bare_name_is_refused(self) -> None:
         """PATH lookup in a root context is the Omarchy #8172 mistake."""
         with self.assertRaises(AgentError):
-            validate_command(["mkfs.ext4", "-F", "/dev/nvme0n1p2"])
+            validate_command_with_test_profile(["mkfs.ext4", "-F", "/dev/nvme0n1p2"])
 
     def test_shell_metacharacter_in_argument_is_refused(self) -> None:
         with self.assertRaises(AgentError) as caught:
-            validate_command(["/usr/bin/mount", "/dev/sda1; rm -rf /", "/mnt"])
+            validate_command_with_test_profile(["/run/current-system/profile/bin/mount", "/dev/sda1; rm -rf /", "/mnt"])
         self.assertEqual(caught.exception.code, "agent.shell-metacharacter")
 
     def test_command_substitution_is_refused(self) -> None:
         with self.assertRaises(AgentError):
-            validate_command(["/usr/bin/mount", "$(reboot)", "/mnt"])
+            validate_command_with_test_profile(["/run/current-system/profile/bin/mount", "$(reboot)", "/mnt"])
 
     def test_empty_command_is_refused(self) -> None:
         with self.assertRaises(AgentError):
@@ -80,7 +97,7 @@ class AllowlistTests(unittest.TestCase):
 
 class PlanTests(unittest.TestCase):
     def test_good_plan_is_accepted(self) -> None:
-        steps = validate_plan(plan(GOOD, ["/usr/bin/mount", "/dev/nvme0n1p2", "/mnt"]))
+        steps = validate_plan_with_test_profile(plan(GOOD, ["/run/current-system/profile/bin/mount", "/dev/nvme0n1p2", "/mnt"]))
         self.assertEqual(len(steps), 2)
         self.assertTrue(steps[0].destructive)
 
@@ -93,16 +110,16 @@ class PlanTests(unittest.TestCase):
 
     def test_empty_steps_are_refused(self) -> None:
         with self.assertRaises(AgentError):
-            validate_plan({"schema": "wsm-install-plan/1", "disk": "/dev/x", "steps": []})
+            validate_plan_with_test_profile({"schema": "wsm-install-plan/1", "disk": "/dev/x", "steps": []})
 
     def test_too_many_steps_are_refused(self) -> None:
         with self.assertRaises(AgentError) as caught:
-            validate_plan(plan(*([GOOD] * 40)))
+            validate_plan_with_test_profile(plan(*([GOOD] * 40)))
         self.assertEqual(caught.exception.code, "agent.too-many-steps")
 
     def test_non_object_plan_is_refused(self) -> None:
         with self.assertRaises(AgentError):
-            validate_plan(["not", "a", "plan"])
+            validate_plan_with_test_profile(["not", "a", "plan"])
 
     def test_unreadable_plan_is_refused(self) -> None:
         with self.assertRaises(AgentError) as caught:
@@ -128,14 +145,26 @@ class ExecutionTests(unittest.TestCase):
         document = plan(GOOD)
         document["disk"] = "/dev/nvme0n1p1"
         with self.assertRaises(AgentError) as caught:
-            run_plan(document, validate_plan(document), dry_run=True)
+            run_plan(document, validate_plan_with_test_profile(document), dry_run=True)
         self.assertEqual(caught.exception.code, "agent.bad-disk")
 
 
 class CliTests(unittest.TestCase):
     def run_cli(self, *args: str) -> subprocess.CompletedProcess:
+        runner = """
+import sys
+from unittest.mock import patch
+import wsm_install.agent as agent
+from wsm_install.install_steps import TRUSTED_TOOLS
+
+def synthetic_tool_path(name):
+    return f"/run/current-system/profile/bin/{TRUSTED_TOOLS[name]}"
+
+with patch.object(agent, "resolve_trusted_tool", side_effect=synthetic_tool_path):
+    raise SystemExit(agent.main(sys.argv[1:]))
+"""
         return subprocess.run(
-            [sys.executable, "-m", "wsm_install.agent", *args],
+            [sys.executable, "-c", runner, *args],
             capture_output=True, text=True, check=False, cwd=ROOT,
         )
 
@@ -168,6 +197,11 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("agent.apply-disabled", result.stderr)
         self.assertNotIn("executed", result.stdout)
+
+    def test_fhs_and_arbitrary_absolute_paths_are_refused(self) -> None:
+        for program in ("/usr/sbin/mkfs.ext4", "/tmp/mkfs.ext4", "/run/current-system/profile/bin/dd"):
+            with self.subTest(program=program), self.assertRaises(AgentError):
+                validate_command_with_test_profile([program, "-F", "/dev/nvme0n1p2"])
 
     def test_allowlist_is_not_empty_and_all_absolute(self) -> None:
         self.assertTrue(ALLOWED_PROGRAMS)
