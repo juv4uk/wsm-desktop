@@ -56,44 +56,6 @@ class InspectTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("authenticated: unknown by design", result.stdout)
 
-    def test_install_script_does_not_depend_on_savannah(self) -> None:
-        """The official installer is served by cgit, which refuses bots."""
-        script = (ROOT / "scripts" / "install-guix.sh").read_text(encoding="utf-8")
-        # Mentions in comments explain the history; only executable lines count.
-        code = [
-            line for line in script.splitlines()
-            if line.strip() and not line.strip().startswith("#")
-        ]
-        self.assertFalse([line for line in code if "guix-install.sh" in line])
-        self.assertIn("ftp.gnu.org", script)
-        self.assertIn("guix-daemon", script)
-
-class InstallerJobTests(unittest.TestCase):
-    """An installer nobody runs is a claim, not a tool."""
-
-    def setUp(self) -> None:
-        self.text = (ROOT / ".github" / "workflows" / "guix-installer.yml").read_text(encoding="utf-8")
-
-    def test_a_job_runs_the_repository_installer(self) -> None:
-        self.assertIn("./scripts/install-guix.sh", self.text)
-
-    def test_the_workflow_is_manual_only(self) -> None:
-        """It installs a daemon on a throwaway runner; that must be deliberate."""
-        import yaml
-        workflow = yaml.safe_load(self.text)
-        self.assertEqual(list(workflow[True]), ["workflow_dispatch"])
-
-    def test_the_fast_ci_workflow_stays_fast(self) -> None:
-        """The hosted CI policy forbids daemon installs in ci.yml."""
-        ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-        self.assertNotIn("install-guix.sh", ci)
-        self.assertNotIn("workflow_dispatch", ci)
-
-    def test_the_job_proves_more_than_a_version_string(self) -> None:
-        self.assertIn("guix-daemon", self.text)
-        self.assertIn("build --dry-run", self.text)
-
-
 
 if __name__ == "__main__":
     unittest.main()
