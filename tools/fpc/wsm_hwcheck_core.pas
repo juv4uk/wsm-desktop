@@ -163,8 +163,20 @@ begin
     Result := Result + LowerCase(IntToHex(RandomBytes[Index], 2));
 end;
 
+{ Архітектура береться з uname, як platform.machine() у Python, а не з
+  константи компіляції: 32-бітна збірка на x86_64-хості дала б 'i686' там,
+  де Python каже 'x86_64', а збірка під іншу архітектуру — 'unknown' на
+  справжній машині. Константи лишаються запасним варіантом. }
 function ArchitectureName: string;
+var
+  Info: utsname;
 begin
+  Result := '';
+  if fpUname(Info) = 0 then
+    Result := Trim(string(Info.machine));
+  if Result <> '' then
+    Exit;
+
   {$if defined(CPUX86_64)}
   Result := 'x86_64';
   {$elseif defined(CPUI386)}
@@ -752,7 +764,9 @@ end;
 procedure AddBlockDevices(const SysfsRoot, ObservedAt: string; Devices: TJSONArray);
 var
   Root, Name, EntryPath, DevicePath, Model, Vendor, Bus, Transport: string;
-  Search, PartitionSearch: TSearchRec;
+  Names: TStringList;
+  PartitionNames: TStringList;
+  Index, PartitionIndex: Integer;
   Identity, Device, Storage, Partition: TJSONObject;
   Partitions, Missing: TJSONArray;
   Number, Sectors, Value: Int64;
@@ -762,13 +776,12 @@ begin
   Root := JoinPath(SysfsRoot, 'block');
   if not DirectoryExists(Root) then
     Exit;
-  if FindFirst(JoinPath(Root, '*'), faAnyFile, Search) <> 0 then
-    Exit;
+  Names := TStringList.Create;
   try
-    repeat
-      Name := Search.Name;
-      if (Name = '.') or (Name = '..') then
-        Continue;
+    ListSortedEntries(Root, Names);
+    for Index := 0 to Names.Count - 1 do
+    begin
+      Name := Names[Index];
       Skip := (Copy(Name, 1, 4) = 'loop') or (Copy(Name, 1, 3) = 'ram') or
         (Copy(Name, 1, 4) = 'zram') or (Copy(Name, 1, 3) = 'dm-') or
         (Copy(Name, 1, 2) = 'md') or (Copy(Name, 1, 2) = 'sr');
@@ -823,30 +836,37 @@ begin
       else Missing.Add('read_only');
 
       Transport := StorageTransport(Name, DevicePath);
-      Storage.Add('transport', Transport);
-      if Transport = 'unknown' then Missing.Add('transport');
+      { Python або додає transport, або перелічує його як unavailable — але не
+        робить і те, і те. Наявний 'transport': 'unknown' разом із записом у
+        unavailable був самосуперечливим. }
+      if Transport = 'unknown' then
+        Missing.Add('transport')
+      else
+        Storage.Add('transport', Transport);
 
       Partitions := TJSONArray.Create;
-      if FindFirst(JoinPath(EntryPath, '*'), faAnyFile, PartitionSearch) = 0 then
-      begin
-        repeat
-          if (PartitionSearch.Name = '.') or (PartitionSearch.Name = '..') then
-            Continue;
-          if not FileExists(JoinPath(JoinPath(EntryPath, PartitionSearch.Name), 'partition')) then
+      PartitionNames := TStringList.Create;
+      try
+        ListSortedEntries(EntryPath, PartitionNames);
+        for PartitionIndex := 0 to PartitionNames.Count - 1 do
+        begin
+          if not FileExists(JoinPath(JoinPath(EntryPath, PartitionNames[PartitionIndex]), 'partition')) then
             Continue;
           Partition := TJSONObject.Create;
-          Partition.Add('name', PartitionSearch.Name);
-          if ReadInteger(JoinPath(JoinPath(EntryPath, PartitionSearch.Name), 'partition'), Number) then
+          Partition.Add('name', PartitionNames[PartitionIndex]);
+          if ReadInteger(JoinPath(JoinPath(EntryPath, PartitionNames[PartitionIndex]), 'partition'), Number) then
             Partition.Add('number', Number);
-          if ReadInteger(JoinPath(JoinPath(EntryPath, PartitionSearch.Name), 'start'), Number) then
+          if ReadInteger(JoinPath(JoinPath(EntryPath, PartitionNames[PartitionIndex]), 'start'), Number) then
             Partition.Add('start_sector', Number);
-          if ReadInteger(JoinPath(JoinPath(EntryPath, PartitionSearch.Name), 'size'), Number) then
+          if ReadInteger(JoinPath(JoinPath(EntryPath, PartitionNames[PartitionIndex]), 'size'), Number) then
             Partition.Add('sectors', Number);
           Partitions.Add(Partition);
-        until FindNext(PartitionSearch) <> 0;
-        FindClose(PartitionSearch);
-        Storage.Add('partitions', Partitions);
-      end
+        end;
+      finally
+        PartitionNames.Free;
+      end;
+      if Partitions.Count > 0 then
+        Storage.Add('partitions', Partitions)
       else
       begin
         Partitions.Free;
@@ -857,9 +877,9 @@ begin
       else Missing.Free;
       Device.Add('storage', Storage);
       Devices.Add(Device);
-    until FindNext(Search) <> 0;
+    end;
   finally
-    FindClose(Search);
+    Names.Free;
   end;
 end;
 
@@ -931,10 +951,18 @@ var
   Environment, Collector, Privacy: TJSONObject;
   Collectors, Devices, Warnings, Limitations, Redactions: TJSONArray;
   Device: TJSONObject;
+  UnameInfo: utsname;
 begin
   ObservedAt := CurrentTimestampUTC;
   Architecture := ArchitectureName;
   KernelRelease := ReadValue(JoinPath(ProcRoot, 'sys/kernel/osrelease'));
+  if KernelRelease = '' then
+  begin
+    { Python падає на host_platform.uname().release, коли procfs недоступний.
+      Тому й тут спершу uname, і лише потім 'unknown'. }
+    if fpUname(UnameInfo) = 0 then
+      KernelRelease := Trim(string(UnameInfo.release));
+  end;
   if KernelRelease = '' then
     KernelRelease := 'unknown';
   Platform := CollectPlatform(SysfsRoot);
