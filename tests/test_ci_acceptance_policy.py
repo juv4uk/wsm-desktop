@@ -142,9 +142,10 @@ class PackageArchiveWorkflowTests(unittest.TestCase):
     def test_the_owner_permission_is_recorded_in_the_file(self) -> None:
         self.assertIn("ВЛАСНИК ДАВ ДОЗВІЛ", self.text)
 
-    def test_workflow_is_manual_only(self) -> None:
-        self.assertEqual(set(self.workflow["on"]), {"workflow_dispatch"})
-        self.assertNotIn("tags:", self.text)
+    def test_workflow_starts_only_deliberately(self) -> None:
+        """Two deliberate entry points, no branch trigger: nothing appears unasked."""
+        self.assertEqual(set(self.workflow["on"]), {"push", "workflow_dispatch"})
+        self.assertEqual(self.workflow["on"]["push"]["tags"], ["packages-*"])
         self.assertNotIn("branches:", self.text)
 
     def test_no_signing_key_is_created_or_read_here(self) -> None:
