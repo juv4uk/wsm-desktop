@@ -42,8 +42,9 @@ class BootEvidenceBindingTests(unittest.TestCase):
             with contextlib.redirect_stdout(stdout):
                 result = main(["--iso", str(iso), "--dry-run"])
             payload = json.loads(stdout.getvalue())
+            expected_sha256 = sha256_of(iso)
         self.assertEqual(result, 0)
-        self.assertEqual(payload["iso_sha256"], sha256_of(iso))
+        self.assertEqual(payload["iso_sha256"], expected_sha256)
 
     def test_the_workflow_refuses_evidence_from_another_image(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "release-minimal-live.yml").read_text(encoding="utf-8")
